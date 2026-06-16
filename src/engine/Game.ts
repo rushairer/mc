@@ -79,6 +79,7 @@ export class Game {
   private eatingTimer = 0;
   private chewSoundTimer = 0;
   private stepTimer = 0;
+  private lightScanTimer = 0;
 
   constructor(container: HTMLElement) {
     this.renderer = new Renderer(container);
@@ -509,6 +510,13 @@ export class Game {
     const isNight = this.gameTime > 0.35 && this.gameTime < 0.75;
     this.weather.update(dt, this.player.position, isNight);
 
+    // Dynamic lighting
+    this.lightScanTimer += dt;
+    if (this.lightScanTimer >= 0.15) {
+      this.lightScanTimer = 0;
+      this.updateDynamicLighting();
+    }
+
     this.renderer.render();
     this.notifyState();
   };
@@ -684,6 +692,30 @@ export class Game {
     } catch (e) {
       console.warn('Load failed:', e);
     }
+  }
+
+  private updateDynamicLighting() {
+    const lightPositions: THREE.Vector3[] = [];
+    const px = Math.floor(this.player.position.x);
+    const py = Math.floor(this.player.position.y);
+    const pz = Math.floor(this.player.position.z);
+    const radius = 12;
+
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+          const blockId = this.chunks.getBlock(px + dx, py + dy, pz + dz);
+          // Torch (30) or Lava (14)
+          if (blockId === 30 || blockId === 14) {
+            lightPositions.push(new THREE.Vector3(px + dx + 0.5, py + dy + 0.5, pz + dz + 0.5));
+          }
+        }
+      }
+    }
+
+    // Sort by distance to player
+    lightPositions.sort((a, b) => a.distanceToSquared(this.player.position) - b.distanceToSquared(this.player.position));
+    this.renderer.updateTorchLights(lightPositions.slice(0, 4));
   }
 
   dispose() {

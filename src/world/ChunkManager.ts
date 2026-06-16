@@ -3,6 +3,7 @@ import { Chunk } from './Chunk';
 import { WorldGen } from './WorldGen';
 import { CHUNK_SIZE, WORLD_HEIGHT, RENDER_DISTANCE } from '../constants';
 import { TextureAtlas } from '../engine/TextureAtlas';
+import type { BlockMetadata, SerializedBlockMetadata } from '../types';
 
 export class ChunkManager {
   chunks: Map<string, Chunk> = new Map();
@@ -74,6 +75,57 @@ export class ChunkManager {
 
     // Rebuild this chunk immediately
     this.rebuildChunkMesh(chunk);
+  }
+
+  getBlockMeta(wx: number, wy: number, wz: number): BlockMetadata | undefined {
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const chunk = this.getChunk(cx, cz);
+    if (!chunk) return undefined;
+
+    const lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    return chunk.getBlockMeta(lx, wy, lz);
+  }
+
+  setBlockMeta(wx: number, wy: number, wz: number, metadata: BlockMetadata | null, markDirty = false) {
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const chunk = this.getChunk(cx, cz);
+    if (!chunk) return;
+
+    const lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    chunk.setBlockMeta(lx, wy, lz, metadata, markDirty);
+  }
+
+  restoreChunk(cx: number, cz: number, data: Uint8Array, metadata?: SerializedBlockMetadata[]) {
+    const key = ChunkManager.key(cx, cz);
+    let chunk = this.chunks.get(key);
+    if (!chunk) {
+      chunk = new Chunk(cx, cz);
+      this.chunks.set(key, chunk);
+    } else {
+      if (chunk.mesh) {
+        this.scene.remove(chunk.mesh);
+        chunk.mesh.geometry.dispose();
+        chunk.mesh = null;
+      }
+      if (chunk.transparentMesh) {
+        this.scene.remove(chunk.transparentMesh);
+        chunk.transparentMesh.geometry.dispose();
+        chunk.transparentMesh = null;
+      }
+    }
+
+    chunk.data = new Uint8Array(data);
+    chunk.restoreMetadata(metadata);
+    this.rebuildChunkMesh(chunk);
+
+    this.markDirty(cx - 1, cz);
+    this.markDirty(cx + 1, cz);
+    this.markDirty(cx, cz - 1);
+    this.markDirty(cx, cz + 1);
   }
 
   private markDirty(cx: number, cz: number) {

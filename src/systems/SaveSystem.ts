@@ -1,3 +1,5 @@
+import type { SerializedBlockMetadata } from '../types';
+
 const DB_NAME = 'minecraft_clone_save';
 const DB_VERSION = 1;
 const STORE_NAME = 'worlds';
@@ -32,7 +34,7 @@ export interface SaveData {
     armor: ({ id: number; count: number } | null)[];
   };
   seed: number;
-  chunks: { cx: number; cz: number; data: Uint8Array }[];
+  chunks: { cx: number; cz: number; data: Uint8Array; metadata?: SerializedBlockMetadata[] }[];
   timestamp: number;
 }
 

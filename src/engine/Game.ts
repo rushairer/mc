@@ -15,6 +15,8 @@ import { WeatherSystem } from '../systems/WeatherSystem';
 import { SoundSystem } from '../systems/SoundSystem';
 import { SaveSystem, type SaveData } from '../systems/SaveSystem';
 import { RedstoneSystem } from '../systems/RedstoneSystem';
+import { CHUNK_SIZE } from '../constants';
+import type { BlockFacing, BlockMetadata } from '../types';
 
 export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'death';
 
@@ -687,8 +689,9 @@ export class Game {
           // Fluid check: if breaking a block next to water, trigger flow
           this.checkFluidAdjacency(bp.x, bp.y, bp.z);
 
-          this.redstone.unregister(bp.x, bp.y, bp.z);
           this.chunks.setBlock(bp.x, bp.y, bp.z, 0);
+          this.redstone.unregister(bp.x, bp.y, bp.z);
+          this.chunks.setBlockMeta(bp.x, bp.y, bp.z, null);
           this.sound.playBlockBreak();
           this.breakProgress = 0;
           this.breakingBlockPos = null;
@@ -715,7 +718,11 @@ export class Game {
           this.openCraftingTableUI();
           this.placeCooldown = 0.5;
         } else if (targetId === 34) {
-          this.redstone.toggleLever(blockPos.x, blockPos.y, blockPos.z);
+          const powered = this.redstone.toggleLever(blockPos.x, blockPos.y, blockPos.z);
+          this.updateRedstoneMetadata(blockPos.x, blockPos.y, blockPos.z, {
+            powered,
+            signal: powered ? 15 : 0,
+          });
           this.sound.playLever();
           this.placeCooldown = 0.25;
         } else {
@@ -740,7 +747,7 @@ export class Game {
                 this.placeCooldown = 0.25;
 
                 // Register redstone component if it is one
-                let facing: 'north' | 'south' | 'east' | 'west' | 'up' | 'down' = 'north';
+                let facing: BlockFacing = 'north';
                 if (faceNormal.x > 0) facing = 'east';
                 else if (faceNormal.x < 0) facing = 'west';
                 else if (faceNormal.y > 0) facing = 'up';
@@ -748,11 +755,7 @@ export class Game {
                 else if (faceNormal.z > 0) facing = 'south';
                 else if (faceNormal.z < 0) facing = 'north';
 
-                if (blockId === 30) this.redstone.register(placePos.x, placePos.y, placePos.z, 'torch', facing);
-                else if (blockId === 31) this.redstone.register(placePos.x, placePos.y, placePos.z, 'wire', facing);
-                else if (blockId === 32) this.redstone.register(placePos.x, placePos.y, placePos.z, 'repeater', facing);
-                else if (blockId === 33) this.redstone.register(placePos.x, placePos.y, placePos.z, 'piston', facing);
-                else if (blockId === 34) this.redstone.register(placePos.x, placePos.y, placePos.z, 'lever', facing);
+                this.setPlacedBlockMetadata(placePos.x, placePos.y, placePos.z, blockId, facing);
 
                 // If placing water/lava, start fluid simulation
                 if (blockId === 13 || blockId === 14) {
@@ -847,6 +850,13 @@ export class Game {
       (soundType) => {
         if (soundType === 'piston_extend') this.sound.playPistonExtend();
         else if (soundType === 'piston_retract') this.sound.playPistonRetract();
+      },
+      (component) => {
+        this.updateRedstoneMetadata(component.x, component.y, component.z, {
+          powered: component.state,
+          signal: component.signal,
+          extended: component.type === 'piston' ? component.state : undefined,
+        });
       }
     );
 
@@ -1000,9 +1010,14 @@ export class Game {
   }
 
   private async saveGame() {
-    const chunkData: { cx: number; cz: number; data: Uint8Array }[] = [];
+    const chunkData: SaveData['chunks'] = [];
     for (const [, chunk] of this.chunks.chunks) {
-      chunkData.push({ cx: chunk.cx, cz: chunk.cz, data: new Uint8Array(chunk.data) });
+      chunkData.push({
+        cx: chunk.cx,
+        cz: chunk.cz,
+        data: new Uint8Array(chunk.data),
+        metadata: chunk.serializeMetadata(),
+      });
     }
 
     const saveData: SaveData = {
@@ -1051,12 +1066,88 @@ export class Game {
         }
       }
 
+      if (data.chunks) {
+        for (const chunk of data.chunks) {
+          this.chunks.restoreChunk(chunk.cx, chunk.cz, chunk.data, chunk.metadata);
+        }
+      }
+
+      this.restoreRedstoneFromLoadedChunks();
       this.chunks.update(this.player.position.x, this.player.position.z);
       this.player.resolveStuck(this.chunks);
 
       console.log('Game loaded from save');
     } catch (e) {
       console.warn('Load failed:', e);
+    }
+  }
+
+  private setPlacedBlockMetadata(x: number, y: number, z: number, blockId: number, facing: BlockFacing) {
+    const redstoneType = this.getRedstoneType(blockId);
+    if (redstoneType) {
+      this.redstone.register(x, y, z, redstoneType, facing);
+      this.chunks.setBlockMeta(x, y, z, {
+        facing,
+        redstoneType,
+        powered: false,
+        signal: 0,
+        extended: false,
+      }, true);
+      return;
+    }
+
+    if (this.usesFacingMetadata(blockId)) {
+      this.chunks.setBlockMeta(x, y, z, { facing }, true);
+    }
+  }
+
+  private getRedstoneType(blockId: number): BlockMetadata['redstoneType'] | null {
+    if (blockId === 30) return 'torch';
+    if (blockId === 31) return 'wire';
+    if (blockId === 32) return 'repeater';
+    if (blockId === 33) return 'piston';
+    if (blockId === 34) return 'lever';
+    return null;
+  }
+
+  private usesFacingMetadata(blockId: number): boolean {
+    return blockId === 24 || blockId === 25;
+  }
+
+  private updateRedstoneMetadata(x: number, y: number, z: number, patch: BlockMetadata) {
+    const current = this.chunks.getBlockMeta(x, y, z);
+    if (!current?.redstoneType) return;
+
+    this.chunks.setBlockMeta(x, y, z, {
+      ...current,
+      ...patch,
+    });
+  }
+
+  private restoreRedstoneFromLoadedChunks() {
+    this.redstone.dispose();
+
+    for (const chunk of this.chunks.chunks.values()) {
+      for (const { index, metadata } of chunk.serializeMetadata()) {
+        if (!metadata.redstoneType) continue;
+
+        const localX = index % CHUNK_SIZE;
+        const localZ = Math.floor(index / CHUNK_SIZE) % CHUNK_SIZE;
+        const localY = Math.floor(index / (CHUNK_SIZE * CHUNK_SIZE));
+        const worldX = chunk.cx * CHUNK_SIZE + localX;
+        const worldZ = chunk.cz * CHUNK_SIZE + localZ;
+        this.redstone.register(
+          worldX,
+          localY,
+          worldZ,
+          metadata.redstoneType,
+          metadata.facing ?? 'north',
+          {
+            signal: metadata.signal ?? 0,
+            state: metadata.powered ?? metadata.extended ?? false,
+          }
+        );
+      }
     }
   }
 

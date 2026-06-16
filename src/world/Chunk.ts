@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { CHUNK_SIZE, WORLD_HEIGHT } from '../constants';
 import { BlockRegistry } from './BlockRegistry';
-import type { ChunkMeshData } from '../types';
+import type { BlockMetadata, ChunkMeshData, SerializedBlockMetadata } from '../types';
 
 export class Chunk {
   data: Uint8Array;
+  metadata: Map<number, BlockMetadata> = new Map();
   mesh: THREE.Mesh | null = null;
   transparentMesh: THREE.Mesh | null = null;
   dirty = true;
@@ -32,7 +33,54 @@ export class Chunk {
     if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= WORLD_HEIGHT || z < 0 || z >= CHUNK_SIZE) {
       return;
     }
-    this.data[this.getIndex(x, y, z)] = id;
+    const index = this.getIndex(x, y, z);
+    const previousId = this.data[index];
+    this.data[index] = id;
+    if (id === 0 || id !== previousId) {
+      this.metadata.delete(index);
+    }
+    this.dirty = true;
+  }
+
+  getBlockMeta(x: number, y: number, z: number): BlockMetadata | undefined {
+    if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= WORLD_HEIGHT || z < 0 || z >= CHUNK_SIZE) {
+      return undefined;
+    }
+    return this.metadata.get(this.getIndex(x, y, z));
+  }
+
+  setBlockMeta(x: number, y: number, z: number, metadata: BlockMetadata | null, markDirty = false) {
+    if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= WORLD_HEIGHT || z < 0 || z >= CHUNK_SIZE) {
+      return;
+    }
+    const index = this.getIndex(x, y, z);
+    if (metadata && Object.keys(metadata).length > 0) {
+      this.metadata.set(index, { ...metadata });
+    } else {
+      this.metadata.delete(index);
+    }
+    if (markDirty) {
+      this.dirty = true;
+    }
+  }
+
+  serializeMetadata(): SerializedBlockMetadata[] {
+    return Array.from(this.metadata.entries()).map(([index, metadata]) => ({
+      index,
+      metadata: { ...metadata },
+    }));
+  }
+
+  restoreMetadata(serialized?: SerializedBlockMetadata[]) {
+    this.metadata.clear();
+    if (!serialized) return;
+
+    const maxIndex = CHUNK_SIZE * CHUNK_SIZE * WORLD_HEIGHT;
+    for (const entry of serialized) {
+      if (!entry || entry.index < 0 || entry.index >= maxIndex || !entry.metadata) continue;
+      if (this.data[entry.index] === 0) continue;
+      this.metadata.set(entry.index, { ...entry.metadata });
+    }
     this.dirty = true;
   }
 

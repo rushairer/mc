@@ -14,6 +14,21 @@ export interface BlockDef {
   luminance: number;            // 0-15 light emission
 }
 
+export type BlockFacing = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
+
+export interface BlockMetadata {
+  facing?: BlockFacing;
+  redstoneType?: 'wire' | 'torch' | 'repeater' | 'piston' | 'lever' | 'button';
+  powered?: boolean;
+  signal?: number;
+  extended?: boolean;
+}
+
+export interface SerializedBlockMetadata {
+  index: number;
+  metadata: BlockMetadata;
+}
+
 export interface ChunkCoord {
   x: number;
   z: number;

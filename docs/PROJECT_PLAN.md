@@ -88,15 +88,19 @@ Acceptance:
 
 Goal: unblock doors, beds, crops, chests, redstone correctness, and portals.
 
-- Introduce per-block metadata storage alongside block IDs.
-- Add orientation support for placeable blocks.
-- Convert lever, repeater, piston, furnace, and crafting table interactions to use metadata where needed.
-- Persist metadata in IndexedDB.
+- [x] Introduce sparse per-block metadata storage alongside block IDs.
+- [x] Persist metadata in IndexedDB with backward compatibility for older saves.
+- [x] Restore saved chunk block data on load instead of only saving it.
+- [x] Store placement facing metadata for blocks that need orientation.
+- [x] Persist redstone component type, facing, powered state, signal strength, and piston extension state.
+- [ ] Use metadata to render directional block variants where the current mesh needs visible orientation.
+- [ ] Extend metadata-backed behavior to containers, beds, crops, doors, trapdoors, and portals.
 
 Acceptance:
 
 - Existing saves still load gracefully.
-- Oriented blocks render and interact consistently after save/load.
+- Saved chunk edits restore after reload.
+- Metadata-backed block state survives save/load.
 - Redstone components keep their state after reload.
 
 ### Stage 3 - Core Vanilla Blocks And Utility Loop

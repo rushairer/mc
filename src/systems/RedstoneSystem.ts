@@ -5,13 +5,15 @@
  * Signal strength: 0-15 (0 = no signal, 15 = max)
  */
 
+import type { BlockFacing } from '../types';
+
 export interface RedstoneComponent {
   x: number;
   y: number;
   z: number;
   type: 'wire' | 'torch' | 'repeater' | 'piston' | 'lever' | 'button';
   signal: number;
-  facing: 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
+  facing: BlockFacing;
   state: boolean; // on/off for torch, extended for piston
 }
 
@@ -30,10 +32,23 @@ export class RedstoneSystem {
     return `${x},${y},${z}`;
   }
 
-  register(x: number, y: number, z: number, type: RedstoneComponent['type'], facing: RedstoneComponent['facing'] = 'north') {
+  register(
+    x: number,
+    y: number,
+    z: number,
+    type: RedstoneComponent['type'],
+    facing: RedstoneComponent['facing'] = 'north',
+    initialState?: Partial<Pick<RedstoneComponent, 'signal' | 'state'>>
+  ) {
     const key = RedstoneSystem.key(x, y, z);
     this.components.set(key, {
-      x, y, z, type, signal: 0, facing, state: false,
+      x,
+      y,
+      z,
+      type,
+      signal: initialState?.signal ?? 0,
+      facing,
+      state: initialState?.state ?? false,
     });
   }
 
@@ -49,7 +64,8 @@ export class RedstoneSystem {
     dt: number,
     getBlock: (x: number, y: number, z: number) => number,
     setBlock: (x: number, y: number, z: number, id: number) => void,
-    triggerSound?: (soundType: 'piston_extend' | 'piston_retract') => void
+    triggerSound?: (soundType: 'piston_extend' | 'piston_retract') => void,
+    onComponentChange?: (component: RedstoneComponent) => void
   ) {
     this.tickTimer += dt;
     if (this.tickTimer < this.tickInterval) return;
@@ -59,6 +75,10 @@ export class RedstoneSystem {
     for (const comp of this.components.values()) {
       if (comp.type !== 'torch' && comp.type !== 'lever') {
         comp.signal = 0;
+        if (comp.type !== 'piston') {
+          comp.state = false;
+        }
+        onComponentChange?.(comp);
       }
     }
 
@@ -76,12 +96,14 @@ export class RedstoneSystem {
           comp.state = true;
           comp.signal = 15;
         }
+        onComponentChange?.(comp);
       } else if (comp.type === 'lever') {
         if (comp.state) {
           comp.signal = 15;
         } else {
           comp.signal = 0;
         }
+        onComponentChange?.(comp);
       }
     }
 
@@ -117,18 +139,21 @@ export class RedstoneSystem {
 
         if (neighbor.type === 'wire' && neighbor.signal < newSignal) {
           neighbor.signal = newSignal;
+          onComponentChange?.(neighbor);
           queue.push(neighbor);
           visited.add(key);
         } else if (neighbor.type === 'repeater') {
           if (this.isRepeaterInput(neighbor, current)) {
             neighbor.signal = 15;
             neighbor.state = true;
+            onComponentChange?.(neighbor);
             queue.push(neighbor); // repeaters propagate max signal
             visited.add(key);
           }
         } else if (neighbor.type === 'piston') {
           if (newSignal > 0 && !neighbor.state) {
             neighbor.state = true;
+            onComponentChange?.(neighbor);
             if (triggerSound) triggerSound('piston_extend');
 
             // Push block in facing direction
@@ -149,6 +174,7 @@ export class RedstoneSystem {
             }
           } else if (newSignal === 0 && neighbor.state) {
             neighbor.state = false;
+            onComponentChange?.(neighbor);
             if (triggerSound) triggerSound('piston_retract');
           }
         }

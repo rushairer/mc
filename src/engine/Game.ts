@@ -168,9 +168,9 @@ export class Game {
     heldItemSlot.position.set(0, -0.51, 0);
     group.add(heldItemSlot);
 
-    // Position shoulder in bottom-right corner of viewport
-    group.position.set(0.35, -0.08, -0.3);
-    group.rotation.set(Math.PI / 2.5, Math.PI / 6, -Math.PI / 12);
+    // Position shoulder in bottom-right corner of viewport, close to camera so it is clipped
+    group.position.set(0.32, -0.20, -0.05);
+    group.rotation.set(Math.PI / 3, Math.PI / 5, -Math.PI / 12);
 
     return group;
   }
@@ -208,18 +208,18 @@ export class Game {
       const itemDef = ItemRegistry.get(itemId);
       if (itemDef) {
         if (itemDef.category === 'block') {
-          // Position block on top/center of the hand, avoiding clipping
-          slot.position.set(0.04, -0.40, -0.08);
+          // Position block on top/center of the hand, avoiding clipping and aligning with palm
+          slot.position.set(0.04, -0.48, -0.10);
           slot.rotation.set(Math.PI / 6, Math.PI / 4, 0); // Rotate slightly for 3D perspective
           mesh.rotation.set(0, 0, 0); // Reset default rotation
         } else if (itemDef.category === 'tool') {
           // Align tool handle inside hand, point diagonal forward/up-left, tilted at 60 deg to prevent arm clipping
-          slot.position.set(0.02, -0.45, -0.02);
+          slot.position.set(0.02, -0.47, -0.05);
           slot.rotation.set(0, 0, 0);
           mesh.rotation.set(Math.PI / 3, -Math.PI / 5, 0); // First person custom rotation (60 deg tilt forward)
         } else {
           // Material / Food
-          slot.position.set(0.02, -0.44, -0.05);
+          slot.position.set(0.02, -0.50, -0.08);
           slot.rotation.set(Math.PI / 6, Math.PI / 4, 0);
           mesh.rotation.set(0, 0, 0);
         }
@@ -370,13 +370,13 @@ export class Game {
         this.fpArmGroup.visible = true;
         this.updateFpHeldItem(heldItemId);
 
-        // Default position & rotation matching the shoulder-pivot coordinates
-        const defX = 0.35;
-        const defY = -0.08;
-        const defZ = -0.3;
+        // Default position & rotation matching the shoulder-pivot coordinates (clipped by camera near plane)
+        const defX = 0.32;
+        const defY = -0.20;
+        const defZ = -0.05;
         
-        const defRotX = Math.PI / 2.5;
-        const defRotY = Math.PI / 6;
+        const defRotX = Math.PI / 3;
+        const defRotY = Math.PI / 5;
         const defRotZ = -Math.PI / 12;
 
         if (this.player.swingProgress > 0) {
@@ -391,9 +391,9 @@ export class Game {
           );
           
           this.fpArmGroup.rotation.set(
-            defRotX - swingAngle * 0.6,
-            defRotY + swingAngle * 0.4,
-            defRotZ - swingAngle * 0.2
+            defRotX - swingAngle * 0.5,
+            defRotY + swingAngle * 0.3,
+            defRotZ - swingAngle * 0.1
           );
         } else {
           // Subtle breathing / walking bobbing

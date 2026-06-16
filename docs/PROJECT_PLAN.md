@@ -108,8 +108,10 @@ Acceptance:
 Goal: make the survival/building loop feel much closer to early Minecraft.
 
 - [x] Add single chest block, recipe, texture, UI, and persistent 27-slot container data.
+- [x] Add single oak door block, recipe, texture, two-block placement, open/close metadata, and linked breaking.
 - [ ] Add double chest merging.
-- [ ] Add doors, trapdoors, fences, stairs, slabs, bed, ladder, crops, seeds planting, and simple farmland hydration.
+- [ ] Improve door rendering from full-block placeholder to thin directional geometry.
+- [ ] Add trapdoors, fences, stairs, slabs, bed, ladder, crops, seeds planting, and simple farmland hydration.
 - [ ] Add bucket pickup/place for water and lava.
 - [ ] Expand recipes and drops to support the new loop.
 

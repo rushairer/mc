@@ -202,7 +202,7 @@ export class Player {
         for (let bz = minZ; bz <= maxZ; bz++) {
           const blockId = chunks.getBlock(bx, by, bz);
           if (blockId === 0) continue;
-          if (!BlockRegistry.isSolid(blockId)) continue;
+          if (!chunks.isSolidBlock(bx, by, bz)) continue;
 
           // AABB intersection
           if (

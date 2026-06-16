@@ -44,6 +44,8 @@ reg({ id: 33, name: 'piston',         textureKey: 'cobblestone',  textureTop: 'o
 reg({ id: 34, name: 'lever',          textureKey: 'lever',        transparent: true,  solid: false, hardness: 0.0, luminance: 0 });
 reg({ id: 35, name: 'obsidian',       textureKey: 'obsidian',     transparent: false, solid: true,  hardness: 50.0, toolCategory: 'pickaxe', luminance: 0 });
 reg({ id: 36, name: 'chest',          textureKey: 'chest_side',   textureTop: 'chest_top', textureBottom: 'chest_top', transparent: false, solid: true,  hardness: 2.5, toolCategory: 'axe', luminance: 0 });
+reg({ id: 37, name: 'oak_door',       textureKey: 'oak_door_closed', transparent: true, solid: true, hardness: 3.0, toolCategory: 'axe', luminance: 0 });
+reg({ id: 38, name: 'oak_door_open',  textureKey: 'oak_door_open', transparent: true, solid: true, hardness: 3.0, toolCategory: 'axe', dropsId: 37, luminance: 0 });
 
 export const BlockRegistry = {
   get(id: number): BlockDef | undefined {

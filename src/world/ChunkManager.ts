@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Chunk } from './Chunk';
 import { WorldGen } from './WorldGen';
+import { BlockRegistry } from './BlockRegistry';
 import { CHUNK_SIZE, WORLD_HEIGHT, RENDER_DISTANCE } from '../constants';
 import { TextureAtlas } from '../engine/TextureAtlas';
 import type { BlockMetadata, SerializedBlockMetadata } from '../types';
@@ -86,6 +87,15 @@ export class ChunkManager {
     const lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     const lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     return chunk.getBlockMeta(lx, wy, lz);
+  }
+
+  isSolidBlock(wx: number, wy: number, wz: number): boolean {
+    const blockId = this.getBlock(wx, wy, wz);
+    if (blockId === 37 || blockId === 38) {
+      const meta = this.getBlockMeta(wx, wy, wz);
+      return !meta?.open;
+    }
+    return BlockRegistry.isSolid(blockId);
   }
 
   setBlockMeta(wx: number, wy: number, wz: number, metadata: BlockMetadata | null, markDirty = false) {

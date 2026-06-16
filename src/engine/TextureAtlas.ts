@@ -394,6 +394,34 @@ export class TextureAtlas {
       ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
     });
 
+    // oak door
+    this.drawTile('oak_door_closed', (ctx, x, y, s) => {
+      ctx.fillStyle = '#8B5A2B';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#A7773E';
+      ctx.fillRect(x + 2, y + 2, 5, 5);
+      ctx.fillRect(x + 9, y + 2, 5, 5);
+      ctx.fillRect(x + 2, y + 9, 5, 5);
+      ctx.fillRect(x + 9, y + 9, 5, 5);
+      ctx.strokeStyle = '#4C2F14';
+      ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+      ctx.fillStyle = '#D6B15C';
+      ctx.fillRect(x + 12, y + 7, 2, 2);
+    });
+
+    this.drawTile('oak_door_open', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#8B5A2B';
+      ctx.fillRect(x + 6, y, 5, s);
+      ctx.fillStyle = '#A7773E';
+      ctx.fillRect(x + 7, y + 2, 3, 5);
+      ctx.fillRect(x + 7, y + 9, 3, 5);
+      ctx.strokeStyle = '#4C2F14';
+      ctx.strokeRect(x + 6.5, y + 0.5, 4, s - 1);
+      ctx.fillStyle = '#D6B15C';
+      ctx.fillRect(x + 8, y + 7, 2, 2);
+    });
+
     // furnace
     this.drawTile('furnace_top', (ctx, x, y, s) => {
       ctx.fillStyle = '#888888';

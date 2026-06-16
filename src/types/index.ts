@@ -21,6 +21,8 @@ export interface BlockMetadata {
   redstoneType?: 'wire' | 'torch' | 'repeater' | 'piston' | 'lever' | 'button';
   containerType?: 'chest';
   inventory?: (ItemStack | null)[];
+  doorHalf?: 'lower' | 'upper';
+  open?: boolean;
   powered?: boolean;
   signal?: number;
   extended?: boolean;

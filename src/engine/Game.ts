@@ -117,7 +117,7 @@ export class Game {
     this.inventory.setSlot(4, { id: 4, count: 64 });
     this.inventory.setSlot(5, { id: 8, count: 64 });
     this.inventory.setSlot(6, { id: 30, count: 64 });
-    this.inventory.setSlot(7, { id: 26, count: 64 });
+    this.inventory.setSlot(7, { id: 37, count: 64 });
     this.inventory.setSlot(8, { id: 36, count: 64 });
 
     // Spawn
@@ -681,6 +681,7 @@ export class Game {
         if (this.breakProgress >= 1) {
           const blockId = this.chunks.getBlock(bp.x, bp.y, bp.z);
           const blockDef = BlockRegistry.get(blockId);
+          const isDoor = this.isDoorBlock(blockId);
 
           // Spawn break particles
           if (blockDef) {
@@ -689,9 +690,13 @@ export class Game {
           }
 
           // Drop item
-          const dropId = ItemRegistry.getBlockDropItem(blockId);
-          if (dropId > 0) {
-            this.inventory.addItem(dropId, 1);
+          if (isDoor) {
+            this.inventory.addItem(37, 1);
+          } else {
+            const dropId = ItemRegistry.getBlockDropItem(blockId);
+            if (dropId > 0) {
+              this.inventory.addItem(dropId, 1);
+            }
           }
 
           // Damage tool
@@ -703,9 +708,13 @@ export class Game {
           // Fluid check: if breaking a block next to water, trigger flow
           this.checkFluidAdjacency(bp.x, bp.y, bp.z);
 
-          this.chunks.setBlock(bp.x, bp.y, bp.z, 0);
-          this.redstone.unregister(bp.x, bp.y, bp.z);
-          this.chunks.setBlockMeta(bp.x, bp.y, bp.z, null);
+          if (isDoor) {
+            this.breakDoor(bp.x, bp.y, bp.z);
+          } else {
+            this.chunks.setBlock(bp.x, bp.y, bp.z, 0);
+            this.redstone.unregister(bp.x, bp.y, bp.z);
+            this.chunks.setBlockMeta(bp.x, bp.y, bp.z, null);
+          }
           this.sound.playBlockBreak();
           this.breakProgress = 0;
           this.breakingBlockPos = null;
@@ -734,6 +743,10 @@ export class Game {
         } else if (targetId === 36) {
           this.openChestUI(blockPos.x, blockPos.y, blockPos.z);
           this.placeCooldown = 0.5;
+        } else if (this.isDoorBlock(targetId)) {
+          this.toggleDoor(blockPos.x, blockPos.y, blockPos.z);
+          this.sound.playLever();
+          this.placeCooldown = 0.25;
         } else if (targetId === 34) {
           const powered = this.redstone.toggleLever(blockPos.x, blockPos.y, blockPos.z);
           this.updateRedstoneMetadata(blockPos.x, blockPos.y, blockPos.z, {
@@ -758,12 +771,6 @@ export class Game {
             if (slot && slot.count > 0) {
               const blockId = ItemRegistry.isBlock(slot.id) ? slot.id : 0;
               if (blockId > 0) {
-                this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
-                this.sound.playBlockPlace();
-                this.inventory.removeFromSlot(this.player.selectedSlot);
-                this.placeCooldown = 0.25;
-
-                // Register redstone component if it is one
                 let facing: BlockFacing = 'north';
                 if (faceNormal.x > 0) facing = 'east';
                 else if (faceNormal.x < 0) facing = 'west';
@@ -772,11 +779,26 @@ export class Game {
                 else if (faceNormal.z > 0) facing = 'south';
                 else if (faceNormal.z < 0) facing = 'north';
 
-                this.setPlacedBlockMetadata(placePos.x, placePos.y, placePos.z, blockId, facing);
+                if (blockId === 37) {
+                  const placed = this.placeDoor(placePos.x, placePos.y, placePos.z);
+                  if (placed) {
+                    this.sound.playBlockPlace();
+                    this.inventory.removeFromSlot(this.player.selectedSlot);
+                    this.placeCooldown = 0.25;
+                  }
+                } else {
+                  this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
+                  this.sound.playBlockPlace();
+                  this.inventory.removeFromSlot(this.player.selectedSlot);
+                  this.placeCooldown = 0.25;
 
-                // If placing water/lava, start fluid simulation
-                if (blockId === 13 || blockId === 14) {
-                  this.fluids.addSource(placePos.x, placePos.y, placePos.z, blockId);
+                  // Register redstone component if it is one
+                  this.setPlacedBlockMetadata(placePos.x, placePos.y, placePos.z, blockId, facing);
+
+                  // If placing water/lava, start fluid simulation
+                  if (blockId === 13 || blockId === 14) {
+                    this.fluids.addSource(placePos.x, placePos.y, placePos.z, blockId);
+                  }
                 }
               }
             }
@@ -789,7 +811,7 @@ export class Game {
     const foodSlotStack = this.inventory.getSlot(this.player.selectedSlot);
     const isHoldingFood = foodSlotStack && ItemRegistry.isFood(foodSlotStack.id);
     const targetBlockId = this.targetBlock ? this.chunks.getBlock(this.targetBlock.blockPos.x, this.targetBlock.blockPos.y, this.targetBlock.blockPos.z) : 0;
-    const pointingAtInteractive = this.targetBlock && (targetBlockId === 25 || targetBlockId === 24 || targetBlockId === 34 || targetBlockId === 36);
+    const pointingAtInteractive = this.targetBlock && (targetBlockId === 25 || targetBlockId === 24 || targetBlockId === 34 || targetBlockId === 36 || this.isDoorBlock(targetBlockId));
 
     if (this.input.isMouseDown(2) && isHoldingFood && !pointingAtInteractive && this.player.hunger < 20) {
       this.eatingTimer += dt;
@@ -1141,6 +1163,109 @@ export class Game {
     return blockId === 24 || blockId === 25 || blockId === 36;
   }
 
+  private isDoorBlock(blockId: number): boolean {
+    return blockId === 37 || blockId === 38;
+  }
+
+  private getPlayerHorizontalFacing(): BlockFacing {
+    const forward = this.player.forward;
+    if (Math.abs(forward.x) > Math.abs(forward.z)) {
+      return forward.x > 0 ? 'east' : 'west';
+    }
+    return forward.z > 0 ? 'south' : 'north';
+  }
+
+  private placeDoor(x: number, y: number, z: number): boolean {
+    if (y < 0 || y >= 254) return false;
+    if (this.chunks.getBlock(x, y, z) !== 0 || this.chunks.getBlock(x, y + 1, z) !== 0) {
+      return false;
+    }
+
+    const px = Math.floor(this.player.position.x);
+    const py = Math.floor(this.player.position.y);
+    const pz = Math.floor(this.player.position.z);
+    if (x === px && z === pz && (y === py || y === py + 1 || y + 1 === py || y + 1 === py + 1)) {
+      return false;
+    }
+
+    const facing = this.getPlayerHorizontalFacing();
+    this.chunks.setBlock(x, y, z, 37);
+    this.chunks.setBlockMeta(x, y, z, {
+      facing,
+      doorHalf: 'lower',
+      open: false,
+    }, true);
+
+    this.chunks.setBlock(x, y + 1, z, 37);
+    this.chunks.setBlockMeta(x, y + 1, z, {
+      facing,
+      doorHalf: 'upper',
+      open: false,
+    }, true);
+
+    return true;
+  }
+
+  private getDoorBase(x: number, y: number, z: number): { x: number; y: number; z: number } | null {
+    const blockId = this.chunks.getBlock(x, y, z);
+    if (!this.isDoorBlock(blockId)) return null;
+
+    const meta = this.chunks.getBlockMeta(x, y, z);
+    if (meta?.doorHalf === 'upper') {
+      return { x, y: y - 1, z };
+    }
+    if (meta?.doorHalf === 'lower') {
+      return { x, y, z };
+    }
+
+    if (this.isDoorBlock(this.chunks.getBlock(x, y - 1, z))) {
+      return { x, y: y - 1, z };
+    }
+    return { x, y, z };
+  }
+
+  private toggleDoor(x: number, y: number, z: number) {
+    const base = this.getDoorBase(x, y, z);
+    if (!base) return;
+
+    const lowerMeta = this.chunks.getBlockMeta(base.x, base.y, base.z);
+    const upperMeta = this.chunks.getBlockMeta(base.x, base.y + 1, base.z);
+    const open = !(lowerMeta?.open ?? upperMeta?.open ?? false);
+    const facing = lowerMeta?.facing ?? upperMeta?.facing ?? 'north';
+    const blockId = open ? 38 : 37;
+
+    this.chunks.setBlock(base.x, base.y, base.z, blockId);
+    this.chunks.setBlockMeta(base.x, base.y, base.z, {
+      ...lowerMeta,
+      facing,
+      doorHalf: 'lower',
+      open,
+    }, true);
+
+    if (this.isDoorBlock(this.chunks.getBlock(base.x, base.y + 1, base.z))) {
+      this.chunks.setBlock(base.x, base.y + 1, base.z, blockId);
+      this.chunks.setBlockMeta(base.x, base.y + 1, base.z, {
+        ...upperMeta,
+        facing,
+        doorHalf: 'upper',
+        open,
+      }, true);
+    }
+  }
+
+  private breakDoor(x: number, y: number, z: number) {
+    const base = this.getDoorBase(x, y, z);
+    if (!base) return;
+
+    this.chunks.setBlock(base.x, base.y, base.z, 0);
+    this.chunks.setBlockMeta(base.x, base.y, base.z, null);
+
+    if (this.isDoorBlock(this.chunks.getBlock(base.x, base.y + 1, base.z))) {
+      this.chunks.setBlock(base.x, base.y + 1, base.z, 0);
+      this.chunks.setBlockMeta(base.x, base.y + 1, base.z, null);
+    }
+  }
+
   private ensureChestMetadata(x: number, y: number, z: number): BlockMetadata | null {
     if (this.chunks.getBlock(x, y, z) !== 36) return null;
 
@@ -1345,6 +1470,7 @@ export class Game {
         else if (itemId === 24) key = 'crafting_top';
         else if (itemId === 25) key = 'furnace_side';
         else if (itemId === 36) key = 'chest_side';
+        else if (itemId === 37 || itemId === 38) key = 'oak_door_closed';
         else if (itemId === 21) key = 'tnt_side';
         else key = block.textureKey;
       }

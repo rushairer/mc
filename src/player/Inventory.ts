@@ -31,6 +31,10 @@ export class Inventory {
       if (!this.slots[i]) {
         const toAdd = Math.min(remaining, maxStack);
         this.slots[i] = { id, count: toAdd };
+        if (ItemRegistry.isTool(id)) {
+          const def = ItemRegistry.get(id);
+          this.slots[i]!.durability = def?.durability ?? 100;
+        }
         remaining -= toAdd;
       }
     }
@@ -80,10 +84,22 @@ export class Inventory {
 
   /** Damage a tool in the given slot by 1. Remove if broken. */
   damageTool(slotIndex: number): boolean {
-    // Tools are tracked via a damage counter stored in the count field
-    // For simplicity, we'll track damage in a separate map
-    // This returns true if the tool broke
-    return false; // placeholder - damage tracking via durability system
+    const slot = this.slots[slotIndex];
+    if (!slot) return false;
+
+    if (ItemRegistry.isTool(slot.id)) {
+      const def = ItemRegistry.get(slot.id);
+      if (slot.durability === undefined) {
+        slot.durability = def?.durability ?? 100;
+      }
+
+      slot.durability -= 1;
+      if (slot.durability <= 0) {
+        this.slots[slotIndex] = null; // tool broke!
+        return true;
+      }
+    }
+    return false;
   }
 
   /** Serialize for save. */

@@ -15,6 +15,7 @@ export class Player {
   selectedSlot = 0;
   health = 20;
   hunger = 20;
+  saturation = 20;
   flying = false;
 
   private halfWidth = PLAYER_WIDTH / 2;

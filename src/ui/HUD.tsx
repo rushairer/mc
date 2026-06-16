@@ -99,6 +99,33 @@ export const HUD: React.FC<{ state: GameState }> = ({ state }) => {
                       {item!.count}
                     </span>
                   )}
+                  {item && item.durability !== undefined && (
+                    (() => {
+                      const maxDur = ItemRegistry.get(item.id)?.durability ?? 100;
+                      if (item.durability >= maxDur) return null;
+                      const pct = Math.max(0, Math.min(1, item.durability / maxDur));
+                      const hue = pct * 120;
+                      const color = `hsl(${hue}, 100%, 45%)`;
+                      return (
+                        <div style={{
+                          position: 'absolute',
+                          bottom: '2px',
+                          left: '2px',
+                          right: '2px',
+                          height: '3px',
+                          background: '#000',
+                          borderRadius: '1px',
+                          overflow: 'hidden',
+                        }}>
+                          <div style={{
+                            width: `${pct * 100}%`,
+                            height: '100%',
+                            background: color,
+                          }} />
+                        </div>
+                      );
+                    })()
+                  )}
                 </>
               ) : null}
               <span style={{

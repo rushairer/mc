@@ -15,7 +15,7 @@ import { WeatherSystem } from '../systems/WeatherSystem';
 import { SoundSystem } from '../systems/SoundSystem';
 import { SaveSystem, type SaveData } from '../systems/SaveSystem';
 
-export type UIType = 'none' | 'inventory' | 'furnace';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table';
 
 export interface GameState {
   fps: number;
@@ -74,6 +74,9 @@ export class Game {
   private gameTime = 0.25; // start at sunrise (0=midnight, 0.25=sunrise, 0.5=noon, 0.75=sunset)
   private damageFlashTimer = 0;
   private swordSwingTimer = 0;
+  private eatingTimer = 0;
+  private chewSoundTimer = 0;
+  private stepTimer = 0;
 
   constructor(container: HTMLElement) {
     this.renderer = new Renderer(container);
@@ -132,6 +135,11 @@ export class Game {
 
   openFurnaceUI() {
     this.openUI = 'furnace';
+    document.exitPointerLock();
+  }
+
+  openCraftingTableUI() {
+    this.openUI = 'crafting_table';
     document.exitPointerLock();
   }
 
@@ -304,6 +312,12 @@ export class Game {
             this.inventory.addItem(dropId, 1);
           }
 
+          // Damage tool
+          const heldItemStack = this.inventory.getSlot(this.player.selectedSlot);
+          if (heldItemStack && ItemRegistry.isTool(heldItemStack.id)) {
+            this.inventory.damageTool(this.player.selectedSlot);
+          }
+
           // Fluid check: if breaking a block next to water, trigger flow
           this.checkFluidAdjacency(bp.x, bp.y, bp.z);
 
@@ -329,6 +343,9 @@ export class Game {
         // Right-click furnace
         if (targetId === 25) {
           this.openFurnaceUI();
+          this.placeCooldown = 0.5;
+        } else if (targetId === 24) {
+          this.openCraftingTableUI();
           this.placeCooldown = 0.5;
         } else {
           // Place block
@@ -362,6 +379,63 @@ export class Game {
       }
     }
 
+    // ─── Food Eating ───
+    const selectedSlotStack = this.inventory.getSlot(this.player.selectedSlot);
+    const isHoldingFood = selectedSlotStack && ItemRegistry.isFood(selectedSlotStack.id);
+    const targetBlockId = this.targetBlock ? this.chunks.getBlock(this.targetBlock.blockPos.x, this.targetBlock.blockPos.y, this.targetBlock.blockPos.z) : 0;
+    const pointingAtInteractive = this.targetBlock && (targetBlockId === 25 || targetBlockId === 24 || targetBlockId === 34);
+
+    if (this.input.isMouseDown(2) && isHoldingFood && !pointingAtInteractive && this.player.hunger < 20) {
+      this.eatingTimer += dt;
+      this.chewSoundTimer += dt;
+
+      if (this.chewSoundTimer >= 0.25) {
+        this.chewSoundTimer = 0;
+        this.sound.playEat();
+
+        let foodColor = 0xC0A080;
+        if (selectedSlotStack.id === 170) foodColor = 0xFF0000;
+        else if (selectedSlotStack.id === 172 || selectedSlotStack.id === 173) foodColor = 0xA04040;
+
+        const front = this.player.eyePosition.clone().add(this.player.forward.multiplyScalar(0.4));
+        this.particles.spawnBlockBreak(front.x, front.y, front.z, foodColor);
+      }
+
+      if (this.eatingTimer >= 1.6) {
+        const foodDef = ItemRegistry.get(selectedSlotStack.id);
+        if (foodDef) {
+          this.player.hunger = Math.min(20, this.player.hunger + (foodDef.hungerRestore ?? 0));
+          this.player.saturation = Math.min(this.player.hunger, this.player.saturation + (foodDef.saturationRestore ?? 0));
+          this.sound.playBurp();
+          this.inventory.removeFromSlot(this.player.selectedSlot);
+        }
+        this.eatingTimer = 0;
+        this.chewSoundTimer = 0;
+        this.placeCooldown = 0.5;
+      }
+    } else {
+      this.eatingTimer = 0;
+      this.chewSoundTimer = 0;
+    }
+
+    // ─── Footsteps ───
+    const isMoving = (this.input.isKeyDown('w') || this.input.isKeyDown('s') || this.input.isKeyDown('a') || this.input.isKeyDown('d')) && !this.player.flying;
+    if (this.player.onGround && isMoving) {
+      const isSprinting = this.input.isKeyDown('control');
+      const stepInterval = isSprinting ? 0.28 : 0.38;
+      this.stepTimer += dt;
+      if (this.stepTimer >= stepInterval) {
+        this.stepTimer = 0;
+        const bx = Math.floor(this.player.position.x);
+        const by = Math.floor(this.player.position.y - 0.1);
+        const bz = Math.floor(this.player.position.z);
+        const blockId = this.chunks.getBlock(bx, by, bz);
+        this.sound.playStep(blockId);
+      }
+    } else {
+      this.stepTimer = 0;
+    }
+
     // Mob system
     this.mobs.update(dt, this.player.position,
       (x, y, z) => this.chunks.getBlock(x, y, z),
@@ -382,14 +456,7 @@ export class Game {
     this.collectMobDrops();
 
     // Survival
-    this.survival.update(dt, {
-      position: this.player.position,
-      velocity: this.player.velocity,
-      onGround: this.player.onGround,
-      health: this.player.health,
-      hunger: this.player.hunger,
-      flying: this.player.flying,
-    }, (x, y, z) => this.chunks.getBlock(x, y, z), (dmg) => {
+    this.survival.update(dt, this.player, (x, y, z) => this.chunks.getBlock(x, y, z), (dmg) => {
       this.player.health = Math.max(0, this.player.health - dmg);
       this.damageFlashTimer = 0.3;
       this.sound.playHurt();

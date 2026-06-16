@@ -4,6 +4,7 @@ import { HUD } from './ui/HUD';
 import { DebugOverlay } from './ui/DebugOverlay';
 import { InventoryUI } from './ui/InventoryUI';
 import { FurnaceUI } from './ui/FurnaceUI';
+import { CraftingTableUI } from './ui/CraftingTableUI';
 
 const initialGameState: GameState = {
   fps: 0,
@@ -119,6 +120,15 @@ export const App: React.FC = () => {
       {/* Furnace UI */}
       {gameState.openUI === 'furnace' && gameState.inventory && (
         <FurnaceUI
+          inventory={gameState.inventory}
+          onClose={handleCloseUI}
+          onInventoryChange={handleInventoryChange}
+        />
+      )}
+
+      {/* Crafting Table UI */}
+      {gameState.openUI === 'crafting_table' && gameState.inventory && (
+        <CraftingTableUI
           inventory={gameState.inventory}
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}

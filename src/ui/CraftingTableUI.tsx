@@ -1,10 +1,10 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
-import { Inventory, HOTBAR_SIZE, INVENTORY_SIZE } from '../player/Inventory';
+import { Inventory } from '../player/Inventory';
 import { findCraftingResult } from '../items/CraftingRecipes';
 
-interface InventoryUIProps {
+interface CraftingTableUIProps {
   inventory: Inventory;
   onClose: () => void;
   onInventoryChange: () => void;
@@ -12,9 +12,9 @@ interface InventoryUIProps {
 
 const SLOT_SIZE = 48;
 
-export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, onInventoryChange }) => {
+export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onClose, onInventoryChange }) => {
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
-  const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(4).fill(0));
+  const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(9).fill(0));
   const [craftResult, setCraftResult] = useState<{ id: number; count: number } | null>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
 
@@ -22,7 +22,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       mouseRef.current = { x: e.clientX, y: e.clientY };
-      const held = document.getElementById('held-item');
+      const held = document.getElementById('held-item-table');
       if (held) {
         held.style.left = `${e.clientX - SLOT_SIZE / 2}px`;
         held.style.top = `${e.clientY - SLOT_SIZE / 2}px`;
@@ -34,20 +34,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
 
   // Recalculate crafting result when grid changes
   useEffect(() => {
-    // Convert 2x2 grid to 3x3 for findCraftingResult
-    // 2x2 layout:
-    // [0, 1]
-    // [2, 3]
-    // 3x3 layout:
-    // [0, 1, 0]
-    // [2, 3, 0]
-    // [0, 0, 0]
-    const grid3x3 = [
-      craftingGrid[0], craftingGrid[1], 0,
-      craftingGrid[2], craftingGrid[3], 0,
-      0, 0, 0
-    ];
-    const result = findCraftingResult(grid3x3);
+    const result = findCraftingResult(craftingGrid);
     setCraftResult(result);
   }, [craftingGrid]);
 
@@ -103,10 +90,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     // Add result to inventory
     inventory.addItem(craftResult.id, craftResult.count);
     // Remove one of each ingredient from crafting grid
-    const newGrid = craftingGrid.map(id => {
-      if (id === 0) return 0;
-      return 0; // clear all on craft
-    });
+    const newGrid = craftingGrid.map(() => 0); // clear all on craft
     setCraftingGrid(newGrid);
     onInventoryChange();
   }, [craftResult, inventory, craftingGrid, onInventoryChange]);
@@ -121,7 +105,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     for (const id of craftingGrid) {
       if (id !== 0) inventory.addItem(id, 1);
     }
-    setCraftingGrid(new Array(4).fill(0));
+    setCraftingGrid(new Array(9).fill(0));
     onInventoryChange();
     onClose();
   }, [heldItem, inventory, craftingGrid, onInventoryChange, onClose]);
@@ -231,11 +215,11 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
       }}>
         {/* Crafting area */}
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Crafting (2×2)</div>
+          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Crafting Table (3×3)</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: `repeat(2, ${SLOT_SIZE}px)`,
+              gridTemplateColumns: `repeat(3, ${SLOT_SIZE}px)`,
               gap: '2px',
             }}>
               {craftingGrid.map((id, i) => {
@@ -287,7 +271,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
       {/* Held item following cursor */}
       {heldItem && (
         <div
-          id="held-item"
+          id="held-item-table"
           style={{
             position: 'fixed',
             width: SLOT_SIZE,

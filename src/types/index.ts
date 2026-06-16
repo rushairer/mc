@@ -42,6 +42,7 @@ export interface PlayerState {
 export interface ItemStack {
   id: number;
   count: number;
+  durability?: number;
 }
 
 export interface WorldSaveData {

@@ -18,12 +18,14 @@ const initialGameState: GameState = {
   selectedSlot: 0,
   health: 20,
   hunger: 20,
+  oxygen: 15.0,
   onGround: false,
   flying: false,
   openUI: 'none',
   inventory: null as any,
   heldItemId: 0,
   isNight: false,
+  isUnderwater: false,
 };
 
 export const App: React.FC = () => {
@@ -62,6 +64,12 @@ export const App: React.FC = () => {
     }
   }, []);
 
+  const handleRespawn = useCallback(() => {
+    if (gameRef.current) {
+      gameRef.current.respawn();
+    }
+  }, []);
+
   const handleInventoryChange = useCallback(() => {
     // Force re-render by notifying state
     if (gameRef.current) {
@@ -83,6 +91,20 @@ export const App: React.FC = () => {
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+      {/* Underwater blue screen tint */}
+      {gameState.openUI === 'none' && gameState.isUnderwater && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(63, 118, 228, 0.18)',
+          pointerEvents: 'none',
+          zIndex: 10,
+        }} />
+      )}
 
       <HUD state={gameState} getItemIconStyle={getItemIconStyle} />
       <DebugOverlay state={gameState} visible={showDebug} />
@@ -145,6 +167,49 @@ export const App: React.FC = () => {
         />
       )}
 
+      {/* Death UI */}
+      {gameState.openUI === 'death' && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(120, 0, 0, 0.65)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 200,
+        }}>
+          <h1 style={{
+            color: '#f33',
+            fontSize: '48px',
+            fontFamily: '"Courier New", monospace',
+            textShadow: '3px 3px 0 #000',
+            marginBottom: '24px',
+          }}>
+            You died!
+          </h1>
+          <button
+            onClick={handleRespawn}
+            style={{
+              padding: '12px 24px',
+              fontSize: '18px',
+              fontFamily: '"Courier New", monospace',
+              background: '#333',
+              color: '#fff',
+              border: '2px solid #555',
+              cursor: 'pointer',
+              textShadow: '1px 1px 0 #000',
+              boxShadow: '2px 2px 0 #000',
+            }}
+          >
+            Respawn
+          </button>
+        </div>
+      )}
+
       {/* Break progress indicator */}
       {gameState.openUI === 'none' && (
         <div style={{
@@ -189,20 +254,23 @@ export const App: React.FC = () => {
             <h2 style={{ marginBottom: '16px', fontSize: '24px', color: '#4f4' }}>
               Minecraft Clone
             </h2>
-            <div style={{ lineHeight: '2', fontSize: '14px', textAlign: 'left' }}>
+             <div style={{ lineHeight: '2', fontSize: '14px', textAlign: 'left' }}>
               <div><b>WASD</b> — Move</div>
               <div><b>Space</b> — Jump</div>
               <div><b>Shift</b> — Sprint</div>
               <div><b>F</b> — Toggle Fly</div>
               <div><b>Mouse</b> — Look around</div>
-              <div><b>Left Click</b> — Break block (hold)</div>
-              <div><b>Right Click</b> — Place block / Open furnace</div>
+              <div><b>Left Click</b> — Break block / Attack mob (hold)</div>
+              <div><b>Right Click</b> — Place block / Open furnace / Eat food (hold)</div>
               <div><b>Scroll / 1-9</b> — Select hotbar slot</div>
               <div><b>E</b> — Inventory & Crafting</div>
               <div><b>F5</b> — Toggle perspective</div>
               <div><b>F3</b> — Toggle debug overlay</div>
             </div>
-            <div style={{ marginTop: '16px', color: '#8f8', fontSize: '12px' }}>
+            <div style={{ marginTop: '12px', color: '#ffaa00', fontSize: '12px', textAlign: 'left', fontStyle: 'italic' }}>
+              * Tip: Hold Right Click while holding food to eat and fill hunger. Health regenerates naturally when hunger is &gt;= 18.
+            </div>
+            <div style={{ marginTop: '12px', color: '#8f8', fontSize: '12px' }}>
               Auto-saves every 60 seconds
             </div>
             <div style={{ marginTop: '8px', color: '#aaa', fontSize: '12px' }}>

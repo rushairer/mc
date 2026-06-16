@@ -62,11 +62,15 @@ export class TextureAtlas {
     const col = idx % TILES_PER_ROW;
     const row = Math.floor(idx / TILES_PER_ROW);
     const s = 1 / TILES_PER_ROW;
+
+    // Inset by half a pixel to prevent texture bleeding
+    const eps = 0.5 / ATLAS_SIZE;
+
     return {
-      u0: col * s,
-      v0: 1 - (row + 1) * s,
-      u1: (col + 1) * s,
-      v1: 1 - row * s,
+      u0: col * s + eps,
+      v0: 1 - (row + 1) * s + eps,
+      u1: (col + 1) * s - eps,
+      v1: 1 - row * s - eps,
     };
   }
 
@@ -240,13 +244,36 @@ export class TextureAtlas {
 
     // water
     this.drawTile('water', (ctx, x, y, s) => {
-      ctx.fillStyle = '#2B4FA8';
+      ctx.clearRect(x, y, s, s);
+      // Vanilla-style water: bright blue, partially transparent, with blocky flowing streaks.
+      ctx.fillStyle = 'rgba(63, 118, 228, 0.58)';
       ctx.fillRect(x, y, s, s);
-      for (let i = 0; i < 8; i++) {
-        const py = y + Math.random() * s | 0;
-        ctx.fillStyle = '#3A6FD8';
-        ctx.fillRect(x, py, s, 1);
-      }
+
+      const light = 'rgba(109, 160, 255, 0.34)';
+      const mid = 'rgba(73, 134, 238, 0.30)';
+      const dark = 'rgba(33, 77, 174, 0.24)';
+
+      ctx.fillStyle = light;
+      ctx.fillRect(x + 1, y + 2, 6, 1);
+      ctx.fillRect(x + 7, y + 3, 4, 1);
+      ctx.fillRect(x + 12, y + 1, 2, 1);
+      ctx.fillRect(x + 3, y + 9, 5, 1);
+      ctx.fillRect(x + 8, y + 10, 4, 1);
+      ctx.fillRect(x + 12, y + 13, 3, 1);
+
+      ctx.fillStyle = mid;
+      ctx.fillRect(x + 0, y + 5, 4, 1);
+      ctx.fillRect(x + 4, y + 6, 5, 1);
+      ctx.fillRect(x + 10, y + 7, 4, 1);
+      ctx.fillRect(x + 1, y + 13, 5, 1);
+      ctx.fillRect(x + 7, y + 14, 4, 1);
+
+      ctx.fillStyle = dark;
+      ctx.fillRect(x + 9, y + 0, 5, 1);
+      ctx.fillRect(x + 12, y + 4, 3, 1);
+      ctx.fillRect(x + 0, y + 11, 3, 1);
+      ctx.fillRect(x + 5, y + 12, 6, 1);
+      ctx.fillRect(x + 13, y + 9, 2, 1);
     });
 
     // lava

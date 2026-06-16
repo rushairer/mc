@@ -16,7 +16,7 @@ import { SoundSystem } from '../systems/SoundSystem';
 import { SaveSystem, type SaveData } from '../systems/SaveSystem';
 import { RedstoneSystem } from '../systems/RedstoneSystem';
 
-export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'death';
 
 export interface GameState {
   fps: number;
@@ -30,12 +30,14 @@ export interface GameState {
   selectedSlot: number;
   health: number;
   hunger: number;
+  oxygen: number;
   onGround: boolean;
   flying: boolean;
   openUI: UIType;
   inventory: Inventory;
   heldItemId: number;
   isNight: boolean;
+  isUnderwater: boolean;
 }
 
 export type GameStateListener = (state: GameState) => void;
@@ -250,6 +252,85 @@ export class Game {
     this.openUI = 'none';
   }
 
+  respawn() {
+    const safePos = this.findSafeRespawnPosition();
+
+    // Chunk loading around safe position
+    this.chunks.update(safePos.x, safePos.z);
+
+    this.player.position.copy(safePos);
+    this.player.velocity.set(0, 0, 0);
+    this.player.health = 20;
+    this.player.hunger = 20;
+    this.player.saturation = 20;
+    this.player.flying = false;
+    this.player.resolveStuck(this.chunks);
+    this.survival.resetFall();
+
+    this.openUI = 'none';
+    this.input.requestLock();
+    this.notifyState();
+  }
+
+  private findSafeRespawnPosition(): THREE.Vector3 {
+    const spawnPoint = new THREE.Vector3(8, 0, 8);
+    let bestPos: THREE.Vector3 | null = null;
+
+    for (let attempt = 0; attempt < 30; attempt++) {
+      // Choose a random distance (30 to 80 blocks) and angle
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 30 + Math.random() * 50;
+      const rx = Math.floor(spawnPoint.x + Math.cos(angle) * dist);
+      const rz = Math.floor(spawnPoint.z + Math.sin(angle) * dist);
+
+      // Get surface Y height
+      const ry = this.chunks.getWorldGen().getTerrainHeight(rx, rz);
+
+      // Check block type at surface and below
+      const surfaceBlockId = this.chunks.getBlock(rx, ry, rz);
+      const belowBlockId = this.chunks.getBlock(rx, ry - 1, rz);
+
+      // Avoid water (13) and lava (14)
+      if (surfaceBlockId === 13 || surfaceBlockId === 14 || belowBlockId === 13 || belowBlockId === 14) {
+        continue;
+      }
+
+      const candidatePos = new THREE.Vector3(rx + 0.5, ry + 1.5, rz + 0.5);
+
+      // Check for nearby hostile mobs
+      const nearbyMobs = this.mobs.getMobsNear(candidatePos, 16);
+      const nearbyHostiles = nearbyMobs.filter(mob => mob.def.hostile);
+
+      if (nearbyHostiles.length === 0) {
+        bestPos = candidatePos;
+        break;
+      }
+
+      // Keep track of the one with fewest hostiles just in case
+      if (!bestPos) {
+        bestPos = candidatePos;
+      }
+    }
+
+    // Fallback: if all attempts fail, use the last candidate but clear/kill mobs within 12 blocks of it
+    if (!bestPos) {
+      const angle = Math.random() * Math.PI * 2;
+      const rx = Math.floor(spawnPoint.x + Math.cos(angle) * 30);
+      const rz = Math.floor(spawnPoint.z + Math.sin(angle) * 30);
+      const ry = this.chunks.getWorldGen().getTerrainHeight(rx, rz);
+      bestPos = new THREE.Vector3(rx + 0.5, ry + 1.5, rz + 0.5);
+
+      const nearbyMobs = this.mobs.getMobsNear(bestPos, 12);
+      for (const mob of nearbyMobs) {
+        if (mob.def.hostile) {
+          mob.health = 0; // kill it
+        }
+      }
+    }
+
+    return bestPos;
+  }
+
   requestSave() {
     this.saveGame();
   }
@@ -284,6 +365,31 @@ export class Game {
     // Game time (day/night cycle)
     this.gameTime = (this.gameTime + dt / DAY_LENGTH) % 1;
     this.renderer.setTimeOfDay(this.gameTime);
+
+    // Underwater fog and background override
+    const headBlock = this.chunks.getBlock(
+      Math.floor(this.player.position.x),
+      Math.floor(this.player.position.y + 1.62),
+      Math.floor(this.player.position.z)
+    );
+    const isUnderwater = headBlock === 13;
+
+    if (isUnderwater) {
+      const waterFogColor = new THREE.Color(0x3F76E4);
+      this.renderer.scene.background = waterFogColor;
+      if (this.renderer.scene.fog) {
+        const fog = this.renderer.scene.fog as THREE.Fog;
+        fog.color.copy(waterFogColor);
+        fog.near = 0;
+        fog.far = 36;
+      }
+    } else {
+      if (this.renderer.scene.fog) {
+        const fog = this.renderer.scene.fog as THREE.Fog;
+        fog.near = this.renderer.fogNear;
+        fog.far = this.renderer.fogFar;
+      }
+    }
 
     // UI open: skip game input
     if (this.openUI !== 'none') {
@@ -330,9 +436,31 @@ export class Game {
       left: this.input.isKeyDown('a'),
       right: this.input.isKeyDown('d'),
       jump: this.input.isKeyDown(' '),
-      sprint: this.input.isKeyDown('control'),
+      sprint: this.input.isKeyDown('control') || this.input.isKeyDown('shift'),
       fly: false,
     }, this.chunks);
+
+    // Mob system
+    this.mobs.update(dt, this.player.position,
+      (x, y, z) => this.chunks.getBlock(x, y, z),
+      (damage, knockback) => {
+        this.player.health = Math.max(0, this.player.health - damage);
+        this.player.velocity.add(knockback);
+        this.damageFlashTimer = 0.3;
+        this.sound.playHurt();
+        this.particles.spawnDamageParticles(
+          this.player.position.x,
+          this.player.position.y + 1,
+          this.player.position.z
+        );
+      }
+    );
+
+    // Resolve collisions (mob-mob, player-mob)
+    this.resolveCollisions();
+
+    // Collect mob drops from dead mobs
+    this.collectMobDrops();
 
     if (this.input.isMouseDown(0) || this.input.isMouseDown(2)) {
       this.player.startSwing();
@@ -374,7 +502,7 @@ export class Game {
         const defX = 0.42;
         const defY = -0.02;
         const defZ = -0.22;
-        
+
         const defRotX = Math.PI / 3.2;
         const defRotY = Math.PI / 4.5;
         const defRotZ = -Math.PI / 12;
@@ -382,14 +510,14 @@ export class Game {
         if (this.player.swingProgress > 0) {
           const t = this.player.swingProgress;
           const swingAngle = Math.sin(t * Math.PI);
-          
+
           // Rotate around a stable shoulder position with minimal translation
           this.fpArmGroup.position.set(
             defX - swingAngle * 0.04,
             defY - swingAngle * 0.03,
             defZ - swingAngle * 0.04
           );
-          
+
           this.fpArmGroup.rotation.set(
             defRotX - swingAngle * 0.5,
             defRotY + swingAngle * 0.3,
@@ -407,7 +535,7 @@ export class Game {
           } else {
             bobY = Math.sin(time) * 0.005;
           }
-          
+
           this.fpArmGroup.position.set(defX + bobX, defY + bobY, defZ);
           this.fpArmGroup.rotation.set(defRotX, defRotY, defRotZ);
         }
@@ -690,31 +818,22 @@ export class Game {
       this.stepTimer = 0;
     }
 
-    // Mob system
-    this.mobs.update(dt, this.player.position,
-      (x, y, z) => this.chunks.getBlock(x, y, z),
-      (damage, knockback) => {
-        this.player.health = Math.max(0, this.player.health - damage);
-        this.player.velocity.add(knockback);
-        this.damageFlashTimer = 0.3;
-        this.sound.playHurt();
-        this.particles.spawnDamageParticles(
-          this.player.position.x,
-          this.player.position.y + 1,
-          this.player.position.z
-        );
-      }
-    );
+    // Mobs and drops updated earlier in tick
 
-    // Collect mob drops from dead mobs
-    this.collectMobDrops();
-
-    // Survival
     this.survival.update(dt, this.player, (x, y, z) => this.chunks.getBlock(x, y, z), (dmg) => {
       this.player.health = Math.max(0, this.player.health - dmg);
       this.damageFlashTimer = 0.3;
       this.sound.playHurt();
     });
+
+    // Death check
+    if (this.player.health <= 0) {
+      this.openUI = 'death';
+      document.exitPointerLock();
+      this.notifyState();
+      this.renderer.render();
+      return;
+    }
 
     // Redstone simulation
     this.redstone.update(
@@ -841,6 +960,13 @@ export class Game {
 
     const isNight = this.gameTime > 0.35 && this.gameTime < 0.75;
 
+    const headBlock = this.chunks.getBlock(
+      Math.floor(this.player.position.x),
+      Math.floor(this.player.position.y + 1.62),
+      Math.floor(this.player.position.z)
+    );
+    const isUnderwater = headBlock === 13;
+
     const state: GameState = {
       fps: this.currentFps,
       playerX: Math.round(this.player.position.x * 10) / 10,
@@ -853,12 +979,14 @@ export class Game {
       selectedSlot: this.player.selectedSlot,
       health: this.player.health,
       hunger: this.player.hunger,
+      oxygen: this.player.oxygen,
       onGround: this.player.onGround,
       flying: this.player.flying,
       openUI: this.openUI,
       inventory: this.inventory,
       heldItemId: selectedSlot?.id ?? 0,
       isNight,
+      isUnderwater,
     };
 
     for (const listener of this.stateListeners) {
@@ -924,6 +1052,112 @@ export class Game {
       console.log('Game loaded from save');
     } catch (e) {
       console.warn('Load failed:', e);
+    }
+  }
+
+  private resolveCollisions() {
+    const getBlock = (x: number, y: number, z: number) => this.chunks.getBlock(x, y, z);
+
+    // 1. Resolve Mob-Mob collisions
+    const mobs = Array.from(this.mobs.mobs.values());
+    for (let i = 0; i < mobs.length; i++) {
+      for (let j = i + 1; j < mobs.length; j++) {
+        const mobA = mobs[i];
+        const mobB = mobs[j];
+
+        const hwA = mobA.def.width / 2;
+        const hwB = mobB.def.width / 2;
+        const dx = mobA.position.x - mobB.position.x;
+        const dz = mobA.position.z - mobB.position.z;
+        const distSq = dx * dx + dz * dz;
+        const minDist = hwA + hwB;
+
+        if (distSq < minDist * minDist) {
+          // Check Y overlap
+          const yOverlap = (mobA.position.y < mobB.position.y + mobB.def.height) &&
+                           (mobA.position.y + mobA.def.height > mobB.position.y);
+          if (yOverlap) {
+            let dist = Math.sqrt(distSq);
+            let localDx = dx;
+            let localDz = dz;
+            if (dist === 0) {
+              dist = 0.001;
+              localDx = 0.001;
+              localDz = 0;
+            }
+            const overlap = minDist - dist;
+            const pushX = (localDx / dist) * overlap * 0.5;
+            const pushZ = (localDz / dist) * overlap * 0.5;
+
+            // Push mobA
+            mobA.position.x += pushX;
+            if (mobA.checkCollision(getBlock)) mobA.position.x -= pushX;
+            mobA.position.z += pushZ;
+            if (mobA.checkCollision(getBlock)) mobA.position.z -= pushZ;
+
+            // Push mobB
+            mobB.position.x -= pushX;
+            if (mobB.checkCollision(getBlock)) mobB.position.x += pushX;
+            mobB.position.z -= pushZ;
+            if (mobB.checkCollision(getBlock)) mobB.position.z += pushZ;
+
+            // Update meshes
+            mobA.mesh.position.copy(mobA.position);
+            mobB.mesh.position.copy(mobB.position);
+          }
+        }
+      }
+    }
+
+    // 2. Resolve Player-Mob collisions
+    const player = this.player;
+    const hwP = 0.3; // PLAYER_WIDTH / 2
+    const playerHeight = 1.8; // PLAYER_HEIGHT
+
+    for (const mob of mobs) {
+      const hwM = mob.def.width / 2;
+      const dx = player.position.x - mob.position.x;
+      const dz = player.position.z - mob.position.z;
+      const distSq = dx * dx + dz * dz;
+      const minDist = hwP + hwM;
+
+      if (distSq < minDist * minDist) {
+        // Check Y overlap
+        const yOverlap = (player.position.y < mob.position.y + mob.def.height) &&
+                         (player.position.y + playerHeight > mob.position.y);
+        if (yOverlap) {
+          let dist = Math.sqrt(distSq);
+          let localDx = dx;
+          let localDz = dz;
+          if (dist === 0) {
+            dist = 0.001;
+            localDx = 0.001;
+            localDz = 0;
+          }
+          const overlap = minDist - dist;
+
+          // Player is heavier or has control: push player by 30%, mob by 70%
+          const pushPx = (localDx / dist) * overlap * 0.3;
+          const pushPz = (localDz / dist) * overlap * 0.3;
+          const pushMx = -(localDx / dist) * overlap * 0.7;
+          const pushMz = -(localDz / dist) * overlap * 0.7;
+
+          // Push Player
+          player.position.x += pushPx;
+          if (player.checkCollision(this.chunks)) player.position.x -= pushPx;
+          player.position.z += pushPz;
+          if (player.checkCollision(this.chunks)) player.position.z -= pushPz;
+
+          // Push Mob
+          mob.position.x += pushMx;
+          if (mob.checkCollision(getBlock)) mob.position.x -= pushMx;
+          mob.position.z += pushMz;
+          if (mob.checkCollision(getBlock)) mob.position.z -= pushMz;
+
+          // Update mob mesh
+          mob.mesh.position.copy(mob.position);
+        }
+      }
     }
   }
 

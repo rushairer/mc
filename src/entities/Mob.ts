@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BlockRegistry } from '../world/BlockRegistry';
 
 export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken';
 
@@ -28,6 +29,13 @@ const MOB_DEFS: Record<MobType, MobDef> = {
   chicken:  { type: 'chicken',  health: 4,  speed: 2.0, damage: 0, hostile: false, width: 0.4, height: 0.7, bodyColor: 0xFFFFFF, headColor: 0xFF0000, xpDrop: 3,  drops: [] },
 };
 
+const WATER_ID = 13;
+const LAVA_ID = 14;
+const MOB_MAX_AIR = 15.0;
+const MOB_DROWN_INTERVAL = 1.5;
+const WATER_LOOKAHEAD = 0.9;
+const WATER_ESCAPE_RADIUS = 6;
+
 export class Mob {
   id: number;
   def: MobDef;
@@ -44,6 +52,8 @@ export class Mob {
   wanderTimer = 0;
   despawnTimer = 0;
   private halfWidth: number;
+  private air = MOB_MAX_AIR;
+  private drownTimer = 0;
 
   static nextId = 1;
 
@@ -186,7 +196,7 @@ export class Mob {
       // 4 pairs of legs (8 legs) extending sideways
       const legGeo = new THREE.BoxGeometry(0.4, 0.08, 0.08);
       const legMat = new THREE.MeshLambertMaterial({ color: bodyColor });
-      
+
       const legFL = new THREE.Mesh(legGeo, legMat);
       legFL.name = 'legFL';
       legFL.position.set(-0.4, 0.3, 0.2);
@@ -388,12 +398,41 @@ export class Mob {
       return;
     }
 
-    // AI
-    this.updateAI(dt, playerPos, getBlock);
+    const fluidState = this.getFluidState(getBlock);
 
-    // Physics - gravity
-    if (!this.onGround) {
-      this.velocity.y += -28 * dt;
+    // AI
+    this.updateAI(dt, playerPos, getBlock, fluidState.inWater);
+
+    // Drowning: like vanilla land mobs, only the head/eyes being in water consumes air.
+    if (fluidState.headInWater) {
+      this.air = Math.max(0, this.air - dt);
+      if (this.air <= 0) {
+        this.drownTimer += dt;
+        if (this.drownTimer >= MOB_DROWN_INTERVAL) {
+          this.takeDamage(2);
+          this.drownTimer = 0;
+        }
+      }
+    } else {
+      this.air = Math.min(MOB_MAX_AIR, this.air + dt * 7.5);
+      this.drownTimer = 0;
+    }
+
+    if (fluidState.inWater || fluidState.inLava) {
+      if (fluidState.headInWater) {
+        this.velocity.y = Math.min(1.15, this.velocity.y + 7 * dt);
+      } else {
+        this.velocity.y = Math.min(0.45, this.velocity.y + 1.8 * dt);
+      }
+
+      // Fluids slow mobs down instead of becoming a runnable surface.
+      this.velocity.x *= 0.55;
+      this.velocity.z *= 0.55;
+    } else {
+      // Physics - gravity
+      if (!this.onGround) {
+        this.velocity.y += -28 * dt;
+      }
     }
 
     // Apply velocity with collision
@@ -455,8 +494,26 @@ export class Mob {
     }
   }
 
-  private updateAI(dt: number, playerPos: THREE.Vector3, getBlock: (x: number, y: number, z: number) => number) {
+  private updateAI(
+    dt: number,
+    playerPos: THREE.Vector3,
+    getBlock: (x: number, y: number, z: number) => number,
+    inWater: boolean
+  ) {
     const distToPlayer = this.position.distanceTo(playerPos);
+
+    if (inWater) {
+      const escapeDir = this.findWaterEscapeDirection(getBlock);
+      if (escapeDir) {
+        this.aiState = 'wander';
+        this.velocity.x = escapeDir.x * this.def.speed * 0.45;
+        this.velocity.z = escapeDir.z * this.def.speed * 0.45;
+      } else {
+        this.velocity.x *= 0.6;
+        this.velocity.z *= 0.6;
+      }
+      return;
+    }
 
     if (this.def.hostile) {
       // Hostile: chase player within 16 blocks
@@ -465,6 +522,14 @@ export class Mob {
         const dir = new THREE.Vector3().subVectors(playerPos, this.position);
         dir.y = 0;
         dir.normalize();
+
+        if (this.shouldAvoidFluidStep(dir, getBlock)) {
+          this.velocity.x *= 0.35;
+          this.velocity.z *= 0.35;
+          this.wanderTarget = null;
+          return;
+        }
+
         this.velocity.x = dir.x * this.def.speed;
         this.velocity.z = dir.z * this.def.speed;
 
@@ -511,6 +576,12 @@ export class Mob {
         this.velocity.z *= 0.8;
       } else {
         dir.normalize();
+        if (this.shouldAvoidFluidStep(dir, getBlock)) {
+          this.wanderTarget = null;
+          this.velocity.x *= 0.35;
+          this.velocity.z *= 0.35;
+          return;
+        }
         this.velocity.x = dir.x * this.def.speed * 0.5;
         this.velocity.z = dir.z * this.def.speed * 0.5;
       }
@@ -518,6 +589,79 @@ export class Mob {
       this.velocity.x *= 0.9;
       this.velocity.z *= 0.9;
     }
+  }
+
+  private getFluidState(getBlock: (x: number, y: number, z: number) => number) {
+    const mx = Math.floor(this.position.x);
+    const mz = Math.floor(this.position.z);
+    const footY = Math.floor(this.position.y);
+    const bodyY = Math.floor(this.position.y + Math.min(1, this.def.height * 0.55));
+    const headY = Math.floor(this.position.y + this.def.height * 0.9);
+
+    const footBlock = getBlock(mx, footY, mz);
+    const bodyBlock = getBlock(mx, bodyY, mz);
+    const headBlock = getBlock(mx, headY, mz);
+
+    return {
+      inWater: footBlock === WATER_ID || bodyBlock === WATER_ID || headBlock === WATER_ID,
+      headInWater: headBlock === WATER_ID,
+      inLava: footBlock === LAVA_ID || bodyBlock === LAVA_ID || headBlock === LAVA_ID,
+    };
+  }
+
+  private shouldAvoidFluidStep(
+    dir: THREE.Vector3,
+    getBlock: (x: number, y: number, z: number) => number
+  ): boolean {
+    const aheadX = Math.floor(this.position.x + dir.x * WATER_LOOKAHEAD);
+    const aheadZ = Math.floor(this.position.z + dir.z * WATER_LOOKAHEAD);
+    const footY = Math.floor(this.position.y);
+
+    return (
+      this.isFluid(getBlock(aheadX, footY, aheadZ)) ||
+      this.isFluid(getBlock(aheadX, footY - 1, aheadZ)) ||
+      this.isFluid(getBlock(aheadX, footY + 1, aheadZ))
+    );
+  }
+
+  private findWaterEscapeDirection(getBlock: (x: number, y: number, z: number) => number): THREE.Vector3 | null {
+    const baseX = Math.floor(this.position.x);
+    const baseY = Math.floor(this.position.y);
+    const baseZ = Math.floor(this.position.z);
+
+    let best: THREE.Vector3 | null = null;
+    let bestDistSq = Infinity;
+
+    for (let r = 1; r <= WATER_ESCAPE_RADIUS; r++) {
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue;
+
+          const x = baseX + dx;
+          const z = baseZ + dz;
+          const footBlock = getBlock(x, baseY, z);
+          const bodyBlock = getBlock(x, baseY + 1, z);
+          const belowBlock = getBlock(x, baseY - 1, z);
+
+          if (footBlock !== 0 || bodyBlock !== 0) continue;
+          if (this.isFluid(belowBlock) || !BlockRegistry.isSolid(belowBlock)) continue;
+
+          const distSq = dx * dx + dz * dz;
+          if (distSq < bestDistSq) {
+            bestDistSq = distSq;
+            best = new THREE.Vector3(dx, 0, dz).normalize();
+          }
+        }
+      }
+
+      if (best) return best;
+    }
+
+    return null;
+  }
+
+  private isFluid(blockId: number): boolean {
+    return blockId === WATER_ID || blockId === LAVA_ID;
   }
 
   private moveWithCollision(dt: number, getBlock: (x: number, y: number, z: number) => number) {
@@ -558,7 +702,7 @@ export class Mob {
     }
   }
 
-  private checkCollision(getBlock: (x: number, y: number, z: number) => number): boolean {
+  public checkCollision(getBlock: (x: number, y: number, z: number) => number): boolean {
     const hw = this.halfWidth;
     const minX = Math.floor(this.position.x - hw);
     const maxX = Math.floor(this.position.x + hw);

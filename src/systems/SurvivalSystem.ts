@@ -12,6 +12,7 @@ export class SurvivalSystem {
   private regenTimer = 0;
   private exhaustion = 0;
   private wasOnGround = true;
+  private drownTimer = 0;
 
   update(
     dt: number,
@@ -74,19 +75,29 @@ export class SurvivalSystem {
     // ─── Drowning ───
     const headBlock = getBlock(
       Math.floor(player.position.x),
-      Math.floor(player.position.y + 1.6),
+      Math.floor(player.position.y + 1.62), // player eye/head height
       Math.floor(player.position.z)
     );
     const isUnderwater = headBlock === 13; // water
 
     if (isUnderwater) {
-      this.underwaterTicks++;
-      if (this.underwaterTicks >= DROWNING_TICKS) {
-        damage(2);
-        this.underwaterTicks = 0;
+      // Consume oxygen
+      player.oxygen = Math.max(0, player.oxygen - dt);
+
+      // If oxygen is empty, take drowning damage every 1.5 seconds
+      if (player.oxygen <= 0) {
+        this.drownTimer += dt;
+        if (this.drownTimer >= 1.5) {
+          damage(2); // 1 heart damage
+          this.drownTimer = 0;
+        }
+      } else {
+        this.drownTimer = 0;
       }
     } else {
-      this.underwaterTicks = 0;
+      // Refill oxygen rapidly when out of water (full refill in 2 seconds)
+      player.oxygen = Math.min(15.0, player.oxygen + dt * 7.5);
+      this.drownTimer = 0;
     }
 
     // ─── Starvation ───

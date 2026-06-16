@@ -27,8 +27,8 @@ export class ChunkManager {
       map: atlas.getTexture(),
       vertexColors: true,
       transparent: true,
-      opacity: 0.8,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
+      depthWrite: false,
     });
   }
 
@@ -128,9 +128,16 @@ export class ChunkManager {
     this.worldGen.generateChunk(chunk);
     this.chunks.set(ChunkManager.key(cx, cz), chunk);
     this.rebuildChunkMesh(chunk);
+
+    // Mark loaded neighbors as dirty so they rebuild and cull boundary faces
+    this.markDirty(cx - 1, cz);
+    this.markDirty(cx + 1, cz);
+    this.markDirty(cx, cz - 1);
+    this.markDirty(cx, cz + 1);
   }
 
   private unloadChunk(key: string, chunk: Chunk) {
+    const [cx, cz] = ChunkManager.fromKey(key);
     if (chunk.mesh) {
       this.scene.remove(chunk.mesh);
       chunk.mesh.geometry.dispose();
@@ -140,6 +147,12 @@ export class ChunkManager {
       chunk.transparentMesh.geometry.dispose();
     }
     this.chunks.delete(key);
+
+    // Mark remaining loaded neighbors as dirty so they rebuild and render border faces against the empty air
+    this.markDirty(cx - 1, cz);
+    this.markDirty(cx + 1, cz);
+    this.markDirty(cx, cz - 1);
+    this.markDirty(cx, cz + 1);
   }
 
   private rebuildChunkMesh(chunk: Chunk) {

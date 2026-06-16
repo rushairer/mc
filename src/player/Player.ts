@@ -17,6 +17,7 @@ export class Player {
   health = 20;
   hunger = 20;
   saturation = 20;
+  oxygen = 15.0; // oxygen in seconds (15 seconds max)
   flying = false;
   mesh: THREE.Group;
 
@@ -91,17 +92,41 @@ export class Player {
       else if (input.forward && input.jump) this.velocity.y = speed;
       else this.velocity.y *= 0.8;
     } else {
-      // Walking mode
-      this.velocity.x = moveDir.x * speed;
-      this.velocity.z = moveDir.z * speed;
+      // Fluid or Walking mode
+      const px = Math.floor(this.position.x);
+      const py = Math.floor(this.position.y);
+      const pz = Math.floor(this.position.z);
 
-      // Gravity
-      this.velocity.y += GRAVITY * dt;
+      const footBlock = chunks.getBlock(px, py, pz);
+      const bodyBlock = chunks.getBlock(px, py + 1, pz);
+      const inFluid = footBlock === 13 || footBlock === 14 || bodyBlock === 13 || bodyBlock === 14;
 
-      // Jump
-      if (input.jump && this.onGround) {
-        this.velocity.y = JUMP_VELOCITY;
-        this.onGround = false;
+      if (inFluid) {
+        // Swimming mode
+        this.velocity.x = moveDir.x * speed * 0.5;
+        this.velocity.z = moveDir.z * speed * 0.5;
+
+        if (input.jump) {
+          // Swim up
+          this.velocity.y = Math.min(2.0, this.velocity.y + 12 * dt);
+        } else {
+          // Slow drift down (buoyancy)
+          this.velocity.y += GRAVITY * 0.15 * dt;
+          this.velocity.y = Math.max(-1.5, this.velocity.y);
+        }
+      } else {
+        // Walking mode
+        this.velocity.x = moveDir.x * speed;
+        this.velocity.z = moveDir.z * speed;
+
+        // Gravity
+        this.velocity.y += GRAVITY * dt;
+
+        // Jump
+        if (input.jump && this.onGround) {
+          this.velocity.y = JUMP_VELOCITY;
+          this.onGround = false;
+        }
       }
     }
 
@@ -163,7 +188,7 @@ export class Player {
     }
   }
 
-  private checkCollision(chunks: ChunkManager): boolean {
+  public checkCollision(chunks: ChunkManager): boolean {
     const hw = this.halfWidth;
     const minX = Math.floor(this.position.x - hw);
     const maxX = Math.floor(this.position.x + hw);

@@ -9,11 +9,43 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
     const half = state.health >= i * 2 + 1 && state.health < (i + 1) * 2;
     return (
       <span key={i} style={{
-        color: filled ? '#e22' : half ? '#e64' : '#444',
+        position: 'relative',
+        display: 'inline-block',
+        width: '18px',
+        height: '18px',
         fontSize: '18px',
-        textShadow: '1px 1px 0 #000',
+        fontFamily: 'Arial, sans-serif',
+        textAlign: 'center',
+        lineHeight: '18px',
       }}>
-        {filled ? '❤' : half ? '💔' : '🖤'}
+        {/* Shadow layer */}
+        <span style={{
+          position: 'absolute',
+          left: '1px',
+          top: '1px',
+          color: '#000',
+          zIndex: 1,
+        }}>
+          ❤
+        </span>
+        {/* Color layer */}
+        <span style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          zIndex: 2,
+          ...(filled ? {
+            color: '#ff2222'
+          } : half ? {
+            background: 'linear-gradient(90deg, #ff2222 50%, #444444 50%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          } : {
+            color: '#444444'
+          })
+        }}>
+          ❤
+        </span>
       </span>
     );
   });
@@ -21,16 +53,55 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
   // Hunger drumsticks
   const drumsticks = Array.from({ length: 10 }, (_, i) => {
     const filled = state.hunger >= (i + 1) * 2;
+    const half = state.hunger >= i * 2 + 1 && state.hunger < (i + 1) * 2;
     return (
       <span key={i} style={{
-        color: filled ? '#d80' : '#444',
+        position: 'relative',
+        display: 'inline-block',
+        width: '16px',
+        height: '16px',
         fontSize: '16px',
-        textShadow: '1px 1px 0 #000',
+        textAlign: 'center',
+        lineHeight: '16px',
       }}>
-        🍗
+        {/* Shadow layer */}
+        <span style={{
+          position: 'absolute',
+          left: '1px',
+          top: '1px',
+          filter: 'brightness(0) opacity(0.8)',
+          zIndex: 1,
+        }}>
+          🍗
+        </span>
+        {/* Color/Image layer */}
+        <span style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          zIndex: 2,
+          filter: filled ? 'none' : half ? 'grayscale(50%) opacity(0.8)' : 'grayscale(100%) brightness(30%) opacity(0.5)'
+        }}>
+          🍗
+        </span>
       </span>
     );
   });
+
+  // Oxygen bubbles
+  const showOxygen = state.oxygen < 15.0;
+  const oxygenBubbles = showOxygen ? Array.from({ length: 10 }, (_, i) => {
+    const filled = (state.oxygen / 15.0) * 10 > i;
+    return (
+      <span key={i} style={{
+        fontSize: '16px',
+        opacity: filled ? 1.0 : 0.2, // dim depleted bubbles
+        transition: 'opacity 0.2s',
+      }}>
+        🫧
+      </span>
+    );
+  }) : null;
 
   // Get hotbar items from inventory
   const hotbarItems = state.inventory
@@ -49,12 +120,30 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
       {/* Health and Hunger bars */}
       <div style={{
         display: 'flex',
-        justifyContent: 'space-between',
+        flexDirection: 'column',
+        gap: '4px',
         padding: '0 20px',
         marginBottom: '4px',
       }}>
-        <div style={{ display: 'flex', gap: '1px' }}>{hearts}</div>
-        <div style={{ display: 'flex', gap: '1px' }}>{drumsticks}</div>
+        {/* Oxygen bubbles layer */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          height: '20px',
+        }}>
+          {showOxygen && (
+            <div style={{ display: 'flex', gap: '2px' }}>{oxygenBubbles}</div>
+          )}
+        </div>
+
+        {/* Hearts and Drumsticks */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+        }}>
+          <div style={{ display: 'flex', gap: '1px' }}>{hearts}</div>
+          <div style={{ display: 'flex', gap: '1px' }}>{drumsticks}</div>
+        </div>
       </div>
 
       {/* Hotbar */}

@@ -80,15 +80,49 @@ export class Chunk {
               neighborId = this.getBlock(nx, ny, nz);
             }
 
-            // Don't render face if neighbor is same transparent type, or solid
-            if (isTrans) {
-              if (neighborId === id) continue;
-              if (BlockRegistry.isSolid(neighborId)) continue;
-            } else {
-              if (BlockRegistry.isSolid(neighborId)) continue;
+            // Voxel Face Culling (Minecraft Rules)
+            if (neighborId !== 0) {
+              const neighborIsTrans = BlockRegistry.isTransparent(neighborId);
+              if (!neighborIsTrans) {
+                // Neighbor is opaque: always cull the face
+                continue;
+              } else {
+                // Neighbor is transparent:
+                // If this block is also transparent, cull if they are the same block type
+                if (isTrans && neighborId === id) {
+                  continue;
+                }
+              }
+            }
+            let depth = 0;
+            if (neighborId === 13) {
+              let wy = ny;
+              const wx = worldX + nx;
+              const wz = worldZ + nz;
+              const isLocal = (nx >= 0 && nx < CHUNK_SIZE && nz >= 0 && nz < CHUNK_SIZE);
+
+              if (isLocal) {
+                while (wy < WORLD_HEIGHT - 1 && wy - ny < 32) {
+                  if (this.getBlock(nx, wy + 1, nz) === 13) {
+                    wy++;
+                  } else {
+                    break;
+                  }
+                }
+              } else {
+                while (wy < WORLD_HEIGHT - 1 && wy - ny < 32) {
+                  if (getNeighborBlock(wx, wy + 1, wz) === 13) {
+                    wy++;
+                  } else {
+                    break;
+                  }
+                }
+              }
+              depth = wy - y;
+              if (depth < 0) depth = 0;
             }
 
-            this.addFace(target, x, y, z, face, id, atlas);
+            this.addFace(target, x, y, z, face, id, atlas, depth);
           }
         }
       }
@@ -105,7 +139,8 @@ export class Chunk {
     x: number, y: number, z: number,
     face: number,
     blockId: number,
-    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } }
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
+    waterDepth: number = 0
   ) {
     const texKey = BlockRegistry.getTextureForFace(blockId, face);
     const uv = atlas.getUV(texKey);
@@ -126,7 +161,13 @@ export class Chunk {
     data.uvs.push(uv.u0, uv.v1);
 
     // face brightness based on face direction
-    const brightness = FACE_BRIGHTNESS[face];
+    let brightness = FACE_BRIGHTNESS[face];
+    if (waterDepth > 0 && blockId !== 13) {
+      // Exponential attenuation of light in water
+      const tint = Math.max(0.12, Math.pow(0.82, waterDepth));
+      brightness *= tint;
+    }
+
     data.colors.push(brightness, brightness, brightness);
     data.colors.push(brightness, brightness, brightness);
     data.colors.push(brightness, brightness, brightness);

@@ -14,7 +14,7 @@ reg({ id: 3, name: 'dirt',           textureKey: 'dirt',         transparent: fa
 reg({ id: 4, name: 'cobblestone',    textureKey: 'cobblestone',  transparent: false, solid: true,  hardness: 2.0, toolCategory: 'pickaxe', luminance: 0 });
 reg({ id: 5, name: 'oak_planks',     textureKey: 'oak_planks',   transparent: false, solid: true,  hardness: 2.0, toolCategory: 'axe', luminance: 0 });
 reg({ id: 6, name: 'oak_log',        textureKey: 'oak_log_side', textureTop: 'oak_log_top', textureBottom: 'oak_log_top', transparent: false, solid: true,  hardness: 2.0, toolCategory: 'axe', luminance: 0 });
-reg({ id: 7, name: 'oak_leaves',     textureKey: 'oak_leaves',   transparent: true,  solid: true,  hardness: 0.2, toolCategory: 'axe', luminance: 0 });
+reg({ id: 7, name: 'oak_leaves',     textureKey: 'oak_leaves',   transparent: false, solid: true,  hardness: 0.2, toolCategory: 'axe', luminance: 0 });
 reg({ id: 8, name: 'sand',           textureKey: 'sand',         transparent: false, solid: true,  hardness: 0.5, toolCategory: 'shovel', luminance: 0 });
 reg({ id: 9, name: 'gravel',         textureKey: 'gravel',       transparent: false, solid: true,  hardness: 0.6, toolCategory: 'shovel', luminance: 0 });
 reg({ id: 10, name: 'gold_ore',      textureKey: 'gold_ore',     transparent: false, solid: true,  hardness: 3.0, toolCategory: 'pickaxe', luminance: 0 });

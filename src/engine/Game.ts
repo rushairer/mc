@@ -203,6 +203,26 @@ export class Game {
     const mesh = this.player.createHeldItemMesh(itemId);
     if (mesh) {
       slot.add(mesh);
+
+      const itemDef = ItemRegistry.get(itemId);
+      if (itemDef) {
+        if (itemDef.category === 'block') {
+          // Position block on top/center of the hand
+          slot.position.set(0, -0.16, 0.05);
+          slot.rotation.set(0, Math.PI / 4, 0); // Rotate slightly for 3D perspective
+          mesh.rotation.set(0, 0, 0); // Reset default rotation
+        } else if (itemDef.category === 'tool') {
+          // Align tool handle inside hand, point diagonal forward/up-left
+          slot.position.set(0.02, -0.15, 0.08);
+          slot.rotation.set(0, 0, 0);
+          mesh.rotation.set(Math.PI / 2.2, -Math.PI / 6, 0); // First person custom rotation
+        } else {
+          // Material / Food
+          slot.position.set(0, -0.18, 0.06);
+          slot.rotation.set(0, 0, 0);
+          mesh.rotation.set(0, 0, 0);
+        }
+      }
     }
   }
 

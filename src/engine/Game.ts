@@ -81,8 +81,9 @@ export class Game {
   private stepTimer = 0;
   private lightScanTimer = 0;
   private perspectiveMode: 'first' | 'third' = 'first';
-
   private container: HTMLElement;
+  private fpArmGroup!: THREE.Group;
+  private fpLastHeldItemId = -1;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -126,6 +127,9 @@ export class Game {
     this.createHighlight();
     this.loadGame();
 
+    this.fpArmGroup = this.createFpArm();
+    this.renderer.camera.add(this.fpArmGroup);
+
     this.running = true;
     this.animate();
   }
@@ -135,6 +139,72 @@ export class Game {
       this.input.requestLock();
     }
   };
+
+  private createFpArm(): THREE.Group {
+    const group = new THREE.Group();
+    group.name = 'fpArmGroup';
+
+    // Steve shirt color
+    const shirtColor = 0x008080;
+
+    // Arm mesh
+    const armGeo = new THREE.BoxGeometry(0.12, 0.45, 0.12);
+    const armMat = new THREE.MeshLambertMaterial({ color: shirtColor });
+    const armMesh = new THREE.Mesh(armGeo, armMat);
+    armMesh.name = 'armMesh';
+    group.add(armMesh);
+
+    // Hand mesh
+    const handGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+    const handMat = new THREE.MeshLambertMaterial({ color: 0xFFCC99 });
+    const handMesh = new THREE.Mesh(handGeo, handMat);
+    handMesh.position.set(0, -0.22, 0);
+    group.add(handMesh);
+
+    // Held item slot
+    const heldItemSlot = new THREE.Group();
+    heldItemSlot.name = 'heldItemSlot';
+    heldItemSlot.position.set(0, -0.22, 0.08);
+    group.add(heldItemSlot);
+
+    // Position in bottom-right corner of viewport
+    group.position.set(0.25, -0.22, -0.4);
+    group.rotation.set(-Math.PI / 3, -Math.PI / 8, Math.PI / 12);
+
+    return group;
+  }
+
+  private updateFpHeldItem(itemId: number) {
+    if (itemId === this.fpLastHeldItemId) return;
+    this.fpLastHeldItemId = itemId;
+
+    const slot = this.fpArmGroup.getObjectByName('heldItemSlot');
+    if (!slot) return;
+
+    // Clear previous children
+    while (slot.children.length > 0) {
+      const child = slot.children[0];
+      slot.remove(child);
+      child.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m.dispose());
+          } else {
+            obj.material.dispose();
+          }
+        }
+      });
+    }
+
+    if (itemId === 0) return;
+
+    // Reuse Player's 3D mesh generator
+    const mesh = this.player.createHeldItemMesh(itemId);
+    if (mesh) {
+      slot.add(mesh);
+    }
+  }
 
   onStateChange(listener: GameStateListener) {
     this.stateListeners.push(listener);
@@ -273,7 +343,57 @@ export class Game {
       // Camera position at eye level in first person
       const eye = this.player.eyePosition;
       this.renderer.camera.position.copy(eye);
+
+      // First person arm visibility and animation
+      if (this.openUI === 'none') {
+        this.fpArmGroup.visible = true;
+        this.updateFpHeldItem(heldItemId);
+
+        // Default position & rotation
+        const defX = 0.25;
+        const defY = -0.22;
+        const defZ = -0.4;
+        
+        const defRotX = -Math.PI / 3;
+        const defRotY = -Math.PI / 8;
+        const defRotZ = Math.PI / 12;
+
+        if (this.player.swingProgress > 0) {
+          const t = this.player.swingProgress;
+          const swingAngle = Math.sin(t * Math.PI);
+          
+          this.fpArmGroup.position.set(
+            defX - swingAngle * 0.1,
+            defY - swingAngle * 0.08,
+            defZ - swingAngle * 0.08
+          );
+          
+          this.fpArmGroup.rotation.set(
+            defRotX - swingAngle * 0.6,
+            defRotY + swingAngle * 0.4,
+            defRotZ - swingAngle * 0.2
+          );
+        } else {
+          // Subtle breathing / walking bobbing
+          const speed = this.player.velocity.clone().setY(0).length();
+          const time = Date.now() * 0.005;
+          let bobY = 0;
+          let bobX = 0;
+          if (this.player.onGround && speed > 0.1) {
+            bobY = Math.sin(time * 2) * 0.015;
+            bobX = Math.cos(time) * 0.01;
+          } else {
+            bobY = Math.sin(time) * 0.005;
+          }
+          
+          this.fpArmGroup.position.set(defX + bobX, defY + bobY, defZ);
+          this.fpArmGroup.rotation.set(defRotX, defRotY, defRotZ);
+        }
+      } else {
+        this.fpArmGroup.visible = false;
+      }
     } else {
+      this.fpArmGroup.visible = false;
       this.player.mesh.visible = true;
       this.player.mesh.position.copy(this.player.position);
       this.player.mesh.rotation.y = this.player.yaw + Math.PI;

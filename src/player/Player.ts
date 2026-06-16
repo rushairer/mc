@@ -347,7 +347,7 @@ export class Player {
     }
   }
 
-  private createHeldItemMesh(itemId: number): THREE.Object3D | null {
+  createHeldItemMesh(itemId: number): THREE.Object3D | null {
     const group = new THREE.Group();
 
     const getMaterialColor = (mat: string): number => {

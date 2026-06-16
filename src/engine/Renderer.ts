@@ -21,6 +21,7 @@ export class Renderer {
       0.1,
       500
     );
+    this.scene.add(this.camera);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
     this.renderer.setSize(window.innerWidth, window.innerHeight);

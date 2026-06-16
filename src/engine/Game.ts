@@ -168,8 +168,8 @@ export class Game {
     group.add(heldItemSlot);
 
     // Position in bottom-right corner of viewport
-    group.position.set(0.25, -0.22, -0.4);
-    group.rotation.set(-Math.PI / 3, -Math.PI / 8, Math.PI / 12);
+    group.position.set(0.3, -0.25, -0.45);
+    group.rotation.set(Math.PI / 2.5, Math.PI / 6, -Math.PI / 12);
 
     return group;
   }
@@ -208,19 +208,19 @@ export class Game {
       if (itemDef) {
         if (itemDef.category === 'block') {
           // Position block on top/center of the hand
-          slot.position.set(0, -0.16, 0.05);
+          slot.position.set(0, -0.22, 0.05);
           slot.rotation.set(0, Math.PI / 4, 0); // Rotate slightly for 3D perspective
           mesh.rotation.set(0, 0, 0); // Reset default rotation
         } else if (itemDef.category === 'tool') {
           // Align tool handle inside hand, point diagonal forward/up-left
-          slot.position.set(0.02, -0.15, 0.08);
+          slot.position.set(0, -0.22, 0.1);
           slot.rotation.set(0, 0, 0);
-          mesh.rotation.set(Math.PI / 2.2, -Math.PI / 6, 0); // First person custom rotation
+          mesh.rotation.set(Math.PI * 0.85, -Math.PI / 4, 0); // First person custom rotation
         } else {
           // Material / Food
-          slot.position.set(0, -0.18, 0.06);
+          slot.position.set(0, -0.22, 0.08);
           slot.rotation.set(0, 0, 0);
-          mesh.rotation.set(0, 0, 0);
+          mesh.rotation.set(Math.PI * 0.85, 0, 0);
         }
       }
     }
@@ -370,13 +370,13 @@ export class Game {
         this.updateFpHeldItem(heldItemId);
 
         // Default position & rotation
-        const defX = 0.25;
-        const defY = -0.22;
-        const defZ = -0.4;
+        const defX = 0.3;
+        const defY = -0.25;
+        const defZ = -0.45;
         
-        const defRotX = -Math.PI / 3;
-        const defRotY = -Math.PI / 8;
-        const defRotZ = Math.PI / 12;
+        const defRotX = Math.PI / 2.5;
+        const defRotY = Math.PI / 6;
+        const defRotZ = -Math.PI / 12;
 
         if (this.player.swingProgress > 0) {
           const t = this.player.swingProgress;

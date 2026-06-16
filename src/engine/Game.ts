@@ -14,6 +14,7 @@ import { FluidSystem } from '../systems/FluidSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
 import { SoundSystem } from '../systems/SoundSystem';
 import { SaveSystem, type SaveData } from '../systems/SaveSystem';
+import { RedstoneSystem } from '../systems/RedstoneSystem';
 
 export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table';
 
@@ -55,6 +56,7 @@ export class Game {
   private fluids: FluidSystem;
   private weather: WeatherSystem;
   private sound: SoundSystem;
+  private redstone: RedstoneSystem;
   private clock: THREE.Clock;
   running = false;
   private stateListeners: GameStateListener[] = [];
@@ -91,6 +93,7 @@ export class Game {
     this.fluids = new FluidSystem();
     this.weather = new WeatherSystem(this.renderer.scene);
     this.sound = new SoundSystem();
+    this.redstone = new RedstoneSystem();
 
     // Default hotbar
     this.inventory.setSlot(0, { id: 2, count: 64 });
@@ -321,6 +324,7 @@ export class Game {
           // Fluid check: if breaking a block next to water, trigger flow
           this.checkFluidAdjacency(bp.x, bp.y, bp.z);
 
+          this.redstone.unregister(bp.x, bp.y, bp.z);
           this.chunks.setBlock(bp.x, bp.y, bp.z, 0);
           this.sound.playBlockBreak();
           this.breakProgress = 0;
@@ -347,6 +351,10 @@ export class Game {
         } else if (targetId === 24) {
           this.openCraftingTableUI();
           this.placeCooldown = 0.5;
+        } else if (targetId === 34) {
+          this.redstone.toggleLever(blockPos.x, blockPos.y, blockPos.z);
+          this.sound.playLever();
+          this.placeCooldown = 0.25;
         } else {
           // Place block
           const placePos = blockPos.clone().add(faceNormal);
@@ -367,6 +375,21 @@ export class Game {
                 this.sound.playBlockPlace();
                 this.inventory.removeFromSlot(this.player.selectedSlot);
                 this.placeCooldown = 0.25;
+
+                // Register redstone component if it is one
+                let facing: 'north' | 'south' | 'east' | 'west' | 'up' | 'down' = 'north';
+                if (faceNormal.x > 0) facing = 'east';
+                else if (faceNormal.x < 0) facing = 'west';
+                else if (faceNormal.y > 0) facing = 'up';
+                else if (faceNormal.y < 0) facing = 'down';
+                else if (faceNormal.z > 0) facing = 'south';
+                else if (faceNormal.z < 0) facing = 'north';
+
+                if (blockId === 30) this.redstone.register(placePos.x, placePos.y, placePos.z, 'torch', facing);
+                else if (blockId === 31) this.redstone.register(placePos.x, placePos.y, placePos.z, 'wire', facing);
+                else if (blockId === 32) this.redstone.register(placePos.x, placePos.y, placePos.z, 'repeater', facing);
+                else if (blockId === 33) this.redstone.register(placePos.x, placePos.y, placePos.z, 'piston', facing);
+                else if (blockId === 34) this.redstone.register(placePos.x, placePos.y, placePos.z, 'lever', facing);
 
                 // If placing water/lava, start fluid simulation
                 if (blockId === 13 || blockId === 14) {
@@ -461,6 +484,17 @@ export class Game {
       this.damageFlashTimer = 0.3;
       this.sound.playHurt();
     });
+
+    // Redstone simulation
+    this.redstone.update(
+      dt,
+      (x, y, z) => this.chunks.getBlock(x, y, z),
+      (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
+      (soundType) => {
+        if (soundType === 'piston_extend') this.sound.playPistonExtend();
+        else if (soundType === 'piston_retract') this.sound.playPistonRetract();
+      }
+    );
 
     // Fluid simulation
     this.fluids.update(dt,
@@ -659,6 +693,7 @@ export class Game {
     this.particles.dispose();
     this.weather.dispose();
     this.sound.dispose();
+    this.redstone.dispose();
     this.input.dispose();
     this.renderer.dispose();
   }

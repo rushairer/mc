@@ -48,15 +48,16 @@ export class RedstoneSystem {
   update(
     dt: number,
     getBlock: (x: number, y: number, z: number) => number,
-    setBlock: (x: number, y: number, z: number, id: number) => void
+    setBlock: (x: number, y: number, z: number, id: number) => void,
+    triggerSound?: (soundType: 'piston_extend' | 'piston_retract') => void
   ) {
     this.tickTimer += dt;
     if (this.tickTimer < this.tickInterval) return;
     this.tickTimer = 0;
 
-    // Reset all signals
+    // Reset all signals except sources
     for (const comp of this.components.values()) {
-      if (comp.type !== 'torch') {
+      if (comp.type !== 'torch' && comp.type !== 'lever') {
         comp.signal = 0;
       }
     }
@@ -64,7 +65,6 @@ export class RedstoneSystem {
     // Tick sources first (torches, levers)
     for (const comp of this.components.values()) {
       if (comp.type === 'torch') {
-        // Torch provides signal 15 unless the block it's attached to is powered
         const attachedBlock = this.getAttachedBlock(comp);
         const attachedKey = RedstoneSystem.key(attachedBlock[0], attachedBlock[1], attachedBlock[2]);
         const attachedComp = this.components.get(attachedKey);
@@ -79,6 +79,8 @@ export class RedstoneSystem {
       } else if (comp.type === 'lever') {
         if (comp.state) {
           comp.signal = 15;
+        } else {
+          comp.signal = 0;
         }
       }
     }
@@ -118,22 +120,48 @@ export class RedstoneSystem {
           queue.push(neighbor);
           visited.add(key);
         } else if (neighbor.type === 'repeater') {
-          // Repeater: signal in one side, signal out other side (15)
           if (this.isRepeaterInput(neighbor, current)) {
             neighbor.signal = 15;
             neighbor.state = true;
+            queue.push(neighbor); // repeaters propagate max signal
+            visited.add(key);
           }
         } else if (neighbor.type === 'piston') {
-          // Piston extends when powered
           if (newSignal > 0 && !neighbor.state) {
             neighbor.state = true;
-            // Push block in facing direction (simplified: just set state)
+            if (triggerSound) triggerSound('piston_extend');
+
+            // Push block in facing direction
+            const pDir = this.getFacingDirection(neighbor.facing);
+            const frontX = neighbor.x + pDir[0];
+            const frontY = neighbor.y + pDir[1];
+            const frontZ = neighbor.z + pDir[2];
+            const pushId = getBlock(frontX, frontY, frontZ);
+
+            if (pushId !== 0 && pushId !== 35 && pushId !== 13 && pushId !== 14) {
+              const targetX = frontX + pDir[0];
+              const targetY = frontY + pDir[1];
+              const targetZ = frontZ + pDir[2];
+              if (getBlock(targetX, targetY, targetZ) === 0) {
+                setBlock(targetX, targetY, targetZ, pushId);
+                setBlock(frontX, frontY, frontZ, 0);
+              }
+            }
           } else if (newSignal === 0 && neighbor.state) {
             neighbor.state = false;
+            if (triggerSound) triggerSound('piston_retract');
           }
         }
       }
     }
+  }
+
+  private getFacingDirection(facing: RedstoneComponent['facing']): [number, number, number] {
+    const dirs: Record<string, [number, number, number]> = {
+      north: [0, 0, -1], south: [0, 0, 1], east: [1, 0, 0], west: [-1, 0, 0],
+      up: [0, 1, 0], down: [0, -1, 0],
+    };
+    return dirs[facing] ?? [0, 0, -1];
   }
 
   private getAttachedBlock(comp: RedstoneComponent): [number, number, number] {

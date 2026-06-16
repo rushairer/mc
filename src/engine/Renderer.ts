@@ -146,6 +146,9 @@ export class Renderer {
 
   dispose() {
     window.removeEventListener('resize', this.onResize);
+    if (this.renderer.domElement.parentNode) {
+      this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+    }
     this.renderer.dispose();
   }
 }

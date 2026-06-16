@@ -82,7 +82,10 @@ export class Game {
   private lightScanTimer = 0;
   private perspectiveMode: 'first' | 'third' = 'first';
 
+  private container: HTMLElement;
+
   constructor(container: HTMLElement) {
+    this.container = container;
     this.renderer = new Renderer(container);
     this.input = new InputManager(this.renderer.renderer.domElement);
     this.atlas = new TextureAtlas();
@@ -118,11 +121,7 @@ export class Game {
     this.renderer.scene.add(this.player.mesh);
 
     // Pointer lock
-    container.addEventListener('click', () => {
-      if (!this.input.locked && this.openUI === 'none') {
-        this.input.requestLock();
-      }
-    });
+    this.container.addEventListener('click', this.handleContainerClick);
 
     this.createHighlight();
     this.loadGame();
@@ -130,6 +129,12 @@ export class Game {
     this.running = true;
     this.animate();
   }
+
+  private handleContainerClick = () => {
+    if (!this.input.locked && this.openUI === 'none') {
+      this.input.requestLock();
+    }
+  };
 
   onStateChange(listener: GameStateListener) {
     this.stateListeners.push(listener);
@@ -824,6 +829,7 @@ export class Game {
 
   dispose() {
     this.running = false;
+    this.container.removeEventListener('click', this.handleContainerClick);
     this.saveGame();
     this.mobs.dispose();
     this.particles.dispose();

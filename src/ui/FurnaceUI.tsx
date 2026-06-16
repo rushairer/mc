@@ -159,7 +159,33 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
         borderRadius: '8px',
         padding: '20px',
         color: '#fff',
+        position: 'relative',
       }}>
+        <button
+          onClick={handleClose}
+          style={{
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            background: '#c22',
+            color: '#fff',
+            border: '2px solid #555',
+            borderRadius: '4px',
+            width: '24px',
+            height: '24px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '1px 1px 0 #000',
+            fontFamily: 'monospace',
+          }}
+          title="Close (Esc)"
+        >
+          X
+        </button>
         <div style={{ fontSize: '14px', marginBottom: '12px', color: '#aaa' }}>Furnace</div>
 
         {/* Input → Output */}

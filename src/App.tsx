@@ -199,6 +199,7 @@ export const App: React.FC = () => {
               <div><b>Right Click</b> — Place block / Open furnace</div>
               <div><b>Scroll / 1-9</b> — Select hotbar slot</div>
               <div><b>E</b> — Inventory & Crafting</div>
+              <div><b>F5</b> — Toggle perspective</div>
               <div><b>F3</b> — Toggle debug overlay</div>
             </div>
             <div style={{ marginTop: '16px', color: '#8f8', fontSize: '12px' }}>

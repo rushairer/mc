@@ -114,6 +114,7 @@ export class Game {
     const spawnY = this.chunks.getWorldGen().getTerrainHeight(spawnX, spawnZ) + 3;
     this.player = new Player(spawnX, spawnY, spawnZ);
     this.chunks.update(spawnX, spawnZ);
+    this.player.resolveStuck(this.chunks);
     this.renderer.scene.add(this.player.mesh);
 
     // Pointer lock
@@ -237,6 +238,10 @@ export class Game {
       fly: false,
     }, this.chunks);
 
+    if (this.input.isMouseDown(0) || this.input.isMouseDown(2)) {
+      this.player.startSwing();
+    }
+
     // F key → fly toggle
     if (this.input.isKeyDown('f')) {
       this.player.flying = !this.player.flying;
@@ -253,6 +258,10 @@ export class Game {
     this.chunks.update(this.player.position.x, this.player.position.z);
 
     // Update player mesh visibility and transform
+    const selectedSlotStack = this.inventory.getSlot(this.player.selectedSlot);
+    const heldItemId = selectedSlotStack?.id ?? 0;
+    this.player.updateHeldItem(heldItemId);
+
     if (this.perspectiveMode === 'first') {
       this.player.mesh.visible = false;
 
@@ -262,7 +271,7 @@ export class Game {
     } else {
       this.player.mesh.visible = true;
       this.player.mesh.position.copy(this.player.position);
-      this.player.mesh.rotation.y = this.player.yaw;
+      this.player.mesh.rotation.y = this.player.yaw + Math.PI;
 
       const head = this.player.mesh.getObjectByName('head');
       if (head) {
@@ -279,17 +288,22 @@ export class Game {
       const legL = this.player.mesh.getObjectByName('legL');
       const legR = this.player.mesh.getObjectByName('legR');
 
-      if (isMoving) {
-        const swingAngle = Math.sin(time) * 0.6;
-        if (armL) armL.rotation.x = -swingAngle;
-        if (armR) armR.rotation.x = swingAngle;
-        if (legL) legL.rotation.x = swingAngle;
-        if (legR) legR.rotation.x = -swingAngle;
+      const swingAngle = isMoving ? Math.sin(time) * 0.6 : 0;
+      if (armL) armL.rotation.x = -swingAngle;
+      if (legL) legL.rotation.x = swingAngle;
+      if (legR) legR.rotation.x = -swingAngle;
+
+      if (this.player.swingProgress > 0) {
+        const punchAngle = Math.sin(this.player.swingProgress * Math.PI) * 1.5;
+        if (armR) {
+          armR.rotation.x = -punchAngle;
+          armR.rotation.z = Math.sin(this.player.swingProgress * Math.PI) * 0.3;
+        }
       } else {
-        if (armL) armL.rotation.x = 0;
-        if (armR) armR.rotation.x = 0;
-        if (legL) legL.rotation.x = 0;
-        if (legR) legR.rotation.x = 0;
+        if (armR) {
+          armR.rotation.x = swingAngle;
+          armR.rotation.z = 0;
+        }
       }
 
       // Camera position behind player in third person (with collision check)
@@ -473,8 +487,8 @@ export class Game {
     }
 
     // ─── Food Eating ───
-    const selectedSlotStack = this.inventory.getSlot(this.player.selectedSlot);
-    const isHoldingFood = selectedSlotStack && ItemRegistry.isFood(selectedSlotStack.id);
+    const foodSlotStack = this.inventory.getSlot(this.player.selectedSlot);
+    const isHoldingFood = foodSlotStack && ItemRegistry.isFood(foodSlotStack.id);
     const targetBlockId = this.targetBlock ? this.chunks.getBlock(this.targetBlock.blockPos.x, this.targetBlock.blockPos.y, this.targetBlock.blockPos.z) : 0;
     const pointingAtInteractive = this.targetBlock && (targetBlockId === 25 || targetBlockId === 24 || targetBlockId === 34);
 
@@ -487,15 +501,15 @@ export class Game {
         this.sound.playEat();
 
         let foodColor = 0xC0A080;
-        if (selectedSlotStack.id === 170) foodColor = 0xFF0000;
-        else if (selectedSlotStack.id === 172 || selectedSlotStack.id === 173) foodColor = 0xA04040;
+        if (foodSlotStack.id === 170) foodColor = 0xFF0000;
+        else if (foodSlotStack.id === 172 || foodSlotStack.id === 173) foodColor = 0xA04040;
 
         const front = this.player.eyePosition.clone().add(this.player.forward.multiplyScalar(0.4));
         this.particles.spawnBlockBreak(front.x, front.y, front.z, foodColor);
       }
 
       if (this.eatingTimer >= 1.6) {
-        const foodDef = ItemRegistry.get(selectedSlotStack.id);
+        const foodDef = ItemRegistry.get(foodSlotStack.id);
         if (foodDef) {
           this.player.hunger = Math.min(20, this.player.hunger + (foodDef.hungerRestore ?? 0));
           this.player.saturation = Math.min(this.player.hunger, this.player.saturation + (foodDef.saturationRestore ?? 0));
@@ -756,6 +770,9 @@ export class Game {
           this.inventory.armor = data.inventory.armor;
         }
       }
+
+      this.chunks.update(this.player.position.x, this.player.position.z);
+      this.player.resolveStuck(this.chunks);
 
       console.log('Game loaded from save');
     } catch (e) {

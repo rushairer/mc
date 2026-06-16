@@ -121,7 +121,12 @@ export class WorldGen {
           if (cave > 0.55 && cave2 > 0.1) {
             const current = chunk.getBlock(x, y, z);
             if (current !== 0 && current !== 13) {
-              chunk.setBlock(x, y, z, 0);
+              const height = this.getTerrainHeight(wx, wz);
+              if (y <= SEA_LEVEL && height <= SEA_LEVEL) {
+                chunk.setBlock(x, y, z, 13);
+              } else {
+                chunk.setBlock(x, y, z, 0);
+              }
             }
           }
         }

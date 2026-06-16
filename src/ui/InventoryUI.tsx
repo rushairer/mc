@@ -127,10 +127,10 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     onClose();
   }, [heldItem, inventory, craftingGrid, onInventoryChange, onClose]);
 
-  // Close on E key
+  // Close on E or Escape key
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'e') {
+      if (e.key.toLowerCase() === 'e' || e.key === 'Escape') {
         e.preventDefault();
         handleClose();
       }
@@ -229,7 +229,33 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
         borderRadius: '8px',
         padding: '20px',
         color: '#fff',
+        position: 'relative',
       }}>
+        <button
+          onClick={handleClose}
+          style={{
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            background: '#c22',
+            color: '#fff',
+            border: '2px solid #555',
+            borderRadius: '4px',
+            width: '24px',
+            height: '24px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '1px 1px 0 #000',
+            fontFamily: 'monospace',
+          }}
+          title="Close (Esc)"
+        >
+          X
+        </button>
         {/* Crafting area */}
         <div style={{ marginBottom: '16px' }}>
           <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Crafting (2×2)</div>

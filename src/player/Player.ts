@@ -5,6 +5,7 @@ import {
 } from '../constants';
 import { ChunkManager } from '../world/ChunkManager';
 import { BlockRegistry } from '../world/BlockRegistry';
+import { ItemRegistry } from '../items/ItemRegistry';
 
 export class Player {
   position: THREE.Vector3;
@@ -20,6 +21,14 @@ export class Player {
   mesh: THREE.Group;
 
   private halfWidth = PLAYER_WIDTH / 2;
+  swingProgress = 0;
+  private lastHeldItemId = -1;
+
+  startSwing() {
+    if (this.swingProgress === 0) {
+      this.swingProgress = 0.01;
+    }
+  }
 
   constructor(spawnX: number, spawnY: number, spawnZ: number) {
     this.position = new THREE.Vector3(spawnX, spawnY, spawnZ);
@@ -43,6 +52,14 @@ export class Player {
   }
 
   update(dt: number, input: { dx: number; dy: number; forward: boolean; back: boolean; left: boolean; right: boolean; jump: boolean; sprint: boolean; fly: boolean }, chunks: ChunkManager) {
+    // Update swing progress
+    if (this.swingProgress > 0) {
+      this.swingProgress += dt * 5.0; // swing takes 0.2s
+      if (this.swingProgress >= 1.0) {
+        this.swingProgress = 0;
+      }
+    }
+
     // Mouse look
     const sensitivity = 0.002;
     this.yaw -= input.dx * sensitivity;
@@ -90,6 +107,18 @@ export class Player {
 
     // Apply velocity with collision
     this.moveWithCollision(dt, chunks);
+  }
+
+  resolveStuck(chunks: ChunkManager) {
+    let limit = 0;
+    while (this.checkCollision(chunks) && limit < 100) {
+      this.position.y += 0.1;
+      limit++;
+    }
+    if (limit > 0) {
+      this.velocity.y = 0;
+      this.onGround = true;
+    }
   }
 
   private moveWithCollision(dt: number, chunks: ChunkManager) {
@@ -274,8 +303,162 @@ export class Player {
     armR.name = 'armR';
     armR.position.set(0.35, 1.05, 0);
 
+    const heldItemSlot = new THREE.Group();
+    heldItemSlot.name = 'heldItemSlot';
+    heldItemSlot.position.set(0, -0.25, 0.1);
+    armR.add(heldItemSlot);
+
     group.add(armL, armR);
 
     return group;
+  }
+
+  updateHeldItem(itemId: number) {
+    if (itemId === this.lastHeldItemId) return;
+    this.lastHeldItemId = itemId;
+
+    const armR = this.mesh.getObjectByName('armR');
+    if (!armR) return;
+    const slot = armR.getObjectByName('heldItemSlot');
+    if (!slot) return;
+
+    // Clear previous children
+    while (slot.children.length > 0) {
+      const child = slot.children[0];
+      slot.remove(child);
+      child.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m.dispose());
+          } else {
+            obj.material.dispose();
+          }
+        }
+      });
+    }
+
+    if (itemId === 0) return;
+
+    // Create new mesh
+    const mesh = this.createHeldItemMesh(itemId);
+    if (mesh) {
+      slot.add(mesh);
+    }
+  }
+
+  private createHeldItemMesh(itemId: number): THREE.Object3D | null {
+    const group = new THREE.Group();
+
+    const getMaterialColor = (mat: string): number => {
+      if (mat === 'diamond') return 0x5DECF5;
+      if (mat === 'iron') return 0xD8D8D8;
+      if (mat === 'gold') return 0xFFD700;
+      if (mat === 'stone') return 0x777777;
+      return 0x8B4513; // wood
+    };
+
+    const itemDef = ItemRegistry.get(itemId);
+    if (!itemDef) return null;
+
+    if (itemDef.category === 'block') {
+      const geo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
+      const color = this.getBlockColor(itemId);
+      const mat = new THREE.MeshLambertMaterial({ color });
+      const mesh = new THREE.Mesh(geo, mat);
+      group.add(mesh);
+    } else if (itemDef.category === 'tool' && itemDef.toolType) {
+      const matColor = getMaterialColor(itemDef.toolMaterial ?? 'wood');
+
+      // Handle/Stick
+      const handleGeo = new THREE.BoxGeometry(0.03, 0.35, 0.03);
+      const handleMat = new THREE.MeshLambertMaterial({ color: 0x5A3A1A });
+      const handle = new THREE.Mesh(handleGeo, handleMat);
+      group.add(handle);
+
+      if (itemDef.toolType === 'sword') {
+        // Blade
+        const bladeGeo = new THREE.BoxGeometry(0.05, 0.35, 0.02);
+        const bladeMat = new THREE.MeshLambertMaterial({ color: matColor });
+        const blade = new THREE.Mesh(bladeGeo, bladeMat);
+        blade.position.set(0, 0.25, 0);
+
+        // Guard
+        const guardGeo = new THREE.BoxGeometry(0.14, 0.03, 0.04);
+        const guardMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+        const guard = new THREE.Mesh(guardGeo, guardMat);
+        guard.position.set(0, 0.08, 0);
+
+        group.add(blade, guard);
+      } else if (itemDef.toolType === 'pickaxe') {
+        const headGeo = new THREE.BoxGeometry(0.22, 0.04, 0.04);
+        const headMat = new THREE.MeshLambertMaterial({ color: matColor });
+        const head = new THREE.Mesh(headGeo, headMat);
+        head.position.set(0, 0.16, 0);
+        group.add(head);
+      } else if (itemDef.toolType === 'axe') {
+        const headGeo = new THREE.BoxGeometry(0.11, 0.10, 0.04);
+        const headMat = new THREE.MeshLambertMaterial({ color: matColor });
+        const head = new THREE.Mesh(headGeo, headMat);
+        head.position.set(0.04, 0.13, 0);
+        group.add(head);
+      } else if (itemDef.toolType === 'shovel') {
+        const headGeo = new THREE.BoxGeometry(0.07, 0.07, 0.03);
+        const headMat = new THREE.MeshLambertMaterial({ color: matColor });
+        const head = new THREE.Mesh(headGeo, headMat);
+        head.position.set(0, 0.18, 0);
+        group.add(head);
+      }
+
+      // Rotate tool to look natural in hand
+      group.rotation.x = Math.PI / 3;
+      group.rotation.y = -Math.PI / 4;
+    } else {
+      // Food or Material
+      let color = 0x8B4513; // default stick/brown
+      if (itemId === 101) color = 0x222222; // coal
+      else if (itemId === 102 || itemId === 105) color = 0xD8D8D8; // iron
+      else if (itemId === 103 || itemId === 106) color = 0xFFD700; // gold
+      else if (itemId === 104) color = 0x5DECF5; // diamond
+      else if (itemId === 170) color = 0xEE2222; // apple
+      else if (itemId === 171) color = 0xD2B48C; // bread
+      else if (itemId === 172 || itemId === 173 || itemId === 174 || itemId === 175) color = 0xA04040; // meat
+
+      const geo = new THREE.BoxGeometry(0.09, 0.09, 0.09);
+      const mat = new THREE.MeshLambertMaterial({ color });
+      const mesh = new THREE.Mesh(geo, mat);
+      group.add(mesh);
+    }
+
+    return group;
+  }
+
+  private getBlockColor(blockId: number): number {
+    const colors: Record<number, number> = {
+      1: 0x888888,   // stone
+      2: 0x5B8C32,   // grass
+      3: 0x8B6914,   // dirt
+      4: 0x7A7A7A,   // cobblestone
+      5: 0xBC9862,   // oak planks
+      6: 0x6B511D,   // oak log
+      7: 0x3A7D1A,   // leaves
+      8: 0xE8D7A3,   // sand
+      13: 0x2B4FA8,  // water
+      14: 0xD84400,  // lava
+      19: 0x9B4B3A,  // bricks
+      24: 0xBC9862,  // crafting table
+      25: 0x888888,  // furnace
+      26: 0xCCEEFF,  // glass
+      27: 0xF0F0F0,  // snow
+      28: 0x96C8FF,  // ice
+      29: 0x9EA4B0,  // clay
+      30: 0xFFAA00,  // torch
+      31: 0xCC0000,  // redstone wire
+      32: 0x888888,  // repeater
+      33: 0x888888,  // piston
+      34: 0x666666,  // lever
+      35: 0x1B0B2E,  // obsidian
+    };
+    return colors[blockId] ?? 0xAAAAAA;
   }
 }

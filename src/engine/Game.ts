@@ -168,9 +168,9 @@ export class Game {
     heldItemSlot.position.set(0, -0.51, 0);
     group.add(heldItemSlot);
 
-    // Position shoulder in bottom-right corner of viewport, close to camera so it is clipped
-    group.position.set(0.32, -0.20, -0.05);
-    group.rotation.set(Math.PI / 3, Math.PI / 5, -Math.PI / 12);
+    // Position shoulder in bottom-right corner of viewport, pushed off-screen to the right
+    group.position.set(0.42, -0.02, -0.22);
+    group.rotation.set(Math.PI / 3.2, Math.PI / 4.5, -Math.PI / 12);
 
     return group;
   }
@@ -370,13 +370,13 @@ export class Game {
         this.fpArmGroup.visible = true;
         this.updateFpHeldItem(heldItemId);
 
-        // Default position & rotation matching the shoulder-pivot coordinates (clipped by camera near plane)
-        const defX = 0.32;
-        const defY = -0.20;
-        const defZ = -0.05;
+        // Default position & rotation matching the shoulder-pivot coordinates (pushed off-screen to the right)
+        const defX = 0.42;
+        const defY = -0.02;
+        const defZ = -0.22;
         
-        const defRotX = Math.PI / 3;
-        const defRotY = Math.PI / 5;
+        const defRotX = Math.PI / 3.2;
+        const defRotY = Math.PI / 4.5;
         const defRotZ = -Math.PI / 12;
 
         if (this.player.swingProgress > 0) {

@@ -38,6 +38,11 @@ reg({ id: 27, name: 'snow_block',    textureKey: 'snow',         transparent: fa
 reg({ id: 28, name: 'ice',           textureKey: 'ice',          transparent: true,  solid: true,  hardness: 0.5, toolCategory: 'pickaxe', luminance: 0 });
 reg({ id: 29, name: 'clay',          textureKey: 'clay',         transparent: false, solid: true,  hardness: 0.6, toolCategory: 'shovel', luminance: 0 });
 reg({ id: 30, name: 'torch',         textureKey: 'torch',        transparent: true,  solid: false, hardness: 0.0, luminance: 14 });
+reg({ id: 31, name: 'redstone_wire',  textureKey: 'redstone_wire', transparent: true,  solid: false, hardness: 0.0, luminance: 0 });
+reg({ id: 32, name: 'repeater',       textureKey: 'repeater',     transparent: false, solid: true,  hardness: 0.2, luminance: 0 });
+reg({ id: 33, name: 'piston',         textureKey: 'cobblestone',  textureTop: 'oak_planks', textureBottom: 'oak_planks', transparent: false, solid: true,  hardness: 1.5, toolCategory: 'axe', luminance: 0 });
+reg({ id: 34, name: 'lever',          textureKey: 'lever',        transparent: true,  solid: false, hardness: 0.0, luminance: 0 });
+reg({ id: 35, name: 'obsidian',       textureKey: 'obsidian',     transparent: false, solid: true,  hardness: 50.0, toolCategory: 'pickaxe', luminance: 0 });
 
 export const BlockRegistry = {
   get(id: number): BlockDef | undefined {

@@ -413,6 +413,48 @@ export class TextureAtlas {
       ctx.font = '6px sans-serif';
       ctx.fillText('TNT', x + 3, y + 11);
     });
+
+    // redstone wire
+    this.drawTile('redstone_wire', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#CC0000';
+      ctx.fillRect(x + 6, y + 2, 4, 12);
+      ctx.fillRect(x + 2, y + 6, 12, 4);
+    });
+
+    // repeater
+    this.drawTile('repeater', (ctx, x, y, s) => {
+      ctx.fillStyle = '#888888';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#CC0000';
+      ctx.fillRect(x + 4, y + 4, 8, 8);
+      ctx.fillStyle = '#AAAAAA';
+      ctx.fillRect(x + 2, y + 7, 12, 2);
+    });
+
+    // lever
+    this.drawTile('lever', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#666666';
+      ctx.fillRect(x + 7, y + 4, 2, 8);
+      ctx.fillStyle = '#AAAAAA';
+      ctx.fillRect(x + 6, y + 2, 4, 4);
+    });
+
+    // obsidian
+    this.drawTile('obsidian', (ctx, x, y, s) => {
+      ctx.fillStyle = '#1B0B2E';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 20; i++) {
+        const px = x + Math.random() * s;
+        const py = y + Math.random() * s;
+        const c = 20 + Math.random() * 40 | 0;
+        ctx.fillStyle = `rgb(${c + 10},${c},${c + 20})`;
+        ctx.fillRect(px | 0, py | 0, 2, 2);
+      }
+      ctx.strokeStyle = '#3D1F6B';
+      ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+    });
   }
 
   private drawOreTile(key: string, spotColor: string) {

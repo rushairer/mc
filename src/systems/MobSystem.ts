@@ -20,6 +20,7 @@ export class MobSystem {
   update(
     dt: number,
     playerPos: THREE.Vector3,
+    isNight: boolean,
     getBlock: (x: number, y: number, z: number) => number,
     hurtPlayer: (damage: number, knockback: THREE.Vector3) => void
   ) {
@@ -36,11 +37,11 @@ export class MobSystem {
     this.spawnTimer += dt;
     if (this.spawnTimer >= SPAWN_INTERVAL && this.mobs.size < MAX_MOBS) {
       this.spawnTimer = 0;
-      this.trySpawn(playerPos, getBlock);
+      this.trySpawn(playerPos, isNight, getBlock);
     }
   }
 
-  private trySpawn(playerPos: THREE.Vector3, getBlock: (x: number, y: number, z: number) => number) {
+  private trySpawn(playerPos: THREE.Vector3, isNight: boolean, getBlock: (x: number, y: number, z: number) => number) {
     // Random position around player
     const angle = Math.random() * Math.PI * 2;
     const dist = 16 + Math.random() * (SPAWN_RANGE - 16);
@@ -72,10 +73,6 @@ export class MobSystem {
         break;
       }
     }
-
-    // Choose mob type based on time and light
-    const time = (Date.now() % 120000) / 120000;
-    const isNight = time > 0.3 && time < 0.8;
 
     let mobType: MobType;
 

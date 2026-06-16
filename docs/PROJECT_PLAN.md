@@ -1,189 +1,179 @@
-# MineCraft Clone — Project Plan
+# Minecraft Clone Roadmap
 
-> **Tech Stack**: React 18 + TypeScript + Vite 4 + Three.js
-> **Target**: Desktop Chrome/Firefox, 60fps with 12-chunk render distance
-> **Node**: 16+ compatible (uses Vite 4)
+> Tech stack: React 18 + TypeScript + Vite 4 + Three.js
+> Current goal: keep improving the clone in small, verifiable stages and push each stable milestone to the main branch.
 
----
+## Current Fit Against Vanilla Minecraft
 
-## Phase Status
+This project already covers the recognizable core loop:
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| 1 — Core Engine | **DONE** | Chunk system, player controls, block interaction |
-| 2 — World Gen | **DONE** | Simplex noise terrain, 6 biomes, caves, trees, ores |
-| 3 — Game Systems | **DONE** | Inventory, crafting, furnace, survival, save/load |
-| 4 — Content | NOT STARTED | Mobs, day/night, fluids, redstone, Nether/End |
+- Chunked voxel terrain with block breaking and placement.
+- First-person controls, collision, sprinting, jumping, fly toggle, and third-person camera.
+- Procedural terrain with basic biomes, caves, trees, ores, water, and lava.
+- Inventory, hotbar, crafting table, furnace, tools, armor, food, health, hunger, oxygen, and death/respawn.
+- Basic mobs, drops, combat, particles, procedural sounds, weather, day/night lighting, fluid spread, redstone components, and a Nether generator scaffold.
+- IndexedDB save/load for loaded chunks, player state, and inventory.
 
----
+The gap with vanilla Minecraft is now less about the existence of a block world and more about depth, scale, correctness, and content density.
 
-## Phase 1 — Core Engine (Current)
+## Major Gaps
 
-**Goal**: Walk around a flat/blocky world, place and break blocks.
+### World And Terrain
 
-### Deliverables
-- [x] Vite + React + Three.js project scaffold
-- [x] Chunk-based voxel renderer (16×256×16 chunks)
-- [x] Face-culling mesh optimization
-- [x] First-person camera + pointer lock
-- [x] WASD movement, jumping, gravity, AABB collision
-- [x] Block breaking (left click) and placement (right click) via raycasting
-- [x] Hotbar UI (9 slots, scroll wheel selection)
-- [x] 30 block types (stone, grass, dirt, ores, wood, leaves, sand, water, etc.)
-- [x] Procedural texture atlas (no external files needed)
-- [x] 6 biomes (Plains, Desert, Mountains, Forest, Snow, Ocean)
-- [x] Cave generation with 3D noise
-- [x] Tree generation per biome
-- [x] Ore distribution (coal, iron, gold, diamond)
-- [x] Debug overlay (F3)
-- [x] Fly mode (F key)
-- [x] Day/night cycle (background color)
-- [x] Build verified (tsc + vite build pass)
+- No modern worldgen layers such as rivers, beaches, villages, structures, ravines, mineshafts, dungeons, strongholds, lush caves, dripstone caves, or deep dark.
+- Biomes are broad placeholders and do not have distinct vegetation, colors, mobs, temperatures, or local blocks.
+- Bedrock is represented by stone, and ore distribution is simplified.
+- Chunk generation and meshing run on the main thread, so render distance and terrain complexity are capped by frame-time.
+- Save data only covers loaded chunks; there is no multi-world menu, seed UI, or explicit world management.
 
-### Acceptance Criteria
-- Render distance of 8+ chunks without frame drops
-- Player can walk, jump, fall, collide with terrain
-- Blocks can be placed and broken in real-time
-- Hotbar displays selected block
+### Blocks And Items
 
----
+- Only a small subset of vanilla blocks and items exists.
+- No slabs, stairs, doors, trapdoors, fences, signs, crops, beds, chests, boats, minecarts, rails, bows, arrows, shields, buckets with fluid pickup, or maps.
+- Block state is mostly just an ID; many vanilla blocks need orientation, age, power, waterlogging, open/closed, lit/unlit, and inventory data.
+- Tool requirements, harvest levels, durability behavior, stack rules, and drops are simplified.
 
-## Phase 2 — World Generation
+### Survival And Progression
 
-**Goal**: Infinite procedural terrain with varied biomes.
+- No XP bar, enchanting, brewing, anvil, smithing, advancement system, sleeping, spawn-point management, or difficulty modes.
+- No farming loop beyond basic food items.
+- No villager trading, raids, pets, mounts, fishing, or loot tables.
+- Combat lacks shields, bows, projectiles, armor toughness, critical hits, status effects, and detailed mob behaviors.
 
-### Deliverables
-- [ ] 2D/3D Simplex noise terrain generation
-- [ ] Biome system (plains, desert, mountains, forest, ocean, snow)
-- [ ] Cave generation (3D noise carving)
-- [ ] Tree generation (oak, birch, spruce, jungle)
-- [ ] Ore distribution (coal, iron, gold, diamond, redstone, lapis)
-- [ ] Water bodies at sea level
-- [ ] Chunk loading/unloading with distance-based priority
+### Mobs And AI
 
-### Acceptance Criteria
-- World generates seamlessly as player walks
-- Biome transitions are smooth
-- Caves are explorable and lit
-- Trees spawn in appropriate biomes
+- Existing mobs are simplified mesh models with basic wander/chase/attack behavior.
+- Creepers do not yet have fuse/explosion block destruction.
+- Skeletons do not shoot arrows, spiders do not climb, zombies do not burn in daylight, passive mobs do not breed, and chickens do not drop eggs.
+- Spawn rules use simplified sky exposure/light checks rather than true light propagation, pack spawning, biome tags, and despawn rules.
 
----
+### Dimensions And Bosses
 
-## Phase 3 — Game Systems
+- Nether generation exists as a scaffold, but there is no complete dimension switching loop with persistent separate chunk stores.
+- No End portal, End dimension, Ender Dragon, credits flow, or dragon fight mechanics.
+- Portals are placeholders rather than true portal blocks with orientation, cooldown, and dimension target behavior.
 
-**Goal**: Full inventory, crafting, and survival mechanics.
+### Rendering And Feel
 
-### Deliverables
-- [x] 36-slot inventory (27 main + 9 hotbar)
-- [x] Crafting grid (3×3) with recipe matching
-- [x] Furnace with smelting recipes
-- [x] Crafting recipes (tools, armor, blocks, materials)
-- [x] Health and hunger bars (UI display + game logic)
-- [x] Fall damage, drowning, starvation
-- [x] Tool system (5 materials × 4 tools = 20 tools)
-- [x] Item drops when blocks break
-- [x] Armor system (iron + diamond, 4 slots)
-- [x] Food system (apple, bread, steak, porkchop)
-- [x] IndexedDB save/load system (auto-save every 60s)
-- [x] E key opens inventory UI
-- [x] Number keys 1-9 for hotbar selection
+- Lighting is scene-level plus a few nearby point lights, not true block light and sky light propagation.
+- Water/lava are not animated/translucent like vanilla and do not maintain fluid levels as block state.
+- No clouds, sun/moon billboards, stars, biome tinting, held item polish for every item, or complete UI parity.
+- Procedural audio exists, but there is no ambient music or biome/underground ambience.
 
-### Acceptance Criteria
-- Player can craft all basic tools and items
-- Furnace smelts ores into ingots
-- Health/hunger system works
-- Game state persists across sessions
+### Engineering And QA
 
----
+- No automated unit tests or browser smoke tests are committed yet.
+- No worker pipeline for generation/meshing.
+- Docs mention systems that are only simplified or scaffolded; this roadmap should stay updated with each milestone.
 
-## Phase 4 — Content Expansion
+## Staged Plan
 
-**Goal**: Add life, danger, and advanced mechanics.
+### Stage 1 - System Consistency And Baseline QA
 
-### Deliverables
-- [x] Day/night cycle with dynamic lighting (sun/moon positions, ambient color)
-- [x] Hostile mobs (zombie, skeleton, creeper, spider)
-- [x] Passive mobs (cow, pig, sheep, chicken)
-- [x] Mob spawning by light level + time of day
-- [x] Mob AI: chase (hostile), wander (passive), jump over obstacles
-- [x] Combat system with sword damage + knockback
-- [x] Water and lava fluid simulation (flow + water+lava=cobblestone)
-- [x] Particle effects (block break, damage, mob death)
-- [x] Mob drops on death
-- [x] Redstone system (wire BFS propagation, torch, repeater, piston, lever)
-- [x] Nether dimension generator (caves, lava lakes, glowstone)
-- [x] Portal frame detection (4×5 obsidian) + activation
-- [x] Sound effects (procedural Web Audio: break/place/hurt/mob/explosion/lightning)
-- [x] Weather system (rain particles, thunder + lightning flash)
-- [ ] End portal and Ender Dragon
-- [ ] Ambient music
+Goal: make existing systems agree with each other and establish a stable verification loop.
 
----
+- Use one shared game-time night/day source for sky, weather, UI, and mob spawning.
+- Add a short browser smoke checklist for load, canvas render, inventory open/close, hotbar, block placement, and block breaking.
+- Keep `npm run build` green before every push.
+- Update this roadmap after each milestone.
 
-## Directory Structure
+Acceptance:
 
-```
-mc/
-├── docs/
-│   ├── PROJECT_PLAN.md      ← this file
-│   └── ARCHITECTURE.md      ← technical architecture
-├── public/
-│   └── textures/            ← block textures (16×16 PNGs)
-├── src/
-│   ├── main.tsx             ← entry point
-│   ├── App.tsx              ← root React component
-│   ├── engine/
-│   │   ├── Game.ts          ← main game loop
-│   │   ├── Renderer.ts      ← Three.js scene setup
-│   │   ├── InputManager.ts  ← keyboard/mouse input
-│   │   └── TextureAtlas.ts  ← block texture management
-│   ├── world/
-│   │   ├── Chunk.ts         ← single chunk data + mesh
-│   │   ├── ChunkManager.ts  ← chunk loading/unloading
-│   │   ├── World.ts         ← world state, block get/set
-│   │   ├── WorldGen.ts      ← terrain generation
-│   │   ├── Biome.ts         ← biome definitions
-│   │   ├── GreedyMesher.ts  ← mesh optimization
-│   │   └── BlockRegistry.ts ← block type definitions
-│   ├── player/
-│   │   ├── Player.ts        ← player entity + physics
-│   │   ├── PlayerController.ts ← input → movement
-│   │   └── Inventory.ts     ← item storage
-│   ├── ui/
-│   │   ├── HUD.tsx          ← health, hunger, hotbar
-│   │   ├── InventoryUI.tsx  ← full inventory screen
-│   │   ├── CraftingUI.tsx   ← crafting grid
-│   │   └── DebugOverlay.tsx ← FPS, coords, chunk info
-│   ├── systems/
-│   │   ├── PhysicsSystem.ts ← collision detection
-│   │   ├── LightingSystem.ts← block light propagation
-│   │   ├── MobSystem.ts     ← mob AI and spawning
-│   │   ├── FluidSystem.ts   ← water/lava simulation
-│   │   └── SaveSystem.ts    ← IndexedDB persistence
-│   ├── types/
-│   │   └── index.ts         ← shared TypeScript types
-│   └── constants.ts         ← game constants
-├── package.json
-├── tsconfig.json
-├── vite.config.ts
-└── index.html
-```
+- Build passes.
+- App loads without framework overlay or console errors.
+- Debug overlay reports changing FPS/chunks/player coordinates.
+- Mob spawning follows the in-game night state rather than wall-clock time.
 
-## Key Constants
+### Stage 2 - Block State Foundation
 
-```
-CHUNK_SIZE = 16 (width) × 256 (height) × 16 (depth)
-BLOCK_SIZE = 1 (unit)
-RENDER_DISTANCE = 8 chunks
-SEA_LEVEL = 62
-WORLD_HEIGHT = 256
-TICK_RATE = 20 ticks/second
-```
+Goal: unblock doors, beds, crops, chests, redstone correctness, and portals.
 
-## How to Continue Development
+- Introduce per-block metadata storage alongside block IDs.
+- Add orientation support for placeable blocks.
+- Convert lever, repeater, piston, furnace, and crafting table interactions to use metadata where needed.
+- Persist metadata in IndexedDB.
 
-1. Read `docs/ARCHITECTURE.md` for technical details
-2. Check `src/constants.ts` for game constants
-3. Each module is self-contained — read the file header for its purpose
-4. Run `npm run dev` to start development server
-5. Run `npm run build` to verify no TypeScript errors
+Acceptance:
+
+- Existing saves still load gracefully.
+- Oriented blocks render and interact consistently after save/load.
+- Redstone components keep their state after reload.
+
+### Stage 3 - Core Vanilla Blocks And Utility Loop
+
+Goal: make the survival/building loop feel much closer to early Minecraft.
+
+- Add chest inventory UI and persistent container data.
+- Add doors, trapdoors, fences, stairs, slabs, bed, ladder, crops, seeds planting, and simple farmland hydration.
+- Add bucket pickup/place for water and lava.
+- Expand recipes and drops to support the new loop.
+
+Acceptance:
+
+- Player can build a basic house with door, bed, chest, stairs/slabs, and farm.
+- Bed sets spawn and skips night when conditions are safe.
+- Chests and crops persist through save/load.
+
+### Stage 4 - Combat And Mob Depth
+
+Goal: make hostile encounters recognizable and tactical.
+
+- Add creeper fuse and explosion terrain damage.
+- Add skeleton arrows and projectile collision.
+- Add zombie daylight burning and spider climbing or leap behavior.
+- Add bows, arrows, shield, armor mitigation tuning, and basic XP drops.
+
+Acceptance:
+
+- Each hostile mob has a distinct threat pattern.
+- Explosions modify terrain and play particles/sound.
+- Combat outcomes account for armor and shield use.
+
+### Stage 5 - Lighting, Fluids, And Atmosphere
+
+Goal: improve the feel of caves, night, water, and exploration.
+
+- Add block light and sky light propagation data per chunk.
+- Make mob spawning depend on actual light levels.
+- Improve water/lava levels, source behavior, and water-lava interactions.
+- Add sun, moon, stars, clouds, biome tinting, and ambient music.
+
+Acceptance:
+
+- Torches affect local block brightness and spawn safety.
+- Caves read as dark without torches.
+- Water and lava spread in predictable, bounded ways.
+
+### Stage 6 - Dimensions And Endgame
+
+Goal: complete the adventure arc.
+
+- Implement persistent Overworld/Nether/End chunk stores.
+- Finish Nether portal teleportation and coordinate scaling.
+- Add End portal activation, End dimension generation, Ender Dragon, obsidian pillars, crystals, and credits/end state.
+
+Acceptance:
+
+- Player can travel Overworld -> Nether -> Overworld with stable portals.
+- Player can reach the End and fight a functional Ender Dragon encounter.
+
+### Stage 7 - Performance And Scale
+
+Goal: support larger worlds and smoother play.
+
+- Move world generation and mesh building to Web Workers.
+- Add chunk build queues with distance priority and cancellation.
+- Add geometry/material pooling.
+- Add optional settings for render distance, FOV, sensitivity, graphics, and audio.
+
+Acceptance:
+
+- 12 chunk render distance is playable on target desktop browsers.
+- Chunk loading no longer causes major frame spikes during walking/flying.
+
+## Commit Policy
+
+- Each stage should land as one or more small commits on the current main branch.
+- Every commit should pass `npm run build`.
+- For rendered changes, run a browser smoke test before pushing.
+- Keep `docs/PROJECT_PLAN.md` current when feature scope or status changes.

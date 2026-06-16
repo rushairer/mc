@@ -44,6 +44,8 @@ export type GameStateListener = (state: GameState) => void;
 
 const BIOME_NAMES = ['Plains', 'Desert', 'Mountains', 'Forest', 'Snow', 'Ocean'];
 const DAY_LENGTH = 600; // 10 minutes in seconds
+const NIGHT_START = 0.5;
+const NIGHT_END = 0.95;
 
 export class Game {
   renderer: Renderer;
@@ -75,7 +77,7 @@ export class Game {
   private breakingBlockPos: THREE.Vector3 | null = null;
   private lastFrameWasBreaking = false;
   private seed = 12345;
-  private gameTime = 0.25; // start at sunrise (0=midnight, 0.25=sunrise, 0.5=noon, 0.75=sunset)
+  private gameTime = 0.05; // 0=sunrise, 0.25=noon, 0.5=sunset, 0.75=midnight
   private damageFlashTimer = 0;
   private swordSwingTimer = 0;
   private eatingTimer = 0;
@@ -394,7 +396,7 @@ export class Game {
     // UI open: skip game input
     if (this.openUI !== 'none') {
       this.particles.update(dt);
-      this.mobs.update(dt, this.player.position,
+      this.mobs.update(dt, this.player.position, this.isNight(),
         (x, y, z) => this.chunks.getBlock(x, y, z),
         () => {} // no mob attacks while UI open
       );
@@ -441,7 +443,9 @@ export class Game {
     }, this.chunks);
 
     // Mob system
-    this.mobs.update(dt, this.player.position,
+    const isNight = this.isNight();
+
+    this.mobs.update(dt, this.player.position, isNight,
       (x, y, z) => this.chunks.getBlock(x, y, z),
       (damage, knockback) => {
         this.player.health = Math.max(0, this.player.health - damage);
@@ -856,7 +860,6 @@ export class Game {
     this.particles.update(dt);
 
     // Weather
-    const isNight = this.gameTime > 0.35 && this.gameTime < 0.75;
     this.weather.update(dt, this.player.position, isNight);
 
     // Dynamic lighting
@@ -958,8 +961,6 @@ export class Game {
       ? ItemRegistry.getDisplayName(selectedSlot.id)
       : 'empty';
 
-    const isNight = this.gameTime > 0.35 && this.gameTime < 0.75;
-
     const headBlock = this.chunks.getBlock(
       Math.floor(this.player.position.x),
       Math.floor(this.player.position.y + 1.62),
@@ -985,13 +986,17 @@ export class Game {
       openUI: this.openUI,
       inventory: this.inventory,
       heldItemId: selectedSlot?.id ?? 0,
-      isNight,
+      isNight: this.isNight(),
       isUnderwater,
     };
 
     for (const listener of this.stateListeners) {
       listener(state);
     }
+  }
+
+  private isNight(): boolean {
+    return this.gameTime >= NIGHT_START && this.gameTime <= NIGHT_END;
   }
 
   private async saveGame() {

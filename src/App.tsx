@@ -12,6 +12,7 @@ const initialGameState: GameState = {
   playerZ: 0,
   biome: 'Unknown',
   chunkCount: 0,
+  mobCount: 0,
   selectedBlock: 'empty',
   selectedSlot: 0,
   health: 20,
@@ -21,6 +22,7 @@ const initialGameState: GameState = {
   openUI: 'none',
   inventory: null as any,
   heldItemId: 0,
+  isNight: false,
 };
 
 export const App: React.FC = () => {

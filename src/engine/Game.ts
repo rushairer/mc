@@ -8,8 +8,10 @@ import { Inventory } from '../player/Inventory';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { SurvivalSystem } from '../systems/SurvivalSystem';
+import { MobSystem } from '../systems/MobSystem';
+import { ParticleSystem } from '../systems/ParticleSystem';
+import { FluidSystem } from '../systems/FluidSystem';
 import { SaveSystem, type SaveData } from '../systems/SaveSystem';
-import { CHUNK_SIZE } from '../constants';
 
 export type UIType = 'none' | 'inventory' | 'furnace';
 
@@ -20,6 +22,7 @@ export interface GameState {
   playerZ: number;
   biome: string;
   chunkCount: number;
+  mobCount: number;
   selectedBlock: string;
   selectedSlot: number;
   health: number;
@@ -28,12 +31,14 @@ export interface GameState {
   flying: boolean;
   openUI: UIType;
   inventory: Inventory;
-  heldItemId: number;  // item ID in selected hotbar slot
+  heldItemId: number;
+  isNight: boolean;
 }
 
 export type GameStateListener = (state: GameState) => void;
 
 const BIOME_NAMES = ['Plains', 'Desert', 'Mountains', 'Forest', 'Snow', 'Ocean'];
+const DAY_LENGTH = 600; // 10 minutes in seconds
 
 export class Game {
   renderer: Renderer;
@@ -43,6 +48,9 @@ export class Game {
   player: Player;
   inventory: Inventory;
   private survival: SurvivalSystem;
+  private mobs: MobSystem;
+  private particles: ParticleSystem;
+  private fluids: FluidSystem;
   private clock: THREE.Clock;
   running = false;
   private stateListeners: GameStateListener[] = [];
@@ -55,10 +63,13 @@ export class Game {
   private placeCooldown = 0;
   openUI: UIType = 'none';
   private autoSaveTimer = 0;
-  private breakProgress = 0;     // 0..1
+  private breakProgress = 0;
   private breakingBlockPos: THREE.Vector3 | null = null;
   private lastFrameWasBreaking = false;
   private seed = 12345;
+  private gameTime = 0.25; // start at sunrise (0=midnight, 0.25=sunrise, 0.5=noon, 0.75=sunset)
+  private damageFlashTimer = 0;
+  private swordSwingTimer = 0;
 
   constructor(container: HTMLElement) {
     this.renderer = new Renderer(container);
@@ -68,17 +79,20 @@ export class Game {
     this.clock = new THREE.Clock();
     this.inventory = new Inventory();
     this.survival = new SurvivalSystem();
+    this.mobs = new MobSystem(this.renderer.scene);
+    this.particles = new ParticleSystem(this.renderer.scene);
+    this.fluids = new FluidSystem();
 
-    // Default hotbar items
-    this.inventory.setSlot(0, { id: 2, count: 64 });  // grass
-    this.inventory.setSlot(1, { id: 1, count: 64 });  // stone
-    this.inventory.setSlot(2, { id: 5, count: 64 });  // planks
-    this.inventory.setSlot(3, { id: 6, count: 64 });  // log
-    this.inventory.setSlot(4, { id: 4, count: 64 });  // cobble
-    this.inventory.setSlot(5, { id: 8, count: 64 });  // sand
-    this.inventory.setSlot(6, { id: 30, count: 64 }); // torch
-    this.inventory.setSlot(7, { id: 26, count: 64 }); // glass
-    this.inventory.setSlot(8, { id: 7, count: 64 });  // leaves
+    // Default hotbar
+    this.inventory.setSlot(0, { id: 2, count: 64 });
+    this.inventory.setSlot(1, { id: 1, count: 64 });
+    this.inventory.setSlot(2, { id: 5, count: 64 });
+    this.inventory.setSlot(3, { id: 6, count: 64 });
+    this.inventory.setSlot(4, { id: 4, count: 64 });
+    this.inventory.setSlot(5, { id: 8, count: 64 });
+    this.inventory.setSlot(6, { id: 30, count: 64 });
+    this.inventory.setSlot(7, { id: 26, count: 64 });
+    this.inventory.setSlot(8, { id: 7, count: 64 });
 
     // Spawn
     const spawnX = 8;
@@ -95,8 +109,6 @@ export class Game {
     });
 
     this.createHighlight();
-
-    // Try to load save
     this.loadGame();
 
     this.running = true;
@@ -140,25 +152,35 @@ export class Game {
       this.fpsTime = 0;
     }
 
-    // Auto-save every 60 seconds
+    // Timers
     this.autoSaveTimer += dt;
     if (this.autoSaveTimer >= 60) {
       this.autoSaveTimer = 0;
       this.saveGame();
     }
 
-    // Cooldowns
     this.breakCooldown = Math.max(0, this.breakCooldown - dt);
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
+    this.damageFlashTimer = Math.max(0, this.damageFlashTimer - dt);
+    this.swordSwingTimer = Math.max(0, this.swordSwingTimer - dt);
 
-    // ─── UI is open: skip game input ───
+    // Game time (day/night cycle)
+    this.gameTime = (this.gameTime + dt / DAY_LENGTH) % 1;
+    this.renderer.setTimeOfDay(this.gameTime);
+
+    // UI open: skip game input
     if (this.openUI !== 'none') {
+      this.particles.update(dt);
+      this.mobs.update(dt, this.player.position,
+        (x, y, z) => this.chunks.getBlock(x, y, z),
+        () => {} // no mob attacks while UI open
+      );
       this.renderer.render();
       this.notifyState();
       return;
     }
 
-    // ─── E key to open inventory ───
+    // E key → inventory
     if (this.input.isKeyDown('e')) {
       this.openInventoryUI();
       this.input.keys.delete('e');
@@ -167,13 +189,13 @@ export class Game {
       return;
     }
 
-    // Scroll for hotbar
+    // Hotbar scroll
     const scroll = this.input.consumeScroll();
     if (scroll !== 0) {
       this.player.selectedSlot = ((this.player.selectedSlot + (scroll > 0 ? 1 : -1)) % 9 + 9) % 9;
     }
 
-    // Number keys 1-9 for hotbar
+    // Number keys 1-9
     for (let i = 1; i <= 9; i++) {
       if (this.input.isKeyDown(String(i))) {
         this.player.selectedSlot = i - 1;
@@ -195,7 +217,7 @@ export class Game {
       fly: false,
     }, this.chunks);
 
-    // F key to toggle fly
+    // F key → fly toggle
     if (this.input.isKeyDown('f')) {
       this.player.flying = !this.player.flying;
       this.input.keys.delete('f');
@@ -215,83 +237,139 @@ export class Game {
     this.targetBlock = this.player.raycast(this.chunks);
     this.updateHighlight();
 
-    // ─── Block breaking with progress ───
+    // ─── Left click: attack mobs OR break blocks ───
     const selectedItemId = this.inventory.getSlot(this.player.selectedSlot)?.id ?? 0;
-    const breakTime = this.targetBlock
-      ? ItemRegistry.getBreakTime(this.targetBlock.blockPos.x < 0 ? 1 : this.chunks.getBlock(
-          this.targetBlock.blockPos.x,
-          this.targetBlock.blockPos.y,
-          this.targetBlock.blockPos.z
-        ), selectedItemId)
-      : 0;
+    const isHoldingSword = ItemRegistry.isTool(selectedItemId) &&
+      ItemRegistry.get(selectedItemId)?.toolType === 'sword';
+    const isHoldingTool = ItemRegistry.isTool(selectedItemId);
+    const attackDamage = isHoldingTool
+      ? (ItemRegistry.get(selectedItemId)?.damage ?? 1)
+      : 1;
 
-    if (this.input.isMouseDown(0) && this.targetBlock) {
-      const bp = this.targetBlock.blockPos;
+    if (this.input.isMouseDown(0) && this.swordSwingTimer <= 0) {
+      // First: try to attack mob
+      const dir = this.player.forward;
+      const mobHit = this.mobs.playerAttackMob(
+        this.player.eyePosition,
+        dir,
+        attackDamage,
+        4.5
+      );
 
-      // Check if we're still breaking the same block
-      if (this.breakingBlockPos && this.breakingBlockPos.equals(bp)) {
-        this.breakProgress += dt / Math.max(breakTime, 0.05);
-      } else {
-        this.breakingBlockPos = bp.clone();
-        this.breakProgress = dt / Math.max(breakTime, 0.05);
-      }
-
-      if (this.breakProgress >= 1) {
-        // Get block drop
-        const blockId = this.chunks.getBlock(bp.x, bp.y, bp.z);
-        const dropId = ItemRegistry.getBlockDropItem(blockId);
-        if (dropId > 0) {
-          this.inventory.addItem(dropId, 1);
+      if (mobHit.hit) {
+        this.swordSwingTimer = 0.4;
+        // Spawn damage particles on mob
+        if (mobHit.mob) {
+          this.particles.spawnDamageParticles(
+            mobHit.mob.position.x,
+            mobHit.mob.position.y + mobHit.mob.def.height * 0.5,
+            mobHit.mob.position.z
+          );
         }
-        this.chunks.setBlock(bp.x, bp.y, bp.z, 0);
-        this.breakProgress = 0;
-        this.breakingBlockPos = null;
+      } else if (this.targetBlock) {
+        // Break block
+        const bp = this.targetBlock.blockPos;
+        const breakTime = ItemRegistry.getBreakTime(
+          this.chunks.getBlock(bp.x, bp.y, bp.z),
+          selectedItemId
+        );
+
+        if (this.breakingBlockPos && this.breakingBlockPos.equals(bp)) {
+          this.breakProgress += dt / Math.max(breakTime, 0.05);
+        } else {
+          this.breakingBlockPos = bp.clone();
+          this.breakProgress = dt / Math.max(breakTime, 0.05);
+        }
+
+        if (this.breakProgress >= 1) {
+          const blockId = this.chunks.getBlock(bp.x, bp.y, bp.z);
+          const blockDef = BlockRegistry.get(blockId);
+
+          // Spawn break particles
+          if (blockDef) {
+            const blockColor = this.getBlockParticleColor(blockId);
+            this.particles.spawnBlockBreak(bp.x, bp.y, bp.z, blockColor);
+          }
+
+          // Drop item
+          const dropId = ItemRegistry.getBlockDropItem(blockId);
+          if (dropId > 0) {
+            this.inventory.addItem(dropId, 1);
+          }
+
+          // Fluid check: if breaking a block next to water, trigger flow
+          this.checkFluidAdjacency(bp.x, bp.y, bp.z);
+
+          this.chunks.setBlock(bp.x, bp.y, bp.z, 0);
+          this.breakProgress = 0;
+          this.breakingBlockPos = null;
+        }
+        this.lastFrameWasBreaking = true;
       }
-      this.lastFrameWasBreaking = true;
     } else {
       this.breakProgress = 0;
       this.breakingBlockPos = null;
       this.lastFrameWasBreaking = false;
     }
 
-    // ─── Block placement ───
+    // ─── Right click: place block / interact ───
     if (this.input.isMouseDown(2) && this.placeCooldown <= 0) {
       if (this.targetBlock) {
         const { blockPos, faceNormal } = this.targetBlock;
-        const placePos = blockPos.clone().add(faceNormal);
+        const targetId = this.chunks.getBlock(blockPos.x, blockPos.y, blockPos.z);
 
-        // Don't place inside player
-        const px = Math.floor(this.player.position.x);
-        const py = Math.floor(this.player.position.y);
-        const pz = Math.floor(this.player.position.z);
-        const py1 = Math.floor(this.player.position.y + 1.5);
+        // Right-click furnace
+        if (targetId === 25) {
+          this.openFurnaceUI();
+          this.placeCooldown = 0.5;
+        } else {
+          // Place block
+          const placePos = blockPos.clone().add(faceNormal);
+          const px = Math.floor(this.player.position.x);
+          const py = Math.floor(this.player.position.y);
+          const pz = Math.floor(this.player.position.z);
+          const py1 = Math.floor(this.player.position.y + 1.5);
 
-        const insidePlayer = placePos.x === px && placePos.z === pz &&
-          (placePos.y === py || placePos.y === py1);
+          const insidePlayer = placePos.x === px && placePos.z === pz &&
+            (placePos.y === py || placePos.y === py1);
 
-        if (!insidePlayer) {
-          const slot = this.inventory.getSlot(this.player.selectedSlot);
-          if (slot && slot.count > 0) {
-            const blockId = ItemRegistry.isBlock(slot.id) ? slot.id : 0;
-            if (blockId > 0) {
-              this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
-              this.inventory.removeFromSlot(this.player.selectedSlot);
-              this.placeCooldown = 0.25;
+          if (!insidePlayer) {
+            const slot = this.inventory.getSlot(this.player.selectedSlot);
+            if (slot && slot.count > 0) {
+              const blockId = ItemRegistry.isBlock(slot.id) ? slot.id : 0;
+              if (blockId > 0) {
+                this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
+                this.inventory.removeFromSlot(this.player.selectedSlot);
+                this.placeCooldown = 0.25;
+
+                // If placing water/lava, start fluid simulation
+                if (blockId === 13 || blockId === 14) {
+                  this.fluids.addSource(placePos.x, placePos.y, placePos.z, blockId);
+                }
+              }
             }
           }
         }
       }
     }
 
-    // ─── Right-click on furnace/crafting table blocks ───
-    if (this.input.isMouseDown(2) && this.placeCooldown <= 0 && this.targetBlock) {
-      const bp = this.targetBlock.blockPos;
-      const blockId = this.chunks.getBlock(bp.x, bp.y, bp.z);
-      if (blockId === 25) { // furnace
-        this.openFurnaceUI();
-        this.placeCooldown = 0.5;
+    // Mob system
+    this.mobs.update(dt, this.player.position,
+      (x, y, z) => this.chunks.getBlock(x, y, z),
+      (damage, knockback) => {
+        this.player.health = Math.max(0, this.player.health - damage);
+        this.player.velocity.add(knockback);
+        this.damageFlashTimer = 0.3;
+        this.particles.spawnDamageParticles(
+          this.player.position.x,
+          this.player.position.y + 1,
+          this.player.position.z
+        );
       }
-    }
+    );
+
+    // Collect mob drops from dead mobs
+    this.collectMobDrops();
 
     // Survival
     this.survival.update(dt, {
@@ -303,15 +381,72 @@ export class Game {
       flying: this.player.flying,
     }, (x, y, z) => this.chunks.getBlock(x, y, z), (dmg) => {
       this.player.health = Math.max(0, this.player.health - dmg);
+      this.damageFlashTimer = 0.3;
     });
 
-    // Day/night
-    const time = (Date.now() % 120000) / 120000;
-    this.renderer.setTimeOfDay(time);
+    // Fluid simulation
+    this.fluids.update(dt,
+      (x, y, z) => this.chunks.getBlock(x, y, z),
+      (x, y, z, id) => this.chunks.setBlock(x, y, z, id)
+    );
+
+    // Particles
+    this.particles.update(dt);
 
     this.renderer.render();
     this.notifyState();
   };
+
+  private collectMobDrops() {
+    // Check for dead mobs and drop XP/items
+    for (const mob of this.mobs.mobs.values()) {
+      if (mob.isDead()) {
+        // Spawn death particles
+        this.particles.spawnDeathParticles(
+          mob.position.x,
+          mob.position.y,
+          mob.position.z,
+          mob.def.bodyColor
+        );
+
+        // Drop items
+        for (const drop of mob.def.drops) {
+          if (Math.random() < drop.chance) {
+            this.inventory.addItem(drop.id, drop.count);
+          }
+        }
+      }
+    }
+  }
+
+  private checkFluidAdjacency(x: number, y: number, z: number) {
+    const dirs: [number, number, number][] = [[0,1,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]];
+    for (const [dx, dy, dz] of dirs) {
+      const nx = x + dx;
+      const ny = y + dy;
+      const nz = z + dz;
+      const nb = this.chunks.getBlock(nx, ny, nz);
+      if (nb === 13 || nb === 14) {
+        this.fluids.addSource(nx, ny, nz, nb);
+      }
+    }
+  }
+
+  private getBlockParticleColor(blockId: number): number {
+    const colors: Record<number, number> = {
+      1: 0x888888,   // stone
+      2: 0x5B8C32,   // grass
+      3: 0x8B6914,   // dirt
+      4: 0x7A7A7A,   // cobblestone
+      5: 0xBC9862,   // oak planks
+      6: 0x6B511D,   // oak log
+      7: 0x3A7D1A,   // leaves
+      8: 0xE8D7A3,   // sand
+      19: 0x9B4B3A,  // bricks
+      26: 0xCCEEFF,  // glass
+    };
+    return colors[blockId] ?? 0xAAAAAA;
+  }
 
   private createHighlight() {
     const geo = new THREE.BoxGeometry(1.005, 1.005, 1.005);
@@ -349,6 +484,8 @@ export class Game {
       ? ItemRegistry.getDisplayName(selectedSlot.id)
       : 'empty';
 
+    const isNight = this.gameTime > 0.35 && this.gameTime < 0.75;
+
     const state: GameState = {
       fps: this.currentFps,
       playerX: Math.round(this.player.position.x * 10) / 10,
@@ -356,6 +493,7 @@ export class Game {
       playerZ: Math.round(this.player.position.z * 10) / 10,
       biome: BIOME_NAMES[biomeId] || 'Unknown',
       chunkCount: this.chunks.getLoadedChunkCount(),
+      mobCount: this.mobs.mobs.size,
       selectedBlock: selectedName,
       selectedSlot: this.player.selectedSlot,
       health: this.player.health,
@@ -365,6 +503,7 @@ export class Game {
       openUI: this.openUI,
       inventory: this.inventory,
       heldItemId: selectedSlot?.id ?? 0,
+      isNight,
     };
 
     for (const listener of this.stateListeners) {
@@ -374,7 +513,7 @@ export class Game {
 
   private async saveGame() {
     const chunkData: { cx: number; cz: number; data: Uint8Array }[] = [];
-    for (const [key, chunk] of this.chunks.chunks) {
+    for (const [, chunk] of this.chunks.chunks) {
       chunkData.push({ cx: chunk.cx, cz: chunk.cz, data: new Uint8Array(chunk.data) });
     }
 
@@ -410,7 +549,6 @@ export class Game {
       const data = await SaveSystem.load();
       if (!data) return;
 
-      // Restore player
       this.player.position.set(data.player.x, data.player.y, data.player.z);
       this.player.yaw = data.player.yaw;
       this.player.pitch = data.player.pitch;
@@ -418,7 +556,6 @@ export class Game {
       this.player.hunger = data.player.hunger;
       this.player.flying = data.player.flying;
 
-      // Restore inventory
       if (data.inventory) {
         this.inventory.fromJSON(data.inventory.slots);
         if (data.inventory.armor) {
@@ -435,6 +572,8 @@ export class Game {
   dispose() {
     this.running = false;
     this.saveGame();
+    this.mobs.dispose();
+    this.particles.dispose();
     this.input.dispose();
     this.renderer.dispose();
   }

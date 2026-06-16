@@ -25,6 +25,8 @@ export const DebugOverlay: React.FC<{ state: GameState; visible: boolean }> = ({
       <div>XYZ: {state.playerX} / {state.playerY} / {state.playerZ}</div>
       <div>Biome: {state.biome}</div>
       <div>Chunks: {state.chunkCount}</div>
+      <div>Mobs: {state.mobCount}</div>
+      <div>Time: {state.isNight ? 'Night' : 'Day'}</div>
       <div>Block: {state.selectedBlock}</div>
       <div>Slot: {state.selectedSlot + 1}/9</div>
       <div>&nbsp;</div>

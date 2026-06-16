@@ -283,11 +283,11 @@ export class Player {
 
     const legL = new THREE.Mesh(legGeo, legMat);
     legL.name = 'legL';
-    legL.position.set(-0.12, 0.375, 0);
+    legL.position.set(0.12, 0.375, 0);
 
     const legR = new THREE.Mesh(legGeo, legMat);
     legR.name = 'legR';
-    legR.position.set(0.12, 0.375, 0);
+    legR.position.set(-0.12, 0.375, 0);
 
     group.add(legL, legR);
 
@@ -297,11 +297,11 @@ export class Player {
 
     const armL = new THREE.Mesh(armGeo, armMat);
     armL.name = 'armL';
-    armL.position.set(-0.35, 1.05, 0);
+    armL.position.set(0.35, 1.05, 0);
 
     const armR = new THREE.Mesh(armGeo, armMat);
     armR.name = 'armR';
-    armR.position.set(0.35, 1.05, 0);
+    armR.position.set(-0.35, 1.05, 0);
 
     const heldItemSlot = new THREE.Group();
     heldItemSlot.name = 'heldItemSlot';

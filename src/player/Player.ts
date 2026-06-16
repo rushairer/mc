@@ -305,7 +305,7 @@ export class Player {
 
     const heldItemSlot = new THREE.Group();
     heldItemSlot.name = 'heldItemSlot';
-    heldItemSlot.position.set(0, -0.32, 0.06);
+    heldItemSlot.position.set(0, -0.38, 0.06);
     armR.add(heldItemSlot);
 
     group.add(armL, armR);

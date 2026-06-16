@@ -30,7 +30,7 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   { pattern: [101, 0, 0, 100, 0, 0, 0, 0, 0], result: { id: 30, count: 4 } },
 
   // ─── Chest ───
-  { pattern: [5, 5, 5, 5, 0, 5, 5, 5, 5], result: { id: 5, count: 1 } },  // placeholder
+  { pattern: [5, 5, 5, 5, 0, 5, 5, 5, 5], result: { id: 36, count: 1 } },
 
   // ─── Wooden Tools ───
   { pattern: [5, 5, 0, 0, 100, 0, 0, 100, 0], result: { id: 122, count: 1 } }, // pickaxe

@@ -16,9 +16,9 @@ import { SoundSystem } from '../systems/SoundSystem';
 import { SaveSystem, type SaveData } from '../systems/SaveSystem';
 import { RedstoneSystem } from '../systems/RedstoneSystem';
 import { CHUNK_SIZE } from '../constants';
-import type { BlockFacing, BlockMetadata } from '../types';
+import type { BlockFacing, BlockMetadata, ItemStack } from '../types';
 
-export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'death';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'death';
 
 export interface GameState {
   fps: number;
@@ -37,6 +37,7 @@ export interface GameState {
   flying: boolean;
   openUI: UIType;
   inventory: Inventory;
+  chestInventory: (ItemStack | null)[] | null;
   heldItemId: number;
   isNight: boolean;
   isUnderwater: boolean;
@@ -90,6 +91,7 @@ export class Game {
   private container: HTMLElement;
   private fpArmGroup!: THREE.Group;
   private fpLastHeldItemId = -1;
+  private openChestPos: THREE.Vector3 | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -116,7 +118,7 @@ export class Game {
     this.inventory.setSlot(5, { id: 8, count: 64 });
     this.inventory.setSlot(6, { id: 30, count: 64 });
     this.inventory.setSlot(7, { id: 26, count: 64 });
-    this.inventory.setSlot(8, { id: 7, count: 64 });
+    this.inventory.setSlot(8, { id: 36, count: 64 });
 
     // Spawn
     const spawnX = 8;
@@ -252,7 +254,19 @@ export class Game {
     document.exitPointerLock();
   }
 
+  openChestUI(x: number, y: number, z: number) {
+    const metadata = this.ensureChestMetadata(x, y, z);
+    if (!metadata) return;
+
+    this.openChestPos = new THREE.Vector3(x, y, z);
+    this.openUI = 'chest';
+    document.exitPointerLock();
+  }
+
   closeUI() {
+    if (this.openUI === 'chest') {
+      this.openChestPos = null;
+    }
     this.openUI = 'none';
   }
 
@@ -717,6 +731,9 @@ export class Game {
         } else if (targetId === 24) {
           this.openCraftingTableUI();
           this.placeCooldown = 0.5;
+        } else if (targetId === 36) {
+          this.openChestUI(blockPos.x, blockPos.y, blockPos.z);
+          this.placeCooldown = 0.5;
         } else if (targetId === 34) {
           const powered = this.redstone.toggleLever(blockPos.x, blockPos.y, blockPos.z);
           this.updateRedstoneMetadata(blockPos.x, blockPos.y, blockPos.z, {
@@ -772,7 +789,7 @@ export class Game {
     const foodSlotStack = this.inventory.getSlot(this.player.selectedSlot);
     const isHoldingFood = foodSlotStack && ItemRegistry.isFood(foodSlotStack.id);
     const targetBlockId = this.targetBlock ? this.chunks.getBlock(this.targetBlock.blockPos.x, this.targetBlock.blockPos.y, this.targetBlock.blockPos.z) : 0;
-    const pointingAtInteractive = this.targetBlock && (targetBlockId === 25 || targetBlockId === 24 || targetBlockId === 34);
+    const pointingAtInteractive = this.targetBlock && (targetBlockId === 25 || targetBlockId === 24 || targetBlockId === 34 || targetBlockId === 36);
 
     if (this.input.isMouseDown(2) && isHoldingFood && !pointingAtInteractive && this.player.hunger < 20) {
       this.eatingTimer += dt;
@@ -995,6 +1012,7 @@ export class Game {
       flying: this.player.flying,
       openUI: this.openUI,
       inventory: this.inventory,
+      chestInventory: this.getOpenChestInventory(),
       heldItemId: selectedSlot?.id ?? 0,
       isNight: this.isNight(),
       isUnderwater,
@@ -1096,6 +1114,15 @@ export class Game {
       return;
     }
 
+    if (blockId === 36) {
+      this.chunks.setBlockMeta(x, y, z, {
+        facing,
+        containerType: 'chest',
+        inventory: new Array(27).fill(null),
+      }, true);
+      return;
+    }
+
     if (this.usesFacingMetadata(blockId)) {
       this.chunks.setBlockMeta(x, y, z, { facing }, true);
     }
@@ -1111,7 +1138,35 @@ export class Game {
   }
 
   private usesFacingMetadata(blockId: number): boolean {
-    return blockId === 24 || blockId === 25;
+    return blockId === 24 || blockId === 25 || blockId === 36;
+  }
+
+  private ensureChestMetadata(x: number, y: number, z: number): BlockMetadata | null {
+    if (this.chunks.getBlock(x, y, z) !== 36) return null;
+
+    const current = this.chunks.getBlockMeta(x, y, z);
+    if (current?.containerType === 'chest' && current.inventory) {
+      return current;
+    }
+
+    const metadata: BlockMetadata = {
+      ...current,
+      containerType: 'chest',
+      inventory: new Array(27).fill(null),
+    };
+    this.chunks.setBlockMeta(x, y, z, metadata);
+    return metadata;
+  }
+
+  private getOpenChestInventory(): (ItemStack | null)[] | null {
+    if (!this.openChestPos) return null;
+
+    const metadata = this.ensureChestMetadata(
+      this.openChestPos.x,
+      this.openChestPos.y,
+      this.openChestPos.z
+    );
+    return metadata?.inventory ?? null;
   }
 
   private updateRedstoneMetadata(x: number, y: number, z: number, patch: BlockMetadata) {
@@ -1289,6 +1344,7 @@ export class Game {
         if (itemId === 2) key = 'grass_top';
         else if (itemId === 24) key = 'crafting_top';
         else if (itemId === 25) key = 'furnace_side';
+        else if (itemId === 36) key = 'chest_side';
         else if (itemId === 21) key = 'tnt_side';
         else key = block.textureKey;
       }

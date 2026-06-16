@@ -19,6 +19,8 @@ export type BlockFacing = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
 export interface BlockMetadata {
   facing?: BlockFacing;
   redstoneType?: 'wire' | 'torch' | 'repeater' | 'piston' | 'lever' | 'button';
+  containerType?: 'chest';
+  inventory?: (ItemStack | null)[];
   powered?: boolean;
   signal?: number;
   extended?: boolean;

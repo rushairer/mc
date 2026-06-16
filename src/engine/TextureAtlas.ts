@@ -367,6 +367,33 @@ export class TextureAtlas {
       ctx.fillRect(x, y + 13, s, 1);
     });
 
+    // chest
+    this.drawTile('chest_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#9A6126';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#6F4318';
+      ctx.fillRect(x, y + 7, s, 2);
+      ctx.fillRect(x + 7, y, 2, s);
+      ctx.strokeStyle = '#3B2410';
+      ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+    });
+
+    this.drawTile('chest_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#9A6126';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#6F4318';
+      ctx.fillRect(x, y + 4, s, 1);
+      ctx.fillRect(x, y + 12, s, 1);
+      ctx.fillRect(x + 2, y, 1, s);
+      ctx.fillRect(x + 13, y, 1, s);
+      ctx.fillStyle = '#D6B15C';
+      ctx.fillRect(x + 6, y + 6, 4, 4);
+      ctx.fillStyle = '#3B2410';
+      ctx.fillRect(x + 7, y + 8, 2, 1);
+      ctx.strokeStyle = '#3B2410';
+      ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+    });
+
     // furnace
     this.drawTile('furnace_top', (ctx, x, y, s) => {
       ctx.fillStyle = '#888888';

@@ -5,6 +5,7 @@ import { DebugOverlay } from './ui/DebugOverlay';
 import { InventoryUI } from './ui/InventoryUI';
 import { FurnaceUI } from './ui/FurnaceUI';
 import { CraftingTableUI } from './ui/CraftingTableUI';
+import { ChestUI } from './ui/ChestUI';
 
 const initialGameState: GameState = {
   fps: 0,
@@ -23,6 +24,7 @@ const initialGameState: GameState = {
   flying: false,
   openUI: 'none',
   inventory: null as any,
+  chestInventory: null,
   heldItemId: 0,
   isNight: false,
   isUnderwater: false,
@@ -161,6 +163,17 @@ export const App: React.FC = () => {
       {gameState.openUI === 'crafting_table' && gameState.inventory && (
         <CraftingTableUI
           inventory={gameState.inventory}
+          onClose={handleCloseUI}
+          onInventoryChange={handleInventoryChange}
+          getItemIconStyle={getItemIconStyle}
+        />
+      )}
+
+      {/* Chest UI */}
+      {gameState.openUI === 'chest' && gameState.inventory && gameState.chestInventory && (
+        <ChestUI
+          inventory={gameState.inventory}
+          chestSlots={gameState.chestInventory}
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}

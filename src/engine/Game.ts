@@ -144,31 +144,32 @@ export class Game {
     const group = new THREE.Group();
     group.name = 'fpArmGroup';
 
-    // Steve shirt color
     const shirtColor = 0x008080;
 
-    // Arm mesh
+    // Arm mesh (origin is now at top/shoulder, so offset down by half height)
     const armGeo = new THREE.BoxGeometry(0.12, 0.45, 0.12);
     const armMat = new THREE.MeshLambertMaterial({ color: shirtColor });
     const armMesh = new THREE.Mesh(armGeo, armMat);
     armMesh.name = 'armMesh';
+    armMesh.position.set(0, -0.225, 0); // Offset down by half height
     group.add(armMesh);
 
-    // Hand mesh
+    // Hand mesh (placed at the bottom of the arm)
     const handGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
     const handMat = new THREE.MeshLambertMaterial({ color: 0xFFCC99 });
     const handMesh = new THREE.Mesh(handGeo, handMat);
-    handMesh.position.set(0, -0.22, 0);
+    handMesh.name = 'handMesh';
+    handMesh.position.set(0, -0.51, 0); // y = -0.45 - 0.06
     group.add(handMesh);
 
-    // Held item slot
+    // Held item slot (placed in hand)
     const heldItemSlot = new THREE.Group();
     heldItemSlot.name = 'heldItemSlot';
-    heldItemSlot.position.set(0, -0.22, 0.08);
+    heldItemSlot.position.set(0, -0.51, 0);
     group.add(heldItemSlot);
 
-    // Position in bottom-right corner of viewport
-    group.position.set(0.3, -0.25, -0.45);
+    // Position shoulder in bottom-right corner of viewport
+    group.position.set(0.35, -0.08, -0.3);
     group.rotation.set(Math.PI / 2.5, Math.PI / 6, -Math.PI / 12);
 
     return group;
@@ -207,20 +208,20 @@ export class Game {
       const itemDef = ItemRegistry.get(itemId);
       if (itemDef) {
         if (itemDef.category === 'block') {
-          // Position block on top/center of the hand
-          slot.position.set(0, -0.22, 0.05);
-          slot.rotation.set(0, Math.PI / 4, 0); // Rotate slightly for 3D perspective
+          // Position block on top/center of the hand, avoiding clipping
+          slot.position.set(0.04, -0.40, -0.08);
+          slot.rotation.set(Math.PI / 6, Math.PI / 4, 0); // Rotate slightly for 3D perspective
           mesh.rotation.set(0, 0, 0); // Reset default rotation
         } else if (itemDef.category === 'tool') {
-          // Align tool handle inside hand, point diagonal forward/up-left
-          slot.position.set(0, -0.22, 0.1);
+          // Align tool handle inside hand, point diagonal forward/up-left, tilted at 60 deg to prevent arm clipping
+          slot.position.set(0.02, -0.45, -0.02);
           slot.rotation.set(0, 0, 0);
-          mesh.rotation.set(Math.PI * 0.85, -Math.PI / 4, 0); // First person custom rotation
+          mesh.rotation.set(Math.PI / 3, -Math.PI / 5, 0); // First person custom rotation (60 deg tilt forward)
         } else {
           // Material / Food
-          slot.position.set(0, -0.22, 0.08);
-          slot.rotation.set(0, 0, 0);
-          mesh.rotation.set(Math.PI * 0.85, 0, 0);
+          slot.position.set(0.02, -0.44, -0.05);
+          slot.rotation.set(Math.PI / 6, Math.PI / 4, 0);
+          mesh.rotation.set(0, 0, 0);
         }
       }
     }
@@ -369,10 +370,10 @@ export class Game {
         this.fpArmGroup.visible = true;
         this.updateFpHeldItem(heldItemId);
 
-        // Default position & rotation
-        const defX = 0.3;
-        const defY = -0.25;
-        const defZ = -0.45;
+        // Default position & rotation matching the shoulder-pivot coordinates
+        const defX = 0.35;
+        const defY = -0.08;
+        const defZ = -0.3;
         
         const defRotX = Math.PI / 2.5;
         const defRotY = Math.PI / 6;
@@ -382,10 +383,11 @@ export class Game {
           const t = this.player.swingProgress;
           const swingAngle = Math.sin(t * Math.PI);
           
+          // Rotate around a stable shoulder position with minimal translation
           this.fpArmGroup.position.set(
-            defX - swingAngle * 0.1,
-            defY - swingAngle * 0.08,
-            defZ - swingAngle * 0.08
+            defX - swingAngle * 0.04,
+            defY - swingAngle * 0.03,
+            defZ - swingAngle * 0.04
           );
           
           this.fpArmGroup.rotation.set(

@@ -208,18 +208,18 @@ export class Game {
       const itemDef = ItemRegistry.get(itemId);
       if (itemDef) {
         if (itemDef.category === 'block') {
-          // Position block on top/center of the hand, avoiding clipping and aligning with palm
-          slot.position.set(0.04, -0.48, -0.10);
+          // Position block on top/center of the hand, avoiding clipping and aligning with palm (lowered to y = -0.56)
+          slot.position.set(0.04, -0.56, -0.10);
           slot.rotation.set(Math.PI / 6, Math.PI / 4, 0); // Rotate slightly for 3D perspective
           mesh.rotation.set(0, 0, 0); // Reset default rotation
         } else if (itemDef.category === 'tool') {
-          // Align tool handle inside hand, point diagonal forward/up-left, tilted at 60 deg to prevent arm clipping
-          slot.position.set(0.02, -0.47, -0.05);
+          // Align tool handle inside hand, point diagonal forward/up-left, tilted at 60 deg (lowered to y = -0.56)
+          slot.position.set(0.02, -0.56, -0.05);
           slot.rotation.set(0, 0, 0);
           mesh.rotation.set(Math.PI / 3, -Math.PI / 5, 0); // First person custom rotation (60 deg tilt forward)
         } else {
-          // Material / Food
-          slot.position.set(0.02, -0.50, -0.08);
+          // Material / Food (lowered to y = -0.58)
+          slot.position.set(0.02, -0.58, -0.08);
           slot.rotation.set(Math.PI / 6, Math.PI / 4, 0);
           mesh.rotation.set(0, 0, 0);
         }

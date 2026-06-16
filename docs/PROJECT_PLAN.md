@@ -110,11 +110,13 @@
 - [x] Water and lava fluid simulation (flow + water+lava=cobblestone)
 - [x] Particle effects (block break, damage, mob death)
 - [x] Mob drops on death
-- [ ] Redstone circuit basics (wire, torch, repeater, piston)
-- [ ] Nether portal and Nether dimension
+- [x] Redstone system (wire BFS propagation, torch, repeater, piston, lever)
+- [x] Nether dimension generator (caves, lava lakes, glowstone)
+- [x] Portal frame detection (4×5 obsidian) + activation
+- [x] Sound effects (procedural Web Audio: break/place/hurt/mob/explosion/lightning)
+- [x] Weather system (rain particles, thunder + lightning flash)
 - [ ] End portal and Ender Dragon
-- [ ] Sound effects and ambient music
-- [ ] Weather (rain, snow, thunder)
+- [ ] Ambient music
 
 ---
 

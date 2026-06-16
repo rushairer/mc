@@ -80,6 +80,7 @@ export class Game {
   private chewSoundTimer = 0;
   private stepTimer = 0;
   private lightScanTimer = 0;
+  private perspectiveMode: 'first' | 'third' = 'first';
 
   constructor(container: HTMLElement) {
     this.renderer = new Renderer(container);
@@ -113,6 +114,7 @@ export class Game {
     const spawnY = this.chunks.getWorldGen().getTerrainHeight(spawnX, spawnZ) + 3;
     this.player = new Player(spawnX, spawnY, spawnZ);
     this.chunks.update(spawnX, spawnZ);
+    this.renderer.scene.add(this.player.mesh);
 
     // Pointer lock
     container.addEventListener('click', () => {
@@ -241,12 +243,79 @@ export class Game {
       this.input.keys.delete('f');
     }
 
+    // F5 key → perspective toggle
+    if (this.input.isKeyDown('f5')) {
+      this.perspectiveMode = this.perspectiveMode === 'first' ? 'third' : 'first';
+      this.input.keys.delete('f5');
+    }
+
     // Chunk loading
     this.chunks.update(this.player.position.x, this.player.position.z);
 
-    // Camera
-    const eye = this.player.eyePosition;
-    this.renderer.camera.position.copy(eye);
+    // Update player mesh visibility and transform
+    if (this.perspectiveMode === 'first') {
+      this.player.mesh.visible = false;
+
+      // Camera position at eye level in first person
+      const eye = this.player.eyePosition;
+      this.renderer.camera.position.copy(eye);
+    } else {
+      this.player.mesh.visible = true;
+      this.player.mesh.position.copy(this.player.position);
+      this.player.mesh.rotation.y = this.player.yaw;
+
+      const head = this.player.mesh.getObjectByName('head');
+      if (head) {
+        head.rotation.x = this.player.pitch;
+      }
+
+      // Swing animation
+      const speed = this.player.velocity.clone().setY(0).length();
+      const isMoving = speed > 0.1;
+      const time = Date.now() * 0.008;
+
+      const armL = this.player.mesh.getObjectByName('armL');
+      const armR = this.player.mesh.getObjectByName('armR');
+      const legL = this.player.mesh.getObjectByName('legL');
+      const legR = this.player.mesh.getObjectByName('legR');
+
+      if (isMoving) {
+        const swingAngle = Math.sin(time) * 0.6;
+        if (armL) armL.rotation.x = -swingAngle;
+        if (armR) armR.rotation.x = swingAngle;
+        if (legL) legL.rotation.x = swingAngle;
+        if (legR) legR.rotation.x = -swingAngle;
+      } else {
+        if (armL) armL.rotation.x = 0;
+        if (armR) armR.rotation.x = 0;
+        if (legL) legL.rotation.x = 0;
+        if (legR) legR.rotation.x = 0;
+      }
+
+      // Camera position behind player in third person (with collision check)
+      const eye = this.player.eyePosition;
+      const dir = this.player.forward;
+      const raycastDir = dir.clone().negate();
+      const step = 0.1;
+      const maxD = 3.5;
+      let finalD = maxD;
+
+      for (let d = 0; d < maxD; d += step) {
+        const checkPos = eye.clone().addScaledVector(raycastDir, d);
+        const bx = Math.floor(checkPos.x);
+        const by = Math.floor(checkPos.y);
+        const bz = Math.floor(checkPos.z);
+        const blockId = this.chunks.getBlock(bx, by, bz);
+        if (blockId !== 0 && BlockRegistry.isSolid(blockId)) {
+          finalD = Math.max(0.2, d - 0.2);
+          break;
+        }
+      }
+
+      const camPos = eye.clone().addScaledVector(raycastDir, finalD);
+      this.renderer.camera.position.copy(camPos);
+    }
+
     this.renderer.camera.rotation.order = 'YXZ';
     this.renderer.camera.rotation.y = this.player.yaw;
     this.renderer.camera.rotation.x = this.player.pitch;
@@ -716,6 +785,24 @@ export class Game {
     // Sort by distance to player
     lightPositions.sort((a, b) => a.distanceToSquared(this.player.position) - b.distanceToSquared(this.player.position));
     this.renderer.updateTorchLights(lightPositions.slice(0, 4));
+  }
+
+  getItemIconStyle(itemId: number, iconSize: number = 32): any {
+    let key = 'stone';
+    if (itemId >= 1 && itemId <= 99) {
+      const block = BlockRegistry.get(itemId);
+      if (block) {
+        if (itemId === 2) key = 'grass_top';
+        else if (itemId === 24) key = 'crafting_top';
+        else if (itemId === 25) key = 'furnace_side';
+        else if (itemId === 21) key = 'tnt_side';
+        else key = block.textureKey;
+      }
+    } else {
+      const item = ItemRegistry.get(itemId);
+      if (item) key = item.name;
+    }
+    return this.atlas.getIconStyle(key, iconSize);
   }
 
   dispose() {

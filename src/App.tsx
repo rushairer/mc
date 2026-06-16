@@ -73,11 +73,18 @@ export const App: React.FC = () => {
     setShowInstructions(false);
   }, []);
 
+  const getItemIconStyle = useCallback((itemId: number, size?: number) => {
+    if (gameRef.current) {
+      return gameRef.current.getItemIconStyle(itemId, size);
+    }
+    return {};
+  }, []);
+
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-      <HUD state={gameState} />
+      <HUD state={gameState} getItemIconStyle={getItemIconStyle} />
       <DebugOverlay state={gameState} visible={showDebug} />
 
       {/* Crosshair (only when no UI open) */}
@@ -114,6 +121,7 @@ export const App: React.FC = () => {
           inventory={gameState.inventory}
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}
+          getItemIconStyle={getItemIconStyle}
         />
       )}
 
@@ -123,6 +131,7 @@ export const App: React.FC = () => {
           inventory={gameState.inventory}
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}
+          getItemIconStyle={getItemIconStyle}
         />
       )}
 
@@ -132,6 +141,7 @@ export const App: React.FC = () => {
           inventory={gameState.inventory}
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}
+          getItemIconStyle={getItemIconStyle}
         />
       )}
 

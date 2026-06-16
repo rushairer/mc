@@ -10,6 +10,7 @@ export class TextureAtlas {
   private texture: THREE.CanvasTexture;
   private tileIndex: Map<string, number> = new Map();
   private nextIndex = 0;
+  private dataURL = '';
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -24,10 +25,33 @@ export class TextureAtlas {
     this.texture.colorSpace = THREE.SRGBColorSpace;
 
     this.generateAllTextures();
+    this.dataURL = this.canvas.toDataURL();
   }
 
   getTexture(): THREE.CanvasTexture {
     return this.texture;
+  }
+
+  getDataURL(): string {
+    return this.dataURL;
+  }
+
+  getIconStyle(key: string, iconSize: number = 32): any {
+    const idx = this.tileIndex.get(key);
+    if (idx === undefined) {
+      return {};
+    }
+    const col = idx % TILES_PER_ROW;
+    const row = Math.floor(idx / TILES_PER_ROW);
+    const scale = iconSize / TILE_SIZE;
+    return {
+      backgroundImage: `url(${this.dataURL})`,
+      backgroundSize: `${ATLAS_SIZE * scale}px ${ATLAS_SIZE * scale}px`,
+      backgroundPosition: `-${col * TILE_SIZE * scale}px -${row * TILE_SIZE * scale}px`,
+      width: `${iconSize}px`,
+      height: `${iconSize}px`,
+      imageRendering: 'pixelated',
+    };
   }
 
   getUV(key: string): { u0: number; v0: number; u1: number; v1: number } {
@@ -455,6 +479,312 @@ export class TextureAtlas {
       ctx.strokeStyle = '#3D1F6B';
       ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
     });
+
+    // ─── Materials ───
+    // stick
+    this.drawTile('stick', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.strokeStyle = '#8B5A2B';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 3, y + s - 3);
+      ctx.lineTo(x + s - 3, y + 3);
+      ctx.stroke();
+    });
+
+    // coal
+    this.drawTile('coal', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#222222';
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y + 4);
+      ctx.lineTo(x + s - 4, y + 6);
+      ctx.lineTo(x + s - 3, y + s - 5);
+      ctx.lineTo(x + 5, y + s - 4);
+      ctx.closePath();
+      ctx.fill();
+    });
+
+    // ingot helper
+    const drawIngot = (key: string, color: string, shadow: string) => {
+      this.drawTile(key, (ctx, x, y, s) => {
+        ctx.clearRect(x, y, s, s);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x + 3, y + s - 6);
+        ctx.lineTo(x + s - 6, y + 3);
+        ctx.lineTo(x + s - 3, y + 6);
+        ctx.lineTo(x + 6, y + s - 3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = shadow;
+        ctx.fillRect(x + 4, y + s - 5, 2, 2);
+      });
+    };
+    drawIngot('iron_ingot', '#D8D8D8', '#B0B0B0');
+    drawIngot('gold_ingot', '#FFD700', '#CC9900');
+    drawIngot('iron_nugget', '#D8D8D8', '#B0B0B0'); // simplified nugget using ingot shape
+    drawIngot('gold_nugget', '#FFD700', '#CC9900');
+
+    // diamond
+    this.drawTile('diamond', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#5DECF5';
+      ctx.beginPath();
+      ctx.moveTo(x + s/2, y + 2);
+      ctx.lineTo(x + s - 3, y + 6);
+      ctx.lineTo(x + s/2, y + s - 2);
+      ctx.lineTo(x + 3, y + 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#FFF';
+      ctx.fillRect(x + s/2 - 1, y + 4, 2, 2);
+    });
+
+    // redstone dust
+    this.drawTile('redstone', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#FF2220';
+      ctx.fillRect(x + 4, y + 6, 2, 2);
+      ctx.fillRect(x + 10, y + 8, 2, 2);
+      ctx.fillRect(x + 7, y + 11, 2, 2);
+      ctx.fillStyle = '#990000';
+      ctx.fillRect(x + 7, y + 5, 2, 2);
+      ctx.fillRect(x + 3, y + 10, 2, 2);
+    });
+
+    // lapis
+    this.drawTile('lapis', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#3344CC';
+      ctx.beginPath();
+      ctx.moveTo(x + s/2, y + 3);
+      ctx.lineTo(x + s - 4, y + 10);
+      ctx.lineTo(x + s/2, y + s - 3);
+      ctx.lineTo(x + 4, y + 10);
+      ctx.closePath();
+      ctx.fill();
+    });
+
+    // string
+    this.drawTile('string', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.strokeStyle = '#E2E2E2';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 2, y + 2);
+      ctx.quadraticCurveTo(x + s - 2, y + 6, x + 3, y + s - 3);
+      ctx.stroke();
+    });
+
+    // flint
+    this.drawTile('flint', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#444444';
+      ctx.beginPath();
+      ctx.moveTo(x + 5, y + 11);
+      ctx.lineTo(x + 11, y + 4);
+      ctx.lineTo(x + 12, y + 10);
+      ctx.closePath();
+      ctx.fill();
+    });
+
+    // paper
+    this.drawTile('paper', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#EEEEEE';
+      ctx.fillRect(x + 3, y + 3, s - 6, s - 6);
+      ctx.fillStyle = '#CCCCCC';
+      ctx.fillRect(x + 4, y + 5, s - 8, 1);
+      ctx.fillRect(x + 4, y + 9, s - 8, 1);
+    });
+
+    // book
+    this.drawTile('book', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#8B2500'; // brown/red cover
+      ctx.fillRect(x + 3, y + 2, s - 6, s - 4);
+      ctx.fillStyle = '#EEEEEE'; // pages
+      ctx.fillRect(x + 4, y + 3, s - 8, s - 6);
+    });
+
+    // wheat
+    this.drawTile('wheat', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#EEDD66';
+      ctx.fillRect(x + 7, y + 3, 2, 10);
+      ctx.fillStyle = '#CCAA33';
+      ctx.fillRect(x + 5, y + 5, 6, 2);
+      ctx.fillRect(x + 4, y + 8, 8, 2);
+    });
+
+    // seeds
+    this.drawTile('seeds', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#77AA44';
+      ctx.fillRect(x + 4, y + 9, 2, 2);
+      ctx.fillRect(x + 7, y + 6, 2, 2);
+      ctx.fillRect(x + 10, y + 10, 2, 2);
+    });
+
+    // bucket
+    this.drawTile('bucket', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.strokeStyle = '#D8D8D8';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y + 4);
+      ctx.lineTo(x + s - 5, y + 4);
+      ctx.lineTo(x + s - 6, y + s - 4);
+      ctx.lineTo(x + 5, y + s - 4);
+      ctx.closePath();
+      ctx.stroke();
+    });
+
+    // ─── Food ───
+    // apple
+    this.drawTile('apple', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#E22';
+      ctx.beginPath();
+      ctx.arc(x + s/2, y + s/2 + 1, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#8B5A2B';
+      ctx.fillRect(x + s/2 - 1, y + 2, 1, 3);
+    });
+
+    // bread
+    this.drawTile('bread', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#D2B48C';
+      ctx.fillRect(x + 2, y + 5, s - 4, s - 10);
+      ctx.fillStyle = '#CD853F';
+      ctx.fillRect(x + 4, y + 6, 2, 4);
+      ctx.fillRect(x + 10, y + 6, 2, 4);
+    });
+
+    // steak (cooked beef)
+    this.drawTile('cooked_beef', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#5C2E2B';
+      ctx.fillRect(x + 3, y + 4, s - 6, s - 8);
+      ctx.fillStyle = '#A04040';
+      ctx.fillRect(x + 5, y + 6, s - 10, s - 12);
+    });
+
+    // raw beef
+    this.drawTile('raw_beef', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#C83232';
+      ctx.fillRect(x + 3, y + 4, s - 6, s - 8);
+      ctx.fillStyle = '#FFF';
+      ctx.fillRect(x + 4, y + 6, 2, 4);
+    });
+
+    // raw porkchop
+    this.drawTile('raw_porkchop', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#FF9999';
+      ctx.fillRect(x + 3, y + 4, s - 6, s - 8);
+    });
+
+    // cooked porkchop
+    this.drawTile('cooked_porkchop', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#C68E65';
+      ctx.fillRect(x + 3, y + 4, s - 6, s - 8);
+    });
+
+    // ─── Tools Helper ───
+    const matColors: Record<string, string> = {
+      wood: '#8B4513', stone: '#777777', iron: '#E8E8E8', gold: '#FFD700', diamond: '#5DECF5'
+    };
+
+    const drawTool = (key: string, type: 'sword'|'pickaxe'|'shovel'|'axe', material: string) => {
+      this.drawTile(key, (ctx, x, y, s) => {
+        ctx.clearRect(x, y, s, s);
+        const color = matColors[material] ?? '#FFF';
+
+        // Handle (brown diagonal)
+        ctx.strokeStyle = '#5A3A1A';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x + 3, y + s - 3);
+        ctx.lineTo(x + s/2 + 1, y + s/2 - 1);
+        ctx.stroke();
+
+        ctx.fillStyle = color;
+        if (type === 'sword') {
+          // Sword blade
+          ctx.beginPath();
+          ctx.moveTo(x + s/2 - 1, y + s/2 + 1);
+          ctx.lineTo(x + s - 3, y + 3);
+          ctx.lineTo(x + s - 4, y + 2);
+          ctx.lineTo(x + s/2 - 2, y + s/2);
+          ctx.closePath();
+          ctx.fill();
+          // guard
+          ctx.fillStyle = '#333';
+          ctx.fillRect(x + 4, y + s - 7, 3, 3);
+        } else if (type === 'pickaxe') {
+          // Pickaxe head
+          ctx.beginPath();
+          ctx.moveTo(x + s/2 - 5, y + 3);
+          ctx.quadraticCurveTo(x + s - 2, y + 2, x + s - 3, y + s/2 + 3);
+          ctx.lineTo(x + s - 5, y + s/2 + 1);
+          ctx.quadraticCurveTo(x + s/2 + 1, y + 5, x + s/2 - 4, y + 5);
+          ctx.closePath();
+          ctx.fill();
+        } else if (type === 'shovel') {
+          // Shovel head
+          ctx.fillRect(x + s/2 + 1, y + 3, 4, 4);
+        } else if (type === 'axe') {
+          // Axe head
+          ctx.fillRect(x + s/2, y + 3, 5, 4);
+          ctx.fillRect(x + s/2 + 2, y + 7, 2, 2);
+        }
+      });
+    };
+
+    // Register all tools
+    for (const mat of ['wood', 'stone', 'iron', 'gold', 'diamond']) {
+      const prefix = mat === 'gold' ? 'golden' : mat === 'wood' ? 'wooden' : mat;
+      drawTool(`${prefix}_sword`, 'sword', mat);
+      drawTool(`${prefix}_pickaxe`, 'pickaxe', mat);
+      drawTool(`${prefix}_shovel`, 'shovel', mat);
+      drawTool(`${prefix}_axe`, 'axe', mat);
+    }
+
+    // ─── Armor Helper ───
+    const drawArmor = (key: string, slot: 'helmet'|'chestplate'|'leggings'|'boots', material: string) => {
+      this.drawTile(key, (ctx, x, y, s) => {
+        ctx.clearRect(x, y, s, s);
+        const color = matColors[material] ?? '#FFF';
+        ctx.fillStyle = color;
+
+        if (slot === 'helmet') {
+          ctx.fillRect(x + 4, y + 3, s - 8, 4);
+          ctx.fillRect(x + 4, y + 7, 2, 4);
+          ctx.fillRect(x + s - 6, y + 7, 2, 4);
+        } else if (slot === 'chestplate') {
+          ctx.fillRect(x + 3, y + 3, s - 6, 8);
+          ctx.clearRect(x + 6, y + 3, 4, 2); // neck cutout
+        } else if (slot === 'leggings') {
+          ctx.fillRect(x + 4, y + 3, s - 8, 9);
+          ctx.clearRect(x + 7, y + 6, 2, 6); // leg split
+        } else if (slot === 'boots') {
+          ctx.fillRect(x + 3, y + 5, 3, 6);
+          ctx.fillRect(x + s - 6, y + 5, 3, 6);
+        }
+      });
+    };
+
+    for (const mat of ['iron', 'diamond']) {
+      drawArmor(`${mat}_helmet`, 'helmet', mat);
+      drawArmor(`${mat}_chestplate`, 'chestplate', mat);
+      drawArmor(`${mat}_leggings`, 'leggings', mat);
+      drawArmor(`${mat}_boots`, 'boots', mat);
+    }
   }
 
   private drawOreTile(key: string, spotColor: string) {

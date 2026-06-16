@@ -17,12 +17,14 @@ export class Player {
   hunger = 20;
   saturation = 20;
   flying = false;
+  mesh: THREE.Group;
 
   private halfWidth = PLAYER_WIDTH / 2;
 
   constructor(spawnX: number, spawnY: number, spawnZ: number) {
     this.position = new THREE.Vector3(spawnX, spawnY, spawnZ);
     this.velocity = new THREE.Vector3(0, 0, 0);
+    this.mesh = this.createMesh();
   }
 
   get eyePosition(): THREE.Vector3 {
@@ -200,5 +202,80 @@ export class Player {
     }
 
     return null;
+  }
+
+  private createMesh(): THREE.Group {
+    const group = new THREE.Group();
+    // Steve colors
+    const skinColor = 0xFFCC99;
+    const shirtColor = 0x008080; // cyan/teal shirt
+    const pantsColor = 0x2244AA; // blue pants
+    const hairColor = 0x553311; // brown hair
+
+    // Head group
+    const headGroup = new THREE.Group();
+    headGroup.name = 'head';
+    headGroup.position.set(0, 1.35, 0);
+
+    const headGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+    const headMat = new THREE.MeshLambertMaterial({ color: skinColor });
+    const head = new THREE.Mesh(headGeo, headMat);
+    head.position.set(0, 0.2, 0);
+    headGroup.add(head);
+
+    // Hair cap
+    const hairGeo = new THREE.BoxGeometry(0.42, 0.12, 0.42);
+    const hairMat = new THREE.MeshLambertMaterial({ color: hairColor });
+    const hair = new THREE.Mesh(hairGeo, hairMat);
+    hair.position.set(0, 0.35, 0.01);
+    headGroup.add(hair);
+
+    // Eyes
+    const eyeGeo = new THREE.BoxGeometry(0.06, 0.03, 0.02);
+    const eyeMat = new THREE.MeshLambertMaterial({ color: 0x0000FF });
+    const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+    const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+    eyeL.position.set(-0.1, 0.2, 0.201);
+    eyeR.position.set(0.1, 0.2, 0.201);
+    headGroup.add(eyeL, eyeR);
+
+    group.add(headGroup);
+
+    // Body
+    const bodyGeo = new THREE.BoxGeometry(0.48, 0.6, 0.24);
+    const bodyMat = new THREE.MeshLambertMaterial({ color: shirtColor });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.set(0, 1.05, 0);
+    group.add(body);
+
+    // Legs
+    const legGeo = new THREE.BoxGeometry(0.2, 0.75, 0.22);
+    const legMat = new THREE.MeshLambertMaterial({ color: pantsColor });
+
+    const legL = new THREE.Mesh(legGeo, legMat);
+    legL.name = 'legL';
+    legL.position.set(-0.12, 0.375, 0);
+
+    const legR = new THREE.Mesh(legGeo, legMat);
+    legR.name = 'legR';
+    legR.position.set(0.12, 0.375, 0);
+
+    group.add(legL, legR);
+
+    // Arms
+    const armGeo = new THREE.BoxGeometry(0.2, 0.6, 0.22);
+    const armMat = new THREE.MeshLambertMaterial({ color: shirtColor });
+
+    const armL = new THREE.Mesh(armGeo, armMat);
+    armL.name = 'armL';
+    armL.position.set(-0.35, 1.05, 0);
+
+    const armR = new THREE.Mesh(armGeo, armMat);
+    armR.name = 'armR';
+    armR.position.set(0.35, 1.05, 0);
+
+    group.add(armL, armR);
+
+    return group;
   }
 }

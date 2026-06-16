@@ -8,11 +8,12 @@ interface CraftingTableUIProps {
   inventory: Inventory;
   onClose: () => void;
   onInventoryChange: () => void;
+  getItemIconStyle: (id: number, size?: number) => any;
 }
 
 const SLOT_SIZE = 48;
 
-export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onClose, onInventoryChange }) => {
+export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle }) => {
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
   const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(9).fill(0));
   const [craftResult, setCraftResult] = useState<{ id: number; count: number } | null>(null);
@@ -147,7 +148,7 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
       >
         {item && itemDef && (
           <>
-            <span style={{ fontSize: '8px' }}>{itemDef.displayName}</span>
+            <div style={getItemIconStyle(item.id, 32)} title={itemDef.displayName} />
             {item.count > 1 && (
               <span style={{
                 position: 'absolute',
@@ -287,7 +288,7 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
             textShadow: '1px 1px 0 #000',
           }}
         >
-          <span style={{ fontSize: '8px' }}>{ItemRegistry.getDisplayName(heldItem.id)}</span>
+          <div style={getItemIconStyle(heldItem.id, 32)} />
           {heldItem.count > 1 && (
             <span style={{ position: 'absolute', bottom: '1px', right: '3px', fontSize: '11px', fontWeight: 'bold' }}>
               {heldItem.count}

@@ -8,11 +8,12 @@ interface FurnaceUIProps {
   inventory: Inventory;
   onClose: () => void;
   onInventoryChange: () => void;
+  getItemIconStyle: (id: number, size?: number) => any;
 }
 
 const SLOT_SIZE = 48;
 
-export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInventoryChange }) => {
+export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle }) => {
   const [inputSlot, setInputSlot] = useState<ItemStack | null>(null);
   const [fuelSlot, setFuelSlot] = useState<ItemStack | null>(null);
   const [outputSlot, setOutputSlot] = useState<ItemStack | null>(null);
@@ -126,7 +127,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
       >
         {item && itemDef && (
           <>
-            <span style={{ fontSize: '8px' }}>{itemDef.displayName}</span>
+            <div style={getItemIconStyle(item.id, 32)} title={itemDef.displayName} />
             {item.count > 1 && (
               <span style={{ position: 'absolute', bottom: '1px', right: '3px', fontSize: '11px', fontWeight: 'bold' }}>
                 {item.count}
@@ -255,7 +256,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
               >
                 {item && ItemRegistry.get(item.id) && (
                   <>
-                    <span style={{ fontSize: '8px' }}>{ItemRegistry.getDisplayName(item.id)}</span>
+                    <div style={getItemIconStyle(item.id, 32)} title={ItemRegistry.getDisplayName(item.id)} />
                     {item.count > 1 && (
                       <span style={{ position: 'absolute', bottom: '1px', right: '3px', fontSize: '11px', fontWeight: 'bold' }}>
                         {item.count}

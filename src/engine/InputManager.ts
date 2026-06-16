@@ -52,6 +52,9 @@ export class InputManager {
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'F5') {
+      e.preventDefault();
+    }
     this.keys.add(e.key.toLowerCase());
   };
 

@@ -2,7 +2,7 @@ import React from 'react';
 import type { GameState } from '../engine/Game';
 import { ItemRegistry } from '../items/ItemRegistry';
 
-export const HUD: React.FC<{ state: GameState }> = ({ state }) => {
+export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, size?: number) => any }> = ({ state, getItemIconStyle }) => {
   // Health hearts
   const hearts = Array.from({ length: 10 }, (_, i) => {
     const filled = state.health >= (i + 1) * 2;
@@ -87,7 +87,7 @@ export const HUD: React.FC<{ state: GameState }> = ({ state }) => {
             }}>
               {itemDef ? (
                 <>
-                  <span style={{ fontSize: '8px' }}>{itemDef.displayName}</span>
+                  <div style={getItemIconStyle(item!.id, 32)} title={itemDef.displayName} />
                   {item!.count > 1 && (
                     <span style={{
                       position: 'absolute',

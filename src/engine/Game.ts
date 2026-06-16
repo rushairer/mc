@@ -11,6 +11,8 @@ import { SurvivalSystem } from '../systems/SurvivalSystem';
 import { MobSystem } from '../systems/MobSystem';
 import { ParticleSystem } from '../systems/ParticleSystem';
 import { FluidSystem } from '../systems/FluidSystem';
+import { WeatherSystem } from '../systems/WeatherSystem';
+import { SoundSystem } from '../systems/SoundSystem';
 import { SaveSystem, type SaveData } from '../systems/SaveSystem';
 
 export type UIType = 'none' | 'inventory' | 'furnace';
@@ -51,6 +53,8 @@ export class Game {
   private mobs: MobSystem;
   private particles: ParticleSystem;
   private fluids: FluidSystem;
+  private weather: WeatherSystem;
+  private sound: SoundSystem;
   private clock: THREE.Clock;
   running = false;
   private stateListeners: GameStateListener[] = [];
@@ -82,6 +86,8 @@ export class Game {
     this.mobs = new MobSystem(this.renderer.scene);
     this.particles = new ParticleSystem(this.renderer.scene);
     this.fluids = new FluidSystem();
+    this.weather = new WeatherSystem(this.renderer.scene);
+    this.sound = new SoundSystem();
 
     // Default hotbar
     this.inventory.setSlot(0, { id: 2, count: 64 });
@@ -258,6 +264,7 @@ export class Game {
 
       if (mobHit.hit) {
         this.swordSwingTimer = 0.4;
+        this.sound.playMobHurt();
         // Spawn damage particles on mob
         if (mobHit.mob) {
           this.particles.spawnDamageParticles(
@@ -301,6 +308,7 @@ export class Game {
           this.checkFluidAdjacency(bp.x, bp.y, bp.z);
 
           this.chunks.setBlock(bp.x, bp.y, bp.z, 0);
+          this.sound.playBlockBreak();
           this.breakProgress = 0;
           this.breakingBlockPos = null;
         }
@@ -339,6 +347,7 @@ export class Game {
               const blockId = ItemRegistry.isBlock(slot.id) ? slot.id : 0;
               if (blockId > 0) {
                 this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
+                this.sound.playBlockPlace();
                 this.inventory.removeFromSlot(this.player.selectedSlot);
                 this.placeCooldown = 0.25;
 
@@ -360,6 +369,7 @@ export class Game {
         this.player.health = Math.max(0, this.player.health - damage);
         this.player.velocity.add(knockback);
         this.damageFlashTimer = 0.3;
+        this.sound.playHurt();
         this.particles.spawnDamageParticles(
           this.player.position.x,
           this.player.position.y + 1,
@@ -382,6 +392,7 @@ export class Game {
     }, (x, y, z) => this.chunks.getBlock(x, y, z), (dmg) => {
       this.player.health = Math.max(0, this.player.health - dmg);
       this.damageFlashTimer = 0.3;
+      this.sound.playHurt();
     });
 
     // Fluid simulation
@@ -393,6 +404,10 @@ export class Game {
     // Particles
     this.particles.update(dt);
 
+    // Weather
+    const isNight = this.gameTime > 0.35 && this.gameTime < 0.75;
+    this.weather.update(dt, this.player.position, isNight);
+
     this.renderer.render();
     this.notifyState();
   };
@@ -401,6 +416,7 @@ export class Game {
     // Check for dead mobs and drop XP/items
     for (const mob of this.mobs.mobs.values()) {
       if (mob.isDead()) {
+        this.sound.playMobDeath();
         // Spawn death particles
         this.particles.spawnDeathParticles(
           mob.position.x,
@@ -574,6 +590,8 @@ export class Game {
     this.saveGame();
     this.mobs.dispose();
     this.particles.dispose();
+    this.weather.dispose();
+    this.sound.dispose();
     this.input.dispose();
     this.renderer.dispose();
   }

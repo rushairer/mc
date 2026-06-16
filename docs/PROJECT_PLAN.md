@@ -101,17 +101,20 @@
 **Goal**: Add life, danger, and advanced mechanics.
 
 ### Deliverables
-- [ ] Day/night cycle with dynamic lighting
-- [ ] Hostile mobs (zombie, skeleton, creeper, spider)
-- [ ] Passive mobs (cow, pig, sheep, chicken)
-- [ ] Mob spawning, AI, pathfinding (A*)
-- [ ] Combat system with knockback
-- [ ] Water and lava fluid simulation
+- [x] Day/night cycle with dynamic lighting (sun/moon positions, ambient color)
+- [x] Hostile mobs (zombie, skeleton, creeper, spider)
+- [x] Passive mobs (cow, pig, sheep, chicken)
+- [x] Mob spawning by light level + time of day
+- [x] Mob AI: chase (hostile), wander (passive), jump over obstacles
+- [x] Combat system with sword damage + knockback
+- [x] Water and lava fluid simulation (flow + water+lava=cobblestone)
+- [x] Particle effects (block break, damage, mob death)
+- [x] Mob drops on death
 - [ ] Redstone circuit basics (wire, torch, repeater, piston)
 - [ ] Nether portal and Nether dimension
 - [ ] End portal and Ender Dragon
 - [ ] Sound effects and ambient music
-- [ ] Particle effects (block breaking, rain, snow)
+- [ ] Weather (rain, snow, thunder)
 
 ---
 

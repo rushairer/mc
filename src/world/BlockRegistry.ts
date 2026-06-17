@@ -57,6 +57,41 @@ reg({ id: 44, name: 'brick_slab',       textureKey: 'bricks',      transparent: 
 reg({ id: 45, name: 'sandstone_slab',   textureKey: 'sandstone',   transparent: false, solid: true, hardness: 0.8, toolCategory: 'pickaxe', luminance: 0 });
 reg({ id: 46, name: 'stone_brick_slab', textureKey: 'stone_bricks',transparent: false, solid: true, hardness: 2.0, toolCategory: 'pickaxe', luminance: 0 });
 
+// ─── Stairs ───
+reg({ id: 47, name: 'oak_stairs',       textureKey: 'oak_planks',  transparent: false, solid: true, hardness: 2.0, toolCategory: 'axe',     luminance: 0 });
+reg({ id: 48, name: 'cobblestone_stairs',textureKey: 'cobblestone',transparent: false, solid: true, hardness: 2.0, toolCategory: 'pickaxe', luminance: 0 });
+reg({ id: 49, name: 'brick_stairs',     textureKey: 'bricks',      transparent: false, solid: true, hardness: 2.0, toolCategory: 'pickaxe', luminance: 0 });
+reg({ id: 50, name: 'stone_stairs',     textureKey: 'stone',       transparent: false, solid: true, hardness: 1.5, toolCategory: 'pickaxe', luminance: 0 });
+reg({ id: 51, name: 'sandstone_stairs', textureKey: 'sandstone',   transparent: false, solid: true, hardness: 0.8, toolCategory: 'pickaxe', luminance: 0 });
+reg({ id: 52, name: 'stone_brick_stairs',textureKey: 'stone_bricks',transparent: false, solid: true, hardness: 2.0, toolCategory: 'pickaxe', luminance: 0 });
+
+// ─── Fences & Walls ───
+reg({ id: 53, name: 'oak_fence',        textureKey: 'oak_planks',  transparent: true,  solid: true, hardness: 2.0, toolCategory: 'axe',     luminance: 0 });
+reg({ id: 54, name: 'spruce_fence',     textureKey: 'spruce_planks',transparent: true, solid: true, hardness: 2.0, toolCategory: 'axe',     luminance: 0 });
+reg({ id: 55, name: 'birch_fence',      textureKey: 'birch_planks',transparent: true,  solid: true, hardness: 2.0, toolCategory: 'axe',     luminance: 0 });
+reg({ id: 56, name: 'cobblestone_wall', textureKey: 'cobblestone', transparent: true,  solid: true, hardness: 2.0, toolCategory: 'pickaxe', luminance: 0 });
+
+// ─── Flowers & Plants ───
+reg({ id: 58, name: 'dandelion',        textureKey: 'dandelion',   transparent: true,  solid: false, hardness: 0.0, luminance: 0 });
+reg({ id: 59, name: 'poppy',            textureKey: 'poppy',       transparent: true,  solid: false, hardness: 0.0, luminance: 0 });
+reg({ id: 60, name: 'tall_grass',       textureKey: 'tall_grass',  transparent: true,  solid: false, hardness: 0.0, luminance: 0 });
+reg({ id: 61, name: 'fern',             textureKey: 'fern',        transparent: true,  solid: false, hardness: 0.0, luminance: 0 });
+reg({ id: 62, name: 'dead_bush',        textureKey: 'dead_bush',   transparent: true,  solid: false, hardness: 0.0, luminance: 0 });
+reg({ id: 63, name: 'blue_orchid',      textureKey: 'blue_orchid', transparent: true,  solid: false, hardness: 0.0, luminance: 0 });
+reg({ id: 64, name: 'allium',           textureKey: 'allium',      transparent: true,  solid: false, hardness: 0.0, luminance: 0 });
+reg({ id: 65, name: 'red_tulip',        textureKey: 'red_tulip',   transparent: true,  solid: false, hardness: 0.0, luminance: 0 });
+
+// ─── More Wood Types ───
+reg({ id: 66, name: 'spruce_log',       textureKey: 'spruce_log_side', textureTop: 'spruce_log_top', textureBottom: 'spruce_log_top', transparent: false, solid: true, hardness: 2.0, toolCategory: 'axe', luminance: 0 });
+reg({ id: 67, name: 'spruce_planks',    textureKey: 'spruce_planks',   transparent: false, solid: true, hardness: 2.0, toolCategory: 'axe', luminance: 0 });
+reg({ id: 68, name: 'spruce_leaves',    textureKey: 'spruce_leaves',   transparent: false, solid: true, hardness: 0.2, toolCategory: 'axe', luminance: 0 });
+reg({ id: 69, name: 'birch_log',        textureKey: 'birch_log_side',  textureTop: 'birch_log_top', textureBottom: 'birch_log_top', transparent: false, solid: true, hardness: 2.0, toolCategory: 'axe', luminance: 0 });
+reg({ id: 70, name: 'birch_planks',     textureKey: 'birch_planks',    transparent: false, solid: true, hardness: 2.0, toolCategory: 'axe', luminance: 0 });
+reg({ id: 71, name: 'birch_leaves',     textureKey: 'birch_leaves',    transparent: false, solid: true, hardness: 0.2, toolCategory: 'axe', luminance: 0 });
+reg({ id: 72, name: 'acacia_log',       textureKey: 'acacia_log_side', textureTop: 'acacia_log_top', textureBottom: 'acacia_log_top', transparent: false, solid: true, hardness: 2.0, toolCategory: 'axe', luminance: 0 });
+reg({ id: 73, name: 'acacia_planks',    textureKey: 'acacia_planks',   transparent: false, solid: true, hardness: 2.0, toolCategory: 'axe', luminance: 0 });
+reg({ id: 74, name: 'acacia_leaves',    textureKey: 'acacia_leaves',   transparent: false, solid: true, hardness: 0.2, toolCategory: 'axe', luminance: 0 });
+
 export const BlockRegistry = {
   get(id: number): BlockDef | undefined {
     return blocks.get(id);

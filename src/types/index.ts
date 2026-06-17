@@ -28,6 +28,8 @@ export interface BlockMetadata {
   signal?: number;
   extended?: boolean;
   slabHalf?: 'top' | 'bottom';
+  stairFacing?: BlockFacing;
+  fenceConnections?: boolean[]; // [north, south, east, west]
 }
 
 export interface SerializedBlockMetadata {

@@ -291,6 +291,27 @@ export class Chunk {
             continue;
           }
 
+          // Stairs (IDs 47-52)
+          if (id >= 47 && id <= 52) {
+            const light = this.getLightAt(x, y, z);
+            this.addStair(target, x, y, z, id, meta, atlas, light);
+            continue;
+          }
+
+          // Fences & walls (IDs 53-56)
+          if (id >= 53 && id <= 56) {
+            const light = this.getLightAt(x, y, z);
+            this.addFence(target, x, y, z, id, meta, atlas, light, getNeighborBlock, worldX, worldZ);
+            continue;
+          }
+
+          // Flowers & plants (IDs 58-65) - cross-shaped rendering
+          if (id >= 58 && id <= 65) {
+            const light = this.getLightAt(x, y, z);
+            this.addPlant(target, x, y, z, id, atlas, light);
+            continue;
+          }
+
           // Check 6 faces
           for (let face = 0; face < 6; face++) {
             const [dx, dy, dz] = FACE_DIRS[face];
@@ -725,6 +746,127 @@ export class Chunk {
       baseIdx, baseIdx + 1, baseIdx + 2,
       baseIdx, baseIdx + 2, baseIdx + 3
     );
+  }
+
+  private addStair(
+    data: ChunkMeshData,
+    x: number, y: number, z: number,
+    blockId: number,
+    meta: BlockMetadata | undefined,
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
+    lightLevel: number = 15
+  ) {
+    const facing = meta?.stairFacing ?? 'north';
+    // Bottom half (full width, half height)
+    const bottomBounds: CuboidBounds = { minX: 0, maxX: 1, minY: 0, maxY: 0.5, minZ: 0, maxZ: 1 };
+    this.addCuboid(data, x, y, z, blockId, atlas, bottomBounds, {}, undefined, false, lightLevel);
+
+    // Top step (half block, depends on facing)
+    let topBounds: CuboidBounds;
+    switch (facing) {
+      case 'north': topBounds = { minX: 0, maxX: 1, minY: 0.5, maxY: 1, minZ: 0, maxZ: 0.5 }; break;
+      case 'south': topBounds = { minX: 0, maxX: 1, minY: 0.5, maxY: 1, minZ: 0.5, maxZ: 1 }; break;
+      case 'east':  topBounds = { minX: 0.5, maxX: 1, minY: 0.5, maxY: 1, minZ: 0, maxZ: 1 }; break;
+      case 'west':  topBounds = { minX: 0, maxX: 0.5, minY: 0.5, maxY: 1, minZ: 0, maxZ: 1 }; break;
+      default:      topBounds = { minX: 0, maxX: 1, minY: 0.5, maxY: 1, minZ: 0, maxZ: 0.5 };
+    }
+    this.addCuboid(data, x, y, z, blockId, atlas, topBounds, {}, undefined, false, lightLevel);
+  }
+
+  private addFence(
+    data: ChunkMeshData,
+    x: number, y: number, z: number,
+    blockId: number,
+    meta: BlockMetadata | undefined,
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
+    lightLevel: number = 15,
+    getNeighborBlock: (wx: number, wy: number, wz: number) => number,
+    worldX: number,
+    worldZ: number
+  ) {
+    // Center post: 6x16x6 pixels = 0.375 wide, full height
+    const postBounds: CuboidBounds = { minX: 0.25, maxX: 0.75, minY: 0, maxY: 1.5, minZ: 0.25, maxZ: 0.75 };
+    this.addCuboid(data, x, y, z, blockId, atlas, postBounds, {}, undefined, false, lightLevel);
+
+    // Check connections to adjacent blocks
+    const wx = worldX + x;
+    const wz = worldZ + z;
+    const isFence = (bid: number) => bid >= 53 && bid <= 56;
+    const connectsTo = (bid: number) => isFence(bid) || BlockRegistry.isSolid(bid);
+
+    // North (-Z)
+    if (connectsTo(getNeighborBlock(wx, y, wz - 1))) {
+      const b: CuboidBounds = { minX: 0.25, maxX: 0.75, minY: 0.375, maxY: 1.25, minZ: 0, maxZ: 0.25 };
+      this.addCuboid(data, x, y, z, blockId, atlas, b, {}, undefined, false, lightLevel);
+    }
+    // South (+Z)
+    if (connectsTo(getNeighborBlock(wx, y, wz + 1))) {
+      const b: CuboidBounds = { minX: 0.25, maxX: 0.75, minY: 0.375, maxY: 1.25, minZ: 0.75, maxZ: 1 };
+      this.addCuboid(data, x, y, z, blockId, atlas, b, {}, undefined, false, lightLevel);
+    }
+    // East (+X)
+    if (connectsTo(getNeighborBlock(wx + 1, y, wz))) {
+      const b: CuboidBounds = { minX: 0.75, maxX: 1, minY: 0.375, maxY: 1.25, minZ: 0.25, maxZ: 0.75 };
+      this.addCuboid(data, x, y, z, blockId, atlas, b, {}, undefined, false, lightLevel);
+    }
+    // West (-X)
+    if (connectsTo(getNeighborBlock(wx - 1, y, wz))) {
+      const b: CuboidBounds = { minX: 0, maxX: 0.25, minY: 0.375, maxY: 1.25, minZ: 0.25, maxZ: 0.75 };
+      this.addCuboid(data, x, y, z, blockId, atlas, b, {}, undefined, false, lightLevel);
+    }
+  }
+
+  private addPlant(
+    data: ChunkMeshData,
+    x: number, y: number, z: number,
+    blockId: number,
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
+    lightLevel: number = 15
+  ) {
+    const texKey = BlockRegistry.getTextureForFace(blockId, 0);
+    const uv = atlas.getUV(texKey);
+    const brightness = Math.max(0.04, lightLevel / 15);
+
+    // Two diagonal planes forming an X shape
+    // Plane 1: NW to SE
+    this.addPlantQuad(data,
+      [x, y, z], [x + 1, y, z + 1], [x + 1, y + 1, z + 1], [x, y + 1, z],
+      [-0.707, 0, 0.707], uv, brightness
+    );
+    this.addPlantQuad(data,
+      [x + 1, y, z + 1], [x, y, z], [x, y + 1, z], [x + 1, y + 1, z + 1],
+      [0.707, 0, -0.707], uv, brightness
+    );
+
+    // Plane 2: NE to SW
+    this.addPlantQuad(data,
+      [x + 1, y, z], [x, y, z + 1], [x, y + 1, z + 1], [x + 1, y + 1, z],
+      [0.707, 0, 0.707], uv, brightness
+    );
+    this.addPlantQuad(data,
+      [x, y, z + 1], [x + 1, y, z], [x + 1, y + 1, z], [x, y + 1, z + 1],
+      [-0.707, 0, -0.707], uv, brightness
+    );
+  }
+
+  private addPlantQuad(
+    data: ChunkMeshData,
+    p1: [number, number, number],
+    p2: [number, number, number],
+    p3: [number, number, number],
+    p4: [number, number, number],
+    normal: [number, number, number],
+    uv: { u0: number; v0: number; u1: number; v1: number },
+    brightness: number
+  ) {
+    const baseIdx = data.positions.length / 3;
+    data.positions.push(...p1, ...p2, ...p3, ...p4);
+    for (let i = 0; i < 4; i++) {
+      data.normals.push(...normal);
+      data.colors.push(brightness, brightness, brightness);
+    }
+    data.uvs.push(uv.u0, uv.v0, uv.u1, uv.v0, uv.u1, uv.v1, uv.u0, uv.v1);
+    data.indices.push(baseIdx, baseIdx + 1, baseIdx + 2, baseIdx, baseIdx + 2, baseIdx + 3);
   }
 
   private createGeometry(data: ChunkMeshData): THREE.BufferGeometry {

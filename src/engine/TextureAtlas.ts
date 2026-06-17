@@ -206,6 +206,202 @@ export class TextureAtlas {
       }
     });
 
+    // spruce_planks
+    this.drawTile('spruce_planks', (ctx, x, y, s) => {
+      ctx.fillStyle = '#6B4226';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 4; i++) {
+        ctx.fillStyle = '#5A3620';
+        ctx.fillRect(x, y + i * 4 + 3, s, 1);
+      }
+    });
+
+    // birch_planks
+    this.drawTile('birch_planks', (ctx, x, y, s) => {
+      ctx.fillStyle = '#D4C49A';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 4; i++) {
+        ctx.fillStyle = '#C0B080';
+        ctx.fillRect(x, y + i * 4 + 3, s, 1);
+      }
+    });
+
+    // acacia_planks
+    this.drawTile('acacia_planks', (ctx, x, y, s) => {
+      ctx.fillStyle = '#BA6338';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 4; i++) {
+        ctx.fillStyle = '#A05530';
+        ctx.fillRect(x, y + i * 4 + 3, s, 1);
+      }
+    });
+
+    // spruce_log_side
+    this.drawTile('spruce_log_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#3B2616';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 6; i++) {
+        ctx.fillStyle = '#2A1A0E';
+        ctx.fillRect(x + i * 3, y, 1, s);
+      }
+    });
+
+    // spruce_log_top
+    this.drawTile('spruce_log_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#3B2616';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#5A3D2A';
+      ctx.fillRect(x + 4, y + 4, 8, 8);
+      ctx.fillStyle = '#3B2616';
+      ctx.fillRect(x + 6, y + 6, 4, 4);
+    });
+
+    // birch_log_side
+    this.drawTile('birch_log_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#D4D4C8';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 4; i++) {
+        ctx.fillStyle = '#3A3A30';
+        const px = x + 2 + i * 4;
+        ctx.fillRect(px, y, 2, s);
+      }
+    });
+
+    // birch_log_top
+    this.drawTile('birch_log_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#D4D4C8';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#C0BFA0';
+      ctx.fillRect(x + 4, y + 4, 8, 8);
+      ctx.fillStyle = '#D4D4C8';
+      ctx.fillRect(x + 6, y + 6, 4, 4);
+    });
+
+    // acacia_log_side
+    this.drawTile('acacia_log_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#6A6A6A';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#BA6338';
+      ctx.fillRect(x + 2, y, s - 4, s);
+    });
+
+    // acacia_log_top
+    this.drawTile('acacia_log_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#6A6A6A';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#BA6338';
+      ctx.fillRect(x + 4, y + 4, 8, 8);
+    });
+
+    // spruce_leaves
+    this.drawTile('spruce_leaves', (ctx, x, y, s) => {
+      ctx.fillStyle = '#2D5A1A';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 50; i++) {
+        const px = x + Math.random() * s;
+        const py = y + Math.random() * s;
+        ctx.fillStyle = `rgb(${20 + Math.random() * 20 | 0},${60 + Math.random() * 40 | 0},${10 + Math.random() * 15 | 0})`;
+        ctx.fillRect(px | 0, py | 0, 2, 2);
+      }
+    });
+
+    // birch_leaves
+    this.drawTile('birch_leaves', (ctx, x, y, s) => {
+      ctx.fillStyle = '#5A8A2A';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 50; i++) {
+        const px = x + Math.random() * s;
+        const py = y + Math.random() * s;
+        ctx.fillStyle = `rgb(${60 + Math.random() * 30 | 0},${110 + Math.random() * 40 | 0},${20 + Math.random() * 20 | 0})`;
+        ctx.fillRect(px | 0, py | 0, 2, 2);
+      }
+    });
+
+    // acacia_leaves
+    this.drawTile('acacia_leaves', (ctx, x, y, s) => {
+      ctx.fillStyle = '#4A7A1A';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 50; i++) {
+        const px = x + Math.random() * s;
+        const py = y + Math.random() * s;
+        ctx.fillStyle = `rgb(${50 + Math.random() * 30 | 0},${90 + Math.random() * 40 | 0},${15 + Math.random() * 15 | 0})`;
+        ctx.fillRect(px | 0, py | 0, 2, 2);
+      }
+    });
+
+    // ─── Flowers & Plants ───
+
+    this.drawTile('dandelion', (ctx, x, y, s) => {
+      ctx.fillStyle = '#2A6B10';
+      ctx.fillRect(x + 7, y + 4, 2, 12);
+      ctx.fillStyle = '#FFD700';
+      ctx.fillRect(x + 5, y, 6, 6);
+      ctx.fillStyle = '#FFEE00';
+      ctx.fillRect(x + 6, y + 1, 4, 4);
+    });
+
+    this.drawTile('poppy', (ctx, x, y, s) => {
+      ctx.fillStyle = '#2A6B10';
+      ctx.fillRect(x + 7, y + 4, 2, 12);
+      ctx.fillStyle = '#CC0000';
+      ctx.fillRect(x + 5, y, 6, 6);
+      ctx.fillStyle = '#FF2222';
+      ctx.fillRect(x + 6, y + 1, 4, 4);
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(x + 7, y + 2, 2, 2);
+    });
+
+    this.drawTile('tall_grass', (ctx, x, y, s) => {
+      ctx.fillStyle = '#3A8A15';
+      ctx.fillRect(x + 2, y + 3, 2, 13);
+      ctx.fillRect(x + 6, y + 1, 2, 15);
+      ctx.fillRect(x + 10, y + 4, 2, 12);
+      ctx.fillRect(x + 13, y + 6, 2, 10);
+    });
+
+    this.drawTile('fern', (ctx, x, y, s) => {
+      ctx.fillStyle = '#2A7A10';
+      ctx.fillRect(x + 1, y + 2, 3, 14);
+      ctx.fillRect(x + 5, y + 1, 3, 15);
+      ctx.fillRect(x + 9, y + 3, 3, 13);
+      ctx.fillRect(x + 12, y + 5, 3, 11);
+    });
+
+    this.drawTile('dead_bush', (ctx, x, y, s) => {
+      ctx.fillStyle = '#8B6914';
+      ctx.fillRect(x + 6, y + 4, 2, 12);
+      ctx.fillRect(x + 3, y + 6, 5, 2);
+      ctx.fillRect(x + 9, y + 5, 4, 2);
+      ctx.fillRect(x + 4, y + 2, 3, 2);
+    });
+
+    this.drawTile('blue_orchid', (ctx, x, y, s) => {
+      ctx.fillStyle = '#2A6B10';
+      ctx.fillRect(x + 7, y + 5, 2, 11);
+      ctx.fillStyle = '#5599FF';
+      ctx.fillRect(x + 5, y, 6, 6);
+      ctx.fillStyle = '#77BBFF';
+      ctx.fillRect(x + 6, y + 1, 4, 4);
+    });
+
+    this.drawTile('allium', (ctx, x, y, s) => {
+      ctx.fillStyle = '#2A6B10';
+      ctx.fillRect(x + 7, y + 5, 2, 11);
+      ctx.fillStyle = '#AA44CC';
+      ctx.fillRect(x + 5, y, 6, 6);
+      ctx.fillStyle = '#CC66EE';
+      ctx.fillRect(x + 6, y + 1, 4, 4);
+    });
+
+    this.drawTile('red_tulip', (ctx, x, y, s) => {
+      ctx.fillStyle = '#2A6B10';
+      ctx.fillRect(x + 7, y + 5, 2, 11);
+      ctx.fillStyle = '#CC2222';
+      ctx.fillRect(x + 5, y, 6, 7);
+      ctx.fillStyle = '#2A6B10';
+      ctx.fillRect(x + 7, y + 2, 2, 3);
+    });
+
     // sand
     this.drawTile('sand', (ctx, x, y, s) => {
       ctx.fillStyle = '#E8D7A3';

@@ -326,7 +326,9 @@ export class Game {
   }
 
   respawn() {
-    const safePos = this.findSafeRespawnPosition();
+    const safePos = this.bedSpawnPoint
+      ? this.bedSpawnPoint.clone()
+      : this.findSafeRespawnPosition();
 
     // Chunk loading around safe position
     this.chunks.update(safePos.x, safePos.z);
@@ -890,6 +892,11 @@ export class Game {
           // Ignite TNT
           this.igniteTNT(blockPos.x, blockPos.y, blockPos.z);
           this.placeCooldown = 0.25;
+        } else if (targetId === 75) {
+          // Bed: set spawn point
+          this.bedSpawnPoint = new THREE.Vector3(blockPos.x + 0.5, blockPos.y + 1, blockPos.z + 0.5);
+          this.sound.playBlockPlace();
+          this.placeCooldown = 0.25;
         } else {
           // Place block
           const placePos = blockPos.clone().add(faceNormal);
@@ -1037,6 +1044,13 @@ export class Game {
 
     // Death check
     if (this.player.health <= 0) {
+      // Drop inventory items at death location
+      for (let i = 0; i < 36; i++) {
+        const slot = this.inventory.getSlot(i);
+        if (slot) {
+          this.inventory.removeFromSlot(i, slot.count);
+        }
+      }
       this.openUI = 'death';
       document.exitPointerLock();
       this.notifyState();
@@ -1172,6 +1186,7 @@ export class Game {
   }
 
   private tntFuses: { position: THREE.Vector3; timer: number }[] = [];
+  private bedSpawnPoint: THREE.Vector3 | null = null;
 
   private checkFluidAdjacency(x: number, y: number, z: number) {
     const dirs: [number, number, number][] = [[0,1,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]];

@@ -132,6 +132,28 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   { pattern: [103, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 106, count: 9 }, shapeless: true }, // gold ingot -> 9 nuggets
   { pattern: [105, 105, 105, 105, 105, 105, 105, 105, 105], result: { id: 102, count: 1 } }, // 9 iron nuggets -> ingot
   { pattern: [106, 106, 106, 106, 106, 106, 106, 106, 106], result: { id: 103, count: 1 } }, // 9 gold nuggets -> ingot
+
+  // ─── Bed ───
+  { pattern: [16, 16, 16, 5, 5, 5, 0, 0, 0], result: { id: 75, count: 1 } }, // 3 wool + 3 planks
+
+  // ─── Slabs (3 planks/stones = 6 slabs) ───
+  { pattern: [5, 5, 5, 0, 0, 0, 0, 0, 0], result: { id: 43, count: 6 } },    // oak slab
+  { pattern: [4, 4, 4, 0, 0, 0, 0, 0, 0], result: { id: 42, count: 6 } },    // cobblestone slab
+  { pattern: [1, 1, 1, 0, 0, 0, 0, 0, 0], result: { id: 41, count: 6 } },    // stone slab
+  { pattern: [19, 19, 19, 0, 0, 0, 0, 0, 0], result: { id: 44, count: 6 } }, // brick slab
+
+  // ─── Stairs (6 blocks = 4 stairs) ───
+  { pattern: [5, 0, 0, 5, 5, 0, 5, 5, 5], result: { id: 47, count: 4 } },    // oak stairs
+  { pattern: [4, 0, 0, 4, 4, 0, 4, 4, 4], result: { id: 48, count: 4 } },    // cobblestone stairs
+
+  // ─── Fences (4 planks + 2 sticks = 3 fences) ───
+  { pattern: [5, 100, 5, 5, 100, 5, 0, 0, 0], result: { id: 53, count: 3 } }, // oak fence
+
+  // ─── Bow ───
+  { pattern: [100, 102, 0, 100, 0, 102, 100, 102, 0], result: { id: 190, count: 1 } }, // stick + string(iron ingot sub)
+
+  // ─── Arrow (flint + stick + feather) ───
+  { pattern: [4, 0, 0, 100, 0, 0, 16, 0, 0], result: { id: 191, count: 4 } }, // simplified
 ];
 
 /**

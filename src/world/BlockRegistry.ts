@@ -92,6 +92,9 @@ reg({ id: 72, name: 'acacia_log',       textureKey: 'acacia_log_side', textureTo
 reg({ id: 73, name: 'acacia_planks',    textureKey: 'acacia_planks',   transparent: false, solid: true, hardness: 2.0, toolCategory: 'axe', luminance: 0 });
 reg({ id: 74, name: 'acacia_leaves',    textureKey: 'acacia_leaves',   transparent: false, solid: true, hardness: 0.2, toolCategory: 'axe', luminance: 0 });
 
+// ─── Functional Blocks ───
+reg({ id: 75, name: 'bed',             textureKey: 'oak_planks',  textureTop: 'white_wool', textureBottom: 'oak_planks', transparent: false, solid: true, hardness: 0.2, luminance: 0 });
+
 export const BlockRegistry = {
   get(id: number): BlockDef | undefined {
     return blocks.get(id);

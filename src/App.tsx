@@ -184,6 +184,11 @@ export const App: React.FC = () => {
       game.startGame(selectedMode);
       setMenuState('none');
       setLoadingWorld(false);
+
+      // Request pointer lock after React has painted the frame
+      requestAnimationFrame(() => {
+        game.requestPointerLock();
+      });
     }
   }, [selectedMode, selectedSlot]);
 
@@ -635,6 +640,12 @@ export const App: React.FC = () => {
                                   game.startGame();
                                   setMenuState('none');
                                   setLoadingWorld(false);
+
+                                  // Request pointer lock after React has painted the frame
+                                  // (the loading screen must be gone from the DOM first)
+                                  requestAnimationFrame(() => {
+                                    game.requestPointerLock();
+                                  });
                                 }
                               }}
                             >

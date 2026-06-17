@@ -109,6 +109,7 @@ export class Inventory {
 
   /** Deserialize from save. */
   fromJSON(data: (ItemStack | null)[]): void {
+    if (!data || !Array.isArray(data)) return;
     for (let i = 0; i < INVENTORY_SIZE && i < data.length; i++) {
       this.slots[i] = data[i];
     }
@@ -154,5 +155,52 @@ export class Inventory {
     const half = Math.ceil(slot.count / 2);
     slot.count -= half;
     return { id: slot.id, count: half };
+  }
+
+  /** Get total armor defense value. */
+  getTotalArmorDefense(): number {
+    if (!this.armor || !Array.isArray(this.armor)) {
+      this.armor = new Array(ARMOR_SLOTS).fill(null);
+    }
+    let total = 0;
+    for (let i = 0; i < ARMOR_SLOTS; i++) {
+      const item = this.armor[i];
+      if (item) {
+        const def = ItemRegistry.get(item.id);
+        if (def && def.armorDefense !== undefined) {
+          total += def.armorDefense;
+        }
+      }
+    }
+    return total;
+  }
+
+  /** Damage equipped armor items. */
+  damageArmor(amount: number): void {
+    if (!this.armor || !Array.isArray(this.armor)) {
+      this.armor = new Array(ARMOR_SLOTS).fill(null);
+    }
+    const equippedIndices: number[] = [];
+    for (let i = 0; i < ARMOR_SLOTS; i++) {
+      if (this.armor[i]) {
+        equippedIndices.push(i);
+      }
+    }
+
+    if (equippedIndices.length === 0) return;
+
+    // Pick a random equipped piece to damage
+    const randomIndex = equippedIndices[Math.floor(Math.random() * equippedIndices.length)];
+    const armorItem = this.armor[randomIndex];
+    if (armorItem) {
+      const def = ItemRegistry.get(armorItem.id);
+      if (armorItem.durability === undefined) {
+        armorItem.durability = def?.durability ?? 100;
+      }
+      armorItem.durability -= amount;
+      if (armorItem.durability <= 0) {
+        this.armor[randomIndex] = null; // armor broke!
+      }
+    }
   }
 }

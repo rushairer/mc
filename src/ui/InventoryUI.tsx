@@ -124,6 +124,32 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     onInventoryChange();
   }, [heldItem, inventory, craftingGrid, onInventoryChange]);
 
+  const handleArmorSlotClick = useCallback((armorSlotIndex: number) => {
+    const expectedSlots: ('helmet' | 'chestplate' | 'leggings' | 'boots')[] = ['helmet', 'chestplate', 'leggings', 'boots'];
+    const expectedSlotType = expectedSlots[armorSlotIndex];
+
+    const currentArmorItem = (inventory.armor && Array.isArray(inventory.armor)) ? inventory.armor[armorSlotIndex] : null;
+
+    if (heldItem) {
+      const itemDef = ItemRegistry.get(heldItem.id);
+      if (itemDef && itemDef.category === 'armor' && itemDef.armorSlot === expectedSlotType) {
+        if (!inventory.armor || !Array.isArray(inventory.armor)) {
+          inventory.armor = new Array(4).fill(null);
+        }
+        inventory.armor[armorSlotIndex] = heldItem;
+        setHeldItem(currentArmorItem);
+      }
+    } else if (currentArmorItem) {
+      setHeldItem(currentArmorItem);
+      if (!inventory.armor || !Array.isArray(inventory.armor)) {
+        inventory.armor = new Array(4).fill(null);
+      }
+      inventory.armor[armorSlotIndex] = null;
+    }
+
+    onInventoryChange();
+  }, [heldItem, inventory, onInventoryChange]);
+
   const handleCraftResultClick = useCallback(() => {
     if (!craftResult) return;
     // Add result to inventory
@@ -164,7 +190,25 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     return () => document.removeEventListener('keydown', onKey);
   }, [handleClose]);
 
-  const renderSlot = (item: ItemStack | null, index: number, onClick: () => void, highlight?: boolean) => {
+  const armorPlaceholders = [
+    <svg key="helmet" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.25, color: '#fff' }}>
+      <path d="M2 10a10 10 0 0 1 20 0v3a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2v-1a2 2 0 0 0-4 0v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" />
+    </svg>,
+    <svg key="chestplate" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.25, color: '#fff' }}>
+      <path d="M12 22v-9" />
+      <path d="M5 3h14l2 5v4a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8z" />
+      <path d="M8 3v4a4 4 0 0 0 8 0V3" />
+    </svg>,
+    <svg key="leggings" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.25, color: '#fff' }}>
+      <path d="M4 3h16v8h-6v10h-4V11H4z" />
+    </svg>,
+    <svg key="boots" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.25, color: '#fff' }}>
+      <path d="M4 4v12l4 4h4v-8H4" />
+      <path d="M20 4v12l-4 4h-4v-8h8" />
+    </svg>
+  ];
+
+  const renderSlot = (item: ItemStack | null, index: number, onClick: () => void, highlight?: boolean, placeholder?: React.ReactNode) => {
     const itemDef = item ? ItemRegistry.get(item.id) : null;
     return (
       <div
@@ -213,7 +257,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
           userSelect: 'none',
         }}
       >
-        {item && itemDef && (
+        {item && itemDef ? (
           <>
             <div style={getItemIconStyle(item.id, 32)} />
             {item.count > 1 && (
@@ -255,7 +299,151 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
               })()
             )}
           </>
+        ) : (
+          placeholder
         )}
+      </div>
+    );
+  };
+
+  const renderPlayerPreview = () => {
+    const helmet = (inventory.armor && Array.isArray(inventory.armor)) ? inventory.armor[0] : null;
+    const chestplate = (inventory.armor && Array.isArray(inventory.armor)) ? inventory.armor[1] : null;
+    const leggings = (inventory.armor && Array.isArray(inventory.armor)) ? inventory.armor[2] : null;
+    const boots = (inventory.armor && Array.isArray(inventory.armor)) ? inventory.armor[3] : null;
+
+    const getArmorColor = (item: ItemStack | null) => {
+      if (!item) return null;
+      const def = ItemRegistry.get(item.id);
+      if (!def) return null;
+      return def.name.startsWith('iron_') ? '#d8d8d8' : '#55ffff';
+    };
+
+    const helmetColor = getArmorColor(helmet);
+    const chestplateColor = getArmorColor(chestplate);
+    const leggingsColor = getArmorColor(leggings);
+    const bootsColor = getArmorColor(boots);
+
+    return (
+      <div style={{
+        width: '100px',
+        height: '202px',
+        border: '2px solid #555',
+        background: 'rgba(20,20,20,0.6)',
+        borderRadius: '4px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: '"Courier New", monospace',
+        boxSizing: 'border-box',
+      }}>
+        <div style={{ fontSize: '10px', color: '#888', marginBottom: '8px', textShadow: '1px 1px 0 #000' }}>Preview</div>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+          {/* Head & Helmet */}
+          <div style={{
+            width: '24px',
+            height: '24px',
+            background: '#FFCC99',
+            border: '1px solid rgba(0,0,0,0.25)',
+            position: 'relative',
+            boxSizing: 'border-box',
+          }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '6px', background: '#553311' }} />
+            <div style={{ position: 'absolute', top: '10px', left: '3px', width: '3px', height: '2px', background: '#0000FF' }} />
+            <div style={{ position: 'absolute', top: '10px', right: '3px', width: '3px', height: '2px', background: '#0000FF' }} />
+            {helmetColor && (
+              <div style={{
+                position: 'absolute',
+                top: '-2px',
+                left: '-2px',
+                right: '-2px',
+                bottom: '-2px',
+                border: `2px solid ${helmetColor}`,
+                background: 'rgba(0,0,0,0.1)',
+                boxSizing: 'border-box',
+              }}>
+                <div style={{ position: 'absolute', bottom: 0, left: '6px', right: '6px', height: '4px', background: helmetColor }} />
+              </div>
+            )}
+          </div>
+
+          {/* Middle Row: Arms and Torso */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', marginTop: '2px' }}>
+            <div style={{
+              width: '10px',
+              height: '36px',
+              background: chestplateColor || '#008080',
+              border: '1px solid rgba(0,0,0,0.25)',
+              borderRight: 'none',
+              boxSizing: 'border-box',
+              position: 'relative',
+            }}>
+              {chestplateColor && (
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '10px', background: '#FFCC99' }} />
+              )}
+            </div>
+
+            <div style={{
+              width: '24px',
+              height: '36px',
+              background: chestplateColor || '#008080',
+              border: '1px solid rgba(0,0,0,0.25)',
+              boxSizing: 'border-box',
+              position: 'relative',
+            }}>
+              {!chestplateColor && (
+                <div style={{ position: 'absolute', top: 0, left: '6px', width: '10px', height: '4px', background: '#FFCC99' }} />
+              )}
+            </div>
+
+            <div style={{
+              width: '10px',
+              height: '36px',
+              background: chestplateColor || '#008080',
+              border: '1px solid rgba(0,0,0,0.25)',
+              borderLeft: 'none',
+              boxSizing: 'border-box',
+              position: 'relative',
+            }}>
+              {chestplateColor && (
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '10px', background: '#FFCC99' }} />
+              )}
+            </div>
+          </div>
+
+          {/* Bottom Row: Legs */}
+          <div style={{ display: 'flex', marginTop: '2px' }}>
+            <div style={{
+              width: '11px',
+              height: '40px',
+              background: leggingsColor || '#2244AA',
+              border: '1px solid rgba(0,0,0,0.25)',
+              borderRight: 'none',
+              boxSizing: 'border-box',
+              position: 'relative',
+            }}>
+              {bootsColor && (
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '12px', background: bootsColor }} />
+              )}
+            </div>
+
+            <div style={{
+              width: '11px',
+              height: '40px',
+              background: leggingsColor || '#2244AA',
+              border: '1px solid rgba(0,0,0,0.25)',
+              borderLeft: 'none',
+              boxSizing: 'border-box',
+              position: 'relative',
+            }}>
+              {bootsColor && (
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '12px', background: bootsColor }} />
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
@@ -381,28 +569,50 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
         >
           X
         </button>
-        {/* Crafting area */}
-        {gameMode === 'survival' && (
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Crafting (2×2)</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(2, ${SLOT_SIZE}px)`,
-                gap: '2px',
-              }}>
-                {craftingGrid.map((id, i) => {
-                  const item = id !== 0 ? { id, count: 1 } : null;
-                  return renderSlot(item, i, () => handleSlotClick(i, true));
-                })}
-              </div>
-              <div style={{ fontSize: '20px', color: '#aaa' }}>→</div>
-              {renderSlot(craftResult, -1, handleCraftResultClick, true)}
+        {/* Upper row: Armor & Crafting (Survival) or Armor only (Creative) */}
+        <div style={{ display: 'flex', gap: '32px', marginBottom: '16px', alignItems: 'flex-start' }}>
+          {/* Armor Slots */}
+          <div>
+            <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Armor</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {Array.from({ length: 4 }, (_, i) =>
+                renderSlot(
+                  (inventory.armor && Array.isArray(inventory.armor)) ? inventory.armor[i] : null,
+                  i,
+                  () => handleArmorSlotClick(i),
+                  false,
+                  armorPlaceholders[i]
+                )
+              )}
             </div>
           </div>
-        )}
 
-        {gameMode === 'survival' && <div style={{ height: '1px', background: '#555', margin: '12px 0' }} />}
+          {/* Player Preview */}
+          {renderPlayerPreview()}
+
+          {/* Crafting area */}
+          {gameMode === 'survival' && (
+            <div>
+              <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Crafting (2×2)</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(2, ${SLOT_SIZE}px)`,
+                  gap: '2px',
+                }}>
+                  {craftingGrid.map((id, i) => {
+                    const item = id !== 0 ? { id, count: 1 } : null;
+                    return renderSlot(item, i, () => handleSlotClick(i, true));
+                  })}
+                </div>
+                <div style={{ fontSize: '20px', color: '#aaa' }}>→</div>
+                {renderSlot(craftResult, -1, handleCraftResultClick, true)}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ height: '1px', background: '#555', margin: '12px 0' }} />
 
         {/* Main inventory (27 slots) */}
         <div style={{ marginBottom: '12px' }}>

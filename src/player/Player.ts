@@ -24,6 +24,7 @@ export class Player {
   private halfWidth = PLAYER_WIDTH / 2;
   swingProgress = 0;
   private lastHeldItemId = -1;
+  private lastArmorIds = [-1, -1, -1, -1];
 
   startSwing() {
     if (this.swingProgress === 0) {
@@ -301,26 +302,39 @@ export class Player {
     headGroup.name = 'head';
     headGroup.position.set(0, 1.35, 0);
 
-    const headGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
-    const headMat = new THREE.MeshLambertMaterial({ color: skinColor });
-    const head = new THREE.Mesh(headGeo, headMat);
-    head.position.set(0, 0.2, 0);
+    // Minecraft Steve head: 8x8x8 pixel cube with per-face coloring.
+    // Face order in THREE.js BoxGeometry: +X(right), -X(left), +Y(top), -Y(bottom), +Z(front), -Z(back)
+    const headGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    const hairMat = new THREE.MeshLambertMaterial({ color: hairColor });
+    const headSkinMat = new THREE.MeshLambertMaterial({ color: skinColor });
+    const headMaterials = [
+      hairMat,      // +X right side — hair
+      hairMat,      // -X left side — hair
+      hairMat,      // +Y top — hair
+      headSkinMat,  // -Y bottom — skin (neck)
+      headSkinMat,  // +Z front — face/skin
+      hairMat,      // -Z back — hair
+    ];
+    const head = new THREE.Mesh(headGeo, headMaterials);
+    head.position.set(0, 0.25, 0);
     headGroup.add(head);
 
-    // Hair cap (resized and offset backward to cover top/back/sides cleanly with no Z-fighting)
-    const hairGeo = new THREE.BoxGeometry(0.43, 0.15, 0.43);
-    const hairMat = new THREE.MeshLambertMaterial({ color: hairColor });
-    const hair = new THREE.Mesh(hairGeo, hairMat);
-    hair.position.set(0, 0.33, -0.015);
-    headGroup.add(hair);
+    // Forehead fringe (bangs) — a thin strip on the upper front of the head
+    // Positioned flush with the front face, covering the top ~2 pixels of the face
+    const fringeGeo = new THREE.BoxGeometry(0.5, 0.12, 0.02);
+    const fringeMat = new THREE.MeshLambertMaterial({ color: hairColor });
+    const fringe = new THREE.Mesh(fringeGeo, fringeMat);
+    fringe.name = 'bangs';
+    fringe.position.set(0, 0.44, 0.26);
+    headGroup.add(fringe);
 
     // Eyes
     const eyeGeo = new THREE.BoxGeometry(0.06, 0.03, 0.02);
     const eyeMat = new THREE.MeshLambertMaterial({ color: 0x0000FF });
     const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
     const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
-    eyeL.position.set(-0.1, 0.2, 0.201);
-    eyeR.position.set(0.1, 0.2, 0.201);
+    eyeL.position.set(-0.1, 0.25, 0.251);
+    eyeR.position.set(0.1, 0.25, 0.251);
     headGroup.add(eyeL, eyeR);
 
     group.add(headGroup);
@@ -329,6 +343,7 @@ export class Player {
     const bodyGeo = new THREE.BoxGeometry(0.48, 0.6, 0.24);
     const bodyMat = new THREE.MeshLambertMaterial({ color: shirtColor });
     const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.name = 'body';
     body.position.set(0, 1.05, 0);
     group.add(body);
 
@@ -399,6 +414,164 @@ export class Player {
     const mesh = this.createHeldItemMesh(itemId);
     if (mesh) {
       slot.add(mesh);
+    }
+  }
+
+  updateArmorMesh(armor: (any | null)[]) {
+    if (!armor || !Array.isArray(armor)) return;
+    let changed = false;
+    for (let i = 0; i < 4; i++) {
+      const id = armor[i]?.id ?? 0;
+      if (id !== this.lastArmorIds[i]) {
+        changed = true;
+        this.lastArmorIds[i] = id;
+      }
+    }
+    if (!changed) return;
+
+    this.removeArmorMeshes();
+
+    // Keep bangs visible under the helmet (do not hide them)
+
+    for (let i = 0; i < 4; i++) {
+      const item = armor[i];
+      if (!item) continue;
+
+      const itemDef = ItemRegistry.get(item.id);
+      if (!itemDef || itemDef.category !== 'armor') continue;
+
+      const isIron = itemDef.name.startsWith('iron_');
+      const color = isIron ? 0xd8d8d8 : 0x55ffff;
+      const mat = new THREE.MeshLambertMaterial({ color });
+
+      if (i === 0) { // Helmet — seamless shell with thick walls + front brow
+        const head = this.mesh.getObjectByName('head');
+        if (head) {
+          const helmetGroup = new THREE.Group();
+          helmetGroup.name = 'armor_helmet';
+          helmetGroup.position.set(0, 0.25, 0); // Center relative to head cube
+
+          const T = 0.04; // wall thickness
+
+          // 1. Top plate (covers top of head + sides/back walls)
+          const topGeo = new THREE.BoxGeometry(0.60, T, 0.60);
+          const topPlate = new THREE.Mesh(topGeo, mat);
+          topPlate.position.set(0, 0.28, 0);
+          helmetGroup.add(topPlate);
+
+          // 2. Side walls (left and right)
+          const wallH = 0.42;
+          const sideGeo = new THREE.BoxGeometry(T, wallH, 0.56);
+          const wallY = 0.05;
+
+          const sideL = new THREE.Mesh(sideGeo, mat);
+          sideL.position.set(0.28, wallY, 0.02);
+          helmetGroup.add(sideL);
+
+          const sideR = new THREE.Mesh(sideGeo, mat);
+          sideR.position.set(-0.28, wallY, 0.02);
+          helmetGroup.add(sideR);
+
+          // 3. Back wall
+          const backGeo = new THREE.BoxGeometry(0.52, wallH, T);
+          const backWall = new THREE.Mesh(backGeo, mat);
+          backWall.position.set(0, wallY, -0.28);
+          helmetGroup.add(backWall);
+
+          // 4. Front forehead band (brow)
+          const browGeo = new THREE.BoxGeometry(0.52, 0.14, T);
+          const brow = new THREE.Mesh(browGeo, mat);
+          brow.position.set(0, 0.19, 0.28);
+          helmetGroup.add(brow);
+
+          head.add(helmetGroup);
+        }
+      } else if (i === 1) { // Chestplate
+        const body = this.mesh.getObjectByName('body');
+        const armL = this.mesh.getObjectByName('armL');
+        const armR = this.mesh.getObjectByName('armR');
+
+        if (body) {
+          const armorBodyGeo = new THREE.BoxGeometry(0.52, 0.62, 0.28);
+          const armorBody = new THREE.Mesh(armorBodyGeo, mat);
+          armorBody.name = 'armor_chestplate_body';
+          armorBody.position.set(0, 0, 0);
+          body.add(armorBody);
+        }
+        if (armL) {
+          const armorArmLGeo = new THREE.BoxGeometry(0.24, 0.50, 0.26);
+          const armorArmL = new THREE.Mesh(armorArmLGeo, mat);
+          armorArmL.name = 'armor_chestplate_armL';
+          armorArmL.position.set(0, 0, 0);
+          armL.add(armorArmL);
+        }
+        if (armR) {
+          const armorArmRGeo = new THREE.BoxGeometry(0.24, 0.50, 0.26);
+          const armorArmR = new THREE.Mesh(armorArmRGeo, mat);
+          armorArmR.name = 'armor_chestplate_armR';
+          armorArmR.position.set(0, 0, 0);
+          armR.add(armorArmR);
+        }
+      } else if (i === 2) { // Leggings
+        const legL = this.mesh.getObjectByName('legL');
+        const legR = this.mesh.getObjectByName('legR');
+        if (legL) {
+          const armorLegLGeo = new THREE.BoxGeometry(0.24, 0.60, 0.24);
+          const armorLegL = new THREE.Mesh(armorLegLGeo, mat);
+          armorLegL.name = 'armor_leggings_legL';
+          armorLegL.position.set(0, 0.05, 0);
+          legL.add(armorLegL);
+        }
+        if (legR) {
+          const armorLegRGeo = new THREE.BoxGeometry(0.24, 0.60, 0.24);
+          const armorLegR = new THREE.Mesh(armorLegRGeo, mat);
+          armorLegR.name = 'armor_leggings_legR';
+          armorLegR.position.set(0, 0.05, 0);
+          legR.add(armorLegR);
+        }
+      } else if (i === 3) { // Boots
+        const legL = this.mesh.getObjectByName('legL');
+        const legR = this.mesh.getObjectByName('legR');
+        if (legL) {
+          const armorBootsLGeo = new THREE.BoxGeometry(0.24, 0.20, 0.24);
+          const armorBootsL = new THREE.Mesh(armorBootsLGeo, mat);
+          armorBootsL.name = 'armor_boots_legL';
+          armorBootsL.position.set(0, -0.275, 0);
+          legL.add(armorBootsL);
+        }
+        if (legR) {
+          const armorBootsRGeo = new THREE.BoxGeometry(0.24, 0.20, 0.24);
+          const armorBootsR = new THREE.Mesh(armorBootsRGeo, mat);
+          armorBootsR.name = 'armor_boots_legR';
+          armorBootsR.position.set(0, -0.275, 0);
+          legR.add(armorBootsR);
+        }
+      }
+    }
+  }
+
+  private removeArmorMeshes() {
+    const toRemove: THREE.Object3D[] = [];
+    this.mesh.traverse((obj) => {
+      if (obj.name && obj.name.startsWith('armor_')) {
+        toRemove.push(obj);
+      }
+    });
+    for (const obj of toRemove) {
+      const parent = obj.parent;
+      if (parent) {
+        parent.remove(obj);
+        obj.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.geometry.dispose();
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => m.dispose());
+            } else {
+              child.material.dispose();
+            }
+          }
+        });
+      }
     }
   }
 

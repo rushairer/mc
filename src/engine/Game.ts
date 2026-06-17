@@ -283,8 +283,9 @@ export class Game {
       }
     }
     this.openUI = 'none';
-    this.input.requestLock();
-    this.lockCooldown = 0.5;
+    // Don't request lock here — the loading screen may still be covering the canvas.
+    // App.tsx will request pointer lock after the loading screen is hidden.
+    this.lockCooldown = 2.0;
     this.notifyState();
   }
 
@@ -293,6 +294,11 @@ export class Game {
     this.input.requestLock();
     this.lockCooldown = 0.5;
     this.notifyState();
+  }
+
+  requestPointerLock() {
+    this.input.requestLock();
+    this.lockCooldown = 0.5;
   }
 
   async manualSave(): Promise<boolean> {
@@ -516,16 +522,7 @@ export class Game {
     this.mobs.update(dt, this.player.position, isNight,
       (x, y, z) => this.chunks.getBlock(x, y, z),
       (damage, knockback) => {
-        if (this.gameMode === 'creative') return;
-        this.player.health = Math.max(0, this.player.health - damage);
-        this.player.velocity.add(knockback);
-        this.damageFlashTimer = 0.3;
-        this.sound.playHurt();
-        this.particles.spawnDamageParticles(
-          this.player.position.x,
-          this.player.position.y + 1,
-          this.player.position.z
-        );
+        this.damagePlayer(damage, 'mob', knockback);
       },
       (x, y, z) => this.chunks.isSolidBlock(x, y, z),
       this.gameMode
@@ -938,10 +935,8 @@ export class Game {
 
     // Mobs and drops updated earlier in tick
 
-    this.survival.update(dt, this.player, this.gameMode, (x, y, z) => this.chunks.getBlock(x, y, z), (dmg) => {
-      this.player.health = Math.max(0, this.player.health - dmg);
-      this.damageFlashTimer = 0.3;
-      this.sound.playHurt();
+    this.survival.update(dt, this.player, this.gameMode, (x, y, z) => this.chunks.getBlock(x, y, z), (dmg, type) => {
+      this.damagePlayer(dmg, type);
     });
 
     // Death check
@@ -1071,7 +1066,48 @@ export class Game {
     }
   }
 
+  damagePlayer(amount: number, type: 'mob' | 'fall' | 'drown' | 'starve', knockback?: THREE.Vector3) {
+    if (this.gameMode === 'creative') return;
+
+    let finalDamage = amount;
+    const defense = this.inventory.getTotalArmorDefense();
+
+    if (type === 'mob' || type === 'fall') {
+      const reduction = Math.min(0.8, defense * 0.04);
+      finalDamage = Math.max(1, amount * (1 - reduction));
+      
+      if (defense > 0) {
+        this.inventory.damageArmor(1);
+      }
+    }
+
+    this.player.health = Math.max(0, this.player.health - finalDamage);
+
+    if (knockback) {
+      this.player.velocity.add(knockback);
+    }
+
+    this.damageFlashTimer = 0.3;
+    this.sound.playHurt();
+
+    this.particles.spawnDamageParticles(
+      this.player.position.x,
+      this.player.position.y + 1,
+      this.player.position.z
+    );
+
+    if (this.player.health <= 0) {
+      this.openUI = 'death';
+      document.exitPointerLock();
+      this.notifyState();
+      this.renderer.render();
+    }
+  }
+
   private notifyState() {
+    this.player.updateArmorMesh(this.inventory.armor);
+    this.updateFpArmArmor();
+
     const biomeId = this.chunks.getBiomeAt(
       Math.floor(this.player.position.x),
       Math.floor(this.player.position.z)
@@ -1145,6 +1181,7 @@ export class Game {
         hunger: this.player.hunger,
         flying: this.player.flying,
         gameMode: this.gameMode,
+        perspectiveMode: this.perspectiveMode,
       },
       inventory: {
         slots: this.inventory.toJSON(),
@@ -1168,19 +1205,27 @@ export class Game {
       if (!data) return;
 
       this.player.position.set(data.player.x, data.player.y, data.player.z);
-      this.player.yaw = data.player.yaw;
-      this.player.pitch = data.player.pitch;
+      this.player.yaw = typeof data.player.yaw === 'number' && !isNaN(data.player.yaw) ? data.player.yaw : 0;
+      this.player.pitch = typeof data.player.pitch === 'number' && !isNaN(data.player.pitch) ? data.player.pitch : 0;
       this.player.health = data.player.health;
       this.player.hunger = data.player.hunger;
       this.player.flying = data.player.flying;
       if (data.player.gameMode) {
         this.gameMode = data.player.gameMode;
       }
+      if (data.player.perspectiveMode) {
+        this.perspectiveMode = data.player.perspectiveMode;
+      }
 
       if (data.inventory) {
         this.inventory.fromJSON(data.inventory.slots);
-        if (data.inventory.armor) {
-          this.inventory.armor = data.inventory.armor;
+        if (data.inventory.armor && Array.isArray(data.inventory.armor)) {
+          this.inventory.armor = [...data.inventory.armor];
+          while (this.inventory.armor.length < 4) {
+            this.inventory.armor.push(null);
+          }
+        } else {
+          this.inventory.armor = new Array(4).fill(null);
         }
       }
 
@@ -1652,6 +1697,32 @@ export class Game {
       if (item) key = item.name;
     }
     return this.atlas.getIconStyle(key, iconSize);
+  }
+
+  updateFpArmArmor() {
+    if (!this.fpArmGroup) return;
+    const armMesh = this.fpArmGroup.getObjectByName('armMesh') as THREE.Mesh;
+    if (!armMesh) return;
+
+    const chestplate = this.inventory.armor[1];
+    let color = 0x008080; // default teal shirt color
+    if (chestplate) {
+      const itemDef = ItemRegistry.get(chestplate.id);
+      if (itemDef && itemDef.category === 'armor') {
+        const isIron = itemDef.name.startsWith('iron_');
+        color = isIron ? 0xd8d8d8 : 0x55ffff;
+      }
+    }
+
+    if (Array.isArray(armMesh.material)) {
+      armMesh.material.forEach((m) => {
+        if (m && 'color' in m) (m as any).color.setHex(color);
+      });
+    } else {
+      if (armMesh.material && 'color' in armMesh.material) {
+        (armMesh.material as any).color.setHex(color);
+      }
+    }
   }
 
   dispose() {

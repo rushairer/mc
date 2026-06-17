@@ -103,6 +103,64 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
     );
   }) : null;
 
+  // Armor shields
+  let totalArmorDefense = 0;
+  if (state.inventory && Array.isArray(state.inventory.armor)) {
+    for (const item of state.inventory.armor) {
+      if (item) {
+        const def = ItemRegistry.get(item.id);
+        if (def && def.armorDefense !== undefined) {
+          totalArmorDefense += def.armorDefense;
+        }
+      }
+    }
+  }
+  const armorIcons = Array.from({ length: 10 }, (_, i) => {
+    const filled = totalArmorDefense >= (i + 1) * 2;
+    const half = totalArmorDefense >= i * 2 + 1 && totalArmorDefense < (i + 1) * 2;
+    return (
+      <span key={i} style={{
+        position: 'relative',
+        display: 'inline-block',
+        width: '16px',
+        height: '16px',
+        fontSize: '14px',
+        textAlign: 'center',
+        lineHeight: '16px',
+      }}>
+        {/* Shadow layer */}
+        <span style={{
+          position: 'absolute',
+          left: '1px',
+          top: '1px',
+          color: '#000',
+          zIndex: 1,
+          opacity: 0.8,
+        }}>
+          🛡️
+        </span>
+        {/* Color layer */}
+        <span style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          zIndex: 2,
+          ...(filled ? {
+            color: '#55aaff'
+          } : half ? {
+            background: 'linear-gradient(90deg, #55aaff 50%, #444444 50%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          } : {
+            color: 'rgba(68, 68, 68, 0.4)'
+          })
+        }}>
+          🛡️
+        </span>
+      </span>
+    );
+  });
+
   // Hotbar item name popup state
   const [lastSelectedSlot, setLastSelectedSlot] = React.useState(state.selectedSlot);
   const [lastHeldId, setLastHeldId] = React.useState(state.heldItemId);
@@ -159,15 +217,19 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
           padding: '0 20px',
           marginBottom: '4px',
         }}>
-          {/* Oxygen bubbles layer */}
+          {/* Armor shields and Oxygen bubbles layer */}
           <div style={{
             display: 'flex',
-            justifyContent: 'flex-end',
+            justifyContent: 'space-between',
             height: '20px',
+            alignItems: 'center',
           }}>
-            {showOxygen && (
-              <div style={{ display: 'flex', gap: '2px' }}>{oxygenBubbles}</div>
-            )}
+            <div style={{ display: 'flex', gap: '1px' }}>
+              {totalArmorDefense > 0 && armorIcons}
+            </div>
+            <div style={{ display: 'flex', gap: '2px' }}>
+              {showOxygen && oxygenBubbles}
+            </div>
           </div>
 
           {/* Hearts and Drumsticks */}

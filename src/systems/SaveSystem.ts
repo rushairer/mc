@@ -29,6 +29,7 @@ export interface SaveData {
     hunger: number;
     flying: boolean;
     gameMode?: 'survival' | 'creative';
+    perspectiveMode?: 'first' | 'third';
   };
   inventory: {
     slots: ({ id: number; count: number } | null)[];

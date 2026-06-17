@@ -19,7 +19,7 @@ export class SurvivalSystem {
     player: Player,
     gameMode: 'survival' | 'creative',
     getBlock: (x: number, y: number, z: number) => number,
-    damage: (amount: number) => void
+    damage: (amount: number, type: 'fall' | 'drown' | 'starve') => void
   ) {
     if (gameMode === 'creative') {
       player.health = 20;
@@ -76,7 +76,7 @@ export class SurvivalSystem {
       const fallDist = this.fallStartY - player.position.y;
       if (fallDist > 3) {
         const fallDamage = Math.floor(fallDist - 3);
-        damage(fallDamage);
+        damage(fallDamage, 'fall');
       }
       this.wasFalling = false;
     }
@@ -97,7 +97,7 @@ export class SurvivalSystem {
       if (player.oxygen <= 0) {
         this.drownTimer += dt;
         if (this.drownTimer >= 1.5) {
-          damage(2); // 1 heart damage
+          damage(2, 'drown'); // 1 heart damage
           this.drownTimer = 0;
         }
       } else {
@@ -113,7 +113,7 @@ export class SurvivalSystem {
     if (player.hunger <= 0) {
       this.starvationTimer += dt;
       if (this.starvationTimer >= 4) { // damage every 4 seconds
-        damage(1);
+        damage(1, 'starve');
         this.starvationTimer = 0;
       }
     } else {

@@ -386,7 +386,8 @@ export class Mob {
     playerPos: THREE.Vector3,
     getBlock: (x: number, y: number, z: number) => number,
     hurtPlayer: (damage: number, knockback: THREE.Vector3) => void,
-    isSolidBlock?: (x: number, y: number, z: number) => boolean
+    isSolidBlock?: (x: number, y: number, z: number) => boolean,
+    gameMode: 'survival' | 'creative' = 'survival'
   ) {
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
@@ -402,7 +403,7 @@ export class Mob {
     const fluidState = this.getFluidState(getBlock);
 
     // AI
-    this.updateAI(dt, playerPos, getBlock, fluidState.inWater);
+    this.updateAI(dt, playerPos, getBlock, fluidState.inWater, gameMode);
 
     // Drowning: like vanilla land mobs, only the head/eyes being in water consumes air.
     if (fluidState.headInWater) {
@@ -440,7 +441,7 @@ export class Mob {
     this.moveWithCollision(dt, getBlock, isSolidBlock);
 
     // Hostile mob attacks player
-    if (this.def.hostile && distToPlayer < 1.8 && this.attackCooldown <= 0) {
+    if (this.def.hostile && distToPlayer < 1.8 && this.attackCooldown <= 0 && gameMode !== 'creative') {
       const knockback = new THREE.Vector3()
         .subVectors(playerPos, this.position)
         .normalize()
@@ -499,7 +500,8 @@ export class Mob {
     dt: number,
     playerPos: THREE.Vector3,
     getBlock: (x: number, y: number, z: number) => number,
-    inWater: boolean
+    inWater: boolean,
+    gameMode: 'survival' | 'creative' = 'survival'
   ) {
     const distToPlayer = this.position.distanceTo(playerPos);
 
@@ -517,8 +519,8 @@ export class Mob {
     }
 
     if (this.def.hostile) {
-      // Hostile: chase player within 16 blocks
-      if (distToPlayer < 16) {
+      // Hostile: chase player within 16 blocks (survival only)
+      if (distToPlayer < 16 && gameMode !== 'creative') {
         this.aiState = 'chase';
         const dir = new THREE.Vector3().subVectors(playerPos, this.position);
         dir.y = 0;

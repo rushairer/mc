@@ -23,11 +23,12 @@ export class MobSystem {
     isNight: boolean,
     getBlock: (x: number, y: number, z: number) => number,
     hurtPlayer: (damage: number, knockback: THREE.Vector3) => void,
-    isSolidBlock?: (x: number, y: number, z: number) => boolean
+    isSolidBlock?: (x: number, y: number, z: number) => boolean,
+    gameMode: 'survival' | 'creative' = 'survival'
   ) {
     // Update existing mobs
     for (const [id, mob] of this.mobs) {
-      mob.update(dt, playerPos, getBlock, hurtPlayer, isSolidBlock);
+      mob.update(dt, playerPos, getBlock, hurtPlayer, isSolidBlock, gameMode);
 
       if (mob.isDead()) {
         this.removeMob(id);

@@ -28,6 +28,7 @@ export interface SaveData {
     health: number;
     hunger: number;
     flying: boolean;
+    gameMode?: 'survival' | 'creative';
   };
   inventory: {
     slots: ({ id: number; count: number } | null)[];
@@ -39,45 +40,45 @@ export interface SaveData {
 }
 
 export const SaveSystem = {
-  async save(data: SaveData): Promise<void> {
+  async save(data: SaveData, slot: string = 'world_1'): Promise<void> {
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-      store.put(data, 'autosave');
+      store.put(data, slot);
       tx.oncomplete = () => { db.close(); resolve(); };
       tx.onerror = () => { db.close(); reject(tx.error); };
     });
   },
 
-  async load(): Promise<SaveData | null> {
+  async load(slot: string = 'world_1'): Promise<SaveData | null> {
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
-      const req = store.get('autosave');
+      const req = store.get(slot);
       req.onsuccess = () => { db.close(); resolve(req.result ?? null); };
       req.onerror = () => { db.close(); reject(req.error); };
     });
   },
 
-  async hasSave(): Promise<boolean> {
+  async hasSave(slot: string = 'world_1'): Promise<boolean> {
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
-      const req = store.count('autosave');
+      const req = store.count(slot);
       req.onsuccess = () => { db.close(); resolve(req.result > 0); };
       req.onerror = () => { db.close(); reject(req.error); };
     });
   },
 
-  async deleteSave(): Promise<void> {
+  async deleteSave(slot: string = 'world_1'): Promise<void> {
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-      store.delete('autosave');
+      store.delete(slot);
       tx.oncomplete = () => { db.close(); resolve(); };
       tx.onerror = () => { db.close(); reject(tx.error); };
     });

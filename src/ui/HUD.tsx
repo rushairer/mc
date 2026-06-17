@@ -151,33 +151,35 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
       fontFamily: '"Courier New", monospace',
     }}>
       {/* Health and Hunger bars */}
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px',
-        padding: '0 20px',
-        marginBottom: '4px',
-      }}>
-        {/* Oxygen bubbles layer */}
+      {state.gameMode !== 'creative' && (
         <div style={{
           display: 'flex',
-          justifyContent: 'flex-end',
-          height: '20px',
+          flexDirection: 'column',
+          gap: '4px',
+          padding: '0 20px',
+          marginBottom: '4px',
         }}>
-          {showOxygen && (
-            <div style={{ display: 'flex', gap: '2px' }}>{oxygenBubbles}</div>
-          )}
-        </div>
+          {/* Oxygen bubbles layer */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            height: '20px',
+          }}>
+            {showOxygen && (
+              <div style={{ display: 'flex', gap: '2px' }}>{oxygenBubbles}</div>
+            )}
+          </div>
 
-        {/* Hearts and Drumsticks */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-        }}>
-          <div style={{ display: 'flex', gap: '1px' }}>{hearts}</div>
-          <div style={{ display: 'flex', gap: '1px' }}>{drumsticks}</div>
+          {/* Hearts and Drumsticks */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+          }}>
+            <div style={{ display: 'flex', gap: '1px' }}>{hearts}</div>
+            <div style={{ display: 'flex', gap: '1px' }}>{drumsticks}</div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Item Name Pop-up */}
       {fadeName && (

@@ -9,11 +9,12 @@ interface InventoryUIProps {
   onClose: () => void;
   onInventoryChange: () => void;
   getItemIconStyle: (id: number, size?: number) => any;
+  gameMode?: 'survival' | 'creative';
 }
 
 const SLOT_SIZE = 48;
 
-export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle }) => {
+export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle, gameMode = 'survival' }) => {
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
   const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(4).fill(0));
   const [craftResult, setCraftResult] = useState<{ id: number; count: number } | null>(null);
@@ -24,6 +25,24 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     y: number;
   } | null>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
+
+  const creativeItems = [
+    // Blocks
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 39,
+    // Tools
+    120, 121, 122, 123, 130, 131, 132, 133, 140, 141, 142, 143, 150, 151, 152, 153, 160, 161, 162, 163,
+    // Foods
+    170, 171, 172, 173, 174, 175,
+    // Armor
+    180, 181, 182, 183, 184, 185, 186, 187,
+    // Materials
+    100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112
+  ];
+
+  const handleCatalogClick = (itemId: number) => {
+    const maxStack = ItemRegistry.getMaxStackSize(itemId);
+    setHeldItem({ id: itemId, count: maxStack });
+  };
 
   // Track mouse for held item
   useEffect(() => {
@@ -262,8 +281,82 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
         padding: '20px',
         color: '#fff',
         position: 'relative',
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'flex-start',
       }}>
-        <button
+        {/* Creative Item Catalog */}
+        {gameMode === 'creative' && (
+          <div style={{
+            marginRight: '20px',
+            width: '320px',
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
+            <div style={{ fontSize: '14px', marginBottom: '8px', color: '#ffaa00', fontWeight: 'bold' }}>Creative Catalog</div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(6, 48px)',
+              gap: '2px',
+              maxHeight: '330px',
+              overflowY: 'auto',
+              paddingRight: '4px',
+              background: 'rgba(20,20,20,0.5)',
+              border: '2px solid #444',
+              borderRadius: '4px',
+              padding: '4px',
+            }}>
+              {creativeItems.map((id) => {
+                const itemDef = ItemRegistry.get(id);
+                return (
+                  <div
+                    key={id}
+                    onClick={() => handleCatalogClick(id)}
+                    onMouseEnter={(e) => {
+                      if (itemDef && !heldItem) {
+                        setHoveredSlot({
+                          item: { id, count: 1 },
+                          itemDef,
+                          x: e.clientX,
+                          y: e.clientY,
+                        });
+                      }
+                    }}
+                    onMouseMove={(e) => {
+                      if (itemDef && !heldItem) {
+                        setHoveredSlot({
+                          item: { id, count: 1 },
+                          itemDef,
+                          x: e.clientX,
+                          y: e.clientY,
+                        });
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredSlot(null);
+                    }}
+                    style={{
+                      width: SLOT_SIZE,
+                      height: SLOT_SIZE,
+                      border: '2px solid #555',
+                      background: 'rgba(60,60,60,0.9)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <div style={getItemIconStyle(id, 32)} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <button
           onClick={handleClose}
           style={{
             position: 'absolute',
@@ -289,25 +382,27 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
           X
         </button>
         {/* Crafting area */}
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Crafting (2×2)</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: `repeat(2, ${SLOT_SIZE}px)`,
-              gap: '2px',
-            }}>
-              {craftingGrid.map((id, i) => {
-                const item = id !== 0 ? { id, count: 1 } : null;
-                return renderSlot(item, i, () => handleSlotClick(i, true));
-              })}
+        {gameMode === 'survival' && (
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Crafting (2×2)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(2, ${SLOT_SIZE}px)`,
+                gap: '2px',
+              }}>
+                {craftingGrid.map((id, i) => {
+                  const item = id !== 0 ? { id, count: 1 } : null;
+                  return renderSlot(item, i, () => handleSlotClick(i, true));
+                })}
+              </div>
+              <div style={{ fontSize: '20px', color: '#aaa' }}>→</div>
+              {renderSlot(craftResult, -1, handleCraftResultClick, true)}
             </div>
-            <div style={{ fontSize: '20px', color: '#aaa' }}>→</div>
-            {renderSlot(craftResult, -1, handleCraftResultClick, true)}
           </div>
-        </div>
+        )}
 
-        <div style={{ height: '1px', background: '#555', margin: '12px 0' }} />
+        {gameMode === 'survival' && <div style={{ height: '1px', background: '#555', margin: '12px 0' }} />}
 
         {/* Main inventory (27 slots) */}
         <div style={{ marginBottom: '12px' }}>
@@ -405,6 +500,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
           )}
         </div>
       )}
+    </div>
     </div>
   );
 };

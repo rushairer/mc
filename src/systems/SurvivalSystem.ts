@@ -17,9 +17,18 @@ export class SurvivalSystem {
   update(
     dt: number,
     player: Player,
+    gameMode: 'survival' | 'creative',
     getBlock: (x: number, y: number, z: number) => number,
     damage: (amount: number) => void
   ) {
+    if (gameMode === 'creative') {
+      player.health = 20;
+      player.hunger = 20;
+      player.saturation = 20;
+      player.oxygen = 15.0;
+      return;
+    }
+
     if (player.flying) return;
 
     // ─── Hunger / Exhaustion Decay ───

@@ -18,7 +18,7 @@ import { RedstoneSystem } from '../systems/RedstoneSystem';
 import { CHUNK_SIZE } from '../constants';
 import type { BlockFacing, BlockMetadata, ItemStack } from '../types';
 
-export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'death';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'death' | 'menu' | 'pause';
 
 export interface GameState {
   fps: number;
@@ -41,6 +41,8 @@ export interface GameState {
   heldItemId: number;
   isNight: boolean;
   isUnderwater: boolean;
+  gameMode: 'survival' | 'creative';
+  activeSlot: string;
 }
 
 export type GameStateListener = (state: GameState) => void;
@@ -74,7 +76,9 @@ export class Game {
   private currentFps = 0;
   private breakCooldown = 0;
   private placeCooldown = 0;
+  private lockCooldown = 0;
   openUI: UIType = 'none';
+  gameMode: 'survival' | 'creative' = 'survival';
   private autoSaveTimer = 0;
   private breakProgress = 0;
   private breakingBlockPos: THREE.Vector3 | null = null;
@@ -93,8 +97,13 @@ export class Game {
   private fpLastHeldItemId = -1;
   private openChestPos: THREE.Vector3 | null = null;
 
-  constructor(container: HTMLElement) {
+  activeSlot: string = 'world_1';
+
+  constructor(container: HTMLElement, initialMode?: 'survival' | 'creative', initialSlot?: string) {
     this.container = container;
+    this.activeSlot = initialSlot ?? 'world_1';
+    this.gameMode = initialMode ?? 'survival';
+    this.openUI = 'menu';
     this.renderer = new Renderer(container);
     this.input = new InputManager(this.renderer.renderer.domElement);
     this.atlas = new TextureAtlas();
@@ -134,7 +143,6 @@ export class Game {
     this.container.addEventListener('click', this.handleContainerClick);
 
     this.createHighlight();
-    this.loadGame();
 
     this.fpArmGroup = this.createFpArm();
     this.renderer.camera.add(this.fpArmGroup);
@@ -146,6 +154,7 @@ export class Game {
   private handleContainerClick = () => {
     if (!this.input.locked && this.openUI === 'none') {
       this.input.requestLock();
+      this.lockCooldown = 0.5;
     }
   };
 
@@ -264,11 +273,46 @@ export class Game {
     document.exitPointerLock();
   }
 
+  startGame(mode?: 'survival' | 'creative') {
+    if (mode) {
+      this.gameMode = mode;
+      // In creative, flying can start enabled or match what was saved.
+      // If switching to survival, make sure they are not flying.
+      if (mode === 'survival') {
+        this.player.flying = false;
+      }
+    }
+    this.openUI = 'none';
+    this.input.requestLock();
+    this.lockCooldown = 0.5;
+    this.notifyState();
+  }
+
+  resumeGame() {
+    this.openUI = 'none';
+    this.input.requestLock();
+    this.lockCooldown = 0.5;
+    this.notifyState();
+  }
+
+  async manualSave(): Promise<boolean> {
+    try {
+      await this.saveGame();
+      return true;
+    } catch (e) {
+      console.warn('Manual save failed:', e);
+      return false;
+    }
+  }
+
   closeUI() {
     if (this.openUI === 'chest') {
       this.openChestPos = null;
     }
     this.openUI = 'none';
+    this.input.requestLock();
+    this.lockCooldown = 0.5;
+    this.notifyState();
   }
 
   respawn() {
@@ -288,6 +332,7 @@ export class Game {
 
     this.openUI = 'none';
     this.input.requestLock();
+    this.lockCooldown = 0.5;
     this.notifyState();
   }
 
@@ -380,6 +425,7 @@ export class Game {
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
     this.damageFlashTimer = Math.max(0, this.damageFlashTimer - dt);
     this.swordSwingTimer = Math.max(0, this.swordSwingTimer - dt);
+    this.lockCooldown = Math.max(0, this.lockCooldown - dt);
 
     // Game time (day/night cycle)
     this.gameTime = (this.gameTime + dt / DAY_LENGTH) % 1;
@@ -408,6 +454,14 @@ export class Game {
         fog.near = this.renderer.fogNear;
         fog.far = this.renderer.fogFar;
       }
+    }
+
+    // If pointer lock is lost and no UI is open, open pause menu (only if not in lock cooldown)
+    if (!this.input.locked && this.openUI === 'none' && this.lockCooldown <= 0) {
+      this.openUI = 'pause';
+      this.notifyState();
+      this.renderer.render();
+      return;
     }
 
     // UI open: skip game input
@@ -462,6 +516,7 @@ export class Game {
     this.mobs.update(dt, this.player.position, isNight,
       (x, y, z) => this.chunks.getBlock(x, y, z),
       (damage, knockback) => {
+        if (this.gameMode === 'creative') return;
         this.player.health = Math.max(0, this.player.health - damage);
         this.player.velocity.add(knockback);
         this.damageFlashTimer = 0.3;
@@ -472,7 +527,8 @@ export class Game {
           this.player.position.z
         );
       },
-      (x, y, z) => this.chunks.isSolidBlock(x, y, z)
+      (x, y, z) => this.chunks.isSolidBlock(x, y, z),
+      this.gameMode
     );
 
     // Resolve collisions (mob-mob, player-mob)
@@ -485,16 +541,18 @@ export class Game {
       this.player.startSwing();
     }
 
-    // F key → fly toggle
-    if (this.input.isKeyDown('f')) {
+    // F key → fly toggle (creative mode only)
+    if (this.input.isKeyDown('f') && this.gameMode === 'creative') {
       this.player.flying = !this.player.flying;
       this.input.keys.delete('f');
+      this.notifyState();
     }
 
     // F5 key → perspective toggle
     if (this.input.isKeyDown('f5')) {
       this.perspectiveMode = this.perspectiveMode === 'first' ? 'third' : 'first';
       this.input.keys.delete('f5');
+      this.notifyState();
     }
 
     // Chunk loading
@@ -665,16 +723,21 @@ export class Game {
       } else if (this.targetBlock) {
         // Break block
         const bp = this.targetBlock.blockPos;
-        const breakTime = ItemRegistry.getBreakTime(
-          this.chunks.getBlock(bp.x, bp.y, bp.z),
-          selectedItemId
-        );
 
-        if (this.breakingBlockPos && this.breakingBlockPos.equals(bp)) {
-          this.breakProgress += dt / Math.max(breakTime, 0.05);
+        if (this.gameMode === 'creative') {
+          this.breakProgress = 1.0;
         } else {
-          this.breakingBlockPos = bp.clone();
-          this.breakProgress = dt / Math.max(breakTime, 0.05);
+          const breakTime = ItemRegistry.getBreakTime(
+            this.chunks.getBlock(bp.x, bp.y, bp.z),
+            selectedItemId
+          );
+
+          if (this.breakingBlockPos && this.breakingBlockPos.equals(bp)) {
+            this.breakProgress += dt / Math.max(breakTime, 0.05);
+          } else {
+            this.breakingBlockPos = bp.clone();
+            this.breakProgress = dt / Math.max(breakTime, 0.05);
+          }
         }
 
         if (this.breakProgress >= 1) {
@@ -688,20 +751,22 @@ export class Game {
             this.particles.spawnBlockBreak(bp.x, bp.y, bp.z, blockColor);
           }
 
-          // Drop item
-          if (isDoor) {
-            this.inventory.addItem(37, 1);
-          } else {
-            const dropId = ItemRegistry.getBlockDropItem(blockId);
-            if (dropId > 0) {
-              this.inventory.addItem(dropId, 1);
+          if (this.gameMode !== 'creative') {
+            // Drop item
+            if (isDoor) {
+              this.inventory.addItem(37, 1);
+            } else {
+              const dropId = ItemRegistry.getBlockDropItem(blockId);
+              if (dropId > 0) {
+                this.inventory.addItem(dropId, 1);
+              }
             }
-          }
 
-          // Damage tool
-          const heldItemStack = this.inventory.getSlot(this.player.selectedSlot);
-          if (heldItemStack && ItemRegistry.isTool(heldItemStack.id)) {
-            this.inventory.damageTool(this.player.selectedSlot);
+            // Damage tool
+            const heldItemStack = this.inventory.getSlot(this.player.selectedSlot);
+            if (heldItemStack && ItemRegistry.isTool(heldItemStack.id)) {
+              this.inventory.damageTool(this.player.selectedSlot);
+            }
           }
 
           // Fluid check: if breaking a block next to water, trigger flow
@@ -786,13 +851,17 @@ export class Game {
                   const placed = this.placeDoor(placePos.x, placePos.y, placePos.z);
                   if (placed) {
                     this.sound.playBlockPlace();
-                    this.inventory.removeFromSlot(this.player.selectedSlot);
+                    if (this.gameMode !== 'creative') {
+                      this.inventory.removeFromSlot(this.player.selectedSlot);
+                    }
                     this.placeCooldown = 0.25;
                   }
                 } else {
                   this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
                   this.sound.playBlockPlace();
-                  this.inventory.removeFromSlot(this.player.selectedSlot);
+                  if (this.gameMode !== 'creative') {
+                    this.inventory.removeFromSlot(this.player.selectedSlot);
+                  }
                   this.placeCooldown = 0.25;
 
                   // Register redstone component if it is one
@@ -869,7 +938,7 @@ export class Game {
 
     // Mobs and drops updated earlier in tick
 
-    this.survival.update(dt, this.player, (x, y, z) => this.chunks.getBlock(x, y, z), (dmg) => {
+    this.survival.update(dt, this.player, this.gameMode, (x, y, z) => this.chunks.getBlock(x, y, z), (dmg) => {
       this.player.health = Math.max(0, this.player.health - dmg);
       this.damageFlashTimer = 0.3;
       this.sound.playHurt();
@@ -1041,6 +1110,8 @@ export class Game {
       heldItemId: selectedSlot?.id ?? 0,
       isNight: this.isNight(),
       isUnderwater,
+      gameMode: this.gameMode,
+      activeSlot: this.activeSlot,
     };
 
     for (const listener of this.stateListeners) {
@@ -1073,6 +1144,7 @@ export class Game {
         health: this.player.health,
         hunger: this.player.hunger,
         flying: this.player.flying,
+        gameMode: this.gameMode,
       },
       inventory: {
         slots: this.inventory.toJSON(),
@@ -1084,15 +1156,15 @@ export class Game {
     };
 
     try {
-      await SaveSystem.save(saveData);
+      await SaveSystem.save(saveData, this.activeSlot);
     } catch (e) {
       console.warn('Save failed:', e);
     }
   }
 
-  private async loadGame() {
+  async loadGame() {
     try {
-      const data = await SaveSystem.load();
+      const data = await SaveSystem.load(this.activeSlot);
       if (!data) return;
 
       this.player.position.set(data.player.x, data.player.y, data.player.z);
@@ -1101,6 +1173,9 @@ export class Game {
       this.player.health = data.player.health;
       this.player.hunger = data.player.hunger;
       this.player.flying = data.player.flying;
+      if (data.player.gameMode) {
+        this.gameMode = data.player.gameMode;
+      }
 
       if (data.inventory) {
         this.inventory.fromJSON(data.inventory.slots);
@@ -1120,6 +1195,7 @@ export class Game {
       this.player.resolveStuck(this.chunks);
 
       console.log('Game loaded from save');
+      this.notifyState();
     } catch (e) {
       console.warn('Load failed:', e);
     }
@@ -1581,7 +1657,9 @@ export class Game {
   dispose() {
     this.running = false;
     this.container.removeEventListener('click', this.handleContainerClick);
-    this.saveGame();
+    if (this.openUI !== 'menu') {
+      this.saveGame();
+    }
     this.mobs.dispose();
     this.particles.dispose();
     this.weather.dispose();

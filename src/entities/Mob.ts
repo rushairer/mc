@@ -385,7 +385,8 @@ export class Mob {
     dt: number,
     playerPos: THREE.Vector3,
     getBlock: (x: number, y: number, z: number) => number,
-    hurtPlayer: (damage: number, knockback: THREE.Vector3) => void
+    hurtPlayer: (damage: number, knockback: THREE.Vector3) => void,
+    isSolidBlock?: (x: number, y: number, z: number) => boolean
   ) {
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
@@ -436,7 +437,7 @@ export class Mob {
     }
 
     // Apply velocity with collision
-    this.moveWithCollision(dt, getBlock);
+    this.moveWithCollision(dt, getBlock, isSolidBlock);
 
     // Hostile mob attacks player
     if (this.def.hostile && distToPlayer < 1.8 && this.attackCooldown <= 0) {
@@ -664,10 +665,45 @@ export class Mob {
     return blockId === WATER_ID || blockId === LAVA_ID;
   }
 
-  private moveWithCollision(dt: number, getBlock: (x: number, y: number, z: number) => number) {
+  private moveWithCollision(
+    dt: number,
+    getBlock: (x: number, y: number, z: number) => number,
+    isSolidBlock?: (x: number, y: number, z: number) => boolean
+  ) {
+    const hw = this.halfWidth;
+
+    // Detect doors/trapdoors the mob is already colliding with to ignore them during this physics step (allows walking out)
+    const ignoredBlocks = new Set<string>();
+    const minX = Math.floor(this.position.x - hw);
+    const maxX = Math.floor(this.position.x + hw);
+    const minY = Math.floor(this.position.y);
+    const maxY = Math.floor(this.position.y + this.def.height);
+    const minZ = Math.floor(this.position.z - hw);
+    const maxZ = Math.floor(this.position.z + hw);
+
+    for (let bx = minX; bx <= maxX; bx++) {
+      for (let by = minY; by <= maxY; by++) {
+        for (let bz = minZ; bz <= maxZ; bz++) {
+          const blockId = getBlock(bx, by, bz);
+          if (blockId === 37 || blockId === 38 || blockId === 39 || blockId === 40) {
+            const isSolid = isSolidBlock ? isSolidBlock(bx, by, bz) : true;
+            if (isSolid) {
+              if (
+                this.position.x + hw > bx && this.position.x - hw < bx + 1 &&
+                this.position.y + this.def.height > by && this.position.y < by + 1 &&
+                this.position.z + hw > bz && this.position.z - hw < bz + 1
+              ) {
+                ignoredBlocks.add(`${bx},${by},${bz}`);
+              }
+            }
+          }
+        }
+      }
+    }
+
     // X axis
     this.position.x += this.velocity.x * dt;
-    if (this.checkCollision(getBlock)) {
+    if (this.checkCollision(getBlock, isSolidBlock, ignoredBlocks)) {
       this.position.x -= this.velocity.x * dt;
       this.velocity.x = 0;
     }
@@ -677,7 +713,7 @@ export class Mob {
     this.position.y += this.velocity.y * dt;
     this.onGround = false;
 
-    if (this.checkCollision(getBlock)) {
+    if (this.checkCollision(getBlock, isSolidBlock, ignoredBlocks)) {
       if (this.velocity.y < 0) {
         this.position.y = Math.floor(prevY) + 0.001;
         this.onGround = true;
@@ -689,7 +725,7 @@ export class Mob {
 
     // Z axis
     this.position.z += this.velocity.z * dt;
-    if (this.checkCollision(getBlock)) {
+    if (this.checkCollision(getBlock, isSolidBlock, ignoredBlocks)) {
       this.position.z -= this.velocity.z * dt;
       this.velocity.z = 0;
     }
@@ -702,7 +738,11 @@ export class Mob {
     }
   }
 
-  public checkCollision(getBlock: (x: number, y: number, z: number) => number): boolean {
+  public checkCollision(
+    getBlock: (x: number, y: number, z: number) => number,
+    isSolidBlock?: (x: number, y: number, z: number) => boolean,
+    ignoredBlocks?: Set<string>
+  ): boolean {
     const hw = this.halfWidth;
     const minX = Math.floor(this.position.x - hw);
     const maxX = Math.floor(this.position.x + hw);
@@ -714,9 +754,17 @@ export class Mob {
     for (let bx = minX; bx <= maxX; bx++) {
       for (let by = minY; by <= maxY; by++) {
         for (let bz = minZ; bz <= maxZ; bz++) {
+          if (ignoredBlocks && ignoredBlocks.has(`${bx},${by},${bz}`)) {
+            continue;
+          }
           const blockId = getBlock(bx, by, bz);
           if (blockId === 0) continue;
-          if (blockId === 13 || blockId === 14) continue; // water/lava - not solid for mobs
+          
+          if (isSolidBlock) {
+            if (!isSolidBlock(bx, by, bz)) continue;
+          } else {
+            if (blockId === 13 || blockId === 14) continue; // fallback
+          }
 
           if (
             this.position.x + hw > bx && this.position.x - hw < bx + 1 &&

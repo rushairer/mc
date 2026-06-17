@@ -111,7 +111,8 @@ export class Chunk {
           const meta = this.getBlockMeta(x, y, z);
 
           const isTrans = def.transparent;
-          const target = isTrans ? transparent : solid;
+          const isTranslucent = id === 13 || id === 14 || id === 28;
+          const target = isTranslucent ? transparent : solid;
 
           if (id === 30) {
             this.addTorch(target, x, y, z, atlas);
@@ -220,10 +221,17 @@ export class Chunk {
     }
 
     // UV mapping
-    data.uvs.push(uv.u0, uv.v0);
-    data.uvs.push(uv.u1, uv.v0);
-    data.uvs.push(uv.u1, uv.v1);
-    data.uvs.push(uv.u0, uv.v1);
+    if (face === 2 || face === 3) {
+      data.uvs.push(uv.u0, uv.v0);
+      data.uvs.push(uv.u0, uv.v1);
+      data.uvs.push(uv.u1, uv.v1);
+      data.uvs.push(uv.u1, uv.v0);
+    } else {
+      data.uvs.push(uv.u0, uv.v0);
+      data.uvs.push(uv.u1, uv.v0);
+      data.uvs.push(uv.u1, uv.v1);
+      data.uvs.push(uv.u0, uv.v1);
+    }
 
     // face brightness based on face direction
     let brightness = FACE_BRIGHTNESS[face];
@@ -350,7 +358,7 @@ export class Chunk {
     this.addCuboid(data, x, y, z, blockId, atlas, bounds, {
       top: !isLower || !this.isDoorId(this.getBlock(x, y + 1, z)),
       bottom: isLower || !this.isDoorId(this.getBlock(x, y - 1, z)),
-    });
+    }, undefined, hinge === 'right');
   }
 
   private addTrapdoor(
@@ -363,30 +371,80 @@ export class Chunk {
     const thickness = 0.1875;
     const facing = meta?.facing ?? 'north';
     const isOpen = meta?.open ?? false;
-
+ 
     let bounds: CuboidBounds;
+    let customTextureKeys: string[];
+ 
+    const mainTex = isOpen ? 'oak_trapdoor_open' : 'oak_trapdoor_closed';
+ 
     if (!isOpen) {
       bounds = { minX: 0, maxX: 1, minY: 0, maxY: thickness, minZ: 0, maxZ: 1 };
+      // Closed: Top and Bottom get main trapdoor texture, sides get planks
+      customTextureKeys = [
+        mainTex,       // top (y+)
+        mainTex,       // bottom (y-)
+        'oak_planks',  // right (x+)
+        'oak_planks',  // left (x-)
+        'oak_planks',  // front (z+)
+        'oak_planks',  // back (z-)
+      ];
     } else {
       switch (facing) {
         case 'north':
           bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: thickness };
+          // North open: Front and Back get main trapdoor texture, others get planks
+          customTextureKeys = [
+            'oak_planks',  // top
+            'oak_planks',  // bottom
+            'oak_planks',  // right
+            'oak_planks',  // left
+            mainTex,       // front
+            mainTex,       // back
+          ];
           break;
         case 'south':
           bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 1 - thickness, maxZ: 1 };
+          customTextureKeys = [
+            'oak_planks',  // top
+            'oak_planks',  // bottom
+            'oak_planks',  // right
+            'oak_planks',  // left
+            mainTex,       // front
+            mainTex,       // back
+          ];
           break;
         case 'east':
           bounds = { minX: 1 - thickness, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
+          // East open: Right and Left get main trapdoor texture, others get planks
+          customTextureKeys = [
+            'oak_planks',  // top
+            'oak_planks',  // bottom
+            mainTex,       // right
+            mainTex,       // left
+            'oak_planks',  // front
+            'oak_planks',  // back
+          ];
           break;
         case 'west':
           bounds = { minX: 0, maxX: thickness, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
+          customTextureKeys = [
+            'oak_planks',  // top
+            'oak_planks',  // bottom
+            mainTex,       // right
+            mainTex,       // left
+            'oak_planks',  // front
+            'oak_planks',  // back
+          ];
           break;
         default:
           bounds = { minX: 0, maxX: 1, minY: 0, maxY: thickness, minZ: 0, maxZ: 1 };
+          customTextureKeys = [
+            mainTex, mainTex, 'oak_planks', 'oak_planks', 'oak_planks', 'oak_planks'
+          ];
       }
     }
-
-    this.addCuboid(data, x, y, z, blockId, atlas, bounds);
+ 
+    this.addCuboid(data, x, y, z, blockId, atlas, bounds, {}, customTextureKeys);
   }
 
   private addCuboid(
@@ -395,7 +453,9 @@ export class Chunk {
     blockId: number,
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
     bounds: CuboidBounds,
-    faceOverrides: Partial<Record<'top' | 'bottom', boolean>> = {}
+    faceOverrides: Partial<Record<'top' | 'bottom', boolean>> = {},
+    customTextureKeys?: string[],
+    mirrorHorizontal = false
   ) {
     const faces = getCuboidFaces(bounds);
     const shouldDraw = {
@@ -411,7 +471,8 @@ export class Chunk {
       const faceName = FACE_NAMES[faceIndex];
       if (!shouldDraw[faceName]) return;
 
-      const uv = atlas.getUV(BlockRegistry.getTextureForFace(blockId, faceIndex));
+      const texKey = customTextureKeys ? customTextureKeys[faceIndex] : BlockRegistry.getTextureForFace(blockId, faceIndex);
+      const uv = atlas.getUV(texKey);
       const baseIdx = data.positions.length / 3;
 
       for (const [vx, vy, vz] of faceDef.verts) {
@@ -421,10 +482,20 @@ export class Chunk {
         data.colors.push(brightness, brightness, brightness);
       }
 
-      data.uvs.push(uv.u0, uv.v0);
-      data.uvs.push(uv.u1, uv.v0);
-      data.uvs.push(uv.u1, uv.v1);
-      data.uvs.push(uv.u0, uv.v1);
+      const uStart = mirrorHorizontal ? uv.u1 : uv.u0;
+      const uEnd = mirrorHorizontal ? uv.u0 : uv.u1;
+
+      if (faceIndex === 2 || faceIndex === 3) {
+        data.uvs.push(uStart, uv.v0);
+        data.uvs.push(uStart, uv.v1);
+        data.uvs.push(uEnd, uv.v1);
+        data.uvs.push(uEnd, uv.v0);
+      } else {
+        data.uvs.push(uStart, uv.v0);
+        data.uvs.push(uEnd, uv.v0);
+        data.uvs.push(uEnd, uv.v1);
+        data.uvs.push(uStart, uv.v1);
+      }
       data.indices.push(
         baseIdx, baseIdx + 1, baseIdx + 2,
         baseIdx, baseIdx + 2, baseIdx + 3

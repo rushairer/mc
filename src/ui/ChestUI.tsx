@@ -55,6 +55,12 @@ export const ChestUI: React.FC<ChestUIProps> = ({
 }) => {
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
   const [, forceRender] = useState(0);
+  const [hoveredSlot, setHoveredSlot] = useState<{
+    item: ItemStack;
+    itemDef: any;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const moveHeldRef = useRef({ x: 0, y: 0 });
 
@@ -144,7 +150,33 @@ export const ChestUI: React.FC<ChestUIProps> = ({
     return (
       <div
         key={key}
-        onClick={onClick}
+        onClick={() => {
+          setHoveredSlot(null);
+          onClick();
+        }}
+        onMouseEnter={(e) => {
+          if (item && itemDef && !heldItem) {
+            setHoveredSlot({
+              item,
+              itemDef,
+              x: e.clientX,
+              y: e.clientY,
+            });
+          }
+        }}
+        onMouseMove={(e) => {
+          if (item && itemDef && !heldItem) {
+            setHoveredSlot({
+              item,
+              itemDef,
+              x: e.clientX,
+              y: e.clientY,
+            });
+          }
+        }}
+        onMouseLeave={() => {
+          setHoveredSlot(null);
+        }}
         style={{
           width: SLOT_SIZE,
           height: SLOT_SIZE,
@@ -164,7 +196,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
       >
         {item && itemDef && (
           <>
-            <div style={getItemIconStyle(item.id, 32)} title={itemDef.displayName} />
+            <div style={getItemIconStyle(item.id, 32)} />
             {item.count > 1 && (
               <span style={{
                 position: 'absolute',
@@ -309,6 +341,41 @@ export const ChestUI: React.FC<ChestUIProps> = ({
               textShadow: '1px 1px 0 #000',
             }}>
               {heldItem.count}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Minecraft-style Premium Hover Tooltip */}
+      {hoveredSlot && !heldItem && (
+        <div style={{
+          position: 'fixed',
+          left: `${hoveredSlot.x + 12}px`,
+          top: `${hoveredSlot.y - 12}px`,
+          background: 'rgba(16, 0, 16, 0.95)',
+          border: '2px solid #2b0054',
+          boxShadow: '0 0 0 1px #5e00a8',
+          padding: '6px 10px',
+          borderRadius: '4px',
+          color: '#fff',
+          fontFamily: '"Courier New", monospace',
+          fontSize: '12px',
+          zIndex: 9999,
+          pointerEvents: 'none',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          minWidth: '120px',
+        }}>
+          <span style={{ fontWeight: 'bold', fontSize: '13px', color: '#ffffff', textShadow: '1px 1px 0 #000' }}>
+            {hoveredSlot.itemDef.displayName}
+          </span>
+          <span style={{ color: '#888888', fontSize: '10px', textTransform: 'capitalize' }}>
+            {hoveredSlot.itemDef.category}
+          </span>
+          {hoveredSlot.item.durability !== undefined && hoveredSlot.itemDef.durability && (
+            <span style={{ color: '#55FF55', fontSize: '10px' }}>
+              Durability: {hoveredSlot.item.durability} / {hoveredSlot.itemDef.durability}
             </span>
           )}
         </div>

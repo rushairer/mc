@@ -103,10 +103,43 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
     );
   }) : null;
 
+  // Hotbar item name popup state
+  const [lastSelectedSlot, setLastSelectedSlot] = React.useState(state.selectedSlot);
+  const [lastHeldId, setLastHeldId] = React.useState(state.heldItemId);
+  const [showName, setShowName] = React.useState(false);
+  const [fadeName, setFadeName] = React.useState('');
+
   // Get hotbar items from inventory
   const hotbarItems = state.inventory
     ? Array.from({ length: 9 }, (_, i) => state.inventory.getSlot(i))
     : [];
+
+  React.useEffect(() => {
+    if (state.selectedSlot !== lastSelectedSlot || state.heldItemId !== lastHeldId) {
+      setLastSelectedSlot(state.selectedSlot);
+      setLastHeldId(state.heldItemId);
+      
+      const item = hotbarItems[state.selectedSlot];
+      if (item) {
+        const itemDef = ItemRegistry.get(item.id);
+        if (itemDef) {
+          setFadeName(itemDef.displayName);
+          setShowName(true);
+        }
+      } else {
+        setShowName(false);
+      }
+    }
+  }, [state.selectedSlot, state.heldItemId, lastSelectedSlot, lastHeldId, hotbarItems]);
+
+  React.useEffect(() => {
+    if (showName) {
+      const timer = setTimeout(() => {
+        setShowName(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [showName, fadeName]);
 
   return (
     <div style={{
@@ -145,6 +178,30 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
           <div style={{ display: 'flex', gap: '1px' }}>{drumsticks}</div>
         </div>
       </div>
+
+      {/* Item Name Pop-up */}
+      {fadeName && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          marginBottom: '8px',
+          opacity: showName ? 1.0 : 0.0,
+          transition: 'opacity 0.3s ease-in-out',
+          textAlign: 'center',
+        }}>
+          <span style={{
+            background: 'rgba(0,0,0,0.65)',
+            color: '#ffffff',
+            padding: '4px 8px',
+            borderRadius: '2px',
+            fontSize: '13px',
+            textShadow: '1px 1px 0 #000',
+            fontWeight: 'bold',
+          }}>
+            {fadeName}
+          </span>
+        </div>
+      )}
 
       {/* Hotbar */}
       <div style={{

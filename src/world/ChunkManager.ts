@@ -23,6 +23,7 @@ export class ChunkManager {
       map: atlas.getTexture(),
       vertexColors: true,
       side: THREE.FrontSide,
+      alphaTest: 0.1,
     });
 
     this.transparentMaterial = new THREE.MeshLambertMaterial({

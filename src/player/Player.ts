@@ -47,8 +47,8 @@ export class Player {
 
   get forward(): THREE.Vector3 {
     const dir = new THREE.Vector3(0, 0, -1);
-    dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
-    dir.applyAxisAngle(new THREE.Vector3(1, 0, 0), this.pitch);
+    const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');
+    dir.applyEuler(euler);
     return dir.normalize();
   }
 
@@ -147,12 +147,39 @@ export class Player {
   }
 
   private moveWithCollision(dt: number, chunks: ChunkManager) {
-    // Move along each axis independently
     const hw = this.halfWidth;
+
+    // Detect doors/trapdoors the player is already colliding with to ignore them during this physics step (allows walking out)
+    const ignoredBlocks = new Set<string>();
+    const minX = Math.floor(this.position.x - hw);
+    const maxX = Math.floor(this.position.x + hw);
+    const minY = Math.floor(this.position.y);
+    const maxY = Math.floor(this.position.y + PLAYER_HEIGHT);
+    const minZ = Math.floor(this.position.z - hw);
+    const maxZ = Math.floor(this.position.z + hw);
+
+    for (let bx = minX; bx <= maxX; bx++) {
+      for (let by = minY; by <= maxY; by++) {
+        for (let bz = minZ; bz <= maxZ; bz++) {
+          const blockId = chunks.getBlock(bx, by, bz);
+          if (blockId === 37 || blockId === 38 || blockId === 39 || blockId === 40) {
+            if (chunks.isSolidBlock(bx, by, bz)) {
+              if (
+                this.position.x + hw > bx && this.position.x - hw < bx + 1 &&
+                this.position.y + PLAYER_HEIGHT > by && this.position.y < by + 1 &&
+                this.position.z + hw > bz && this.position.z - hw < bz + 1
+              ) {
+                ignoredBlocks.add(`${bx},${by},${bz}`);
+              }
+            }
+          }
+        }
+      }
+    }
 
     // X axis
     this.position.x += this.velocity.x * dt;
-    if (this.checkCollision(chunks)) {
+    if (this.checkCollision(chunks, ignoredBlocks)) {
       this.position.x -= this.velocity.x * dt;
       this.velocity.x = 0;
     }
@@ -162,7 +189,7 @@ export class Player {
     this.position.y += this.velocity.y * dt;
     this.onGround = false;
 
-    if (this.checkCollision(chunks)) {
+    if (this.checkCollision(chunks, ignoredBlocks)) {
       if (this.velocity.y < 0) {
         // Landing - snap to block top
         this.position.y = Math.floor(prevY) + 0.001;
@@ -175,7 +202,7 @@ export class Player {
 
     // Z axis
     this.position.z += this.velocity.z * dt;
-    if (this.checkCollision(chunks)) {
+    if (this.checkCollision(chunks, ignoredBlocks)) {
       this.position.z -= this.velocity.z * dt;
       this.velocity.z = 0;
     }
@@ -188,7 +215,7 @@ export class Player {
     }
   }
 
-  public checkCollision(chunks: ChunkManager): boolean {
+  public checkCollision(chunks: ChunkManager, ignoredBlocks?: Set<string>): boolean {
     const hw = this.halfWidth;
     const minX = Math.floor(this.position.x - hw);
     const maxX = Math.floor(this.position.x + hw);
@@ -200,6 +227,9 @@ export class Player {
     for (let bx = minX; bx <= maxX; bx++) {
       for (let by = minY; by <= maxY; by++) {
         for (let bz = minZ; bz <= maxZ; bz++) {
+          if (ignoredBlocks && ignoredBlocks.has(`${bx},${by},${bz}`)) {
+            continue;
+          }
           const blockId = chunks.getBlock(bx, by, bz);
           if (blockId === 0) continue;
           if (!chunks.isSolidBlock(bx, by, bz)) continue;
@@ -277,11 +307,11 @@ export class Player {
     head.position.set(0, 0.2, 0);
     headGroup.add(head);
 
-    // Hair cap
-    const hairGeo = new THREE.BoxGeometry(0.42, 0.12, 0.42);
+    // Hair cap (resized and offset backward to cover top/back/sides cleanly with no Z-fighting)
+    const hairGeo = new THREE.BoxGeometry(0.43, 0.15, 0.43);
     const hairMat = new THREE.MeshLambertMaterial({ color: hairColor });
     const hair = new THREE.Mesh(hairGeo, hairMat);
-    hair.position.set(0, 0.35, 0.01);
+    hair.position.set(0, 0.33, -0.015);
     headGroup.add(hair);
 
     // Eyes

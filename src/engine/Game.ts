@@ -109,16 +109,17 @@ export class Game {
     this.sound = new SoundSystem();
     this.redstone = new RedstoneSystem();
 
-    // Default hotbar
-    this.inventory.setSlot(0, { id: 2, count: 64 });
-    this.inventory.setSlot(1, { id: 1, count: 64 });
-    this.inventory.setSlot(2, { id: 5, count: 64 });
-    this.inventory.setSlot(3, { id: 6, count: 64 });
-    this.inventory.setSlot(4, { id: 4, count: 64 });
-    this.inventory.setSlot(5, { id: 39, count: 64 });
-    this.inventory.setSlot(6, { id: 30, count: 64 });
-    this.inventory.setSlot(7, { id: 37, count: 64 });
-    this.inventory.setSlot(8, { id: 36, count: 64 });
+    // Default hotbar (Starter Kit)
+    this.inventory.setSlot(0, { id: 130, count: 1 });  // Stone Sword
+    this.inventory.setSlot(1, { id: 132, count: 1 });  // Stone Pickaxe
+    this.inventory.setSlot(2, { id: 133, count: 1 });  // Stone Axe
+    this.inventory.setSlot(3, { id: 172, count: 32 }); // Steak (Food)
+    this.inventory.setSlot(4, { id: 6, count: 64 });   // Oak Log
+    this.inventory.setSlot(5, { id: 5, count: 64 });   // Oak Planks
+    this.inventory.setSlot(6, { id: 24, count: 4 });   // Crafting Table
+    this.inventory.setSlot(7, { id: 36, count: 4 });   // Chest
+    this.inventory.setSlot(8, { id: 30, count: 64 });  // Torch
+
 
     // Spawn
     const spawnX = 8;
@@ -414,7 +415,8 @@ export class Game {
       this.particles.update(dt);
       this.mobs.update(dt, this.player.position, this.isNight(),
         (x, y, z) => this.chunks.getBlock(x, y, z),
-        () => {} // no mob attacks while UI open
+        () => {}, // no mob attacks while UI open
+        (x, y, z) => this.chunks.isSolidBlock(x, y, z)
       );
       this.renderer.render();
       this.notifyState();
@@ -457,7 +459,6 @@ export class Game {
 
     // Mob system
     const isNight = this.isNight();
-
     this.mobs.update(dt, this.player.position, isNight,
       (x, y, z) => this.chunks.getBlock(x, y, z),
       (damage, knockback) => {
@@ -470,7 +471,8 @@ export class Game {
           this.player.position.y + 1,
           this.player.position.z
         );
-      }
+      },
+      (x, y, z) => this.chunks.isSolidBlock(x, y, z)
     );
 
     // Resolve collisions (mob-mob, player-mob)
@@ -1147,8 +1149,17 @@ export class Game {
     }
 
     if (blockId === 39) {
+      let hingeFacing = facing;
+      if (facing === 'up' || facing === 'down') {
+        hingeFacing = this.getPlayerHorizontalFacing();
+      } else {
+        if (facing === 'north') hingeFacing = 'south';
+        else if (facing === 'south') hingeFacing = 'north';
+        else if (facing === 'east') hingeFacing = 'west';
+        else if (facing === 'west') hingeFacing = 'east';
+      }
       this.chunks.setBlockMeta(x, y, z, {
-        facing,
+        facing: hingeFacing,
         open: false,
       }, true);
       return;

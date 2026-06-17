@@ -47,6 +47,7 @@ export interface GameState {
   gameMode: 'survival' | 'creative';
   activeSlot: string;
   chatOpen: boolean;
+  chatInitialValue: string;
   chatMessages: string[];
 }
 
@@ -103,6 +104,7 @@ export class Game {
   private fpLastHeldItemId = -1;
   private openChestPos: THREE.Vector3 | null = null;
   private lastLightRebuildTime = -1;
+  private lightScanTimer = 0;
 
   activeSlot: string = 'world_1';
 
@@ -176,7 +178,7 @@ export class Game {
   }
 
   private handleContainerClick = () => {
-    if (!this.input.locked && this.openUI === 'none') {
+    if (!this.input.locked && this.openUI === 'none' && !this.chatOpen) {
       this.input.requestLock();
       this.lockCooldown = 0.5;
     }
@@ -481,13 +483,23 @@ export class Game {
     const isUnderwater = headBlock === 13;
 
     if (isUnderwater) {
-      const waterFogColor = new THREE.Color(0x3F76E4);
+      const sunAngle = this.gameTime * Math.PI * 2;
+      const sunY = Math.sin(sunAngle);
+      // Day goes from 0.5 to 1.0. Night drops off rapidly to 0.0 (pitch black)
+      const sunFactor = sunY >= 0 ? (sunY + 1) / 2 : Math.pow(sunY + 1, 2.0) * 0.5;
+      const waterFogColor = new THREE.Color(
+        0.25 * sunFactor,
+        0.46 * sunFactor,
+        0.89 * sunFactor
+      );
+
       this.renderer.scene.background = waterFogColor;
       if (this.renderer.scene.fog) {
         const fog = this.renderer.scene.fog as THREE.Fog;
         fog.color.copy(waterFogColor);
         fog.near = 0;
-        fog.far = 36;
+        // At midnight (sunFactor=0), visibility is only 1.8 blocks
+        fog.far = 36 * Math.max(0.05, sunFactor);
       }
     } else {
       if (this.renderer.scene.fog) {
@@ -497,8 +509,8 @@ export class Game {
       }
     }
 
-    // If pointer lock is lost and no UI is open, open pause menu (only if not in lock cooldown)
-    if (!this.input.locked && this.openUI === 'none' && this.lockCooldown <= 0) {
+    // If pointer lock is lost and no UI is open, open pause menu (only if not in lock cooldown and chat is closed)
+    if (!this.input.locked && this.openUI === 'none' && this.lockCooldown <= 0 && !this.chatOpen) {
       this.openUI = 'pause';
       this.notifyState();
       this.renderer.render();
@@ -519,7 +531,7 @@ export class Game {
     }
 
     // E key → inventory
-    if (this.input.isKeyDown('e')) {
+    if (!this.chatOpen && this.input.isKeyDown('e')) {
       this.openInventoryUI();
       this.input.keys.delete('e');
       this.renderer.render();
@@ -531,24 +543,26 @@ export class Game {
     this.input.consumeScroll();
 
     // Number keys 1-9
-    for (let i = 1; i <= 9; i++) {
-      if (this.input.isKeyDown(String(i))) {
-        this.player.selectedSlot = i - 1;
-        this.input.keys.delete(String(i));
+    if (!this.chatOpen) {
+      for (let i = 1; i <= 9; i++) {
+        if (this.input.isKeyDown(String(i))) {
+          this.player.selectedSlot = i - 1;
+          this.input.keys.delete(String(i));
+        }
       }
     }
 
     // Player update
     const mouseDelta = this.input.consumeMouseDelta();
     this.player.update(dt, {
-      dx: mouseDelta.dx,
-      dy: mouseDelta.dy,
-      forward: this.input.isKeyDown('w'),
-      back: this.input.isKeyDown('s'),
-      left: this.input.isKeyDown('a'),
-      right: this.input.isKeyDown('d'),
-      jump: this.input.isKeyDown(' '),
-      sprint: this.input.isKeyDown('control') || this.input.isKeyDown('shift'),
+      dx: this.chatOpen ? 0 : mouseDelta.dx,
+      dy: this.chatOpen ? 0 : mouseDelta.dy,
+      forward: this.chatOpen ? false : this.input.isKeyDown('w'),
+      back: this.chatOpen ? false : this.input.isKeyDown('s'),
+      left: this.chatOpen ? false : this.input.isKeyDown('a'),
+      right: this.chatOpen ? false : this.input.isKeyDown('d'),
+      jump: this.chatOpen ? false : this.input.isKeyDown(' '),
+      sprint: this.chatOpen ? false : (this.input.isKeyDown('control') || this.input.isKeyDown('shift')),
       fly: false,
     }, this.chunks);
 
@@ -606,27 +620,31 @@ export class Game {
     // Resolve collisions (mob-mob, player-mob)
     this.resolveCollisions();
 
-    if (this.input.isMouseDown(0) || this.input.isMouseDown(2)) {
+    if (!this.chatOpen && (this.input.isMouseDown(0) || this.input.isMouseDown(2))) {
       this.player.startSwing();
     }
 
-    // T key → open chat/command
-    if (this.input.isKeyDown('t') && !this.chatOpen) {
+    // T key or / key → open chat/command
+    const tPressed = this.input.isKeyDown('t');
+    const slashPressed = this.input.isKeyDown('/');
+    if ((tPressed || slashPressed) && !this.chatOpen) {
       this.chatOpen = true;
-      this.input.keys.delete('t');
+      this.chatInitialValue = slashPressed ? '/' : '';
+      this.input.keys.clear();
+      this.input.mouseButtons.clear();
       document.exitPointerLock();
       this.notifyState();
     }
 
     // F key → fly toggle (creative mode only)
-    if (this.input.isKeyDown('f') && this.gameMode === 'creative') {
+    if (!this.chatOpen && this.input.isKeyDown('f') && this.gameMode === 'creative') {
       this.player.flying = !this.player.flying;
       this.input.keys.delete('f');
       this.notifyState();
     }
 
     // F5 key → perspective toggle
-    if (this.input.isKeyDown('f5')) {
+    if (!this.chatOpen && this.input.isKeyDown('f5')) {
       this.perspectiveMode = this.perspectiveMode === 'first' ? 'third' : 'first';
       this.input.keys.delete('f5');
       this.notifyState();
@@ -776,7 +794,7 @@ export class Game {
       ? (ItemRegistry.get(selectedItemId)?.damage ?? 1)
       : 1;
 
-    if (this.input.isMouseDown(0) && this.swordSwingTimer <= 0) {
+    if (!this.chatOpen && this.input.isMouseDown(0) && this.swordSwingTimer <= 0) {
       // Bow shooting
       const heldItemId = this.inventory.getSlot(this.player.selectedSlot)?.id;
       if (heldItemId === 190) { // Bow
@@ -885,7 +903,7 @@ export class Game {
     }
 
     // ─── Right click: place block / interact ───
-    if (this.input.isMouseDown(2) && this.placeCooldown <= 0) {
+    if (!this.chatOpen && this.input.isMouseDown(2) && this.placeCooldown <= 0) {
       if (this.targetBlock) {
         const { blockPos, faceNormal } = this.targetBlock;
         const targetId = this.chunks.getBlock(blockPos.x, blockPos.y, blockPos.z);
@@ -1013,7 +1031,7 @@ export class Game {
     const targetBlockId = this.targetBlock ? this.chunks.getBlock(this.targetBlock.blockPos.x, this.targetBlock.blockPos.y, this.targetBlock.blockPos.z) : 0;
     const pointingAtInteractive = this.targetBlock && (targetBlockId === 25 || targetBlockId === 24 || targetBlockId === 34 || targetBlockId === 36 || this.isDoorBlock(targetBlockId) || this.isTrapdoorBlock(targetBlockId));
 
-    if (this.input.isMouseDown(2) && isHoldingFood && !pointingAtInteractive && this.player.hunger < 20) {
+    if (!this.chatOpen && this.input.isMouseDown(2) && isHoldingFood && !pointingAtInteractive && this.player.hunger < 20) {
       this.eatingTimer += dt;
       this.chewSoundTimer += dt;
 
@@ -1047,7 +1065,7 @@ export class Game {
     }
 
     // ─── Footsteps ───
-    const isMoving = (this.input.isKeyDown('w') || this.input.isKeyDown('s') || this.input.isKeyDown('a') || this.input.isKeyDown('d')) && !this.player.flying;
+    const isMoving = !this.chatOpen && (this.input.isKeyDown('w') || this.input.isKeyDown('s') || this.input.isKeyDown('a') || this.input.isKeyDown('d')) && !this.player.flying;
     if (this.player.onGround && isMoving) {
       const isSprinting = this.input.isKeyDown('control');
       const stepInterval = isSprinting ? 0.28 : 0.38;
@@ -1115,6 +1133,13 @@ export class Game {
 
     // Weather
     this.weather.update(dt, this.player.position, isNight);
+
+    // Dynamic lighting
+    this.lightScanTimer += dt;
+    if (this.lightScanTimer >= 0.15) {
+      this.lightScanTimer = 0;
+      this.updateDynamicLighting();
+    }
 
     this.renderer.render();
     this.notifyState();
@@ -1216,6 +1241,7 @@ export class Game {
   private tntFuses: { position: THREE.Vector3; timer: number }[] = [];
   private bedSpawnPoint: THREE.Vector3 | null = null;
   chatOpen = false;
+  chatInitialValue = '';
   chatMessages: string[] = [];
 
   private checkFluidAdjacency(x: number, y: number, z: number) {
@@ -1311,17 +1337,22 @@ export class Game {
   }
 
   submitChat(message: string) {
-    if (message.startsWith('/')) {
-      const result = this.commands.execute(message);
-      this.chatMessages.push(result.message);
-    } else {
-      this.chatMessages.push(message);
-    }
-    // Keep only last 50 messages
-    if (this.chatMessages.length > 50) {
-      this.chatMessages = this.chatMessages.slice(-50);
+    const trimmed = message.trim();
+    if (trimmed) {
+      if (trimmed.startsWith('/')) {
+        const result = this.commands.execute(trimmed);
+        this.chatMessages.push(result.message);
+      } else {
+        this.chatMessages.push(trimmed);
+      }
+      // Keep only last 50 messages
+      if (this.chatMessages.length > 50) {
+        this.chatMessages = this.chatMessages.slice(-50);
+      }
     }
     this.chatOpen = false;
+    this.input.keys.clear();
+    this.input.mouseButtons.clear();
     this.input.requestLock();
     this.notifyState();
   }
@@ -1371,6 +1402,7 @@ export class Game {
       gameMode: this.gameMode,
       activeSlot: this.activeSlot,
       chatOpen: this.chatOpen,
+      chatInitialValue: this.chatInitialValue,
       chatMessages: this.chatMessages,
     };
 
@@ -1923,6 +1955,42 @@ export class Game {
         (armMesh.material as any).color.setHex(color);
       }
     }
+  }
+
+  private updateDynamicLighting() {
+    const lightPositions: THREE.Vector3[] = [];
+    
+    // Check if player is holding a torch (id = 30)
+    const heldItemId = this.inventory.getSlot(this.player.selectedSlot)?.id ?? 0;
+    if (heldItemId === 30) {
+      lightPositions.push(new THREE.Vector3(
+        this.player.position.x,
+        this.player.position.y + 1.0,
+        this.player.position.z
+      ));
+    }
+
+    // Scan for placed torches or lava blocks around player
+    const px = Math.floor(this.player.position.x);
+    const py = Math.floor(this.player.position.y);
+    const pz = Math.floor(this.player.position.z);
+    const radius = 12;
+
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+          const blockId = this.chunks.getBlock(px + dx, py + dy, pz + dz);
+          // Torch (30) or Lava (14)
+          if (blockId === 30 || blockId === 14) {
+            lightPositions.push(new THREE.Vector3(px + dx + 0.5, py + dy + 0.5, pz + dz + 0.5));
+          }
+        }
+      }
+    }
+
+    // Sort by distance to player
+    lightPositions.sort((a, b) => a.distanceToSquared(this.player.position) - b.distanceToSquared(this.player.position));
+    this.renderer.updateTorchLights(lightPositions.slice(0, 4));
   }
 
   dispose() {

@@ -9,6 +9,7 @@ export class Renderer {
   private ambientLight: THREE.AmbientLight;
   private sunLight: THREE.DirectionalLight;
   private moonLight: THREE.DirectionalLight;
+  private torchLights: THREE.PointLight[] = [];
 
   constructor(container: HTMLElement) {
     this.scene = new THREE.Scene();
@@ -44,11 +45,30 @@ export class Renderer {
     this.moonLight.position.set(-100, 200, -100);
     this.scene.add(this.moonLight);
 
+    // Torch point light pool (to illuminate entities near torches)
+    for (let i = 0; i < 4; i++) {
+      const pl = new THREE.PointLight(0xffaa44, 0.0, 15);
+      this.scene.add(pl);
+      this.torchLights.push(pl);
+    }
+
     window.addEventListener('resize', this.onResize);
   }
 
   render() {
     this.renderer.render(this.scene, this.camera);
+  }
+
+  updateTorchLights(positions: THREE.Vector3[]) {
+    for (let i = 0; i < 4; i++) {
+      const light = this.torchLights[i];
+      if (positions[i]) {
+        light.position.copy(positions[i]);
+        light.intensity = 2.5;
+      } else {
+        light.intensity = 0;
+      }
+    }
   }
 
   add(obj: THREE.Object3D) {
@@ -71,7 +91,7 @@ export class Renderer {
     // Sky color gradient
     const dayColor = new THREE.Color(0.53, 0.81, 0.92);
     const sunsetColor = new THREE.Color(0.95, 0.55, 0.35);
-    const nightColor = new THREE.Color(0.05, 0.05, 0.15);
+    const nightColor = new THREE.Color(0.003, 0.003, 0.01);
 
     let skyColor: THREE.Color;
     if (sunBrightness > 0.3) {
@@ -86,13 +106,22 @@ export class Renderer {
       skyColor = nightColor.clone();
     }
 
+    // Dynamic fog adjustment based on time of day
+    // Day: near = 80, far = 120
+    // Night: near = 15, far = 40 (hides distant sky/terrain)
+    const nightFogFactor = sunY >= 0 ? 0 : -sunY;
+    this.fogNear = 80 - nightFogFactor * 65;
+    this.fogFar = 120 - nightFogFactor * 80;
+
     this.scene.background = skyColor;
     if (this.scene.fog) {
       (this.scene.fog as THREE.Fog).color.copy(skyColor);
+      (this.scene.fog as THREE.Fog).near = this.fogNear;
+      (this.scene.fog as THREE.Fog).far = this.fogFar;
     }
 
     // Ambient light intensity
-    const ambientIntensity = 0.1 + sunBrightness * 0.5;
+    const ambientIntensity = 0.03 + sunBrightness * 0.5;
     this.ambientLight.intensity = ambientIntensity;
 
     // Sun light
@@ -105,13 +134,13 @@ export class Renderer {
 
     // Moon light (active at night)
     const moonBrightness = Math.max(0, -sunY);
-    this.moonLight.intensity = moonBrightness * 0.15;
+    this.moonLight.intensity = moonBrightness * 0.08;
 
     // Tint ambient during sunset/sunrise
     if (sunBrightness > 0 && sunBrightness < 0.4) {
       this.ambientLight.color.setHex(0xffcc88);
     } else if (moonBrightness > 0) {
-      this.ambientLight.color.setHex(0x6666aa);
+      this.ambientLight.color.setHex(0x111122);
     } else {
       this.ambientLight.color.setHex(0xffffff);
     }

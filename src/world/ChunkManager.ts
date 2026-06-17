@@ -71,6 +71,28 @@ export class ChunkManager {
     return chunk.getLightAt(lx, wy, lz);
   }
 
+  getSkyLight(wx: number, wy: number, wz: number): number {
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const chunk = this.getChunk(cx, cz);
+    if (!chunk) return 15;
+
+    let lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    let lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    return chunk.getSkyLightAt(lx, wy, lz);
+  }
+
+  getBlockLight(wx: number, wy: number, wz: number): number {
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const chunk = this.getChunk(cx, cz);
+    if (!chunk) return 0;
+
+    let lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    let lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    return chunk.getBlockLightAt(lx, wy, lz);
+  }
+
   setBlock(wx: number, wy: number, wz: number, id: number) {
     const cx = Math.floor(wx / CHUNK_SIZE);
     const cz = Math.floor(wz / CHUNK_SIZE);
@@ -259,12 +281,16 @@ export class ChunkManager {
       return this.getBlock(wx, wy, wz);
     };
 
-    const getNeighborLight = (wx: number, wy: number, wz: number): number => {
-      return this.getLight(wx, wy, wz);
+    const getNeighborSkyLight = (wx: number, wy: number, wz: number): number => {
+      return this.getSkyLight(wx, wy, wz);
+    };
+
+    const getNeighborBlockLight = (wx: number, wy: number, wz: number): number => {
+      return this.getBlockLight(wx, wy, wz);
     };
 
     const { solidGeo, transparentGeo } = chunk.buildMesh(
-      this.atlas, getNeighborBlock, getNeighborLight, this.timeOfDay
+      this.atlas, getNeighborBlock, getNeighborSkyLight, getNeighborBlockLight, this.timeOfDay
     );
 
     if (solidGeo.attributes.position) {

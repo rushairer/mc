@@ -228,16 +228,48 @@ export class Chunk {
     return Math.max(this.skyLight[idx], this.blockLight[idx]);
   }
 
+  getSkyLightAt(x: number, y: number, z: number): number {
+    if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= WORLD_HEIGHT || z < 0 || z >= CHUNK_SIZE) {
+      return 15;
+    }
+    const idx = this.getIndex(x, y, z);
+    return this.skyLight[idx];
+  }
+
+  getBlockLightAt(x: number, y: number, z: number): number {
+    if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= WORLD_HEIGHT || z < 0 || z >= CHUNK_SIZE) {
+      return 0;
+    }
+    const idx = this.getIndex(x, y, z);
+    return this.blockLight[idx];
+  }
+
+  getAdjustedBrightness(skyLight: number, blockLight: number, timeOfDay: number): number {
+    const sunAngle = timeOfDay * Math.PI * 2;
+    const sunY = Math.sin(sunAngle);
+    
+    // Map negative sun angle (nighttime) to a sky light decrement (0 to 14)
+    const decrement = sunY >= 0 ? 0 : Math.round(-sunY * 14);
+    
+    const adjustedSkyLight = Math.max(0, skyLight - decrement);
+    const combinedLight = Math.max(adjustedSkyLight, blockLight);
+    
+    // Non-linear Minecraft light curve (cubic) to make dark levels drop off quickly
+    return Math.pow(combinedLight / 15, 3.0);
+  }
+
   /**
    * Build optimized mesh using greedy meshing.
    * getNeighborBlock: (wx, wy, wz) => blockId for cross-chunk lookups
-   * getNeighborLight: (wx, wy, wz) => combined light level 0-15
+   * getNeighborSkyLight: (wx, wy, wz) => sky light level 0-15
+   * getNeighborBlockLight: (wx, wy, wz) => block light level 0-15
    * timeOfDay: 0..1 day cycle for sky light brightness modulation
    */
   buildMesh(
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
     getNeighborBlock: (wx: number, wy: number, wz: number) => number,
-    getNeighborLight: (wx: number, wy: number, wz: number) => number,
+    getNeighborSkyLight: (wx: number, wy: number, wz: number) => number,
+    getNeighborBlockLight: (wx: number, wy: number, wz: number) => number,
     timeOfDay: number = 0.25
   ): { solidGeo: THREE.BufferGeometry; transparentGeo: THREE.BufferGeometry } {
     const solid: ChunkMeshData = { positions: [], normals: [], uvs: [], indices: [], colors: [] };
@@ -263,52 +295,66 @@ export class Chunk {
           const target = isTranslucent ? transparent : solid;
 
           if (id === 30) {
-            const light = this.getLightAt(x, y, z);
-            this.addTorch(target, x, y, z, atlas, light);
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            this.addTorch(target, x, y, z, atlas, lightBrightness);
             continue;
           }
 
           if (id === 37 || id === 38) {
-            const light = this.getLightAt(x, y, z);
-            this.addDoor(target, x, y, z, id, meta, atlas, light);
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            this.addDoor(target, x, y, z, id, meta, atlas, lightBrightness);
             continue;
           }
 
           if (id === 39 || id === 40) {
-            const light = this.getLightAt(x, y, z);
-            this.addTrapdoor(target, x, y, z, id, meta, atlas, light);
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            this.addTrapdoor(target, x, y, z, id, meta, atlas, lightBrightness);
             continue;
           }
 
           // Slabs (IDs 41-46)
           if (id >= 41 && id <= 46) {
-            const light = this.getLightAt(x, y, z);
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
             const isTop = meta?.slabHalf === 'top';
             const bounds: CuboidBounds = isTop
               ? { minX: 0, maxX: 1, minY: 0.5, maxY: 1, minZ: 0, maxZ: 1 }
               : { minX: 0, maxX: 1, minY: 0, maxY: 0.5, minZ: 0, maxZ: 1 };
-            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, light);
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness);
             continue;
           }
 
           // Stairs (IDs 47-52)
           if (id >= 47 && id <= 52) {
-            const light = this.getLightAt(x, y, z);
-            this.addStair(target, x, y, z, id, meta, atlas, light);
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            this.addStair(target, x, y, z, id, meta, atlas, lightBrightness);
             continue;
           }
 
           // Fences & walls (IDs 53-56)
           if (id >= 53 && id <= 56) {
-            const light = this.getLightAt(x, y, z);
-            this.addFence(target, x, y, z, id, meta, atlas, light, getNeighborBlock, worldX, worldZ);
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            this.addFence(target, x, y, z, id, meta, atlas, lightBrightness, getNeighborBlock, worldX, worldZ);
             continue;
           }
 
           // Flowers & plants (IDs 58-65) - cross-shaped rendering
           if (id >= 58 && id <= 65) {
-            const light = this.getLightAt(x, y, z);
-            this.addPlant(target, x, y, z, id, atlas, light);
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            this.addPlant(target, x, y, z, id, atlas, lightBrightness);
             continue;
           }
 
@@ -372,16 +418,21 @@ export class Chunk {
             }
 
             // Get light at the neighbor (face-adjacent) position
-            let faceLight: number;
+            let faceSkyLight: number;
+            let faceBlockLight: number;
             if (nx < 0 || nx >= CHUNK_SIZE || nz < 0 || nz >= CHUNK_SIZE) {
-              faceLight = getNeighborLight(worldX + nx, ny, worldZ + nz);
+              faceSkyLight = getNeighborSkyLight(worldX + nx, ny, worldZ + nz);
+              faceBlockLight = getNeighborBlockLight(worldX + nx, ny, worldZ + nz);
             } else if (ny < 0 || ny >= WORLD_HEIGHT) {
-              faceLight = ny >= WORLD_HEIGHT ? 15 : 0;
+              faceSkyLight = ny >= WORLD_HEIGHT ? 15 : 0;
+              faceBlockLight = 0;
             } else {
-              faceLight = this.getLightAt(nx, ny, nz);
+              faceSkyLight = this.getSkyLightAt(nx, ny, nz);
+              faceBlockLight = this.getBlockLightAt(nx, ny, nz);
             }
 
-            this.addFace(target, x, y, z, face, id, atlas, depth, faceLight, timeOfDay);
+            const lightBrightness = this.getAdjustedBrightness(faceSkyLight, faceBlockLight, timeOfDay);
+            this.addFace(target, x, y, z, face, id, atlas, depth, lightBrightness);
           }
         }
       }
@@ -400,8 +451,7 @@ export class Chunk {
     blockId: number,
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
     waterDepth: number = 0,
-    lightLevel: number = 15,
-    timeOfDay: number = 0.25
+    lightBrightness: number = 1.0
   ) {
     const texKey = BlockRegistry.getTextureForFace(blockId, face);
     const uv = atlas.getUV(texKey);
@@ -428,16 +478,10 @@ export class Chunk {
       data.uvs.push(uv.u0, uv.v1);
     }
 
-    // Compute brightness from light level + face direction shading
-    const sunAngle = timeOfDay * Math.PI * 2;
-    const sunBrightness = Math.max(0.1, Math.sin(sunAngle));
-    const skyBrightness = (lightLevel / 15) * sunBrightness;
-    const blockBrightness = lightLevel / 15;
-    // Use max of sky-scaled and block light
-    const lightBrightness = Math.max(skyBrightness, blockBrightness);
+    // Compute brightness from lightBrightness + face direction shading
     let brightness = lightBrightness * FACE_BRIGHTNESS[face];
     // Clamp minimum so nothing is completely black
-    brightness = Math.max(0.04, Math.min(1.0, brightness));
+    brightness = Math.max(0.0, Math.min(1.0, brightness));
 
     if (waterDepth > 0 && blockId !== 13) {
       const tint = Math.max(0.12, Math.pow(0.82, waterDepth));
@@ -460,10 +504,10 @@ export class Chunk {
     data: ChunkMeshData,
     x: number, y: number, z: number,
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
-    lightLevel: number = 14
+    lightBrightness: number = 0.93 // 14/15
   ) {
     const uv = atlas.getUV('torch');
-    const brightness = Math.max(0.2, lightLevel / 15);
+    const brightness = Math.max(0.2, lightBrightness);
 
     // Plane 1 - Front Side
     this.addTorchQuad(
@@ -520,7 +564,7 @@ export class Chunk {
     blockId: number,
     meta: BlockMetadata | undefined,
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
-    lightLevel: number = 15
+    lightBrightness: number = 1.0
   ) {
     const thickness = 0.125;
     const facing = meta?.facing ?? 'north';
@@ -563,7 +607,7 @@ export class Chunk {
     this.addCuboid(data, x, y, z, blockId, atlas, bounds, {
       top: !isLower || !this.isDoorId(this.getBlock(x, y + 1, z)),
       bottom: isLower || !this.isDoorId(this.getBlock(x, y - 1, z)),
-    }, undefined, hinge === 'right', lightLevel);
+    }, undefined, hinge === 'right', lightBrightness);
   }
 
   private addTrapdoor(
@@ -572,7 +616,7 @@ export class Chunk {
     blockId: number,
     meta: BlockMetadata | undefined,
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
-    lightLevel: number = 15
+    lightBrightness: number = 1.0
   ) {
     const thickness = 0.1875;
     const facing = meta?.facing ?? 'north';
@@ -650,7 +694,7 @@ export class Chunk {
       }
     }
  
-    this.addCuboid(data, x, y, z, blockId, atlas, bounds, {}, customTextureKeys, false, lightLevel);
+    this.addCuboid(data, x, y, z, blockId, atlas, bounds, {}, customTextureKeys, false, lightBrightness);
   }
 
   private addCuboid(
@@ -662,7 +706,7 @@ export class Chunk {
     faceOverrides: Partial<Record<'top' | 'bottom', boolean>> = {},
     customTextureKeys?: string[],
     mirrorHorizontal = false,
-    lightLevel: number = 15
+    lightBrightness: number = 1.0
   ) {
     const faces = getCuboidFaces(bounds);
     const shouldDraw = {
@@ -673,7 +717,7 @@ export class Chunk {
       front: true,
       back: true,
     };
-    const lightBrightness = Math.max(0.04, lightLevel / 15);
+    const finalLightBrightness = Math.max(0.0, lightBrightness);
 
     faces.forEach((faceDef, faceIndex) => {
       const faceName = FACE_NAMES[faceIndex];
@@ -686,7 +730,7 @@ export class Chunk {
       for (const [vx, vy, vz] of faceDef.verts) {
         data.positions.push(x + vx, y + vy, z + vz);
         data.normals.push(...faceDef.normal);
-        const brightness = Math.max(0.04, FACE_BRIGHTNESS[faceIndex] * lightBrightness);
+        const brightness = Math.max(0.0, FACE_BRIGHTNESS[faceIndex] * finalLightBrightness);
         data.colors.push(brightness, brightness, brightness);
       }
 
@@ -754,12 +798,12 @@ export class Chunk {
     blockId: number,
     meta: BlockMetadata | undefined,
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
-    lightLevel: number = 15
+    lightBrightness: number = 1.0
   ) {
     const facing = meta?.stairFacing ?? 'north';
     // Bottom half (full width, half height)
     const bottomBounds: CuboidBounds = { minX: 0, maxX: 1, minY: 0, maxY: 0.5, minZ: 0, maxZ: 1 };
-    this.addCuboid(data, x, y, z, blockId, atlas, bottomBounds, {}, undefined, false, lightLevel);
+    this.addCuboid(data, x, y, z, blockId, atlas, bottomBounds, {}, undefined, false, lightBrightness);
 
     // Top step (half block, depends on facing)
     let topBounds: CuboidBounds;
@@ -770,7 +814,7 @@ export class Chunk {
       case 'west':  topBounds = { minX: 0, maxX: 0.5, minY: 0.5, maxY: 1, minZ: 0, maxZ: 1 }; break;
       default:      topBounds = { minX: 0, maxX: 1, minY: 0.5, maxY: 1, minZ: 0, maxZ: 0.5 };
     }
-    this.addCuboid(data, x, y, z, blockId, atlas, topBounds, {}, undefined, false, lightLevel);
+    this.addCuboid(data, x, y, z, blockId, atlas, topBounds, {}, undefined, false, lightBrightness);
   }
 
   private addFence(
@@ -779,14 +823,14 @@ export class Chunk {
     blockId: number,
     meta: BlockMetadata | undefined,
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
-    lightLevel: number = 15,
+    lightBrightness: number = 1.0,
     getNeighborBlock: (wx: number, wy: number, wz: number) => number,
     worldX: number,
     worldZ: number
   ) {
     // Center post: 6x16x6 pixels = 0.375 wide, full height
     const postBounds: CuboidBounds = { minX: 0.25, maxX: 0.75, minY: 0, maxY: 1.5, minZ: 0.25, maxZ: 0.75 };
-    this.addCuboid(data, x, y, z, blockId, atlas, postBounds, {}, undefined, false, lightLevel);
+    this.addCuboid(data, x, y, z, blockId, atlas, postBounds, {}, undefined, false, lightBrightness);
 
     // Check connections to adjacent blocks
     const wx = worldX + x;
@@ -797,22 +841,22 @@ export class Chunk {
     // North (-Z)
     if (connectsTo(getNeighborBlock(wx, y, wz - 1))) {
       const b: CuboidBounds = { minX: 0.25, maxX: 0.75, minY: 0.375, maxY: 1.25, minZ: 0, maxZ: 0.25 };
-      this.addCuboid(data, x, y, z, blockId, atlas, b, {}, undefined, false, lightLevel);
+      this.addCuboid(data, x, y, z, blockId, atlas, b, {}, undefined, false, lightBrightness);
     }
     // South (+Z)
     if (connectsTo(getNeighborBlock(wx, y, wz + 1))) {
       const b: CuboidBounds = { minX: 0.25, maxX: 0.75, minY: 0.375, maxY: 1.25, minZ: 0.75, maxZ: 1 };
-      this.addCuboid(data, x, y, z, blockId, atlas, b, {}, undefined, false, lightLevel);
+      this.addCuboid(data, x, y, z, blockId, atlas, b, {}, undefined, false, lightBrightness);
     }
     // East (+X)
     if (connectsTo(getNeighborBlock(wx + 1, y, wz))) {
       const b: CuboidBounds = { minX: 0.75, maxX: 1, minY: 0.375, maxY: 1.25, minZ: 0.25, maxZ: 0.75 };
-      this.addCuboid(data, x, y, z, blockId, atlas, b, {}, undefined, false, lightLevel);
+      this.addCuboid(data, x, y, z, blockId, atlas, b, {}, undefined, false, lightBrightness);
     }
     // West (-X)
     if (connectsTo(getNeighborBlock(wx - 1, y, wz))) {
       const b: CuboidBounds = { minX: 0, maxX: 0.25, minY: 0.375, maxY: 1.25, minZ: 0.25, maxZ: 0.75 };
-      this.addCuboid(data, x, y, z, blockId, atlas, b, {}, undefined, false, lightLevel);
+      this.addCuboid(data, x, y, z, blockId, atlas, b, {}, undefined, false, lightBrightness);
     }
   }
 
@@ -821,11 +865,11 @@ export class Chunk {
     x: number, y: number, z: number,
     blockId: number,
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
-    lightLevel: number = 15
+    lightBrightness: number = 1.0
   ) {
     const texKey = BlockRegistry.getTextureForFace(blockId, 0);
     const uv = atlas.getUV(texKey);
-    const brightness = Math.max(0.04, lightLevel / 15);
+    const brightness = Math.max(0.0, lightBrightness);
 
     // Two diagonal planes forming an X shape
     // Plane 1: NW to SE

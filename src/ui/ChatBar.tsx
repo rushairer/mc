@@ -3,19 +3,37 @@ import { useState, useRef, useEffect } from 'react';
 interface ChatBarProps {
   open: boolean;
   messages: string[];
+  initialValue?: string;
   onSubmit: (message: string) => void;
 }
 
-export function ChatBar({ open, messages, onSubmit }: ChatBarProps) {
-  const [input, setInput] = useState('/');
+export function ChatBar({ open, messages, initialValue = '', onSubmit }: ChatBarProps) {
+  const [input, setInput] = useState(initialValue);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
-      setInput('/');
-      setTimeout(() => inputRef.current?.focus(), 50);
+      setInput(initialValue);
+      inputRef.current?.focus();
+      const focusTimeout = setTimeout(() => inputRef.current?.focus(), 50);
+
+      // Keep focus on the input box when the user clicks anywhere on the screen
+      const handleGlobalMouseDown = (e: MouseEvent) => {
+        if (inputRef.current && e.target === inputRef.current) {
+          return;
+        }
+        e.preventDefault();
+        inputRef.current?.focus();
+      };
+
+      document.addEventListener('mousedown', handleGlobalMouseDown);
+
+      return () => {
+        clearTimeout(focusTimeout);
+        document.removeEventListener('mousedown', handleGlobalMouseDown);
+      };
     }
-  }, [open]);
+  }, [open, initialValue]);
 
   if (!open && messages.length === 0) return null;
 

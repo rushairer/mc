@@ -34,6 +34,7 @@ const initialGameState: GameState = {
   gameMode: 'survival',
   activeSlot: 'world_1',
   chatOpen: false,
+  chatInitialValue: '',
   chatMessages: [],
 };
 
@@ -302,6 +303,7 @@ export const App: React.FC = () => {
       <ChatBar
         open={gameState.chatOpen}
         messages={gameState.chatMessages}
+        initialValue={gameState.chatInitialValue}
         onSubmit={(msg) => gameRef.current?.submitChat(msg)}
       />
 

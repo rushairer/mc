@@ -52,6 +52,7 @@ export class Mob {
   wanderTimer = 0;
   despawnTimer = 0;
   fuseTimer = -1; // -1 = not fusing, >=0 = counting down
+  shootTimer = 0; // Skeleton arrow cooldown
   private halfWidth: number;
   private air = MOB_MAX_AIR;
   private drownTimer = 0;
@@ -388,7 +389,8 @@ export class Mob {
     getBlock: (x: number, y: number, z: number) => number,
     hurtPlayer: (damage: number, knockback: THREE.Vector3) => void,
     isSolidBlock?: (x: number, y: number, z: number) => boolean,
-    gameMode: 'survival' | 'creative' = 'survival'
+    gameMode: 'survival' | 'creative' = 'survival',
+    onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void
   ) {
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
@@ -467,6 +469,28 @@ export class Mob {
             hurtPlayer(this.def.damage, knockback);
             this.attackCooldown = 1.0;
           }
+        }
+      } else if (this.def.type === 'skeleton' && onShoot) {
+        // Skeleton: shoot arrows at player within 16 blocks
+        this.shootTimer = Math.max(0, this.shootTimer - dt);
+        if (distToPlayer < 16 && this.shootTimer <= 0) {
+          const dir = new THREE.Vector3().subVectors(playerPos, this.position);
+          dir.y += 0.5; // Aim slightly up
+          dir.normalize();
+          const origin = this.position.clone();
+          origin.y += this.def.height * 0.75;
+          onShoot(origin, dir);
+          this.shootTimer = 2.0; // 2 second cooldown
+        }
+        // Melee fallback
+        if (distToPlayer < 1.8 && this.attackCooldown <= 0) {
+          const knockback = new THREE.Vector3()
+            .subVectors(playerPos, this.position)
+            .normalize()
+            .multiplyScalar(4);
+          knockback.y = 3;
+          hurtPlayer(this.def.damage, knockback);
+          this.attackCooldown = 1.0;
         }
       } else if (distToPlayer < 1.8 && this.attackCooldown <= 0) {
         const knockback = new THREE.Vector3()

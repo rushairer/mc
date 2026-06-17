@@ -113,6 +113,10 @@ reg({ id: 185, name: 'diamond_chestplate',displayName:'Diamond Chestplate',maxSt
 reg({ id: 186, name: 'diamond_leggings', displayName: 'Diamond Leggings', maxStackSize: 1, category: 'armor', armorSlot: 'leggings',    armorDefense: ARMOR_STATS.diamond.leggings, durability: 495 });
 reg({ id: 187, name: 'diamond_boots',    displayName: 'Diamond Boots',    maxStackSize: 1, category: 'armor', armorSlot: 'boots',       armorDefense: ARMOR_STATS.diamond.boots,    durability: 429 });
 
+// ─── Ranged Weapons ───
+reg({ id: 190, name: 'bow',   displayName: 'Bow',   maxStackSize: 1, category: 'tool', toolType: 'sword', durability: 384, damage: 1 });
+reg({ id: 191, name: 'arrow', displayName: 'Arrow', maxStackSize: 64, category: 'material' });
+
 export const ItemRegistry = {
   get(id: number): ItemDef | undefined {
     if (id >= 1 && id <= 99) {

@@ -25,11 +25,12 @@ export class MobSystem {
     hurtPlayer: (damage: number, knockback: THREE.Vector3) => void,
     isSolidBlock?: (x: number, y: number, z: number) => boolean,
     gameMode: 'survival' | 'creative' = 'survival',
-    onMobDeath?: (mob: Mob) => void
+    onMobDeath?: (mob: Mob) => void,
+    onMobShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void
   ) {
     // Update existing mobs
     for (const [id, mob] of this.mobs) {
-      mob.update(dt, playerPos, getBlock, hurtPlayer, isSolidBlock, gameMode);
+      mob.update(dt, playerPos, getBlock, hurtPlayer, isSolidBlock, gameMode, onMobShoot);
 
       if (mob.isDead()) {
         if (onMobDeath) {

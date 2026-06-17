@@ -16,6 +16,7 @@ import { WeatherSystem } from '../systems/WeatherSystem';
 import { SoundSystem } from '../systems/SoundSystem';
 import { SaveSystem, type SaveData } from '../systems/SaveSystem';
 import { RedstoneSystem } from '../systems/RedstoneSystem';
+import { ProjectileSystem } from '../systems/ProjectileSystem';
 import { CHUNK_SIZE } from '../constants';
 import type { BlockFacing, BlockMetadata, ItemStack } from '../types';
 
@@ -67,6 +68,7 @@ export class Game {
   private weather: WeatherSystem;
   private sound: SoundSystem;
   private redstone: RedstoneSystem;
+  private projectiles: ProjectileSystem;
   private clock: THREE.Clock;
   running = false;
   private stateListeners: GameStateListener[] = [];
@@ -118,6 +120,7 @@ export class Game {
     this.weather = new WeatherSystem(this.renderer.scene);
     this.sound = new SoundSystem();
     this.redstone = new RedstoneSystem();
+    this.projectiles = new ProjectileSystem(this.renderer.scene);
 
     // Default hotbar (Starter Kit)
     this.inventory.setSlot(0, { id: 130, count: 1 });  // Stone Sword
@@ -538,6 +541,9 @@ export class Game {
       this.gameMode,
       (mob) => {
         this.handleMobDeath(mob);
+      },
+      (origin, direction) => {
+        this.projectiles.shootArrow(origin, direction, false, 4);
       }
     );
 
@@ -558,6 +564,22 @@ export class Game {
         this.tntFuses.splice(i, 1);
       }
     }
+
+    // Update projectiles
+    this.projectiles.update(
+      dt,
+      (x, y, z) => this.chunks.getBlock(x, y, z),
+      (damage, knockback) => this.damagePlayer(damage, 'mob', knockback),
+      (mobId, damage, knockback) => {
+        const mob = this.mobs.mobs.get(mobId);
+        if (mob) mob.takeDamage(damage, knockback);
+      },
+      () => Array.from(this.mobs.mobs.values()).map(m => ({
+        id: m.id, position: m.position, width: m.def.width, height: m.def.height
+      })),
+      this.player.position,
+      0.6, 1.8
+    );
 
     // Resolve collisions (mob-mob, player-mob)
     this.resolveCollisions();
@@ -725,6 +747,21 @@ export class Game {
       : 1;
 
     if (this.input.isMouseDown(0) && this.swordSwingTimer <= 0) {
+      // Bow shooting
+      const heldItemId = this.inventory.getSlot(this.player.selectedSlot)?.id;
+      if (heldItemId === 190) { // Bow
+        const hasArrow = this.inventory.countItem(191) > 0;
+        if (hasArrow) {
+          if (this.gameMode !== 'creative') this.inventory.removeItem(191, 1);
+          this.projectiles.shootArrow(
+            this.player.eyePosition.clone(),
+            this.player.forward.clone(),
+            true
+          );
+          this.sound.playHurt(); // reuse as bow sound
+          this.swordSwingTimer = 0.9; // bow cooldown
+        }
+      } else {
       // First: try to attack mob
       const dir = this.player.forward;
       const mobHit = this.mobs.playerAttackMob(
@@ -810,6 +847,7 @@ export class Game {
         }
         this.lastFrameWasBreaking = true;
       }
+      } // close else (not bow)
     } else {
       this.breakProgress = 0;
       this.breakingBlockPos = null;

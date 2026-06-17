@@ -27,6 +27,7 @@ export interface BlockMetadata {
   powered?: boolean;
   signal?: number;
   extended?: boolean;
+  slabHalf?: 'top' | 'bottom';
 }
 
 export interface SerializedBlockMetadata {

@@ -49,6 +49,14 @@ reg({ id: 38, name: 'oak_door_open',  textureKey: 'oak_door_closed', transparent
 reg({ id: 39, name: 'oak_trapdoor',   textureKey: 'oak_trapdoor_closed', transparent: true, solid: true, hardness: 3.0, toolCategory: 'axe', luminance: 0 });
 reg({ id: 40, name: 'oak_trapdoor_open', textureKey: 'oak_trapdoor_open', transparent: true, solid: true, hardness: 3.0, toolCategory: 'axe', dropsId: 39, luminance: 0 });
 
+// ─── Slabs ───
+reg({ id: 41, name: 'stone_slab',       textureKey: 'stone',       transparent: false, solid: true, hardness: 2.0, toolCategory: 'pickaxe', luminance: 0 });
+reg({ id: 42, name: 'cobblestone_slab', textureKey: 'cobblestone', transparent: false, solid: true, hardness: 2.0, toolCategory: 'pickaxe', luminance: 0 });
+reg({ id: 43, name: 'oak_planks_slab',  textureKey: 'oak_planks',  transparent: false, solid: true, hardness: 2.0, toolCategory: 'axe',     luminance: 0 });
+reg({ id: 44, name: 'brick_slab',       textureKey: 'bricks',      transparent: false, solid: true, hardness: 2.0, toolCategory: 'pickaxe', luminance: 0 });
+reg({ id: 45, name: 'sandstone_slab',   textureKey: 'sandstone',   transparent: false, solid: true, hardness: 0.8, toolCategory: 'pickaxe', luminance: 0 });
+reg({ id: 46, name: 'stone_brick_slab', textureKey: 'stone_bricks',transparent: false, solid: true, hardness: 2.0, toolCategory: 'pickaxe', luminance: 0 });
+
 export const BlockRegistry = {
   get(id: number): BlockDef | undefined {
     return blocks.get(id);

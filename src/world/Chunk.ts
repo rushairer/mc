@@ -280,6 +280,17 @@ export class Chunk {
             continue;
           }
 
+          // Slabs (IDs 41-46)
+          if (id >= 41 && id <= 46) {
+            const light = this.getLightAt(x, y, z);
+            const isTop = meta?.slabHalf === 'top';
+            const bounds: CuboidBounds = isTop
+              ? { minX: 0, maxX: 1, minY: 0.5, maxY: 1, minZ: 0, maxZ: 1 }
+              : { minX: 0, maxX: 1, minY: 0, maxY: 0.5, minZ: 0, maxZ: 1 };
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, light);
+            continue;
+          }
+
           // Check 6 faces
           for (let face = 0; face < 6; face++) {
             const [dx, dy, dz] = FACE_DIRS[face];

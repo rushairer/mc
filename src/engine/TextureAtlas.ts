@@ -348,6 +348,18 @@ export class TextureAtlas {
       }
     });
 
+    // stone bricks
+    this.drawTile('stone_bricks', (ctx, x, y, s) => {
+      ctx.fillStyle = '#7A7A7A';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#636363';
+      ctx.fillRect(x, y + 7, s, 1);
+      ctx.fillRect(x + 7, y, 1, 7);
+      ctx.fillRect(x + 3, y + 8, 1, 8);
+      ctx.fillRect(x + 11, y + 8, 1, 8);
+      ctx.fillRect(x, y + 15, s, 1);
+    });
+
     // crafting table
     this.drawTile('crafting_top', (ctx, x, y, s) => {
       ctx.fillStyle = '#BC9862';

@@ -923,6 +923,32 @@ export class Game {
                     }
                     this.placeCooldown = 0.25;
                   }
+                } else if (blockId >= 41 && blockId <= 46) {
+                  // Slab placement
+                  const existingBlock = this.chunks.getBlock(placePos.x, placePos.y, placePos.z);
+                  if (existingBlock === blockId) {
+                    // Stacking: convert to full block
+                    const fullBlockMap: Record<number, number> = {
+                      41: 1,  // stone
+                      42: 4,  // cobblestone
+                      43: 5,  // oak_planks
+                      44: 19, // bricks
+                      45: 15, // sandstone
+                      46: 98, // stone_bricks (we'll use 1 for now)
+                    };
+                    const fullBlock = fullBlockMap[blockId] || 1;
+                    this.chunks.setBlock(placePos.x, placePos.y, placePos.z, fullBlock);
+                    this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, null);
+                  } else {
+                    this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
+                    const slabHalf = faceNormal.y > 0 ? 'bottom' : 'top';
+                    this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, { slabHalf });
+                  }
+                  this.sound.playBlockPlace();
+                  if (this.gameMode !== 'creative') {
+                    this.inventory.removeFromSlot(this.player.selectedSlot);
+                  }
+                  this.placeCooldown = 0.25;
                 } else {
                   this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
                   this.sound.playBlockPlace();

@@ -84,4 +84,10 @@ export const BlockRegistry = {
     }
     return undefined;
   },
+
+  getLuminance(id: number): number {
+    if (id === 0) return 0;
+    const b = blocks.get(id);
+    return b ? b.luminance : 0;
+  },
 };

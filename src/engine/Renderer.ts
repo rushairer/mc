@@ -9,7 +9,6 @@ export class Renderer {
   private ambientLight: THREE.AmbientLight;
   private sunLight: THREE.DirectionalLight;
   private moonLight: THREE.DirectionalLight;
-  private torchLights: THREE.PointLight[] = [];
 
   constructor(container: HTMLElement) {
     this.scene = new THREE.Scene();
@@ -26,7 +25,7 @@ export class Renderer {
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = false; // keep perf
+    this.renderer.shadowMap.enabled = false;
     container.appendChild(this.renderer.domElement);
 
     this.scene.fog = new THREE.Fog(0x87CEEB, this.fogNear, this.fogFar);
@@ -45,26 +44,7 @@ export class Renderer {
     this.moonLight.position.set(-100, 200, -100);
     this.scene.add(this.moonLight);
 
-    // Torch point light pool
-    for (let i = 0; i < 4; i++) {
-      const pl = new THREE.PointLight(0xffaa44, 0.0, 15);
-      this.scene.add(pl);
-      this.torchLights.push(pl);
-    }
-
     window.addEventListener('resize', this.onResize);
-  }
-
-  updateTorchLights(positions: THREE.Vector3[]) {
-    for (let i = 0; i < 4; i++) {
-      const light = this.torchLights[i];
-      if (positions[i]) {
-        light.position.copy(positions[i]);
-        light.intensity = 2.5;
-      } else {
-        light.intensity = 0;
-      }
-    }
   }
 
   render() {

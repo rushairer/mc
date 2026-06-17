@@ -11,22 +11,23 @@ export class ChunkManager {
   private worldGen: WorldGen;
   private atlas: TextureAtlas;
   private scene: THREE.Scene;
-  private material: THREE.MeshLambertMaterial;
-  private transparentMaterial: THREE.MeshLambertMaterial;
+  private material: THREE.MeshBasicMaterial;
+  private transparentMaterial: THREE.MeshBasicMaterial;
+  timeOfDay = 0.25;
 
   constructor(scene: THREE.Scene, atlas: TextureAtlas, seed: number) {
     this.scene = scene;
     this.atlas = atlas;
     this.worldGen = new WorldGen(seed);
 
-    this.material = new THREE.MeshLambertMaterial({
+    this.material = new THREE.MeshBasicMaterial({
       map: atlas.getTexture(),
       vertexColors: true,
       side: THREE.FrontSide,
       alphaTest: 0.1,
     });
 
-    this.transparentMaterial = new THREE.MeshLambertMaterial({
+    this.transparentMaterial = new THREE.MeshBasicMaterial({
       map: atlas.getTexture(),
       vertexColors: true,
       transparent: true,
@@ -59,6 +60,17 @@ export class ChunkManager {
     return chunk.getBlock(lx, wy, lz);
   }
 
+  getLight(wx: number, wy: number, wz: number): number {
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const chunk = this.getChunk(cx, cz);
+    if (!chunk) return 15;
+
+    let lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    let lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    return chunk.getLightAt(lx, wy, lz);
+  }
+
   setBlock(wx: number, wy: number, wz: number, id: number) {
     const cx = Math.floor(wx / CHUNK_SIZE);
     const cz = Math.floor(wz / CHUNK_SIZE);
@@ -75,7 +87,8 @@ export class ChunkManager {
     if (lz === 0) this.markDirty(cx, cz - 1);
     if (lz === CHUNK_SIZE - 1) this.markDirty(cx, cz + 1);
 
-    // Rebuild this chunk immediately
+    // Recompute light for this chunk and rebuild
+    this.computeChunkLight(chunk);
     this.rebuildChunkMesh(chunk);
   }
 
@@ -131,6 +144,7 @@ export class ChunkManager {
 
     chunk.data = new Uint8Array(data);
     chunk.restoreMetadata(metadata);
+    this.computeChunkLight(chunk);
     this.rebuildChunkMesh(chunk);
 
     this.markDirty(cx - 1, cz);
@@ -190,6 +204,7 @@ export class ChunkManager {
     const chunk = new Chunk(cx, cz);
     this.worldGen.generateChunk(chunk);
     this.chunks.set(ChunkManager.key(cx, cz), chunk);
+    this.computeChunkLight(chunk);
     this.rebuildChunkMesh(chunk);
 
     // Mark loaded neighbors as dirty so they rebuild and cull boundary faces
@@ -197,6 +212,15 @@ export class ChunkManager {
     this.markDirty(cx + 1, cz);
     this.markDirty(cx, cz - 1);
     this.markDirty(cx, cz + 1);
+  }
+
+  private computeChunkLight(chunk: Chunk) {
+    const getNeighborBlock = (wx: number, wy: number, wz: number): number => {
+      return this.getBlock(wx, wy, wz);
+    };
+
+    chunk.computeSkyLight(getNeighborBlock);
+    chunk.computeBlockLight();
   }
 
   private unloadChunk(key: string, chunk: Chunk) {
@@ -235,7 +259,13 @@ export class ChunkManager {
       return this.getBlock(wx, wy, wz);
     };
 
-    const { solidGeo, transparentGeo } = chunk.buildMesh(this.atlas, getNeighborBlock);
+    const getNeighborLight = (wx: number, wy: number, wz: number): number => {
+      return this.getLight(wx, wy, wz);
+    };
+
+    const { solidGeo, transparentGeo } = chunk.buildMesh(
+      this.atlas, getNeighborBlock, getNeighborLight, this.timeOfDay
+    );
 
     if (solidGeo.attributes.position) {
       chunk.mesh = new THREE.Mesh(solidGeo, this.material);

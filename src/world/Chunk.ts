@@ -6,9 +6,12 @@ import type { BlockMetadata, ChunkMeshData, SerializedBlockMetadata } from '../t
 export class Chunk {
   data: Uint8Array;
   metadata: Map<number, BlockMetadata> = new Map();
+  skyLight: Uint8Array;
+  blockLight: Uint8Array;
   mesh: THREE.Mesh | null = null;
   transparentMesh: THREE.Mesh | null = null;
   dirty = true;
+  lightDirty = true;
   cx: number;
   cz: number;
 
@@ -16,6 +19,8 @@ export class Chunk {
     this.cx = cx;
     this.cz = cz;
     this.data = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * WORLD_HEIGHT);
+    this.skyLight = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * WORLD_HEIGHT);
+    this.blockLight = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * WORLD_HEIGHT);
   }
 
   getIndex(x: number, y: number, z: number): number {
@@ -84,13 +89,156 @@ export class Chunk {
     this.dirty = true;
   }
 
+  // ─── Light computation ───
+
+  /**
+   * Compute sky light for this chunk. Sky light (15) propagates straight down
+   * from the top of the world through transparent blocks. Once it hits an
+   * opaque block, BFS spreads laterally with -1 per step.
+   */
+  computeSkyLight(
+    getNeighborBlock: (wx: number, wy: number, wz: number) => number
+  ) {
+    this.skyLight.fill(0);
+    const propagated: Array<[number, number, number]> = [];
+
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+      for (let z = 0; z < CHUNK_SIZE; z++) {
+        for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
+          const id = this.getBlock(x, y, z);
+          if (!BlockRegistry.isTransparent(id)) break;
+          this.skyLight[this.getIndex(x, y, z)] = 15;
+          propagated.push([x, y, z]);
+        }
+      }
+    }
+
+    // BFS for sideways spread from all lit positions
+    const dirs: [number, number, number][] = [
+      [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0],
+    ];
+    let head = 0;
+    while (head < propagated.length) {
+      const [cx, cy, cz] = propagated[head++];
+      const val = this.skyLight[this.getIndex(cx, cy, cz)];
+      if (val <= 1) continue;
+      for (const [dx, dy, dz] of dirs) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        const nz = cz + dz;
+        if (ny < 0 || ny >= WORLD_HEIGHT) continue;
+        if (nx >= 0 && nx < CHUNK_SIZE && nz >= 0 && nz < CHUNK_SIZE) {
+          const ni = this.getIndex(nx, ny, nz);
+          if (!BlockRegistry.isTransparent(this.data[ni])) continue;
+          if (this.skyLight[ni] < val - 1) {
+            this.skyLight[ni] = val - 1;
+            propagated.push([nx, ny, nz]);
+          }
+        }
+      }
+    }
+
+    this.lightDirty = false;
+  }
+
+  /**
+   * Compute block light from emissive blocks in this chunk.
+   * BFS from all luminance>0 sources, -1 per step.
+   * Returns positions that spilled to neighboring chunks so
+   * ChunkManager can propagate them further.
+   */
+  computeBlockLight(): Array<[number, number, number, number]> {
+    this.blockLight.fill(0);
+    const seeds: Array<[number, number, number]> = [];
+
+    for (let y = 0; y < WORLD_HEIGHT; y++) {
+      for (let z = 0; z < CHUNK_SIZE; z++) {
+        for (let x = 0; x < CHUNK_SIZE; x++) {
+          const id = this.getBlock(x, y, z);
+          if (id === 0) continue;
+          const lum = BlockRegistry.getLuminance(id);
+          if (lum > 0) {
+            this.blockLight[this.getIndex(x, y, z)] = lum;
+            seeds.push([x, y, z]);
+          }
+        }
+      }
+    }
+
+    this.floodFillBlockLight(seeds);
+    return this.getLightBorderSpillover();
+  }
+
+  private floodFillBlockLight(seeds: Array<[number, number, number]>) {
+    const dirs: [number, number, number][] = [
+      [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0],
+    ];
+    let head = 0;
+    while (head < seeds.length) {
+      const [cx, cy, cz] = seeds[head++];
+      const val = this.blockLight[this.getIndex(cx, cy, cz)];
+      if (val <= 1) continue;
+      for (const [dx, dy, dz] of dirs) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        const nz = cz + dz;
+        if (ny < 0 || ny >= WORLD_HEIGHT) continue;
+        if (nx >= 0 && nx < CHUNK_SIZE && nz >= 0 && nz < CHUNK_SIZE) {
+          const ni = this.getIndex(nx, ny, nz);
+          if (!BlockRegistry.isTransparent(this.data[ni])) continue;
+          if (this.blockLight[ni] < val - 1) {
+            this.blockLight[ni] = val - 1;
+            seeds.push([nx, ny, nz]);
+          }
+        }
+      }
+    }
+  }
+
+  /** Return border positions where block light spills into neighbors. */
+  private getLightBorderSpillover(): Array<[number, number, number, number]> {
+    const spillover: Array<[number, number, number, number]> = [];
+    const wx0 = this.cx * CHUNK_SIZE;
+    const wz0 = this.cz * CHUNK_SIZE;
+
+    for (let y = 0; y < WORLD_HEIGHT; y++) {
+      for (let i = 0; i < CHUNK_SIZE; i++) {
+        const blNegX = this.blockLight[this.getIndex(0, y, i)];
+        if (blNegX > 1) spillover.push([wx0 - 1, y, wz0 + i, blNegX - 1]);
+
+        const blPosX = this.blockLight[this.getIndex(CHUNK_SIZE - 1, y, i)];
+        if (blPosX > 1) spillover.push([wx0 + CHUNK_SIZE, y, wz0 + i, blPosX - 1]);
+
+        const blNegZ = this.blockLight[this.getIndex(i, y, 0)];
+        if (blNegZ > 1) spillover.push([wx0 + i, y, wz0 - 1, blNegZ - 1]);
+
+        const blPosZ = this.blockLight[this.getIndex(i, y, CHUNK_SIZE - 1)];
+        if (blPosZ > 1) spillover.push([wx0 + i, y, wz0 + CHUNK_SIZE, blPosZ - 1]);
+      }
+    }
+    return spillover;
+  }
+
+  /** Get combined light at local coords (max of sky + block light). */
+  getLightAt(x: number, y: number, z: number): number {
+    if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= WORLD_HEIGHT || z < 0 || z >= CHUNK_SIZE) {
+      return 15;
+    }
+    const idx = this.getIndex(x, y, z);
+    return Math.max(this.skyLight[idx], this.blockLight[idx]);
+  }
+
   /**
    * Build optimized mesh using greedy meshing.
    * getNeighborBlock: (wx, wy, wz) => blockId for cross-chunk lookups
+   * getNeighborLight: (wx, wy, wz) => combined light level 0-15
+   * timeOfDay: 0..1 day cycle for sky light brightness modulation
    */
   buildMesh(
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
-    getNeighborBlock: (wx: number, wy: number, wz: number) => number
+    getNeighborBlock: (wx: number, wy: number, wz: number) => number,
+    getNeighborLight: (wx: number, wy: number, wz: number) => number,
+    timeOfDay: number = 0.25
   ): { solidGeo: THREE.BufferGeometry; transparentGeo: THREE.BufferGeometry } {
     const solid: ChunkMeshData = { positions: [], normals: [], uvs: [], indices: [], colors: [] };
     const transparent: ChunkMeshData = { positions: [], normals: [], uvs: [], indices: [], colors: [] };
@@ -115,17 +263,20 @@ export class Chunk {
           const target = isTranslucent ? transparent : solid;
 
           if (id === 30) {
-            this.addTorch(target, x, y, z, atlas);
+            const light = this.getLightAt(x, y, z);
+            this.addTorch(target, x, y, z, atlas, light);
             continue;
           }
 
           if (id === 37 || id === 38) {
-            this.addDoor(target, x, y, z, id, meta, atlas);
+            const light = this.getLightAt(x, y, z);
+            this.addDoor(target, x, y, z, id, meta, atlas, light);
             continue;
           }
 
           if (id === 39 || id === 40) {
-            this.addTrapdoor(target, x, y, z, id, meta, atlas);
+            const light = this.getLightAt(x, y, z);
+            this.addTrapdoor(target, x, y, z, id, meta, atlas, light);
             continue;
           }
 
@@ -188,7 +339,17 @@ export class Chunk {
               if (depth < 0) depth = 0;
             }
 
-            this.addFace(target, x, y, z, face, id, atlas, depth);
+            // Get light at the neighbor (face-adjacent) position
+            let faceLight: number;
+            if (nx < 0 || nx >= CHUNK_SIZE || nz < 0 || nz >= CHUNK_SIZE) {
+              faceLight = getNeighborLight(worldX + nx, ny, worldZ + nz);
+            } else if (ny < 0 || ny >= WORLD_HEIGHT) {
+              faceLight = ny >= WORLD_HEIGHT ? 15 : 0;
+            } else {
+              faceLight = this.getLightAt(nx, ny, nz);
+            }
+
+            this.addFace(target, x, y, z, face, id, atlas, depth, faceLight, timeOfDay);
           }
         }
       }
@@ -206,7 +367,9 @@ export class Chunk {
     face: number,
     blockId: number,
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
-    waterDepth: number = 0
+    waterDepth: number = 0,
+    lightLevel: number = 15,
+    timeOfDay: number = 0.25
   ) {
     const texKey = BlockRegistry.getTextureForFace(blockId, face);
     const uv = atlas.getUV(texKey);
@@ -233,10 +396,18 @@ export class Chunk {
       data.uvs.push(uv.u0, uv.v1);
     }
 
-    // face brightness based on face direction
-    let brightness = FACE_BRIGHTNESS[face];
+    // Compute brightness from light level + face direction shading
+    const sunAngle = timeOfDay * Math.PI * 2;
+    const sunBrightness = Math.max(0.1, Math.sin(sunAngle));
+    const skyBrightness = (lightLevel / 15) * sunBrightness;
+    const blockBrightness = lightLevel / 15;
+    // Use max of sky-scaled and block light
+    const lightBrightness = Math.max(skyBrightness, blockBrightness);
+    let brightness = lightBrightness * FACE_BRIGHTNESS[face];
+    // Clamp minimum so nothing is completely black
+    brightness = Math.max(0.04, Math.min(1.0, brightness));
+
     if (waterDepth > 0 && blockId !== 13) {
-      // Exponential attenuation of light in water
       const tint = Math.max(0.12, Math.pow(0.82, waterDepth));
       brightness *= tint;
     }
@@ -256,10 +427,11 @@ export class Chunk {
   private addTorch(
     data: ChunkMeshData,
     x: number, y: number, z: number,
-    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } }
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
+    lightLevel: number = 14
   ) {
     const uv = atlas.getUV('torch');
-    const brightness = 1.0; // Torches glow fully
+    const brightness = Math.max(0.2, lightLevel / 15);
 
     // Plane 1 - Front Side
     this.addTorchQuad(
@@ -315,7 +487,8 @@ export class Chunk {
     x: number, y: number, z: number,
     blockId: number,
     meta: BlockMetadata | undefined,
-    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } }
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
+    lightLevel: number = 15
   ) {
     const thickness = 0.125;
     const facing = meta?.facing ?? 'north';
@@ -358,7 +531,7 @@ export class Chunk {
     this.addCuboid(data, x, y, z, blockId, atlas, bounds, {
       top: !isLower || !this.isDoorId(this.getBlock(x, y + 1, z)),
       bottom: isLower || !this.isDoorId(this.getBlock(x, y - 1, z)),
-    }, undefined, hinge === 'right');
+    }, undefined, hinge === 'right', lightLevel);
   }
 
   private addTrapdoor(
@@ -366,7 +539,8 @@ export class Chunk {
     x: number, y: number, z: number,
     blockId: number,
     meta: BlockMetadata | undefined,
-    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } }
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
+    lightLevel: number = 15
   ) {
     const thickness = 0.1875;
     const facing = meta?.facing ?? 'north';
@@ -444,7 +618,7 @@ export class Chunk {
       }
     }
  
-    this.addCuboid(data, x, y, z, blockId, atlas, bounds, {}, customTextureKeys);
+    this.addCuboid(data, x, y, z, blockId, atlas, bounds, {}, customTextureKeys, false, lightLevel);
   }
 
   private addCuboid(
@@ -455,7 +629,8 @@ export class Chunk {
     bounds: CuboidBounds,
     faceOverrides: Partial<Record<'top' | 'bottom', boolean>> = {},
     customTextureKeys?: string[],
-    mirrorHorizontal = false
+    mirrorHorizontal = false,
+    lightLevel: number = 15
   ) {
     const faces = getCuboidFaces(bounds);
     const shouldDraw = {
@@ -466,6 +641,7 @@ export class Chunk {
       front: true,
       back: true,
     };
+    const lightBrightness = Math.max(0.04, lightLevel / 15);
 
     faces.forEach((faceDef, faceIndex) => {
       const faceName = FACE_NAMES[faceIndex];
@@ -478,7 +654,7 @@ export class Chunk {
       for (const [vx, vy, vz] of faceDef.verts) {
         data.positions.push(x + vx, y + vy, z + vz);
         data.normals.push(...faceDef.normal);
-        const brightness = FACE_BRIGHTNESS[faceIndex];
+        const brightness = Math.max(0.04, FACE_BRIGHTNESS[faceIndex] * lightBrightness);
         data.colors.push(brightness, brightness, brightness);
       }
 

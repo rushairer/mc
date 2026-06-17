@@ -91,12 +91,12 @@ export class Game {
   private eatingTimer = 0;
   private chewSoundTimer = 0;
   private stepTimer = 0;
-  private lightScanTimer = 0;
   private perspectiveMode: 'first' | 'third' = 'first';
   private container: HTMLElement;
   private fpArmGroup!: THREE.Group;
   private fpLastHeldItemId = -1;
   private openChestPos: THREE.Vector3 | null = null;
+  private lastLightRebuildTime = -1;
 
   activeSlot: string = 'world_1';
 
@@ -437,6 +437,15 @@ export class Game {
     // Game time (day/night cycle)
     this.gameTime = (this.gameTime + dt / DAY_LENGTH) % 1;
     this.renderer.setTimeOfDay(this.gameTime);
+    this.chunks.timeOfDay = this.gameTime;
+
+    // Rebuild meshes when sun position changes enough to affect brightness
+    if (this.lastLightRebuildTime < 0 || Math.abs(this.gameTime - this.lastLightRebuildTime) > 0.005) {
+      this.lastLightRebuildTime = this.gameTime;
+      for (const chunk of this.chunks.chunks.values()) {
+        chunk.dirty = true;
+      }
+    }
 
     // Underwater fog and background override
     const headBlock = this.chunks.getBlock(
@@ -978,13 +987,6 @@ export class Game {
 
     // Weather
     this.weather.update(dt, this.player.position, isNight);
-
-    // Dynamic lighting
-    this.lightScanTimer += dt;
-    if (this.lightScanTimer >= 0.15) {
-      this.lightScanTimer = 0;
-      this.updateDynamicLighting();
-    }
 
     this.renderer.render();
     this.notifyState();
@@ -1646,30 +1648,6 @@ export class Game {
         }
       }
     }
-  }
-
-  private updateDynamicLighting() {
-    const lightPositions: THREE.Vector3[] = [];
-    const px = Math.floor(this.player.position.x);
-    const py = Math.floor(this.player.position.y);
-    const pz = Math.floor(this.player.position.z);
-    const radius = 12;
-
-    for (let dx = -radius; dx <= radius; dx++) {
-      for (let dy = -radius; dy <= radius; dy++) {
-        for (let dz = -radius; dz <= radius; dz++) {
-          const blockId = this.chunks.getBlock(px + dx, py + dy, pz + dz);
-          // Torch (30) or Lava (14)
-          if (blockId === 30 || blockId === 14) {
-            lightPositions.push(new THREE.Vector3(px + dx + 0.5, py + dy + 0.5, pz + dz + 0.5));
-          }
-        }
-      }
-    }
-
-    // Sort by distance to player
-    lightPositions.sort((a, b) => a.distanceToSquared(this.player.position) - b.distanceToSquared(this.player.position));
-    this.renderer.updateTorchLights(lightPositions.slice(0, 4));
   }
 
   getItemIconStyle(itemId: number, iconSize: number = 32): any {

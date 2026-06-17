@@ -410,16 +410,18 @@ export class TextureAtlas {
     });
 
     this.drawTile('oak_door_open', (ctx, x, y, s) => {
-      ctx.clearRect(x, y, s, s);
       ctx.fillStyle = '#8B5A2B';
-      ctx.fillRect(x + 6, y, 5, s);
+      ctx.fillRect(x, y, s, s);
       ctx.fillStyle = '#A7773E';
-      ctx.fillRect(x + 7, y + 2, 3, 5);
-      ctx.fillRect(x + 7, y + 9, 3, 5);
+      ctx.fillRect(x + 2, y + 2, 5, 5);
+      ctx.fillRect(x + 9, y + 2, 5, 5);
+      ctx.fillRect(x + 2, y + 9, 5, 5);
+      ctx.fillRect(x + 9, y + 9, 5, 5);
       ctx.strokeStyle = '#4C2F14';
-      ctx.strokeRect(x + 6.5, y + 0.5, 4, s - 1);
+      ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+      ctx.strokeRect(x + 7.5, y + 1, 1, s - 2);
       ctx.fillStyle = '#D6B15C';
-      ctx.fillRect(x + 8, y + 7, 2, 2);
+      ctx.fillRect(x + 2, y + 7, 2, 2);
     });
 
     // oak trapdoor
@@ -438,18 +440,18 @@ export class TextureAtlas {
     });
 
     this.drawTile('oak_trapdoor_open', (ctx, x, y, s) => {
-      ctx.clearRect(x, y, s, s);
       ctx.fillStyle = '#8B5A2B';
-      ctx.fillRect(x + 3, y, 10, s);
+      ctx.fillRect(x, y, s, s);
       ctx.fillStyle = '#A7773E';
-      ctx.fillRect(x + 5, y + 2, 3, 5);
-      ctx.fillRect(x + 9, y + 2, 3, 5);
-      ctx.fillRect(x + 5, y + 9, 3, 5);
-      ctx.fillRect(x + 9, y + 9, 3, 5);
+      ctx.fillRect(x + 2, y + 2, 12, 3);
+      ctx.fillRect(x + 2, y + 7, 12, 2);
+      ctx.fillRect(x + 2, y + 11, 12, 3);
       ctx.strokeStyle = '#4C2F14';
-      ctx.strokeRect(x + 3.5, y + 0.5, 9, s - 1);
+      ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+      ctx.strokeRect(x + 5.5, y + 1, 1, s - 2);
+      ctx.strokeRect(x + 10.5, y + 1, 1, s - 2);
       ctx.fillStyle = '#D6B15C';
-      ctx.fillRect(x + 7, y + 7, 2, 2);
+      ctx.fillRect(x + 2, y + 7, 2, 2);
     });
 
     // furnace

@@ -1188,6 +1188,53 @@ export class Game {
     return forward.z > 0 ? 'south' : 'north';
   }
 
+  private getDoorNeighborPosition(x: number, z: number, facing: BlockFacing, side: 'left' | 'right') {
+    switch (facing) {
+      case 'north':
+        return side === 'left' ? { x: x - 1, z } : { x: x + 1, z };
+      case 'south':
+        return side === 'left' ? { x: x + 1, z } : { x: x - 1, z };
+      case 'east':
+        return side === 'left' ? { x, z: z - 1 } : { x, z: z + 1 };
+      case 'west':
+        return side === 'left' ? { x, z: z + 1 } : { x, z: z - 1 };
+      default:
+        return side === 'left' ? { x: x - 1, z } : { x: x + 1, z };
+    }
+  }
+
+  private getDoorHinge(x: number, y: number, z: number, facing: BlockFacing): 'left' | 'right' {
+    const leftNeighbor = this.getDoorNeighborPosition(x, z, facing, 'left');
+    const rightNeighbor = this.getDoorNeighborPosition(x, z, facing, 'right');
+
+    const leftMeta = this.chunks.getBlockMeta(leftNeighbor.x, y, leftNeighbor.z);
+    const rightMeta = this.chunks.getBlockMeta(rightNeighbor.x, y, rightNeighbor.z);
+    const leftBlock = this.chunks.getBlock(leftNeighbor.x, y, leftNeighbor.z);
+    const rightBlock = this.chunks.getBlock(rightNeighbor.x, y, rightNeighbor.z);
+
+    if (this.isDoorBlock(leftBlock) && leftMeta?.facing === facing) {
+      return 'right';
+    }
+    if (this.isDoorBlock(rightBlock) && rightMeta?.facing === facing) {
+      return 'left';
+    }
+
+    const centerX = x + 0.5;
+    const centerZ = z + 0.5;
+    switch (facing) {
+      case 'north':
+        return this.player.position.x < centerX ? 'left' : 'right';
+      case 'south':
+        return this.player.position.x > centerX ? 'left' : 'right';
+      case 'east':
+        return this.player.position.z < centerZ ? 'left' : 'right';
+      case 'west':
+        return this.player.position.z > centerZ ? 'left' : 'right';
+      default:
+        return 'left';
+    }
+  }
+
   private placeDoor(x: number, y: number, z: number): boolean {
     if (y < 0 || y >= 254) return false;
     if (this.chunks.getBlock(x, y, z) !== 0 || this.chunks.getBlock(x, y + 1, z) !== 0) {
@@ -1202,10 +1249,12 @@ export class Game {
     }
 
     const facing = this.getPlayerHorizontalFacing();
+    const hinge = this.getDoorHinge(x, y, z, facing);
     this.chunks.setBlock(x, y, z, 37);
     this.chunks.setBlockMeta(x, y, z, {
       facing,
       doorHalf: 'lower',
+      hinge,
       open: false,
     }, true);
 
@@ -1213,6 +1262,7 @@ export class Game {
     this.chunks.setBlockMeta(x, y + 1, z, {
       facing,
       doorHalf: 'upper',
+      hinge,
       open: false,
     }, true);
 
@@ -1245,6 +1295,7 @@ export class Game {
     const upperMeta = this.chunks.getBlockMeta(base.x, base.y + 1, base.z);
     const open = !(lowerMeta?.open ?? upperMeta?.open ?? false);
     const facing = lowerMeta?.facing ?? upperMeta?.facing ?? 'north';
+    const hinge = lowerMeta?.hinge ?? upperMeta?.hinge ?? 'left';
     const blockId = open ? 38 : 37;
 
     this.chunks.setBlock(base.x, base.y, base.z, blockId);
@@ -1252,6 +1303,7 @@ export class Game {
       ...lowerMeta,
       facing,
       doorHalf: 'lower',
+      hinge,
       open,
     }, true);
 
@@ -1261,6 +1313,7 @@ export class Game {
         ...upperMeta,
         facing,
         doorHalf: 'upper',
+        hinge,
         open,
       }, true);
     }

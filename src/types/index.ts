@@ -22,6 +22,7 @@ export interface BlockMetadata {
   containerType?: 'chest';
   inventory?: (ItemStack | null)[];
   doorHalf?: 'lower' | 'upper';
+  hinge?: 'left' | 'right';
   open?: boolean;
   powered?: boolean;
   signal?: number;

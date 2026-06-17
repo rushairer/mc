@@ -311,6 +311,7 @@ export class Chunk {
   ) {
     const thickness = 0.125;
     const facing = meta?.facing ?? 'north';
+    const hinge = meta?.hinge ?? 'left';
     const isOpen = meta?.open ?? false;
     const isLower = meta?.doorHalf !== 'upper';
 
@@ -322,16 +323,24 @@ export class Chunk {
     } else {
       switch (facing) {
         case 'north':
-          bounds = { minX: 1 - thickness, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
+          bounds = hinge === 'left'
+            ? { minX: 0, maxX: thickness, minY: 0, maxY: 1, minZ: 0, maxZ: 1 }
+            : { minX: 1 - thickness, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
           break;
         case 'south':
-          bounds = { minX: 0, maxX: thickness, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
+          bounds = hinge === 'left'
+            ? { minX: 1 - thickness, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 1 }
+            : { minX: 0, maxX: thickness, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
           break;
         case 'east':
-          bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: thickness };
+          bounds = hinge === 'left'
+            ? { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: thickness }
+            : { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 1 - thickness, maxZ: 1 };
           break;
         case 'west':
-          bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 1 - thickness, maxZ: 1 };
+          bounds = hinge === 'left'
+            ? { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 1 - thickness, maxZ: 1 }
+            : { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: thickness };
           break;
         default:
           bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0.4375, maxZ: 0.5625 };

@@ -3,6 +3,7 @@ import { Game, GameState, type UIType } from './engine/Game';
 import { HUD } from './ui/HUD';
 import { DebugOverlay } from './ui/DebugOverlay';
 import { InventoryUI } from './ui/InventoryUI';
+import { ChatBar } from './ui/ChatBar';
 import { FurnaceUI } from './ui/FurnaceUI';
 import { CraftingTableUI } from './ui/CraftingTableUI';
 import { ChestUI } from './ui/ChestUI';
@@ -32,6 +33,8 @@ const initialGameState: GameState = {
   isUnderwater: false,
   gameMode: 'survival',
   activeSlot: 'world_1',
+  chatOpen: false,
+  chatMessages: [],
 };
 
 export const App: React.FC = () => {
@@ -296,6 +299,11 @@ export const App: React.FC = () => {
 
       <HUD state={gameState} getItemIconStyle={getItemIconStyle} />
       <DebugOverlay state={gameState} visible={showDebug} />
+      <ChatBar
+        open={gameState.chatOpen}
+        messages={gameState.chatMessages}
+        onSubmit={(msg) => gameRef.current?.submitChat(msg)}
+      />
 
       {/* Crosshair (only when no UI open) */}
       {gameState.openUI === 'none' && (

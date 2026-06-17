@@ -17,6 +17,7 @@ import { SoundSystem } from '../systems/SoundSystem';
 import { SaveSystem, type SaveData } from '../systems/SaveSystem';
 import { RedstoneSystem } from '../systems/RedstoneSystem';
 import { ProjectileSystem } from '../systems/ProjectileSystem';
+import { CommandSystem } from '../systems/CommandSystem';
 import { CHUNK_SIZE } from '../constants';
 import type { BlockFacing, BlockMetadata, ItemStack } from '../types';
 
@@ -45,6 +46,8 @@ export interface GameState {
   isUnderwater: boolean;
   gameMode: 'survival' | 'creative';
   activeSlot: string;
+  chatOpen: boolean;
+  chatMessages: string[];
 }
 
 export type GameStateListener = (state: GameState) => void;
@@ -69,6 +72,7 @@ export class Game {
   private sound: SoundSystem;
   private redstone: RedstoneSystem;
   private projectiles: ProjectileSystem;
+  private commands: CommandSystem;
   private clock: THREE.Clock;
   running = false;
   private stateListeners: GameStateListener[] = [];
@@ -121,6 +125,22 @@ export class Game {
     this.sound = new SoundSystem();
     this.redstone = new RedstoneSystem();
     this.projectiles = new ProjectileSystem(this.renderer.scene);
+    this.commands = new CommandSystem({
+      getPlayerPosition: () => ({
+        x: this.player.position.x,
+        y: this.player.position.y,
+        z: this.player.position.z,
+      }),
+      setPlayerPosition: (x, y, z) => {
+        this.player.position.set(x, y, z);
+        this.player.velocity.set(0, 0, 0);
+      },
+      addItem: (id, count) => this.inventory.addItem(id, count),
+      setGameMode: (mode) => { this.gameMode = mode; },
+      setTimeOfDay: (t) => { this.gameTime = t; },
+      setWeather: (_type) => { /* TODO: add setWeatherType to WeatherSystem */ },
+      getGameMode: () => this.gameMode,
+    });
 
     // Default hotbar (Starter Kit)
     this.inventory.setSlot(0, { id: 130, count: 1 });  // Stone Sword
@@ -588,6 +608,14 @@ export class Game {
 
     if (this.input.isMouseDown(0) || this.input.isMouseDown(2)) {
       this.player.startSwing();
+    }
+
+    // T key → open chat/command
+    if (this.input.isKeyDown('t') && !this.chatOpen) {
+      this.chatOpen = true;
+      this.input.keys.delete('t');
+      document.exitPointerLock();
+      this.notifyState();
     }
 
     // F key → fly toggle (creative mode only)
@@ -1187,6 +1215,8 @@ export class Game {
 
   private tntFuses: { position: THREE.Vector3; timer: number }[] = [];
   private bedSpawnPoint: THREE.Vector3 | null = null;
+  chatOpen = false;
+  chatMessages: string[] = [];
 
   private checkFluidAdjacency(x: number, y: number, z: number) {
     const dirs: [number, number, number][] = [[0,1,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]];
@@ -1280,6 +1310,22 @@ export class Game {
     }
   }
 
+  submitChat(message: string) {
+    if (message.startsWith('/')) {
+      const result = this.commands.execute(message);
+      this.chatMessages.push(result.message);
+    } else {
+      this.chatMessages.push(message);
+    }
+    // Keep only last 50 messages
+    if (this.chatMessages.length > 50) {
+      this.chatMessages = this.chatMessages.slice(-50);
+    }
+    this.chatOpen = false;
+    this.input.requestLock();
+    this.notifyState();
+  }
+
   private notifyState() {
     this.player.updateArmorMesh(this.inventory.armor);
     this.updateFpArmArmor();
@@ -1324,6 +1370,8 @@ export class Game {
       isUnderwater,
       gameMode: this.gameMode,
       activeSlot: this.activeSlot,
+      chatOpen: this.chatOpen,
+      chatMessages: this.chatMessages,
     };
 
     for (const listener of this.stateListeners) {

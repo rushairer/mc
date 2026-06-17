@@ -422,6 +422,36 @@ export class TextureAtlas {
       ctx.fillRect(x + 8, y + 7, 2, 2);
     });
 
+    // oak trapdoor
+    this.drawTile('oak_trapdoor_closed', (ctx, x, y, s) => {
+      ctx.fillStyle = '#8B5A2B';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#A7773E';
+      ctx.fillRect(x + 2, y + 2, 5, 5);
+      ctx.fillRect(x + 9, y + 2, 5, 5);
+      ctx.fillRect(x + 2, y + 9, 5, 5);
+      ctx.fillRect(x + 9, y + 9, 5, 5);
+      ctx.strokeStyle = '#4C2F14';
+      ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+      ctx.fillStyle = '#D6B15C';
+      ctx.fillRect(x + 7, y + 7, 2, 2);
+    });
+
+    this.drawTile('oak_trapdoor_open', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#8B5A2B';
+      ctx.fillRect(x + 3, y, 10, s);
+      ctx.fillStyle = '#A7773E';
+      ctx.fillRect(x + 5, y + 2, 3, 5);
+      ctx.fillRect(x + 9, y + 2, 3, 5);
+      ctx.fillRect(x + 5, y + 9, 3, 5);
+      ctx.fillRect(x + 9, y + 9, 3, 5);
+      ctx.strokeStyle = '#4C2F14';
+      ctx.strokeRect(x + 3.5, y + 0.5, 9, s - 1);
+      ctx.fillStyle = '#D6B15C';
+      ctx.fillRect(x + 7, y + 7, 2, 2);
+    });
+
     // furnace
     this.drawTile('furnace_top', (ctx, x, y, s) => {
       ctx.fillStyle = '#888888';
@@ -867,6 +897,208 @@ export class TextureAtlas {
       drawArmor(`${mat}_leggings`, 'leggings', mat);
       drawArmor(`${mat}_boots`, 'boots', mat);
     }
+
+    // ─── 3D Block Icons Generator ───
+    const drawBlockIcon = (key: string, topColor: string, leftColor: string, rightColor: string, drawOverlay?: (ctx: CanvasRenderingContext2D, x: number, y: number, s: number) => void) => {
+      this.drawTile(`${key}_icon`, (ctx, x, y, s) => {
+        ctx.clearRect(x, y, s, s);
+
+        // Draw top face (rhombus)
+        ctx.beginPath();
+        ctx.moveTo(x + 8, y + 1);
+        ctx.lineTo(x + 14, y + 4);
+        ctx.lineTo(x + 8, y + 7);
+        ctx.lineTo(x + 2, y + 4);
+        ctx.closePath();
+        ctx.fillStyle = topColor;
+        ctx.fill();
+
+        // Draw left face
+        ctx.beginPath();
+        ctx.moveTo(x + 2, y + 4);
+        ctx.lineTo(x + 8, y + 7);
+        ctx.lineTo(x + 8, y + 14);
+        ctx.lineTo(x + 2, y + 11);
+        ctx.closePath();
+        ctx.fillStyle = leftColor;
+        ctx.fill();
+
+        // Draw right face
+        ctx.beginPath();
+        ctx.moveTo(x + 8, y + 7);
+        ctx.lineTo(x + 14, y + 4);
+        ctx.lineTo(x + 14, y + 11);
+        ctx.lineTo(x + 8, y + 14);
+        ctx.closePath();
+        ctx.fillStyle = rightColor;
+        ctx.fill();
+
+        if (drawOverlay) {
+          drawOverlay(ctx, x, y, s);
+        }
+      });
+    };
+
+    // Solid blocks
+    drawBlockIcon('stone', '#909090', '#7a7a7a', '#686868');
+    drawBlockIcon('dirt', '#8f6547', '#7b573d', '#684a34');
+    drawBlockIcon('grass_block', '#5e8f33', '#7b573d', '#684a34', (ctx, x, y, s) => {
+      // Draw hanging grass overlay
+      ctx.fillStyle = '#5e8f33';
+      ctx.beginPath();
+      ctx.moveTo(x + 2, y + 4);
+      ctx.lineTo(x + 8, y + 7);
+      ctx.lineTo(x + 8, y + 9);
+      ctx.lineTo(x + 6, y + 8);
+      ctx.lineTo(x + 5, y + 9);
+      ctx.lineTo(x + 4, y + 8);
+      ctx.lineTo(x + 2, y + 6);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(x + 8, y + 7);
+      ctx.lineTo(x + 14, y + 4);
+      ctx.lineTo(x + 14, y + 6);
+      ctx.lineTo(x + 12, y + 8);
+      ctx.lineTo(x + 11, y + 9);
+      ctx.lineTo(x + 10, y + 8);
+      ctx.lineTo(x + 8, y + 9);
+      ctx.closePath();
+      ctx.fill();
+    });
+
+    drawBlockIcon('cobblestone', '#888888', '#737373', '#626262', (ctx, x, y, s) => {
+      // Cracks
+      ctx.fillStyle = '#444444';
+      ctx.fillRect(x + 5, y + 3, 2, 1);
+      ctx.fillRect(x + 9, y + 4, 1, 1);
+      ctx.fillRect(x + 3, y + 7, 2, 1);
+      ctx.fillRect(x + 5, y + 10, 1, 2);
+      ctx.fillRect(x + 10, y + 8, 2, 1);
+      ctx.fillRect(x + 12, y + 6, 1, 2);
+    });
+
+    drawBlockIcon('oak_planks', '#c49a65', '#a88354', '#8e6e44', (ctx, x, y, s) => {
+      ctx.strokeStyle = '#614324';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 2, y + 7.5);
+      ctx.lineTo(x + 8, y + 10.5);
+      ctx.moveTo(x + 2, y + 9.5);
+      ctx.lineTo(x + 8, y + 12.5);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(x + 8, y + 10.5);
+      ctx.lineTo(x + 14, y + 7.5);
+      ctx.moveTo(x + 8, y + 12.5);
+      ctx.lineTo(x + 14, y + 9.5);
+      ctx.stroke();
+    });
+
+    drawBlockIcon('oak_log', '#d3b283', '#7d5e3c', '#664c30', (ctx, x, y, s) => {
+      ctx.strokeStyle = '#7d5e3c';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 8, y + 3);
+      ctx.lineTo(x + 11, y + 4.5);
+      ctx.lineTo(x + 8, y + 6);
+      ctx.lineTo(x + 5, y + 4.5);
+      ctx.closePath();
+      ctx.stroke();
+    });
+
+    drawBlockIcon('oak_leaves', '#407020', '#35601a', '#2c5015');
+    drawBlockIcon('sand', '#dec192', '#bf9e71', '#a18357');
+    drawBlockIcon('gravel', '#998d8d', '#857878', '#706464');
+
+    // Ores
+    const drawOreIcon = (name: string, spotCol: string) => {
+      drawBlockIcon(name, '#909090', '#7a7a7a', '#686868', (ctx, x, y, s) => {
+        ctx.fillStyle = spotCol;
+        ctx.fillRect(x + 5, y + 3, 2, 2);
+        ctx.fillRect(x + 3, y + 8, 2, 2);
+        ctx.fillRect(x + 10, y + 8, 2, 2);
+      });
+    };
+    drawOreIcon('gold_ore', '#ffcc00');
+    drawOreIcon('iron_ore', '#e2a97f');
+    drawOreIcon('coal_ore', '#222222');
+    drawOreIcon('diamond_ore', '#5decf5');
+
+    drawBlockIcon('sandstone', '#dbc291', '#bf9e71', '#a18357');
+    drawBlockIcon('white_wool', '#eeeeee', '#dddddd', '#cccccc');
+    drawBlockIcon('gold_block', '#fede3a', '#dbbd27', '#bda014');
+    drawBlockIcon('iron_block', '#e2e2e2', '#c2c2c2', '#a2a2a2');
+    drawBlockIcon('diamond_block', '#6bf3f9', '#4dd2d8', '#2db2b8');
+    drawBlockIcon('bricks', '#a0584c', '#8a483e', '#753930');
+    drawBlockIcon('obsidian', '#1a0d2e', '#130922', '#0c0517');
+
+    drawBlockIcon('bookshelf', '#c49a65', '#a88354', '#8e6e44', (ctx, x, y, s) => {
+      ctx.fillStyle = '#b32b2b'; ctx.fillRect(x + 3, y + 7, 2, 3);
+      ctx.fillStyle = '#2b78b3'; ctx.fillRect(x + 10, y + 6, 2, 3);
+      ctx.fillStyle = '#51b32b'; ctx.fillRect(x + 5, y + 8, 2, 3);
+    });
+
+    drawBlockIcon('tnt', '#e63222', '#c72418', '#a81c10', (ctx, x, y, s) => {
+      ctx.fillStyle = '#eeeeee';
+      ctx.beginPath();
+      ctx.moveTo(x + 2, y + 7);
+      ctx.lineTo(x + 8, y + 10);
+      ctx.lineTo(x + 8, y + 12);
+      ctx.lineTo(x + 2, y + 9);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(x + 8, y + 10);
+      ctx.lineTo(x + 14, y + 7);
+      ctx.lineTo(x + 14, y + 9);
+      ctx.lineTo(x + 8, y + 12);
+      ctx.closePath();
+      ctx.fill();
+    });
+
+    drawBlockIcon('crafting_table', '#b58550', '#835a34', '#664525');
+    drawBlockIcon('furnace', '#6b6b6b', '#5c5c5c', '#4d4d4d', (ctx, x, y, s) => {
+      ctx.fillStyle = '#222222';
+      ctx.beginPath();
+      ctx.moveTo(x + 3, y + 8);
+      ctx.lineTo(x + 7, y + 10);
+      ctx.lineTo(x + 7, y + 13);
+      ctx.lineTo(x + 3, y + 11);
+      ctx.closePath();
+      ctx.fill();
+    });
+
+    drawBlockIcon('glass', 'rgba(230, 245, 255, 0.4)', 'rgba(200, 230, 255, 0.3)', 'rgba(180, 210, 255, 0.25)', (ctx, x, y, s) => {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 5, y + 3); ctx.lineTo(x + 7, y + 4);
+      ctx.moveTo(x + 3, y + 7); ctx.lineTo(x + 5, y + 8);
+      ctx.stroke();
+    });
+
+    drawBlockIcon('snow_block', '#ffffff', '#f0f4f8', '#e2ebf4');
+    drawBlockIcon('ice', 'rgba(150, 220, 255, 0.7)', 'rgba(130, 200, 255, 0.6)', 'rgba(110, 180, 255, 0.5)');
+    drawBlockIcon('clay', '#a0a7b5', '#8f95a3', '#7e8391');
+    drawBlockIcon('chest', '#bf7f30', '#a16520', '#855014', (ctx, x, y, s) => {
+      ctx.fillStyle = '#dddddd';
+      ctx.fillRect(x + 7, y + 7, 2, 2);
+    });
+
+    drawBlockIcon('piston', '#a88354', '#777777', '#626262', (ctx, x, y, s) => {
+      ctx.fillStyle = '#a88354';
+      ctx.beginPath();
+      ctx.moveTo(x + 8, y + 1);
+      ctx.lineTo(x + 14, y + 4);
+      ctx.lineTo(x + 8, y + 7);
+      ctx.lineTo(x + 2, y + 4);
+      ctx.closePath();
+      ctx.fill();
+    });
   }
 
   private drawOreTile(key: string, spotColor: string) {

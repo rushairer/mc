@@ -274,8 +274,8 @@ export const App: React.FC = () => {
               <div><b>F</b> — Toggle Fly</div>
               <div><b>Mouse</b> — Look around</div>
               <div><b>Left Click</b> — Break block / Attack mob (hold)</div>
-              <div><b>Right Click</b> — Place block / Open furnace / Eat food (hold)</div>
-              <div><b>Scroll / 1-9</b> — Select hotbar slot</div>
+              <div><b>Right Click</b> — Place block / Open container (Crafting Table, Furnace, Chest) / Eat food (hold)</div>
+              <div><b>1-9</b> — Select hotbar slot</div>
               <div><b>E</b> — Inventory & Crafting</div>
               <div><b>F5</b> — Toggle perspective</div>
               <div><b>F3</b> — Toggle debug overlay</div>

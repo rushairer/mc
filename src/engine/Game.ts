@@ -115,7 +115,7 @@ export class Game {
     this.inventory.setSlot(2, { id: 5, count: 64 });
     this.inventory.setSlot(3, { id: 6, count: 64 });
     this.inventory.setSlot(4, { id: 4, count: 64 });
-    this.inventory.setSlot(5, { id: 8, count: 64 });
+    this.inventory.setSlot(5, { id: 39, count: 64 });
     this.inventory.setSlot(6, { id: 30, count: 64 });
     this.inventory.setSlot(7, { id: 37, count: 64 });
     this.inventory.setSlot(8, { id: 36, count: 64 });
@@ -224,7 +224,7 @@ export class Game {
           // Align tool handle inside hand, point diagonal forward/up-left, tilted at 60 deg (lowered to y = -0.56)
           slot.position.set(0.02, -0.56, -0.05);
           slot.rotation.set(0, 0, 0);
-          mesh.rotation.set(Math.PI / 3, -Math.PI / 5, 0); // First person custom rotation (60 deg tilt forward)
+          mesh.rotation.set(-Math.PI / 4, 0, Math.PI / 4); // First person custom rotation (tilted inward towards center crosshair)
         } else {
           // Material / Food (lowered to y = -0.58)
           slot.position.set(0.02, -0.58, -0.08);
@@ -430,11 +430,8 @@ export class Game {
       return;
     }
 
-    // Hotbar scroll
-    const scroll = this.input.consumeScroll();
-    if (scroll !== 0) {
-      this.player.selectedSlot = ((this.player.selectedSlot + (scroll > 0 ? 1 : -1)) % 9 + 9) % 9;
-    }
+    // Consume scroll input (disabled to prevent accidental triggers on trackpads)
+    this.input.consumeScroll();
 
     // Number keys 1-9
     for (let i = 1; i <= 9; i++) {
@@ -747,6 +744,10 @@ export class Game {
           this.toggleDoor(blockPos.x, blockPos.y, blockPos.z);
           this.sound.playLever();
           this.placeCooldown = 0.25;
+        } else if (this.isTrapdoorBlock(targetId)) {
+          this.toggleTrapdoor(blockPos.x, blockPos.y, blockPos.z);
+          this.sound.playLever();
+          this.placeCooldown = 0.25;
         } else if (targetId === 34) {
           const powered = this.redstone.toggleLever(blockPos.x, blockPos.y, blockPos.z);
           this.updateRedstoneMetadata(blockPos.x, blockPos.y, blockPos.z, {
@@ -811,7 +812,7 @@ export class Game {
     const foodSlotStack = this.inventory.getSlot(this.player.selectedSlot);
     const isHoldingFood = foodSlotStack && ItemRegistry.isFood(foodSlotStack.id);
     const targetBlockId = this.targetBlock ? this.chunks.getBlock(this.targetBlock.blockPos.x, this.targetBlock.blockPos.y, this.targetBlock.blockPos.z) : 0;
-    const pointingAtInteractive = this.targetBlock && (targetBlockId === 25 || targetBlockId === 24 || targetBlockId === 34 || targetBlockId === 36 || this.isDoorBlock(targetBlockId));
+    const pointingAtInteractive = this.targetBlock && (targetBlockId === 25 || targetBlockId === 24 || targetBlockId === 34 || targetBlockId === 36 || this.isDoorBlock(targetBlockId) || this.isTrapdoorBlock(targetBlockId));
 
     if (this.input.isMouseDown(2) && isHoldingFood && !pointingAtInteractive && this.player.hunger < 20) {
       this.eatingTimer += dt;
@@ -1145,6 +1146,14 @@ export class Game {
       return;
     }
 
+    if (blockId === 39) {
+      this.chunks.setBlockMeta(x, y, z, {
+        facing,
+        open: false,
+      }, true);
+      return;
+    }
+
     if (this.usesFacingMetadata(blockId)) {
       this.chunks.setBlockMeta(x, y, z, { facing }, true);
     }
@@ -1160,11 +1169,15 @@ export class Game {
   }
 
   private usesFacingMetadata(blockId: number): boolean {
-    return blockId === 24 || blockId === 25 || blockId === 36;
+    return blockId === 24 || blockId === 25 || blockId === 36 || blockId === 39 || blockId === 40;
   }
 
   private isDoorBlock(blockId: number): boolean {
     return blockId === 37 || blockId === 38;
+  }
+
+  private isTrapdoorBlock(blockId: number): boolean {
+    return blockId === 39 || blockId === 40;
   }
 
   private getPlayerHorizontalFacing(): BlockFacing {
@@ -1264,6 +1277,23 @@ export class Game {
       this.chunks.setBlock(base.x, base.y + 1, base.z, 0);
       this.chunks.setBlockMeta(base.x, base.y + 1, base.z, null);
     }
+  }
+
+  private toggleTrapdoor(x: number, y: number, z: number) {
+    const blockId = this.chunks.getBlock(x, y, z);
+    if (!this.isTrapdoorBlock(blockId)) return;
+
+    const meta = this.chunks.getBlockMeta(x, y, z);
+    const open = !(meta?.open ?? false);
+    const facing = meta?.facing ?? 'north';
+    const nextBlockId = open ? 40 : 39;
+
+    this.chunks.setBlock(x, y, z, nextBlockId);
+    this.chunks.setBlockMeta(x, y, z, {
+      ...meta,
+      facing,
+      open,
+    }, true);
   }
 
   private ensureChestMetadata(x: number, y: number, z: number): BlockMetadata | null {
@@ -1466,13 +1496,16 @@ export class Game {
     if (itemId >= 1 && itemId <= 99) {
       const block = BlockRegistry.get(itemId);
       if (block) {
-        if (itemId === 2) key = 'grass_top';
-        else if (itemId === 24) key = 'crafting_top';
-        else if (itemId === 25) key = 'furnace_side';
-        else if (itemId === 36) key = 'chest_side';
-        else if (itemId === 37 || itemId === 38) key = 'oak_door_closed';
-        else if (itemId === 21) key = 'tnt_side';
-        else key = block.textureKey;
+        // Liquids, torches, repeaters, doors, redstone and levers remain 2D
+        if (itemId === 13 || itemId === 14 || itemId === 30 || itemId === 31 || itemId === 32 || itemId === 34 || itemId === 37 || itemId === 38 || itemId === 39 || itemId === 40) {
+          if (itemId === 37 || itemId === 38) key = 'oak_door_closed';
+          else if (itemId === 39 || itemId === 40) key = 'oak_trapdoor_closed';
+          else if (itemId === 31) key = 'redstone';
+          else key = block.textureKey;
+        } else {
+          // All other solid blocks get beautiful 3D isometric icons
+          key = `${block.name}_icon`;
+        }
       }
     } else {
       const item = ItemRegistry.get(itemId);

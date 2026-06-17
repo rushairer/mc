@@ -91,7 +91,7 @@ export class ChunkManager {
 
   isSolidBlock(wx: number, wy: number, wz: number): boolean {
     const blockId = this.getBlock(wx, wy, wz);
-    if (blockId === 37 || blockId === 38) {
+    if (blockId === 37 || blockId === 38 || blockId === 39 || blockId === 40) {
       const meta = this.getBlockMeta(wx, wy, wz);
       return !meta?.open;
     }

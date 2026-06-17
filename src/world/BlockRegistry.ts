@@ -46,6 +46,8 @@ reg({ id: 35, name: 'obsidian',       textureKey: 'obsidian',     transparent: f
 reg({ id: 36, name: 'chest',          textureKey: 'chest_side',   textureTop: 'chest_top', textureBottom: 'chest_top', transparent: false, solid: true,  hardness: 2.5, toolCategory: 'axe', luminance: 0 });
 reg({ id: 37, name: 'oak_door',       textureKey: 'oak_door_closed', transparent: true, solid: true, hardness: 3.0, toolCategory: 'axe', luminance: 0 });
 reg({ id: 38, name: 'oak_door_open',  textureKey: 'oak_door_open', transparent: true, solid: true, hardness: 3.0, toolCategory: 'axe', dropsId: 37, luminance: 0 });
+reg({ id: 39, name: 'oak_trapdoor',   textureKey: 'oak_trapdoor_closed', transparent: true, solid: true, hardness: 3.0, toolCategory: 'axe', luminance: 0 });
+reg({ id: 40, name: 'oak_trapdoor_open', textureKey: 'oak_trapdoor_open', transparent: true, solid: true, hardness: 3.0, toolCategory: 'axe', dropsId: 39, luminance: 0 });
 
 export const BlockRegistry = {
   get(id: number): BlockDef | undefined {

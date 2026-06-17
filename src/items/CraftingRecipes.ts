@@ -15,7 +15,6 @@ export interface CraftingRecipe {
 export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // ─── Planks from any log ───
   { pattern: [6, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 5, count: 4 }, shapeless: true },
-  { pattern: [null, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 5, count: 4 }, shapeless: true },
 
   // ─── Sticks ───
   { pattern: [5, 0, 0, 5, 0, 0, 0, 0, 0], result: { id: 100, count: 4 } },
@@ -35,52 +34,55 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // ─── Oak Door ───
   { pattern: [5, 5, 0, 5, 5, 0, 5, 5, 0], result: { id: 37, count: 3 } },
 
+  // ─── Oak Trapdoor ───
+  { pattern: [5, 5, 5, 5, 5, 5, 0, 0, 0], result: { id: 39, count: 2 } },
+
   // ─── Wooden Tools ───
-  { pattern: [5, 5, 0, 0, 100, 0, 0, 100, 0], result: { id: 122, count: 1 } }, // pickaxe
-  { pattern: [5, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 123, count: 1 } }, // axe
-  { pattern: [0, 5, 0, 0, 100, 0, 0, 100, 0], result: { id: 123, count: 1 } }, // axe mirrored
-  { pattern: [0, 5, 0, 0, 100, 0, 0, 100, 0], result: { id: 121, count: 1 } }, // shovel
+  { pattern: [5, 5, 5, 0, 100, 0, 0, 100, 0], result: { id: 122, count: 1 } }, // pickaxe
+  { pattern: [5, 5, 0, 5, 100, 0, 0, 100, 0], result: { id: 123, count: 1 } }, // axe
+  { pattern: [0, 5, 5, 0, 100, 5, 0, 100, 0], result: { id: 123, count: 1 } }, // axe mirrored
+  { pattern: [5, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 121, count: 1 } }, // shovel
   { pattern: [5, 0, 0, 5, 0, 0, 100, 0, 0], result: { id: 120, count: 1 } }, // sword
 
   // ─── Stone Tools ───
-  { pattern: [4, 4, 0, 0, 100, 0, 0, 100, 0], result: { id: 132, count: 1 } },
-  { pattern: [4, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 133, count: 1 } },
-  { pattern: [0, 4, 0, 0, 100, 0, 0, 100, 0], result: { id: 133, count: 1 } },
-  { pattern: [0, 4, 0, 0, 100, 0, 0, 100, 0], result: { id: 131, count: 1 } },
+  { pattern: [4, 4, 4, 0, 100, 0, 0, 100, 0], result: { id: 132, count: 1 } },
+  { pattern: [4, 4, 0, 4, 100, 0, 0, 100, 0], result: { id: 133, count: 1 } },
+  { pattern: [0, 4, 4, 0, 100, 4, 0, 100, 0], result: { id: 133, count: 1 } },
+  { pattern: [4, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 131, count: 1 } },
   { pattern: [4, 0, 0, 4, 0, 0, 100, 0, 0], result: { id: 130, count: 1 } },
 
   // ─── Iron Tools ───
-  { pattern: [102, 102, 0, 0, 100, 0, 0, 100, 0], result: { id: 142, count: 1 } },
-  { pattern: [102, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 143, count: 1 } },
-  { pattern: [0, 102, 0, 0, 100, 0, 0, 100, 0], result: { id: 143, count: 1 } },
-  { pattern: [0, 102, 0, 0, 100, 0, 0, 100, 0], result: { id: 141, count: 1 } },
+  { pattern: [102, 102, 102, 0, 100, 0, 0, 100, 0], result: { id: 142, count: 1 } },
+  { pattern: [102, 102, 0, 102, 100, 0, 0, 100, 0], result: { id: 143, count: 1 } },
+  { pattern: [0, 102, 102, 0, 100, 102, 0, 100, 0], result: { id: 143, count: 1 } },
+  { pattern: [102, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 141, count: 1 } },
   { pattern: [102, 0, 0, 102, 0, 0, 100, 0, 0], result: { id: 140, count: 1 } },
 
   // ─── Diamond Tools ───
-  { pattern: [104, 104, 0, 0, 100, 0, 0, 100, 0], result: { id: 152, count: 1 } },
-  { pattern: [104, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 153, count: 1 } },
-  { pattern: [0, 104, 0, 0, 100, 0, 0, 100, 0], result: { id: 153, count: 1 } },
-  { pattern: [0, 104, 0, 0, 100, 0, 0, 100, 0], result: { id: 151, count: 1 } },
+  { pattern: [104, 104, 104, 0, 100, 0, 0, 100, 0], result: { id: 152, count: 1 } },
+  { pattern: [104, 104, 0, 104, 100, 0, 0, 100, 0], result: { id: 153, count: 1 } },
+  { pattern: [0, 104, 104, 0, 100, 104, 0, 100, 0], result: { id: 153, count: 1 } },
+  { pattern: [104, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 151, count: 1 } },
   { pattern: [104, 0, 0, 104, 0, 0, 100, 0, 0], result: { id: 150, count: 1 } },
 
   // ─── Golden Tools ───
-  { pattern: [103, 103, 0, 0, 100, 0, 0, 100, 0], result: { id: 162, count: 1 } },
-  { pattern: [103, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 163, count: 1 } },
-  { pattern: [0, 103, 0, 0, 100, 0, 0, 100, 0], result: { id: 163, count: 1 } },
-  { pattern: [0, 103, 0, 0, 100, 0, 0, 100, 0], result: { id: 161, count: 1 } },
+  { pattern: [103, 103, 103, 0, 100, 0, 0, 100, 0], result: { id: 162, count: 1 } },
+  { pattern: [103, 103, 0, 103, 100, 0, 0, 100, 0], result: { id: 163, count: 1 } },
+  { pattern: [0, 103, 103, 0, 100, 103, 0, 100, 0], result: { id: 163, count: 1 } },
+  { pattern: [103, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 161, count: 1 } },
   { pattern: [103, 0, 0, 103, 0, 0, 100, 0, 0], result: { id: 160, count: 1 } },
 
   // ─── Iron Armor ───
   { pattern: [102, 102, 102, 102, 0, 102, 0, 0, 0], result: { id: 180, count: 1 } },
   { pattern: [102, 0, 102, 102, 102, 102, 102, 102, 102], result: { id: 181, count: 1 } },
   { pattern: [102, 102, 102, 102, 0, 102, 102, 0, 102], result: { id: 182, count: 1 } },
-  { pattern: [0, 0, 0, 102, 0, 102, 102, 0, 102], result: { id: 183, count: 1 } },
+  { pattern: [102, 0, 102, 102, 0, 102, 0, 0, 0], result: { id: 183, count: 1 } }, // boots (top-left aligned)
 
   // ─── Diamond Armor ───
   { pattern: [104, 104, 104, 104, 0, 104, 0, 0, 0], result: { id: 184, count: 1 } },
   { pattern: [104, 0, 104, 104, 104, 104, 104, 104, 104], result: { id: 185, count: 1 } },
   { pattern: [104, 104, 104, 104, 0, 104, 104, 0, 104], result: { id: 186, count: 1 } },
-  { pattern: [0, 0, 0, 104, 0, 104, 104, 0, 104], result: { id: 187, count: 1 } },
+  { pattern: [104, 0, 104, 104, 0, 104, 0, 0, 0], result: { id: 187, count: 1 } }, // boots (top-left aligned)
 
   // ─── Bucket ───
   { pattern: [102, 0, 102, 0, 102, 0, 0, 0, 0], result: { id: 178, count: 1 } },
@@ -88,11 +90,32 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // ─── Bread ───
   { pattern: [176, 176, 176, 0, 0, 0, 0, 0, 0], result: { id: 171, count: 1 } },
 
-  // ─── Paper ───
-  { pattern: [176, 176, 176, 0, 0, 0, 0, 0, 0], result: { id: 109, count: 3 } },
+  // ─── Paper (Crafted from 3 Wood Planks in a row since Sugarcane doesn't exist) ───
+  { pattern: [5, 5, 5, 0, 0, 0, 0, 0, 0], result: { id: 109, count: 3 } },
 
   // ─── Book ───
   { pattern: [109, 109, 109, 0, 107, 0, 0, 0, 0], result: { id: 110, count: 1 } },
+
+  // ─── Bookshelf ───
+  { pattern: [5, 5, 5, 110, 110, 110, 5, 5, 5], result: { id: 20, count: 1 } },
+
+  // ─── Sandstone ───
+  { pattern: [8, 8, 0, 8, 8, 0, 0, 0, 0], result: { id: 15, count: 1 } },
+
+  // ─── White Wool ───
+  { pattern: [107, 107, 0, 107, 107, 0, 0, 0, 0], result: { id: 16, count: 1 } },
+
+  // ─── TNT ───
+  { pattern: [101, 8, 101, 8, 101, 8, 101, 8, 101], result: { id: 21, count: 1 } },
+
+  // ─── Lever ───
+  { pattern: [100, 0, 0, 4, 0, 0, 0, 0, 0], result: { id: 34, count: 1 } },
+
+  // ─── Piston ───
+  { pattern: [5, 5, 5, 4, 102, 4, 4, 111, 4], result: { id: 33, count: 1 } },
+
+  // ─── Repeater ───
+  { pattern: [30, 111, 30, 1, 1, 1, 0, 0, 0], result: { id: 32, count: 1 } },
 
   // ─── Block compression ───
   { pattern: [102, 102, 102, 102, 102, 102, 102, 102, 102], result: { id: 18, count: 1 } },  // iron block
@@ -103,6 +126,12 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   { pattern: [18, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 102, count: 9 }, shapeless: true },
   { pattern: [17, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 103, count: 9 }, shapeless: true },
   { pattern: [23, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 104, count: 9 }, shapeless: true },
+
+  // ─── Nugget conversions ───
+  { pattern: [102, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 105, count: 9 }, shapeless: true }, // iron ingot -> 9 nuggets
+  { pattern: [103, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 106, count: 9 }, shapeless: true }, // gold ingot -> 9 nuggets
+  { pattern: [105, 105, 105, 105, 105, 105, 105, 105, 105], result: { id: 102, count: 1 } }, // 9 iron nuggets -> ingot
+  { pattern: [106, 106, 106, 106, 106, 106, 106, 106, 106], result: { id: 103, count: 1 } }, // 9 gold nuggets -> ingot
 ];
 
 /**

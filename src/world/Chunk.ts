@@ -108,8 +108,25 @@ export class Chunk {
           const def = BlockRegistry.get(id);
           if (!def) continue;
 
+          const meta = this.getBlockMeta(x, y, z);
+
           const isTrans = def.transparent;
           const target = isTrans ? transparent : solid;
+
+          if (id === 30) {
+            this.addTorch(target, x, y, z, atlas);
+            continue;
+          }
+
+          if (id === 37 || id === 38) {
+            this.addDoor(target, x, y, z, id, meta, atlas);
+            continue;
+          }
+
+          if (id === 39 || id === 40) {
+            this.addTrapdoor(target, x, y, z, id, meta, atlas);
+            continue;
+          }
 
           // Check 6 faces
           for (let face = 0; face < 6; face++) {
@@ -228,6 +245,221 @@ export class Chunk {
     );
   }
 
+  private addTorch(
+    data: ChunkMeshData,
+    x: number, y: number, z: number,
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } }
+  ) {
+    const uv = atlas.getUV('torch');
+    const brightness = 1.0; // Torches glow fully
+
+    // Plane 1 - Front Side
+    this.addTorchQuad(
+      data,
+      [x + 0.25, y + 0.0, z + 0.25],
+      [x + 0.75, y + 0.0, z + 0.75],
+      [x + 0.75, y + 0.8, z + 0.75],
+      [x + 0.25, y + 0.8, z + 0.25],
+      [-0.707, 0, 0.707],
+      uv,
+      brightness
+    );
+
+    // Plane 1 - Back Side
+    this.addTorchQuad(
+      data,
+      [x + 0.75, y + 0.0, z + 0.75],
+      [x + 0.25, y + 0.0, z + 0.25],
+      [x + 0.25, y + 0.8, z + 0.25],
+      [x + 0.75, y + 0.8, z + 0.75],
+      [0.707, 0, -0.707],
+      uv,
+      brightness
+    );
+
+    // Plane 2 - Front Side
+    this.addTorchQuad(
+      data,
+      [x + 0.25, y + 0.0, z + 0.75],
+      [x + 0.75, y + 0.0, z + 0.25],
+      [x + 0.75, y + 0.8, z + 0.25],
+      [x + 0.25, y + 0.8, z + 0.75],
+      [0.707, 0, 0.707],
+      uv,
+      brightness
+    );
+
+    // Plane 2 - Back Side
+    this.addTorchQuad(
+      data,
+      [x + 0.75, y + 0.0, z + 0.25],
+      [x + 0.25, y + 0.0, z + 0.75],
+      [x + 0.25, y + 0.8, z + 0.75],
+      [x + 0.75, y + 0.8, z + 0.25],
+      [-0.707, 0, -0.707],
+      uv,
+      brightness
+    );
+  }
+
+  private addDoor(
+    data: ChunkMeshData,
+    x: number, y: number, z: number,
+    blockId: number,
+    meta: BlockMetadata | undefined,
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } }
+  ) {
+    const thickness = 0.125;
+    const facing = meta?.facing ?? 'north';
+    const isOpen = meta?.open ?? false;
+    const isLower = meta?.doorHalf !== 'upper';
+
+    let bounds: CuboidBounds;
+    if (!isOpen) {
+      bounds = (facing === 'east' || facing === 'west')
+        ? { minX: 0.4375, maxX: 0.5625, minY: 0, maxY: 1, minZ: 0, maxZ: 1 }
+        : { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0.4375, maxZ: 0.5625 };
+    } else {
+      switch (facing) {
+        case 'north':
+          bounds = { minX: 1 - thickness, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
+          break;
+        case 'south':
+          bounds = { minX: 0, maxX: thickness, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
+          break;
+        case 'east':
+          bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: thickness };
+          break;
+        case 'west':
+          bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 1 - thickness, maxZ: 1 };
+          break;
+        default:
+          bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0.4375, maxZ: 0.5625 };
+      }
+    }
+
+    this.addCuboid(data, x, y, z, blockId, atlas, bounds, {
+      top: !isLower || !this.isDoorId(this.getBlock(x, y + 1, z)),
+      bottom: isLower || !this.isDoorId(this.getBlock(x, y - 1, z)),
+    });
+  }
+
+  private addTrapdoor(
+    data: ChunkMeshData,
+    x: number, y: number, z: number,
+    blockId: number,
+    meta: BlockMetadata | undefined,
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } }
+  ) {
+    const thickness = 0.1875;
+    const facing = meta?.facing ?? 'north';
+    const isOpen = meta?.open ?? false;
+
+    let bounds: CuboidBounds;
+    if (!isOpen) {
+      bounds = { minX: 0, maxX: 1, minY: 0, maxY: thickness, minZ: 0, maxZ: 1 };
+    } else {
+      switch (facing) {
+        case 'north':
+          bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 1 - thickness, maxZ: 1 };
+          break;
+        case 'south':
+          bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: thickness };
+          break;
+        case 'east':
+          bounds = { minX: 0, maxX: thickness, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
+          break;
+        case 'west':
+          bounds = { minX: 1 - thickness, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
+          break;
+        default:
+          bounds = { minX: 0, maxX: 1, minY: 0, maxY: thickness, minZ: 0, maxZ: 1 };
+      }
+    }
+
+    this.addCuboid(data, x, y, z, blockId, atlas, bounds);
+  }
+
+  private addCuboid(
+    data: ChunkMeshData,
+    x: number, y: number, z: number,
+    blockId: number,
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
+    bounds: CuboidBounds,
+    faceOverrides: Partial<Record<'top' | 'bottom', boolean>> = {}
+  ) {
+    const faces = getCuboidFaces(bounds);
+    const shouldDraw = {
+      top: faceOverrides.top ?? true,
+      bottom: faceOverrides.bottom ?? true,
+      right: true,
+      left: true,
+      front: true,
+      back: true,
+    };
+
+    faces.forEach((faceDef, faceIndex) => {
+      const faceName = FACE_NAMES[faceIndex];
+      if (!shouldDraw[faceName]) return;
+
+      const uv = atlas.getUV(BlockRegistry.getTextureForFace(blockId, faceIndex));
+      const baseIdx = data.positions.length / 3;
+
+      for (const [vx, vy, vz] of faceDef.verts) {
+        data.positions.push(x + vx, y + vy, z + vz);
+        data.normals.push(...faceDef.normal);
+        const brightness = FACE_BRIGHTNESS[faceIndex];
+        data.colors.push(brightness, brightness, brightness);
+      }
+
+      data.uvs.push(uv.u0, uv.v0);
+      data.uvs.push(uv.u1, uv.v0);
+      data.uvs.push(uv.u1, uv.v1);
+      data.uvs.push(uv.u0, uv.v1);
+      data.indices.push(
+        baseIdx, baseIdx + 1, baseIdx + 2,
+        baseIdx, baseIdx + 2, baseIdx + 3
+      );
+    });
+  }
+
+  private isDoorId(id: number): boolean {
+    return id === 37 || id === 38;
+  }
+
+  private addTorchQuad(
+    data: ChunkMeshData,
+    p1: [number, number, number],
+    p2: [number, number, number],
+    p3: [number, number, number],
+    p4: [number, number, number],
+    normal: [number, number, number],
+    uv: { u0: number; v0: number; u1: number; v1: number },
+    brightness: number
+  ) {
+    const baseIdx = data.positions.length / 3;
+
+    data.positions.push(...p1);
+    data.positions.push(...p2);
+    data.positions.push(...p3);
+    data.positions.push(...p4);
+
+    for (let i = 0; i < 4; i++) {
+      data.normals.push(...normal);
+      data.colors.push(brightness, brightness, brightness);
+    }
+
+    data.uvs.push(uv.u0, uv.v0); // Bottom-left
+    data.uvs.push(uv.u1, uv.v0); // Bottom-right
+    data.uvs.push(uv.u1, uv.v1); // Top-right
+    data.uvs.push(uv.u0, uv.v1); // Top-left
+
+    data.indices.push(
+      baseIdx, baseIdx + 1, baseIdx + 2,
+      baseIdx, baseIdx + 2, baseIdx + 3
+    );
+  }
+
   private createGeometry(data: ChunkMeshData): THREE.BufferGeometry {
     const geo = new THREE.BufferGeometry();
     if (data.positions.length === 0) return geo;
@@ -266,4 +498,76 @@ const FACE_DIRS: [number, number, number][] = [
   [0,1,0], [0,-1,0], [1,0,0], [-1,0,0], [0,0,1], [0,0,-1]
 ];
 
+type CuboidBounds = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+};
+
+const FACE_NAMES = ['top', 'bottom', 'right', 'left', 'front', 'back'] as const;
+
 const FACE_BRIGHTNESS = [1.0, 0.5, 0.8, 0.8, 0.9, 0.7];
+
+function getCuboidFaces(bounds: CuboidBounds) {
+  const { minX, maxX, minY, maxY, minZ, maxZ } = bounds;
+
+  return [
+    {
+      verts: [
+        [minX, maxY, maxZ],
+        [maxX, maxY, maxZ],
+        [maxX, maxY, minZ],
+        [minX, maxY, minZ],
+      ] as [number, number, number][],
+      normal: [0, 1, 0] as [number, number, number],
+    },
+    {
+      verts: [
+        [minX, minY, minZ],
+        [maxX, minY, minZ],
+        [maxX, minY, maxZ],
+        [minX, minY, maxZ],
+      ] as [number, number, number][],
+      normal: [0, -1, 0] as [number, number, number],
+    },
+    {
+      verts: [
+        [maxX, minY, minZ],
+        [maxX, maxY, minZ],
+        [maxX, maxY, maxZ],
+        [maxX, minY, maxZ],
+      ] as [number, number, number][],
+      normal: [1, 0, 0] as [number, number, number],
+    },
+    {
+      verts: [
+        [minX, minY, maxZ],
+        [minX, maxY, maxZ],
+        [minX, maxY, minZ],
+        [minX, minY, minZ],
+      ] as [number, number, number][],
+      normal: [-1, 0, 0] as [number, number, number],
+    },
+    {
+      verts: [
+        [minX, minY, maxZ],
+        [maxX, minY, maxZ],
+        [maxX, maxY, maxZ],
+        [minX, maxY, maxZ],
+      ] as [number, number, number][],
+      normal: [0, 0, 1] as [number, number, number],
+    },
+    {
+      verts: [
+        [maxX, minY, minZ],
+        [minX, minY, minZ],
+        [minX, maxY, minZ],
+        [maxX, maxY, minZ],
+      ] as [number, number, number][],
+      normal: [0, 0, -1] as [number, number, number],
+    },
+  ];
+}

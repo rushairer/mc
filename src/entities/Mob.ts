@@ -51,6 +51,7 @@ export class Mob {
   wanderTarget: THREE.Vector3 | null = null;
   wanderTimer = 0;
   despawnTimer = 0;
+  fuseTimer = -1; // -1 = not fusing, >=0 = counting down
   private halfWidth: number;
   private air = MOB_MAX_AIR;
   private drownTimer = 0;
@@ -441,14 +442,41 @@ export class Mob {
     this.moveWithCollision(dt, getBlock, isSolidBlock);
 
     // Hostile mob attacks player
-    if (this.def.hostile && distToPlayer < 1.8 && this.attackCooldown <= 0 && gameMode !== 'creative') {
-      const knockback = new THREE.Vector3()
-        .subVectors(playerPos, this.position)
-        .normalize()
-        .multiplyScalar(4);
-      knockback.y = 3;
-      hurtPlayer(this.def.damage, knockback);
-      this.attackCooldown = 1.0;
+    if (this.def.hostile && gameMode !== 'creative') {
+      if (this.def.type === 'creeper') {
+        // Creeper: start fuse when close, cancel when far
+        if (distToPlayer < 3) {
+          if (this.fuseTimer < 0) this.fuseTimer = 0;
+          this.fuseTimer += dt;
+          // Inflation animation
+          const scale = 1 + this.fuseTimer * 0.4;
+          this.mesh.scale.set(scale, scale, scale);
+        } else {
+          if (this.fuseTimer > 0) {
+            // Reset fuse if player moves away
+            this.fuseTimer = -1;
+            this.mesh.scale.set(1, 1, 1);
+          }
+          if (distToPlayer < 1.8 && this.attackCooldown <= 0) {
+            // Melee as fallback
+            const knockback = new THREE.Vector3()
+              .subVectors(playerPos, this.position)
+              .normalize()
+              .multiplyScalar(4);
+            knockback.y = 3;
+            hurtPlayer(this.def.damage, knockback);
+            this.attackCooldown = 1.0;
+          }
+        }
+      } else if (distToPlayer < 1.8 && this.attackCooldown <= 0) {
+        const knockback = new THREE.Vector3()
+          .subVectors(playerPos, this.position)
+          .normalize()
+          .multiplyScalar(4);
+        knockback.y = 3;
+        hurtPlayer(this.def.damage, knockback);
+        this.attackCooldown = 1.0;
+      }
     }
 
     // Update mesh position

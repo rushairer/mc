@@ -541,6 +541,14 @@ export class Game {
       }
     );
 
+    // Check creeper explosions
+    for (const [id, mob] of this.mobs.mobs) {
+      if (mob.def.type === 'creeper' && mob.fuseTimer >= 1.5) {
+        this.handleCreeperExplosion(mob);
+        this.mobs.removeMob(id);
+      }
+    }
+
     // Resolve collisions (mob-mob, player-mob)
     this.resolveCollisions();
 
@@ -1008,6 +1016,67 @@ export class Game {
         this.inventory.addItem(drop.id, drop.count);
       }
     }
+  }
+
+  private handleCreeperExplosion(mob: Mob) {
+    const cx = Math.floor(mob.position.x);
+    const cy = Math.floor(mob.position.y);
+    const cz = Math.floor(mob.position.z);
+    const radius = 3;
+
+    // Destroy blocks in sphere
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+          if (dx * dx + dy * dy + dz * dz > radius * radius) continue;
+          const bx = cx + dx;
+          const by = cy + dy;
+          const bz = cz + dz;
+          const blockId = this.chunks.getBlock(bx, by, bz);
+          if (blockId === 0 || blockId === 35) continue; // Skip air and obsidian
+          const def = BlockRegistry.get(blockId);
+          if (!def) continue;
+          // Higher hardness = more resistant to explosion
+          if (def.hardness >= 20) continue; // obsidian-level blocks survive
+          this.chunks.setBlock(bx, by, bz, 0);
+        }
+      }
+    }
+
+    // Damage entities in radius
+    const explosionDamage = 49; // point-blank creeper damage in hard mode
+    const damageRadius = 7;
+    const playerDist = this.player.position.distanceTo(mob.position);
+    if (playerDist < damageRadius && this.gameMode !== 'creative') {
+      const falloff = 1 - (playerDist / damageRadius);
+      const damage = Math.ceil(explosionDamage * falloff);
+      const knockback = new THREE.Vector3()
+        .subVectors(this.player.position, mob.position)
+        .normalize()
+        .multiplyScalar(8);
+      knockback.y = 5;
+      this.damagePlayer(damage, 'mob', knockback);
+    }
+
+    // Damage nearby mobs too
+    for (const [, otherMob] of this.mobs.mobs) {
+      if (otherMob.id === mob.id) continue;
+      const dist = otherMob.position.distanceTo(mob.position);
+      if (dist < damageRadius) {
+        const falloff = 1 - (dist / damageRadius);
+        const damage = Math.ceil(explosionDamage * falloff);
+        const kb = new THREE.Vector3()
+          .subVectors(otherMob.position, mob.position)
+          .normalize()
+          .multiplyScalar(6);
+        kb.y = 4;
+        otherMob.takeDamage(damage, kb);
+      }
+    }
+
+    // Effects
+    this.sound.playExplosion();
+    this.particles.spawnBlockBreak(cx, cy, cz, 0x8B8B8B, 20);
   }
 
   private checkFluidAdjacency(x: number, y: number, z: number) {

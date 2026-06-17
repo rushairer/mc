@@ -104,7 +104,7 @@ export class MobSystem {
     return mob;
   }
 
-  private removeMob(id: number) {
+  removeMob(id: number) {
     const mob = this.mobs.get(id);
     if (mob) {
       this.scene.remove(mob.mesh);

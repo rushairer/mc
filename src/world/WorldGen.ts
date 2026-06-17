@@ -146,6 +146,9 @@ export class WorldGen {
     // Phase 4: Trees
     this.generateTrees(chunk, worldX, worldZ);
 
+    // Phase 5: Flowers and grass
+    this.generateSurfaceDecor(chunk, worldX, worldZ);
+
     chunk.dirty = true;
   }
 
@@ -269,18 +272,26 @@ export class WorldGen {
   }
 
   private placeTree(chunk: Chunk, x: number, y: number, z: number, biome: BiomeType) {
+    const rand = this.pseudoRandom(x * 7, y, z * 13);
+
+    if (biome === BiomeType.Snow || biome === BiomeType.Mountains) {
+      this.placeSpruceTree(chunk, x, y, z);
+    } else if (biome === BiomeType.Forest && rand > 0.5) {
+      this.placeBirchTree(chunk, x, y, z);
+    } else {
+      this.placeOakTree(chunk, x, y, z);
+    }
+  }
+
+  private placeOakTree(chunk: Chunk, x: number, y: number, z: number) {
     const trunkHeight = 4 + Math.floor(this.pseudoRandom(x, y, z) * 3);
     const logId = 6;     // oak log
     const leafId = 7;    // oak leaves
 
-    // Trunk
     for (let h = 0; h < trunkHeight; h++) {
-      if (y + h < WORLD_HEIGHT) {
-        chunk.setBlock(x, y + h, z, logId);
-      }
+      if (y + h < WORLD_HEIGHT) chunk.setBlock(x, y + h, z, logId);
     }
 
-    // Leaves (sphere-ish canopy)
     const leafStart = y + trunkHeight - 2;
     const leafEnd = y + trunkHeight + 1;
     const radius = 2;
@@ -289,15 +300,116 @@ export class WorldGen {
       const r = ly < leafEnd ? radius : 1;
       for (let lx = -r; lx <= r; lx++) {
         for (let lz = -r; lz <= r; lz++) {
-          if (lx === 0 && lz === 0 && ly < y + trunkHeight) continue; // trunk space
-          if (Math.abs(lx) === r && Math.abs(lz) === r) continue; // corners
+          if (lx === 0 && lz === 0 && ly < y + trunkHeight) continue;
+          if (Math.abs(lx) === r && Math.abs(lz) === r) continue;
           const bx = x + lx;
           const bz = z + lz;
           if (bx >= 0 && bx < CHUNK_SIZE && bz >= 0 && bz < CHUNK_SIZE && ly < WORLD_HEIGHT) {
-            if (chunk.getBlock(bx, ly, bz) === 0) {
-              chunk.setBlock(bx, ly, bz, leafId);
-            }
+            if (chunk.getBlock(bx, ly, bz) === 0) chunk.setBlock(bx, ly, bz, leafId);
           }
+        }
+      }
+    }
+  }
+
+  private placeSpruceTree(chunk: Chunk, x: number, y: number, z: number) {
+    const trunkHeight = 6 + Math.floor(this.pseudoRandom(x, y, z) * 3);
+    const logId = 66;    // spruce log
+    const leafId = 68;   // spruce leaves
+
+    for (let h = 0; h < trunkHeight; h++) {
+      if (y + h < WORLD_HEIGHT) chunk.setBlock(x, y + h, z, logId);
+    }
+
+    // Cone-shaped leaves
+    for (let ly = y + 2; ly <= y + trunkHeight + 1; ly++) {
+      const distFromTop = y + trunkHeight + 1 - ly;
+      const r = Math.min(2, Math.floor(distFromTop * 0.7));
+      if (r < 0) continue;
+      for (let lx = -r; lx <= r; lx++) {
+        for (let lz = -r; lz <= r; lz++) {
+          if (lx === 0 && lz === 0 && ly < y + trunkHeight) continue;
+          if (Math.abs(lx) === r && Math.abs(lz) === r && r > 1) continue;
+          const bx = x + lx;
+          const bz = z + lz;
+          if (bx >= 0 && bx < CHUNK_SIZE && bz >= 0 && bz < CHUNK_SIZE && ly < WORLD_HEIGHT) {
+            if (chunk.getBlock(bx, ly, bz) === 0) chunk.setBlock(bx, ly, bz, leafId);
+          }
+        }
+      }
+    }
+  }
+
+  private placeBirchTree(chunk: Chunk, x: number, y: number, z: number) {
+    const trunkHeight = 6 + Math.floor(this.pseudoRandom(x, y, z) * 2);
+    const logId = 69;    // birch log
+    const leafId = 71;   // birch leaves
+
+    for (let h = 0; h < trunkHeight; h++) {
+      if (y + h < WORLD_HEIGHT) chunk.setBlock(x, y + h, z, logId);
+    }
+
+    // Tall narrow canopy
+    const leafStart = y + trunkHeight - 2;
+    const leafEnd = y + trunkHeight + 2;
+
+    for (let ly = leafStart; ly <= leafEnd; ly++) {
+      const r = ly >= y + trunkHeight + 1 ? 1 : 2;
+      for (let lx = -r; lx <= r; lx++) {
+        for (let lz = -r; lz <= r; lz++) {
+          if (lx === 0 && lz === 0 && ly < y + trunkHeight) continue;
+          if (Math.abs(lx) === r && Math.abs(lz) === r) continue;
+          const bx = x + lx;
+          const bz = z + lz;
+          if (bx >= 0 && bx < CHUNK_SIZE && bz >= 0 && bz < CHUNK_SIZE && ly < WORLD_HEIGHT) {
+            if (chunk.getBlock(bx, ly, bz) === 0) chunk.setBlock(bx, ly, bz, leafId);
+          }
+        }
+      }
+    }
+  }
+
+  private generateSurfaceDecor(chunk: Chunk, worldX: number, worldZ: number) {
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+      for (let z = 0; z < CHUNK_SIZE; z++) {
+        const wx = worldX + x;
+        const wz = worldZ + z;
+        const biome = this.getBiome(wx, wz);
+        if (biome === BiomeType.Desert || biome === BiomeType.Ocean) continue;
+
+        const rand = this.pseudoRandom(wx * 31, 99, wz * 17);
+        if (rand > 0.08) continue;
+
+        // Find surface
+        let surfaceY = -1;
+        for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
+          const id = chunk.getBlock(x, y, z);
+          if (id === 2 || id === 27) { // grass or snow
+            surfaceY = y;
+            break;
+          }
+        }
+        if (surfaceY < 10) continue;
+
+        const aboveBlock = chunk.getBlock(x, surfaceY + 1, z);
+        if (aboveBlock !== 0) continue;
+
+        const decorRand = this.pseudoRandom(wx * 43, surfaceY, wz * 59);
+
+        if (biome === BiomeType.Forest) {
+          if (decorRand < 0.3) chunk.setBlock(x, surfaceY + 1, z, 59); // poppy
+          else if (decorRand < 0.5) chunk.setBlock(x, surfaceY + 1, z, 58); // dandelion
+          else if (decorRand < 0.6) chunk.setBlock(x, surfaceY + 1, z, 61); // fern
+          else chunk.setBlock(x, surfaceY + 1, z, 60); // tall grass
+        } else if (biome === BiomeType.Snow) {
+          // Snow biome: less variety
+        } else {
+          // Plains
+          if (decorRand < 0.2) chunk.setBlock(x, surfaceY + 1, z, 58); // dandelion
+          else if (decorRand < 0.35) chunk.setBlock(x, surfaceY + 1, z, 59); // poppy
+          else if (decorRand < 0.5) chunk.setBlock(x, surfaceY + 1, z, 65); // red tulip
+          else if (decorRand < 0.6) chunk.setBlock(x, surfaceY + 1, z, 63); // blue orchid
+          else chunk.setBlock(x, surfaceY + 1, z, 60); // tall grass
         }
       }
     }

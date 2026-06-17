@@ -549,6 +549,16 @@ export class Game {
       }
     }
 
+    // Update TNT fuses
+    for (let i = this.tntFuses.length - 1; i >= 0; i--) {
+      this.tntFuses[i].timer -= dt;
+      if (this.tntFuses[i].timer <= 0) {
+        const tnt = this.tntFuses[i];
+        this.createExplosion(tnt.position.x, tnt.position.y, tnt.position.z, 4);
+        this.tntFuses.splice(i, 1);
+      }
+    }
+
     // Resolve collisions (mob-mob, player-mob)
     this.resolveCollisions();
 
@@ -838,6 +848,10 @@ export class Game {
           });
           this.sound.playLever();
           this.placeCooldown = 0.25;
+        } else if (targetId === 21) {
+          // Ignite TNT
+          this.igniteTNT(blockPos.x, blockPos.y, blockPos.z);
+          this.placeCooldown = 0.25;
         } else {
           // Place block
           const placePos = blockPos.clone().add(faceNormal);
@@ -1019,10 +1033,13 @@ export class Game {
   }
 
   private handleCreeperExplosion(mob: Mob) {
-    const cx = Math.floor(mob.position.x);
-    const cy = Math.floor(mob.position.y);
-    const cz = Math.floor(mob.position.z);
-    const radius = 3;
+    this.createExplosion(mob.position.x, mob.position.y + 0.5, mob.position.z, 3, mob);
+  }
+
+  private createExplosion(x: number, y: number, z: number, radius: number, source?: Mob) {
+    const cx = Math.floor(x);
+    const cy = Math.floor(y);
+    const cz = Math.floor(z);
 
     // Destroy blocks in sphere
     for (let dx = -radius; dx <= radius; dx++) {
@@ -1033,40 +1050,44 @@ export class Game {
           const by = cy + dy;
           const bz = cz + dz;
           const blockId = this.chunks.getBlock(bx, by, bz);
-          if (blockId === 0 || blockId === 35) continue; // Skip air and obsidian
+          if (blockId === 0) continue;
           const def = BlockRegistry.get(blockId);
           if (!def) continue;
-          // Higher hardness = more resistant to explosion
           if (def.hardness >= 20) continue; // obsidian-level blocks survive
+          // Chain reaction: ignite nearby TNT
+          if (blockId === 21) {
+            this.igniteTNT(bx, by, bz);
+            continue;
+          }
           this.chunks.setBlock(bx, by, bz, 0);
         }
       }
     }
 
     // Damage entities in radius
-    const explosionDamage = 49; // point-blank creeper damage in hard mode
-    const damageRadius = 7;
-    const playerDist = this.player.position.distanceTo(mob.position);
+    const explosionDamage = 49;
+    const damageRadius = radius * 2 + 1;
+    const playerDist = this.player.position.distanceTo(new THREE.Vector3(x, y, z));
     if (playerDist < damageRadius && this.gameMode !== 'creative') {
       const falloff = 1 - (playerDist / damageRadius);
       const damage = Math.ceil(explosionDamage * falloff);
       const knockback = new THREE.Vector3()
-        .subVectors(this.player.position, mob.position)
+        .subVectors(this.player.position, new THREE.Vector3(x, y, z))
         .normalize()
         .multiplyScalar(8);
       knockback.y = 5;
       this.damagePlayer(damage, 'mob', knockback);
     }
 
-    // Damage nearby mobs too
+    // Damage nearby mobs
     for (const [, otherMob] of this.mobs.mobs) {
-      if (otherMob.id === mob.id) continue;
-      const dist = otherMob.position.distanceTo(mob.position);
+      if (source && otherMob.id === source.id) continue;
+      const dist = otherMob.position.distanceTo(new THREE.Vector3(x, y, z));
       if (dist < damageRadius) {
         const falloff = 1 - (dist / damageRadius);
         const damage = Math.ceil(explosionDamage * falloff);
         const kb = new THREE.Vector3()
-          .subVectors(otherMob.position, mob.position)
+          .subVectors(otherMob.position, new THREE.Vector3(x, y, z))
           .normalize()
           .multiplyScalar(6);
         kb.y = 4;
@@ -1078,6 +1099,15 @@ export class Game {
     this.sound.playExplosion();
     this.particles.spawnBlockBreak(cx, cy, cz, 0x8B8B8B, 20);
   }
+
+  private igniteTNT(wx: number, wy: number, wz: number) {
+    this.chunks.setBlock(wx, wy, wz, 0); // Remove TNT block
+    // Schedule explosion after 4 seconds
+    const tntPos = new THREE.Vector3(wx + 0.5, wy + 0.5, wz + 0.5);
+    this.tntFuses.push({ position: tntPos, timer: 4.0 });
+  }
+
+  private tntFuses: { position: THREE.Vector3; timer: number }[] = [];
 
   private checkFluidAdjacency(x: number, y: number, z: number) {
     const dirs: [number, number, number][] = [[0,1,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]];

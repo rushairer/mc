@@ -363,7 +363,6 @@ export class Chunk {
     const thickness = 0.1875;
     const facing = meta?.facing ?? 'north';
     const isOpen = meta?.open ?? false;
-    const textureBlockId = 39;
 
     let bounds: CuboidBounds;
     if (!isOpen) {
@@ -387,7 +386,7 @@ export class Chunk {
       }
     }
 
-    this.addCuboid(data, x, y, z, textureBlockId, atlas, bounds);
+    this.addCuboid(data, x, y, z, blockId, atlas, bounds);
   }
 
   private addCuboid(

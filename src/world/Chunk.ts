@@ -314,6 +314,7 @@ export class Chunk {
     const hinge = meta?.hinge ?? 'left';
     const isOpen = meta?.open ?? false;
     const isLower = meta?.doorHalf !== 'upper';
+    const textureBlockId = blockId === 38 ? 37 : blockId;
 
     let bounds: CuboidBounds;
     if (!isOpen) {
@@ -347,7 +348,7 @@ export class Chunk {
       }
     }
 
-    this.addCuboid(data, x, y, z, blockId, atlas, bounds, {
+    this.addCuboid(data, x, y, z, textureBlockId, atlas, bounds, {
       top: !isLower || !this.isDoorId(this.getBlock(x, y + 1, z)),
       bottom: isLower || !this.isDoorId(this.getBlock(x, y - 1, z)),
     });
@@ -363,6 +364,7 @@ export class Chunk {
     const thickness = 0.1875;
     const facing = meta?.facing ?? 'north';
     const isOpen = meta?.open ?? false;
+    const textureBlockId = blockId === 40 ? 39 : blockId;
 
     let bounds: CuboidBounds;
     if (!isOpen) {
@@ -386,7 +388,7 @@ export class Chunk {
       }
     }
 
-    this.addCuboid(data, x, y, z, blockId, atlas, bounds);
+    this.addCuboid(data, x, y, z, textureBlockId, atlas, bounds);
   }
 
   private addCuboid(

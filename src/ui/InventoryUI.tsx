@@ -3,6 +3,7 @@ import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { Inventory, HOTBAR_SIZE, INVENTORY_SIZE } from '../player/Inventory';
 import { findCraftingResult } from '../items/CraftingRecipes';
+import { useI18n } from '../i18n';
 
 interface InventoryUIProps {
   inventory: Inventory;
@@ -15,6 +16,7 @@ interface InventoryUIProps {
 const SLOT_SIZE = 48;
 
 export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle, gameMode = 'survival' }) => {
+  const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
   const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(4).fill(0));
   const [craftResult, setCraftResult] = useState<{ id: number; count: number } | null>(null);
@@ -481,7 +483,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
             display: 'flex',
             flexDirection: 'column',
           }}>
-            <div style={{ fontSize: '14px', marginBottom: '8px', color: '#ffaa00', fontWeight: 'bold' }}>Creative Catalog</div>
+            <div style={{ fontSize: '14px', marginBottom: '8px', color: '#ffaa00', fontWeight: 'bold' }}>{t('creativeCatalog')}</div>
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(6, 48px)',
@@ -565,7 +567,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
             boxShadow: '1px 1px 0 #000',
             fontFamily: 'monospace',
           }}
-          title="Close (Esc)"
+          title={t('closeEsc')}
         >
           X
         </button>
@@ -573,7 +575,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
         <div style={{ display: 'flex', gap: '32px', marginBottom: '16px', alignItems: 'flex-start' }}>
           {/* Armor Slots */}
           <div>
-            <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Armor</div>
+            <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('armor')}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               {Array.from({ length: 4 }, (_, i) =>
                 renderSlot(
@@ -593,7 +595,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
           {/* Crafting area */}
           {gameMode === 'survival' && (
             <div>
-              <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Crafting (2×2)</div>
+              <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('crafting2x2')}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
                   display: 'grid',
@@ -616,7 +618,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
 
         {/* Main inventory (27 slots) */}
         <div style={{ marginBottom: '12px' }}>
-          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Inventory</div>
+          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('inventory')}</div>
           <div style={{
             display: 'grid',
             gridTemplateColumns: `repeat(9, ${SLOT_SIZE}px)`,
@@ -635,7 +637,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
 
         {/* Hotbar */}
         <div>
-          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Hotbar</div>
+          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('hotbar')}</div>
           <div style={{
             display: 'grid',
             gridTemplateColumns: `repeat(9, ${SLOT_SIZE}px)`,
@@ -698,14 +700,14 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
           minWidth: '120px',
         }}>
           <span style={{ fontWeight: 'bold', fontSize: '13px', color: '#ffffff', textShadow: '1px 1px 0 #000' }}>
-            {hoveredSlot.itemDef.displayName}
+            {getLocalizedItemName(hoveredSlot.item.id, hoveredSlot.itemDef.displayName)}
           </span>
           <span style={{ color: '#888888', fontSize: '10px', textTransform: 'capitalize' }}>
-            {hoveredSlot.itemDef.category}
+            {getLocalizedCategory(hoveredSlot.itemDef.category)}
           </span>
           {hoveredSlot.item.durability !== undefined && hoveredSlot.itemDef.durability && (
             <span style={{ color: '#55FF55', fontSize: '10px' }}>
-              Durability: {hoveredSlot.item.durability} / {hoveredSlot.itemDef.durability}
+              {t('durability', { current: hoveredSlot.item.durability, max: hoveredSlot.itemDef.durability })}
             </span>
           )}
         </div>

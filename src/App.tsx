@@ -7,20 +7,7 @@ import { FurnaceUI } from './ui/FurnaceUI';
 import { CraftingTableUI } from './ui/CraftingTableUI';
 import { ChestUI } from './ui/ChestUI';
 import { SaveSystem } from './systems/SaveSystem';
-
-const SPLASH_TEXTS = [
-  'Also try Terraria!',
-  'TypeScript powered!',
-  'Gemini powered!',
-  'Invulnerable in Creative!',
-  'Fly with F key!',
-  'Craft and survive!',
-  'Minecraft in React!',
-  'Infinite worlds!',
-  'Redstone simulated!',
-  '3D blocky adventure!',
-  'Watch out for Creepers!'
-];
+import { useI18n, translations } from './i18n';
 
 const initialGameState: GameState = {
   fps: 0,
@@ -48,6 +35,7 @@ const initialGameState: GameState = {
 };
 
 export const App: React.FC = () => {
+  const { locale, setLocale, t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
   const [gameState, setGameState] = useState<GameState>(initialGameState);
@@ -96,10 +84,12 @@ export const App: React.FC = () => {
   }, [menuState, loadWorldSaves]);
 
   useEffect(() => {
-    // Pick random splash
-    const randomSplash = SPLASH_TEXTS[Math.floor(Math.random() * SPLASH_TEXTS.length)];
+    const list = translations[locale].splashTexts;
+    const randomSplash = list[Math.floor(Math.random() * list.length)];
     setSplashText(randomSplash);
+  }, [locale]);
 
+  useEffect(() => {
     let game: Game | null = null;
     if (containerRef.current) {
       game = new Game(containerRef.current, undefined, 'world_1');
@@ -399,7 +389,7 @@ export const App: React.FC = () => {
             textShadow: '3px 3px 0 #000',
             marginBottom: '24px',
           }}>
-            You died!
+            {t('youDied')}
           </h1>
           <button
             onClick={handleRespawn}
@@ -415,7 +405,7 @@ export const App: React.FC = () => {
               boxShadow: '2px 2px 0 #000',
             }}
           >
-            Respawn
+            {t('respawn')}
           </button>
         </div>
       )}
@@ -446,7 +436,7 @@ export const App: React.FC = () => {
             textTransform: 'uppercase',
             letterSpacing: '1px',
           }}>
-            Game Menu
+            {t('gameMenu')}
           </h2>
           <div style={{
             color: '#ffaa00',
@@ -456,19 +446,19 @@ export const App: React.FC = () => {
             textTransform: 'uppercase',
             fontWeight: 'bold',
           }}>
-            {gameState.activeSlot ? `World Slot ${gameState.activeSlot.split('_')[1]}` : 'World Slot 1'} — {gameState.gameMode} Mode
+            {t('worldSlot', { num: gameState.activeSlot ? gameState.activeSlot.split('_')[1] : '1' })} — {gameState.gameMode === 'creative' ? t('creativeMode') : t('survivalMode')}
           </div>
 
           <button className="minecraft-btn" onClick={handleResumeGame}>
-            Back to Game
+            {t('backToGame')}
           </button>
 
           <button className="minecraft-btn" onClick={handleSaveGame}>
-            Save Game
+            {t('saveGame')}
           </button>
 
           <button className="minecraft-btn" style={{ background: '#7a2d2d', borderTopColor: '#b05050', borderLeftColor: '#b05050' }} onClick={handleSaveAndQuit}>
-            Save & Quit to Title
+            {t('saveAndQuit')}
           </button>
 
           {saveFeedback && (
@@ -480,7 +470,7 @@ export const App: React.FC = () => {
               textShadow: '1px 1px 0 #000',
               animation: 'splashBounce 0.2s alternate infinite ease-in-out',
             }}>
-              Game Saved!
+              {t('gameSaved')}
             </div>
           )}
         </div>
@@ -553,14 +543,42 @@ export const App: React.FC = () => {
 
               {/* Action Buttons */}
               <button className="minecraft-btn" onClick={handleSingleplayerClick}>
-                Singleplayer
+                {t('singleplayer')}
               </button>
 
               <button className="minecraft-btn" onClick={() => setMenuState('controls')}>
-                Controls & Instructions
+                {t('controlsInstructions')}
               </button>
 
-
+              {/* Language Selector Dropdown */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '12px' }}>
+                <select
+                  value={locale}
+                  onChange={(e) => setLocale(e.target.value as any)}
+                  className="minecraft-btn"
+                  style={{
+                    width: '320px',
+                    textAlignLast: 'center',
+                    background: '#5c5c5c',
+                    color: '#e0e0e0',
+                    border: '3px solid #000',
+                    borderTopColor: '#8c8c8c',
+                    borderLeftColor: '#8c8c8c',
+                    fontFamily: '"Courier New", monospace',
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    textShadow: '2px 2px 0 #000',
+                    boxShadow: '0 4px 0 #1b1b1b',
+                    appearance: 'none',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="en" style={{ background: '#333', color: '#fff' }}>Language: English</option>
+                  <option value="zh-CN" style={{ background: '#333', color: '#fff' }}>语言：简体中文</option>
+                  <option value="zh-TW" style={{ background: '#333', color: '#fff' }}>語言：繁體中文</option>
+                </select>
+              </div>
             </div>
           )}
 
@@ -573,13 +591,13 @@ export const App: React.FC = () => {
                 marginBottom: '20px',
                 textShadow: '2px 2px 0 #000'
               }}>
-                Select World
+                {t('selectWorld')}
               </h2>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', marginBottom: '24px' }}>
                 {['world_1', 'world_2', 'world_3'].map((slot, index) => {
                   const save = worldSaves[slot];
-                  const slotLabel = `World Slot ${index + 1}`;
+                  const slotLabel = t('worldSlot', { num: index + 1 });
                   return (
                     <div
                       key={slot}
@@ -601,11 +619,11 @@ export const App: React.FC = () => {
                         </div>
                         {save.hasSave ? (
                           <div style={{ fontSize: '11px', color: '#ccc', marginTop: '4px' }}>
-                            Mode: <span style={{ textTransform: 'capitalize' }}>{save.mode}</span> | Pos: {save.pos}
+                            {t('modeLabel', { mode: save.mode === 'creative' ? t('creativeMode') : t('survivalMode') })} | {t('posLabel', { pos: save.pos || '' })}
                           </div>
                         ) : (
                           <div style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>
-                            [Empty World Slot]
+                            {t('emptyWorldSlot')}
                           </div>
                         )}
                       </div>
@@ -649,19 +667,19 @@ export const App: React.FC = () => {
                                 }
                               }}
                             >
-                              Play
+                              {t('play')}
                             </button>
                             <button
                               className="minecraft-btn"
                               style={{ width: '100px', padding: '6px', fontSize: '12px', margin: 0, background: '#7a2d2d', borderTopColor: '#b05050', borderLeftColor: '#b05050' }}
                               onClick={async () => {
-                                if (window.confirm(`Are you sure you want to delete ${slotLabel}?`)) {
+                                if (window.confirm(t('confirmDelete', { slot: slotLabel }))) {
                                   await SaveSystem.deleteSave(slot);
                                   loadWorldSaves();
                                 }
                               }}
                             >
-                              Delete
+                              {t('delete')}
                             </button>
                           </>
                         ) : (
@@ -673,7 +691,7 @@ export const App: React.FC = () => {
                               setMenuState('select_mode');
                             }}
                           >
-                            Create World
+                            {t('createWorld')}
                           </button>
                         )}
                       </div>
@@ -683,7 +701,7 @@ export const App: React.FC = () => {
               </div>
 
               <button className="minecraft-btn" style={{ background: '#444' }} onClick={() => setMenuState('welcome')}>
-                Cancel
+                {t('cancel')}
               </button>
             </div>
           )}
@@ -697,7 +715,7 @@ export const App: React.FC = () => {
                 marginBottom: '24px',
                 textShadow: '2px 2px 0 #000'
               }}>
-                Choose Game Mode
+                {t('chooseGameMode')}
               </h2>
 
               <div style={{ display: 'flex', gap: '16px', marginBottom: '32px', width: '100%' }}>
@@ -707,10 +725,10 @@ export const App: React.FC = () => {
                   onClick={() => setSelectedMode('survival')}
                 >
                   <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ff4444', textShadow: '1px 1px 0 #000' }}>
-                    Survival Mode
+                    {t('survivalMode')}
                   </div>
                   <div style={{ fontSize: '12px', color: '#ccc', lineHeight: '1.4' }}>
-                    Search for resources, crafting, gain health and hunger. Mobs are hostile, and blocks take time to break. Flying is disabled.
+                    {t('survivalDesc')}
                   </div>
                 </div>
 
@@ -720,22 +738,22 @@ export const App: React.FC = () => {
                   onClick={() => setSelectedMode('creative')}
                 >
                   <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#44ff44', textShadow: '1px 1px 0 #000' }}>
-                    Creative Mode
+                    {t('creativeMode')}
                   </div>
                   <div style={{ fontSize: '12px', color: '#ccc', lineHeight: '1.4' }}>
-                    Infinite resources, free flying, and destroy blocks instantly. You are invulnerable to all damage, and can browse the item catalog.
+                    {t('creativeDesc')}
                   </div>
                 </div>
               </div>
 
               <button className="minecraft-btn" onClick={handleLaunchWorld}>
-                Create World
+                {t('createWorld')}
               </button>
 
               <button className="minecraft-btn" style={{ background: '#444' }} onClick={() => {
                 setMenuState('select_world');
               }}>
-                Cancel
+                {t('cancel')}
               </button>
             </div>
           )}
@@ -749,7 +767,7 @@ export const App: React.FC = () => {
                 marginBottom: '20px',
                 textShadow: '2px 2px 0 #000'
               }}>
-                Controls & Instructions
+                {t('controlsTitle')}
               </h2>
 
               <div style={{
@@ -766,24 +784,24 @@ export const App: React.FC = () => {
                 marginBottom: '24px',
                 textAlign: 'left',
               }}>
-                <div><b>W / A / S / D</b> — Move</div>
-                <div><b>Space</b> — Jump</div>
-                <div><b>Shift</b> — Sprint</div>
-                <div><b>F</b> — Toggle Fly (Creative mode only)</div>
-                <div><b>Mouse</b> — Look around</div>
-                <div><b>Left Click</b> — Break block / Attack mob</div>
-                <div><b>Right Click</b> — Place block / Open UI / Eat food</div>
-                <div><b>1-9</b> — Select hotbar slot</div>
-                <div><b>E</b> — Inventory (Catalog list in Creative mode)</div>
-                <div><b>F5</b> — Toggle perspective</div>
-                <div><b>F3</b> — Toggle debug overlay</div>
+                <div><b>W / A / S / D</b> — {t('controlMove').split(' — ')[1]}</div>
+                <div><b>Space</b> — {t('controlJump').split(' — ')[1]}</div>
+                <div><b>Shift</b> — {t('controlSprint').split(' — ')[1]}</div>
+                <div><b>F</b> — {t('controlFly').split(' — ')[1]}</div>
+                <div><b>Mouse</b> — {t('controlLook').split(' — ')[1]}</div>
+                <div><b>Left Click</b> — {t('controlBreak').split(' — ')[1]}</div>
+                <div><b>Right Click</b> — {t('controlPlace').split(' — ')[1]}</div>
+                <div><b>1-9</b> — {t('controlHotbar').split(' — ')[1]}</div>
+                <div><b>E</b> — {t('controlInventory').split(' — ')[1]}</div>
+                <div><b>F5</b> — {t('controlPerspective').split(' — ')[1]}</div>
+                <div><b>F3</b> — {t('controlDebug').split(' — ')[1]}</div>
                 <div style={{ marginTop: '12px', color: '#ffaa00', fontStyle: 'italic', fontSize: '11px' }}>
-                  * Tips: In Survival mode, hold Right Click with food in hand to eat. Mobs attack at night. Autosave saves progress every 60 seconds.
+                  {t('controlTips')}
                 </div>
               </div>
 
               <button className="minecraft-btn" onClick={() => setMenuState('welcome')}>
-                Back
+                {t('back')}
               </button>
             </div>
           )}
@@ -816,7 +834,7 @@ export const App: React.FC = () => {
               textTransform: 'uppercase',
               letterSpacing: '1px',
             }}>
-              Loading World...
+              {t('loadingWorld')}
             </h2>
             <div style={{
               color: '#ffaa00',
@@ -826,7 +844,7 @@ export const App: React.FC = () => {
               fontWeight: 'bold',
               textTransform: 'uppercase',
             }}>
-              Building Terrain
+              {t('buildingTerrain')}
             </div>
             {/* Progress bar wrapper */}
             <div style={{

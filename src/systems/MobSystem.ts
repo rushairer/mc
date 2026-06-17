@@ -24,13 +24,17 @@ export class MobSystem {
     getBlock: (x: number, y: number, z: number) => number,
     hurtPlayer: (damage: number, knockback: THREE.Vector3) => void,
     isSolidBlock?: (x: number, y: number, z: number) => boolean,
-    gameMode: 'survival' | 'creative' = 'survival'
+    gameMode: 'survival' | 'creative' = 'survival',
+    onMobDeath?: (mob: Mob) => void
   ) {
     // Update existing mobs
     for (const [id, mob] of this.mobs) {
       mob.update(dt, playerPos, getBlock, hurtPlayer, isSolidBlock, gameMode);
 
       if (mob.isDead()) {
+        if (onMobDeath) {
+          onMobDeath(mob);
+        }
         this.removeMob(id);
       }
     }

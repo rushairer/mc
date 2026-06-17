@@ -3,6 +3,7 @@ import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { Inventory } from '../player/Inventory';
 import { findSmeltingResult } from '../items/SmeltingRecipes';
+import { useI18n } from '../i18n';
 
 interface FurnaceUIProps {
   inventory: Inventory;
@@ -14,6 +15,7 @@ interface FurnaceUIProps {
 const SLOT_SIZE = 48;
 
 export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle }) => {
+  const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [inputSlot, setInputSlot] = useState<ItemStack | null>(null);
   const [fuelSlot, setFuelSlot] = useState<ItemStack | null>(null);
   const [outputSlot, setOutputSlot] = useState<ItemStack | null>(null);
@@ -214,16 +216,16 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
             boxShadow: '1px 1px 0 #000',
             fontFamily: 'monospace',
           }}
-          title="Close (Esc)"
+          title={t('closeEsc')}
         >
           X
         </button>
-        <div style={{ fontSize: '14px', marginBottom: '12px', color: '#aaa' }}>Furnace</div>
+        <div style={{ fontSize: '14px', marginBottom: '12px', color: '#aaa' }}>{t('furnace')}</div>
 
         {/* Input → Output */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
           <div>
-            <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>Input</div>
+            <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>{t('input')}</div>
             {renderSlot(inputSlot, () => {
               if (!inputSlot) return;
               inventory.addItem(inputSlot.id, inputSlot.count);
@@ -232,7 +234,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
             })}
           </div>
           <div>
-            <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>Fuel</div>
+            <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>{t('fuel')}</div>
             {renderSlot(fuelSlot, () => {
               if (!fuelSlot) return;
               inventory.addItem(fuelSlot.id, fuelSlot.count);
@@ -242,7 +244,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
           </div>
           <div style={{ fontSize: '20px', color: '#aaa' }}>→</div>
           <div>
-            <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>Output</div>
+            <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>{t('output')}</div>
             {renderSlot(outputSlot, () => {
               if (!outputSlot) return;
               inventory.addItem(outputSlot.id, outputSlot.count);
@@ -251,6 +253,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
             })}
           </div>
         </div>
+
 
         {/* Progress bar */}
         <div style={{
@@ -270,7 +273,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
         </div>
 
         {/* Inventory to pick items from */}
-        <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Inventory</div>
+        <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('inventory')}</div>
         <div style={{
           display: 'grid',
           gridTemplateColumns: `repeat(9, ${SLOT_SIZE}px)`,
@@ -375,18 +378,19 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
           minWidth: '120px',
         }}>
           <span style={{ fontWeight: 'bold', fontSize: '13px', color: '#ffffff', textShadow: '1px 1px 0 #000' }}>
-            {hoveredSlot.itemDef.displayName}
+            {getLocalizedItemName(hoveredSlot.item.id, hoveredSlot.itemDef.displayName)}
           </span>
           <span style={{ color: '#888888', fontSize: '10px', textTransform: 'capitalize' }}>
-            {hoveredSlot.itemDef.category}
+            {getLocalizedCategory(hoveredSlot.itemDef.category)}
           </span>
           {hoveredSlot.item.durability !== undefined && hoveredSlot.itemDef.durability && (
             <span style={{ color: '#55FF55', fontSize: '10px' }}>
-              Durability: {hoveredSlot.item.durability} / {hoveredSlot.itemDef.durability}
+              {t('durability', { current: hoveredSlot.item.durability, max: hoveredSlot.itemDef.durability })}
             </span>
           )}
         </div>
       )}
+
     </div>
   );
 };

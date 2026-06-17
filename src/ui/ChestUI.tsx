@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ItemStack } from '../types';
 import { Inventory } from '../player/Inventory';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { useI18n } from '../i18n';
 
 interface ChestUIProps {
   inventory: Inventory;
@@ -53,6 +54,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
   onInventoryChange,
   getItemIconStyle,
 }) => {
+  const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
   const [, forceRender] = useState(0);
   const [hoveredSlot, setHoveredSlot] = useState<{
@@ -257,13 +259,13 @@ export const ChestUI: React.FC<ChestUIProps> = ({
             boxShadow: '1px 1px 0 #000',
             fontFamily: 'monospace',
           }}
-          title="Close (Esc)"
+          title={t('closeEsc')}
         >
           X
         </button>
 
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Chest</div>
+          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('chest')}</div>
           <div style={{
             display: 'grid',
             gridTemplateColumns: `repeat(9, ${SLOT_SIZE}px)`,
@@ -278,7 +280,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
         <div style={{ height: '1px', background: '#555', margin: '12px 0' }} />
 
         <div style={{ marginBottom: '12px' }}>
-          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Inventory</div>
+          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('inventory')}</div>
           <div style={{
             display: 'grid',
             gridTemplateColumns: `repeat(9, ${SLOT_SIZE}px)`,
@@ -296,7 +298,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
         </div>
 
         <div>
-          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Hotbar</div>
+          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('hotbar')}</div>
           <div style={{
             display: 'grid',
             gridTemplateColumns: `repeat(9, ${SLOT_SIZE}px)`,
@@ -368,18 +370,19 @@ export const ChestUI: React.FC<ChestUIProps> = ({
           minWidth: '120px',
         }}>
           <span style={{ fontWeight: 'bold', fontSize: '13px', color: '#ffffff', textShadow: '1px 1px 0 #000' }}>
-            {hoveredSlot.itemDef.displayName}
+            {getLocalizedItemName(hoveredSlot.item.id, hoveredSlot.itemDef.displayName)}
           </span>
           <span style={{ color: '#888888', fontSize: '10px', textTransform: 'capitalize' }}>
-            {hoveredSlot.itemDef.category}
+            {getLocalizedCategory(hoveredSlot.itemDef.category)}
           </span>
           {hoveredSlot.item.durability !== undefined && hoveredSlot.itemDef.durability && (
             <span style={{ color: '#55FF55', fontSize: '10px' }}>
-              Durability: {hoveredSlot.item.durability} / {hoveredSlot.itemDef.durability}
+              {t('durability', { current: hoveredSlot.item.durability, max: hoveredSlot.itemDef.durability })}
             </span>
           )}
         </div>
       )}
+
     </div>
   );
 };

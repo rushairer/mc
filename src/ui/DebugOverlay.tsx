@@ -1,8 +1,16 @@
 import React from 'react';
 import type { GameState } from '../engine/Game';
+import { useI18n } from '../i18n';
 
 export const DebugOverlay: React.FC<{ state: GameState; visible: boolean }> = ({ state, visible }) => {
+  const { t, getLocalizedBiomeName } = useI18n();
+
   if (!visible) return null;
+
+  const timeStr = state.isNight ? t('night') : t('day');
+  const groundStr = state.onGround ? t('yes') : t('no');
+  const flyingStr = state.flying ? t('yes') : t('no');
+  const modeStr = state.gameMode === 'creative' ? t('creativeMode') : t('survivalMode');
 
   return (
     <div style={{
@@ -20,21 +28,22 @@ export const DebugOverlay: React.FC<{ state: GameState; visible: boolean }> = ({
       borderRadius: '4px',
     }}>
       <div style={{ color: '#4f4' }}>Minecraft Clone v0.1</div>
-      <div>{state.fps} fps</div>
+      <div>{t('fps', { fps: state.fps })}</div>
       <div>&nbsp;</div>
-      <div>XYZ: {state.playerX} / {state.playerY} / {state.playerZ}</div>
-      <div>Biome: {state.biome}</div>
-      <div>Chunks: {state.chunkCount}</div>
-      <div>Mobs: {state.mobCount}</div>
-      <div>Time: {state.isNight ? 'Night' : 'Day'}</div>
-      <div>Block: {state.selectedBlock}</div>
-      <div>Mode: <span style={{ textTransform: 'capitalize' }}>{state.gameMode}</span></div>
-      <div>Slot: {state.selectedSlot + 1}/9</div>
+      <div>{t('xyz', { x: state.playerX, y: state.playerY, z: state.playerZ })}</div>
+      <div>{t('biome', { biome: getLocalizedBiomeName(state.biome) })}</div>
+      <div>{t('chunks', { chunks: state.chunkCount })}</div>
+      <div>{t('mobs', { mobs: state.mobCount })}</div>
+      <div>{t('time', { time: timeStr })}</div>
+      <div>{t('block', { block: state.selectedBlock })}</div>
+      <div>{t('mode', { mode: modeStr })}</div>
+      <div>{t('slot', { slot: state.selectedSlot + 1 })}</div>
       <div>&nbsp;</div>
-      <div>Ground: {state.onGround ? 'yes' : 'no'}</div>
-      <div>Flying: {state.flying ? 'yes' : 'no'}</div>
+      <div>{t('ground', { ground: groundStr })}</div>
+      <div>{t('flying', { flying: flyingStr })}</div>
       <div>&nbsp;</div>
-      <div style={{ color: '#aaa', fontSize: '10px' }}>F3: Debug | F: Fly | LMB: Break | RMB: Place</div>
+      <div style={{ color: '#aaa', fontSize: '10px' }}>{t('debugFooter')}</div>
     </div>
   );
 };
+

@@ -21,12 +21,12 @@ export interface BiomeConfig {
 }
 
 const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
-  [BiomeType.Plains]:    { baseHeight: 64, amplitude: 8,  treeChance: 0.005, surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
-  [BiomeType.Desert]:    { baseHeight: 63, amplitude: 4,  treeChance: 0,     surfaceBlock: 8, underBlock: 8, stoneDepth: 3 },
-  [BiomeType.Mountains]: { baseHeight: 80, amplitude: 40, treeChance: 0.002, surfaceBlock: 2, underBlock: 3, stoneDepth: 4 },
-  [BiomeType.Forest]:    { baseHeight: 66, amplitude: 12, treeChance: 0.03,  surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
-  [BiomeType.Snow]:      { baseHeight: 68, amplitude: 15, treeChance: 0.008, surfaceBlock: 27, underBlock: 3, stoneDepth: 3 },
-  [BiomeType.Ocean]:     { baseHeight: 40, amplitude: 8,  treeChance: 0,     surfaceBlock: 8, underBlock: 3, stoneDepth: 3 },
+  [BiomeType.Plains]:    { baseHeight: 98, amplitude: 12, treeChance: 0.005, surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
+  [BiomeType.Desert]:    { baseHeight: 97, amplitude: 6,  treeChance: 0,     surfaceBlock: 8, underBlock: 8, stoneDepth: 3 },
+  [BiomeType.Mountains]: { baseHeight: 114, amplitude: 50, treeChance: 0.002, surfaceBlock: 2, underBlock: 3, stoneDepth: 4 },
+  [BiomeType.Forest]:    { baseHeight: 100, amplitude: 16, treeChance: 0.03,  surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
+  [BiomeType.Snow]:      { baseHeight: 102, amplitude: 20, treeChance: 0.008, surfaceBlock: 27, underBlock: 3, stoneDepth: 3 },
+  [BiomeType.Ocean]:     { baseHeight: 74, amplitude: 10, treeChance: 0,     surfaceBlock: 8, underBlock: 3, stoneDepth: 3 },
 };
 
 export class WorldGen {
@@ -115,17 +115,24 @@ export class WorldGen {
           const wx = worldX + x;
           const wz = worldZ + z;
 
-          const cave = this.caveNoise.fbm3D(wx * 0.03, y * 0.05, wz * 0.03, 3);
-          const cave2 = this.caveNoise.noise3D(wx * 0.02, y * 0.04, wz * 0.02);
+          // Smoother, larger vertical structures
+          const cave = this.caveNoise.fbm3D(wx * 0.02, y * 0.02, wz * 0.02, 3);
+          const cave2 = this.caveNoise.noise3D(wx * 0.015, y * 0.015, wz * 0.015);
 
-          if (cave > 0.55 && cave2 > 0.1) {
+          // Caves get larger and more connected (lower threshold) the deeper we go
+          const depthFactor = (WORLD_HEIGHT - y) / WORLD_HEIGHT;
+          const threshold = 0.50 - depthFactor * 0.12;
+
+          if (cave > threshold && cave2 > 0.05) {
             const current = chunk.getBlock(x, y, z);
-            if (current !== 0 && current !== 13) {
+            if (current !== 0 && current !== 13 && current !== 14) {
               const height = this.getTerrainHeight(wx, wz);
-              if (y <= SEA_LEVEL && height <= SEA_LEVEL) {
-                chunk.setBlock(x, y, z, 13);
+              if (y <= 10) {
+                chunk.setBlock(x, y, z, 14); // Lava at the very bottom
+              } else if (y <= SEA_LEVEL && height <= SEA_LEVEL) {
+                chunk.setBlock(x, y, z, 13); // Water
               } else {
-                chunk.setBlock(x, y, z, 0);
+                chunk.setBlock(x, y, z, 0); // Air
               }
             }
           }
@@ -144,10 +151,10 @@ export class WorldGen {
 
   private generateOres(chunk: Chunk, worldX: number, worldZ: number) {
     const ores = [
-      { id: 12, min: 5, max: 50, count: 20 },   // coal
-      { id: 11, min: 5, max: 40, count: 15 },   // iron
-      { id: 10, min: 5, max: 30, count: 5 },    // gold
-      { id: 22, min: 5, max: 15, count: 3 },    // diamond
+      { id: 12, min: 5, max: 90, count: 30 },   // coal
+      { id: 11, min: 5, max: 70, count: 22 },   // iron
+      { id: 10, min: 5, max: 50, count: 8 },    // gold
+      { id: 22, min: 5, max: 25, count: 5 },    // diamond
     ];
 
     for (const ore of ores) {
@@ -159,6 +166,71 @@ export class WorldGen {
         if (x >= 0 && x < CHUNK_SIZE && z >= 0 && z < CHUNK_SIZE && y >= 0 && y < WORLD_HEIGHT) {
           if (chunk.getBlock(x, y, z) === 1) {
             chunk.setBlock(x, y, z, ore.id);
+          }
+        }
+      }
+    }
+
+    // Additional pass: Generate ores exposed on cave walls
+    this.generateCaveWallOres(chunk, worldX, worldZ);
+  }
+
+  private generateCaveWallOres(chunk: Chunk, worldX: number, worldZ: number) {
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+      for (let z = 0; z < CHUNK_SIZE; z++) {
+        const wx = worldX + x;
+        const wz = worldZ + z;
+        for (let y = 5; y < WORLD_HEIGHT - 10; y++) {
+          if (chunk.getBlock(x, y, z) !== 1) continue; // Must be stone
+
+          // Check if it's a cave wall (adjacent to air, water, or lava)
+          let isWall = false;
+          const neighbors = [
+            [x + 1, y, z], [x - 1, y, z],
+            [x, y + 1, z], [x, y - 1, z],
+            [x, y, z + 1], [x, y, z - 1]
+          ];
+          for (const [nx, ny, nz] of neighbors) {
+            if (nx >= 0 && nx < CHUNK_SIZE && ny >= 0 && ny < WORLD_HEIGHT && nz >= 0 && nz < CHUNK_SIZE) {
+              const b = chunk.getBlock(nx, ny, nz);
+              if (b === 0 || b === 13 || b === 14) {
+                isWall = true;
+                break;
+              }
+            }
+          }
+
+          if (isWall) {
+            const rand = this.pseudoRandom(wx, y, wz);
+            if (y <= 20) {
+              if (rand < 0.015) {
+                chunk.setBlock(x, y, z, 22); // Diamond
+              } else if (rand < 0.035) {
+                chunk.setBlock(x, y, z, 10); // Gold
+              } else if (rand < 0.075) {
+                chunk.setBlock(x, y, z, 11); // Iron
+              } else if (rand < 0.135) {
+                chunk.setBlock(x, y, z, 12); // Coal
+              }
+            } else if (y <= 40) {
+              if (rand < 0.025) {
+                chunk.setBlock(x, y, z, 10); // Gold
+              } else if (rand < 0.07) {
+                chunk.setBlock(x, y, z, 11); // Iron
+              } else if (rand < 0.14) {
+                chunk.setBlock(x, y, z, 12); // Coal
+              }
+            } else if (y <= 80) {
+              if (rand < 0.05) {
+                chunk.setBlock(x, y, z, 11); // Iron
+              } else if (rand < 0.13) {
+                chunk.setBlock(x, y, z, 12); // Coal
+              }
+            } else if (y <= 120) {
+              if (rand < 0.10) {
+                chunk.setBlock(x, y, z, 12); // Coal
+              }
+            }
           }
         }
       }

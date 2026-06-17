@@ -9,6 +9,7 @@ import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { SurvivalSystem } from '../systems/SurvivalSystem';
 import { MobSystem } from '../systems/MobSystem';
+import { Mob } from '../entities/Mob';
 import { ParticleSystem } from '../systems/ParticleSystem';
 import { FluidSystem } from '../systems/FluidSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
@@ -525,14 +526,14 @@ export class Game {
         this.damagePlayer(damage, 'mob', knockback);
       },
       (x, y, z) => this.chunks.isSolidBlock(x, y, z),
-      this.gameMode
+      this.gameMode,
+      (mob) => {
+        this.handleMobDeath(mob);
+      }
     );
 
     // Resolve collisions (mob-mob, player-mob)
     this.resolveCollisions();
-
-    // Collect mob drops from dead mobs
-    this.collectMobDrops();
 
     if (this.input.isMouseDown(0) || this.input.isMouseDown(2)) {
       this.player.startSwing();
@@ -624,7 +625,7 @@ export class Game {
 
       const head = this.player.mesh.getObjectByName('head');
       if (head) {
-        head.rotation.x = this.player.pitch;
+        head.rotation.x = -this.player.pitch;
       }
 
       // Swing animation
@@ -989,25 +990,20 @@ export class Game {
     this.notifyState();
   };
 
-  private collectMobDrops() {
-    // Check for dead mobs and drop XP/items
-    for (const mob of this.mobs.mobs.values()) {
-      if (mob.isDead()) {
-        this.sound.playMobDeath();
-        // Spawn death particles
-        this.particles.spawnDeathParticles(
-          mob.position.x,
-          mob.position.y,
-          mob.position.z,
-          mob.def.bodyColor
-        );
+  private handleMobDeath(mob: Mob) {
+    this.sound.playMobDeath();
+    // Spawn death particles
+    this.particles.spawnDeathParticles(
+      mob.position.x,
+      mob.position.y,
+      mob.position.z,
+      mob.def.bodyColor
+    );
 
-        // Drop items
-        for (const drop of mob.def.drops) {
-          if (Math.random() < drop.chance) {
-            this.inventory.addItem(drop.id, drop.count);
-          }
-        }
+    // Drop items
+    for (const drop of mob.def.drops) {
+      if (Math.random() < drop.chance) {
+        this.inventory.addItem(drop.id, drop.count);
       }
     }
   }

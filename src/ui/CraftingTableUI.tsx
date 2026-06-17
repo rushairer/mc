@@ -3,6 +3,7 @@ import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { Inventory } from '../player/Inventory';
 import { findCraftingResult } from '../items/CraftingRecipes';
+import { useI18n } from '../i18n';
 
 interface CraftingTableUIProps {
   inventory: Inventory;
@@ -14,6 +15,7 @@ interface CraftingTableUIProps {
 const SLOT_SIZE = 48;
 
 export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle }) => {
+  const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
   const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(9).fill(0));
   const [craftResult, setCraftResult] = useState<{ id: number; count: number } | null>(null);
@@ -268,13 +270,13 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
             boxShadow: '1px 1px 0 #000',
             fontFamily: 'monospace',
           }}
-          title="Close (Esc)"
+          title={t('closeEsc')}
         >
           X
         </button>
         {/* Crafting area */}
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Crafting Table (3×3)</div>
+          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('craftingTable3x3')}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
               display: 'grid',
@@ -295,7 +297,7 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
 
         {/* Main inventory (27 slots) */}
         <div style={{ marginBottom: '12px' }}>
-          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Inventory</div>
+          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('inventory')}</div>
           <div style={{
             display: 'grid',
             gridTemplateColumns: `repeat(9, ${SLOT_SIZE}px)`,
@@ -314,7 +316,7 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
 
         {/* Hotbar */}
         <div>
-          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>Hotbar</div>
+          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('hotbar')}</div>
           <div style={{
             display: 'grid',
             gridTemplateColumns: `repeat(9, ${SLOT_SIZE}px)`,
@@ -377,18 +379,19 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
           minWidth: '120px',
         }}>
           <span style={{ fontWeight: 'bold', fontSize: '13px', color: '#ffffff', textShadow: '1px 1px 0 #000' }}>
-            {hoveredSlot.itemDef.displayName}
+            {getLocalizedItemName(hoveredSlot.item.id, hoveredSlot.itemDef.displayName)}
           </span>
           <span style={{ color: '#888888', fontSize: '10px', textTransform: 'capitalize' }}>
-            {hoveredSlot.itemDef.category}
+            {getLocalizedCategory(hoveredSlot.itemDef.category)}
           </span>
           {hoveredSlot.item.durability !== undefined && hoveredSlot.itemDef.durability && (
             <span style={{ color: '#55FF55', fontSize: '10px' }}>
-              Durability: {hoveredSlot.item.durability} / {hoveredSlot.itemDef.durability}
+              {t('durability', { current: hoveredSlot.item.durability, max: hoveredSlot.itemDef.durability })}
             </span>
           )}
         </div>
       )}
+
     </div>
   );
 };

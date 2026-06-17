@@ -1,7 +1,7 @@
 // ─── World Dimensions ───
 export const CHUNK_SIZE = 16;
 export const WORLD_HEIGHT = 256;
-export const SEA_LEVEL = 62;
+export const SEA_LEVEL = 96;
 export const RENDER_DISTANCE = 6;
 
 // ─── Physics ───

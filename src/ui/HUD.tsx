@@ -1,8 +1,10 @@
 import React from 'react';
 import type { GameState } from '../engine/Game';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { useI18n } from '../i18n';
 
 export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, size?: number) => any }> = ({ state, getItemIconStyle }) => {
+  const { getLocalizedItemName } = useI18n();
   // Health hearts
   const hearts = Array.from({ length: 10 }, (_, i) => {
     const filled = state.health >= (i + 1) * 2;
@@ -181,14 +183,14 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
       if (item) {
         const itemDef = ItemRegistry.get(item.id);
         if (itemDef) {
-          setFadeName(itemDef.displayName);
+          setFadeName(getLocalizedItemName(item.id, itemDef.displayName));
           setShowName(true);
         }
       } else {
         setShowName(false);
       }
     }
-  }, [state.selectedSlot, state.heldItemId, lastSelectedSlot, lastHeldId, hotbarItems]);
+  }, [state.selectedSlot, state.heldItemId, lastSelectedSlot, lastHeldId, hotbarItems, getLocalizedItemName]);
 
   React.useEffect(() => {
     if (showName) {

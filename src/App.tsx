@@ -9,6 +9,7 @@ import { CraftingTableUI } from './ui/CraftingTableUI';
 import { ChestUI } from './ui/ChestUI';
 import { EnchantUI } from './ui/EnchantUI';
 import { AnvilUI } from './ui/AnvilUI';
+import { BrewingUI } from './ui/BrewingUI';
 import type { Enchantment } from './systems/EnchantSystem';
 import type { ItemStack } from './types';
 import { SaveSystem } from './systems/SaveSystem';
@@ -44,6 +45,7 @@ const initialGameState: GameState = {
   xpProgress: 0,
   xpCurrent: 0,
   xpNext: 7,
+  activePotionEffects: [],
 };
 
 export const App: React.FC = () => {
@@ -430,6 +432,16 @@ export const App: React.FC = () => {
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}
           onSpendLevels={handleSpendLevels}
+          getItemIconStyle={getItemIconStyle}
+        />
+      )}
+
+      {/* Brewing Stand UI */}
+      {gameState.openUI === 'brewing_stand' && gameState.inventory && (
+        <BrewingUI
+          inventory={gameState.inventory}
+          onClose={handleCloseUI}
+          onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
         />
       )}

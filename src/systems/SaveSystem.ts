@@ -1,5 +1,5 @@
 import type { SerializedBlockMetadata } from '../types';
-import type { ItemStack } from '../types';
+import type { ActivePotionEffect, ItemStack } from '../types';
 
 const DB_NAME = 'minecraft_clone_save';
 const DB_VERSION = 1;
@@ -34,6 +34,7 @@ export interface SaveData {
     xpLevel?: number;
     xpCurrent?: number;
     xpTotal?: number;
+    activePotionEffects?: ActivePotionEffect[];
   };
   inventory: {
     slots: (ItemStack | null)[];

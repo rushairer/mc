@@ -43,6 +43,36 @@ export class Inventory {
     return remaining;
   }
 
+  /** Add a full stack while preserving metadata such as enchantments or potion effects. */
+  addStack(stack: ItemStack): ItemStack | null {
+    const maxStack = ItemRegistry.getMaxStackSize(stack.id);
+    let remaining = stack.count;
+    const sameKind = (a: ItemStack, b: ItemStack) =>
+      a.id === b.id &&
+      a.customName === b.customName &&
+      JSON.stringify(a.enchantments ?? []) === JSON.stringify(b.enchantments ?? []) &&
+      JSON.stringify(a.potion ?? null) === JSON.stringify(b.potion ?? null);
+
+    for (let i = 0; i < INVENTORY_SIZE && remaining > 0; i++) {
+      const slot = this.slots[i];
+      if (slot && sameKind(slot, stack) && slot.count < maxStack) {
+        const canAdd = Math.min(remaining, maxStack - slot.count);
+        slot.count += canAdd;
+        remaining -= canAdd;
+      }
+    }
+
+    for (let i = 0; i < INVENTORY_SIZE && remaining > 0; i++) {
+      if (!this.slots[i]) {
+        const toAdd = Math.min(remaining, maxStack);
+        this.slots[i] = { ...stack, count: toAdd };
+        remaining -= toAdd;
+      }
+    }
+
+    return remaining > 0 ? { ...stack, count: remaining } : null;
+  }
+
   /** Remove one item from a specific slot. */
   removeFromSlot(slotIndex: number, count: number = 1): void {
     const slot = this.slots[slotIndex];

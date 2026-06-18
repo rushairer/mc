@@ -2,6 +2,7 @@ import React from 'react';
 import type { GameState } from '../engine/Game';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { useI18n } from '../i18n';
+import { PotionEffects } from '../systems/PotionEffect';
 
 export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, size?: number) => any }> = ({ state, getItemIconStyle }) => {
   const { getLocalizedItemName } = useI18n();
@@ -210,6 +211,31 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
       pointerEvents: 'none',
       fontFamily: '"Courier New", monospace',
     }}>
+      {state.activePotionEffects.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          right: '16px',
+          bottom: '126px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          alignItems: 'flex-end',
+        }}>
+          {state.activePotionEffects.map((effect) => (
+            <div key={effect.id} style={{
+              background: 'rgba(0,0,0,0.55)',
+              color: '#d8c8ff',
+              padding: '3px 6px',
+              borderRadius: '2px',
+              fontSize: '11px',
+              textShadow: '1px 1px 0 #000',
+            }}>
+              {PotionEffects.format(effect)} {Math.ceil(effect.remaining)}s
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Health and Hunger bars */}
       {state.gameMode !== 'creative' && (
         <div style={{

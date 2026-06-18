@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { ActivePotionEffect, PotionEffectData } from '../systems/PotionEffect';
 
 export interface BlockDef {
   id: number;
@@ -72,7 +73,16 @@ export interface ItemStack {
   durability?: number;
   customName?: string;
   enchantments?: { id: 'sharpness' | 'efficiency' | 'protection' | 'unbreaking'; level: number }[];
+  potion?: {
+    kind: PotionKind;
+    name: string;
+    effect?: PotionEffectData;
+  };
 }
+
+export type PotionKind = 'bottle' | 'water' | 'awkward' | 'healing' | 'regeneration' | 'speed' | 'fire_resistance' | 'poison';
+
+export type { ActivePotionEffect, PotionEffectData };
 
 export interface WorldSaveData {
   chunks: { cx: number; cz: number; data: Uint16Array }[];

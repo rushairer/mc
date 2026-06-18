@@ -68,6 +68,9 @@ export interface TranslationsSchema {
   input: string;
   fuel: string;
   output: string;
+  brewingIngredient: string;
+  brewingBottle: string;
+  brewingNeeds: string;
   chest: string;
   durability: string;
 
@@ -259,6 +262,9 @@ export const translations: Record<Locale, TranslationsSchema> = {
     input: 'Input',
     fuel: 'Fuel',
     output: 'Output',
+    brewingIngredient: 'Ingredient',
+    brewingBottle: 'Bottle',
+    brewingNeeds: 'Add bottles, fuel, and ingredient',
     chest: 'Chest',
     durability: 'Durability: {current} / {max}',
     fps: '{fps} fps',
@@ -448,6 +454,9 @@ export const translations: Record<Locale, TranslationsSchema> = {
     input: '输入',
     fuel: '燃料',
     output: '输出',
+    brewingIngredient: '原料',
+    brewingBottle: '瓶子',
+    brewingNeeds: '加入瓶子、燃料和原料',
     chest: '箱子',
     durability: '耐久度: {current} / {max}',
     fps: '{fps} 帧/秒',
@@ -637,6 +646,9 @@ export const translations: Record<Locale, TranslationsSchema> = {
     input: '輸入',
     fuel: '燃料',
     output: '輸出',
+    brewingIngredient: '原料',
+    brewingBottle: '瓶子',
+    brewingNeeds: '放入瓶子、燃料和原料',
     chest: '箱子',
     durability: '耐久度: {current} / {max}',
     fps: '{fps} 幀/秒',
@@ -779,6 +791,7 @@ interface I18nContextType {
   setLocale: (locale: Locale) => void;
   t: (key: keyof TranslationsSchema, variables?: Record<string, string | number>) => string;
   getLocalizedItemName: (id: number, fallbackName?: string) => string;
+  getLocalizedDisplayName: (displayName: string, registryName?: string) => string;
   getLocalizedCategory: (category: string) => string;
   getLocalizedBiomeName: (biome: string) => string;
 }
@@ -862,6 +875,10 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return lookupName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Unknown';
   };
 
+  const getLocalizedDisplayName = (displayName: string, registryName?: string): string => {
+    return localizeItemDisplayName(locale, registryName ?? displayName, displayName);
+  };
+
   const getLocalizedCategory = (category: string): string => {
     const key = `cat${category.charAt(0).toUpperCase()}${category.slice(1)}` as keyof TranslationsSchema;
     return t(key) || category;
@@ -874,7 +891,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <I18nContext.Provider value={{ locale, setLocale, t, getLocalizedItemName, getLocalizedCategory, getLocalizedBiomeName }}>
+    <I18nContext.Provider value={{ locale, setLocale, t, getLocalizedItemName, getLocalizedDisplayName, getLocalizedCategory, getLocalizedBiomeName }}>
       {children}
     </I18nContext.Provider>
   );

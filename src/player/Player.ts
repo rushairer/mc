@@ -20,6 +20,7 @@ export class Player {
   saturation = 20;
   oxygen = 15.0; // oxygen in seconds (15 seconds max)
   flying = false;
+  speedMultiplier = 1;
   mesh: THREE.Group;
 
   private halfWidth = PLAYER_WIDTH / 2;
@@ -84,7 +85,7 @@ export class Player {
     // Fly toggle
     if (input.fly) this.flying = !this.flying;
 
-    const speed = input.sprint ? SPRINT_SPEED : WALK_SPEED;
+    const speed = (input.sprint ? SPRINT_SPEED : WALK_SPEED) * this.speedMultiplier;
 
     if (this.flying) {
       // Flying mode

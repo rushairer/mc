@@ -259,6 +259,23 @@ export class SoundSystem {
     source.start();
   }
 
+  playDrink() {
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.setValueAtTime(520, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(680, ctx.currentTime + 0.12);
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.16);
+
+    osc.connect(gain).connect(this.sfxGain!);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.16);
+  }
+
   playBurp() {
     const ctx = this.ensureCtx();
     if (!ctx) return;

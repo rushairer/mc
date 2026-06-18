@@ -22,11 +22,12 @@ import { VisualResolver } from '../visual/VisualResolver';
 import { DroppedItemSystem } from '../systems/DroppedItemSystem';
 import { XPSystem } from '../systems/XPSystem';
 import { EnchantSystem } from '../systems/EnchantSystem';
+import { PotionEffectSystem } from '../systems/PotionEffect';
 import { CHUNK_SIZE } from '../constants';
 import type { Enchantment } from '../systems/EnchantSystem';
-import type { BlockFacing, BlockMetadata, ItemStack } from '../types';
+import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '../types';
 
-export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'enchanting_table' | 'anvil' | 'death' | 'menu' | 'pause';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'death' | 'menu' | 'pause';
 
 export interface GameState {
   fps: number;
@@ -58,6 +59,7 @@ export interface GameState {
   xpProgress: number;
   xpCurrent: number;
   xpNext: number;
+  activePotionEffects: ActivePotionEffect[];
 }
 
 export type GameStateListener = (state: GameState) => void;
@@ -84,6 +86,7 @@ export class Game {
   private projectiles: ProjectileSystem;
   droppedItems!: DroppedItemSystem;
   private xp: XPSystem;
+  private potionEffects: PotionEffectSystem;
   private commands: CommandSystem;
   private clock: THREE.Clock;
   running = false;
@@ -139,6 +142,7 @@ export class Game {
     this.redstone = new RedstoneSystem();
     this.projectiles = new ProjectileSystem(this.renderer.scene);
     this.xp = new XPSystem(this.renderer.scene);
+    this.potionEffects = new PotionEffectSystem();
     this.commands = new CommandSystem({
       getPlayerPosition: () => ({
         x: this.player.position.x,
@@ -394,6 +398,11 @@ export class Game {
     document.exitPointerLock();
   }
 
+  openBrewingUI() {
+    this.openUI = 'brewing_stand';
+    document.exitPointerLock();
+  }
+
   enchantItem(item: ItemStack, cost: number, enchantment: Enchantment): ItemStack | null {
     if (this.gameMode !== 'creative' && !this.xp.spendLevels(cost)) {
       return null;
@@ -476,6 +485,7 @@ export class Game {
     this.player.flying = false;
     this.player.resolveStuck(this.chunks);
     this.survival.resetFall();
+    this.potionEffects.clear();
 
     this.openUI = 'none';
     this.input.requestLock();
@@ -672,6 +682,7 @@ export class Game {
     }
 
     // Player update
+    this.player.speedMultiplier = this.potionEffects.getSpeedMultiplier();
     const mouseDelta = this.input.consumeMouseDelta();
     this.player.update(dt, {
       dx: this.chatOpen ? 0 : mouseDelta.dx,
@@ -1086,6 +1097,9 @@ export class Game {
         } else if (targetName.includes('anvil')) {
           this.openAnvilUI();
           this.placeCooldown = 0.5;
+        } else if (targetName === 'brewing_stand') {
+          this.openBrewingUI();
+          this.placeCooldown = 0.5;
         } else if (this.isDoorBlock(targetId)) {
           this.toggleDoor(blockPos.x, blockPos.y, blockPos.z);
           this.sound.playLever();
@@ -1207,6 +1221,7 @@ export class Game {
       targetName === 'crafting_table' ||
       targetName === 'enchanting_table' ||
       targetName.includes('anvil') ||
+      targetName === 'brewing_stand' ||
       targetName === 'lever' ||
       targetName === 'chest' ||
       targetName === 'bed' ||
@@ -1214,7 +1229,32 @@ export class Game {
       this.isTrapdoorBlock(targetBlockId)
     );
 
-    if (!this.chatOpen && this.input.isMouseDown(2) && isHoldingFood && !pointingAtInteractive && this.player.hunger < 20) {
+    const isHoldingPotion = foodSlotStack?.id === 373 && !!foodSlotStack.potion?.effect;
+    if (!this.chatOpen && this.input.isMouseDown(2) && isHoldingPotion && !pointingAtInteractive) {
+      this.eatingTimer += dt;
+      this.chewSoundTimer += dt;
+
+      if (this.chewSoundTimer >= 0.35) {
+        this.chewSoundTimer = 0;
+        this.sound.playDrink();
+      }
+
+      if (this.eatingTimer >= 1.6) {
+        const potion = foodSlotStack.potion?.effect;
+        if (potion) {
+          this.potionEffects.apply(
+            potion,
+            (amount) => { this.player.health = Math.min(20, this.player.health + amount); }
+          );
+          this.sound.playBurp();
+          this.inventory.setSlot(this.player.selectedSlot, { id: 374, count: 1 });
+          this.notifyState();
+        }
+        this.eatingTimer = 0;
+        this.chewSoundTimer = 0;
+        this.placeCooldown = 0.5;
+      }
+    } else if (!this.chatOpen && this.input.isMouseDown(2) && isHoldingFood && !pointingAtInteractive && this.player.hunger < 20) {
       this.eatingTimer += dt;
       this.chewSoundTimer += dt;
 
@@ -1271,6 +1311,11 @@ export class Game {
     this.survival.update(dt, this.player, this.gameMode, (x, y, z) => this.chunks.getBlock(x, y, z), (dmg, type) => {
       this.damagePlayer(dmg, type);
     });
+    this.potionEffects.update(
+      dt,
+      (amount) => { this.player.health = Math.min(20, this.player.health + amount); },
+      (amount) => { this.player.health = Math.max(1, this.player.health - amount); }
+    );
 
     // Death check
     if (this.player.health <= 0) {
@@ -1305,6 +1350,7 @@ export class Game {
       }
       this.openUI = 'death';
       this.xp.reset();
+      this.potionEffects.clear();
       document.exitPointerLock();
       this.notifyState();
       this.renderer.render();
@@ -1565,6 +1611,7 @@ export class Game {
     if (this.player.health <= 0) {
       this.openUI = 'death';
       this.xp.reset();
+      this.potionEffects.clear();
       document.exitPointerLock();
       this.notifyState();
       this.renderer.render();
@@ -1645,6 +1692,7 @@ export class Game {
       xpProgress: xpState.progress,
       xpCurrent: xpState.current,
       xpNext: xpState.next,
+      activePotionEffects: this.potionEffects.getEffects(),
     };
 
     for (const listener of this.stateListeners) {
@@ -1682,6 +1730,7 @@ export class Game {
         xpLevel: this.xp.getState().level,
         xpCurrent: this.xp.getState().current,
         xpTotal: this.xp.getState().total,
+        activePotionEffects: this.potionEffects.getEffects(),
       },
       inventory: {
         slots: this.inventory.toJSON(),
@@ -1721,6 +1770,7 @@ export class Game {
         data.player.xpCurrent ?? 0,
         data.player.xpTotal ?? 0
       );
+      this.potionEffects.setEffects(data.player.activePotionEffects);
 
       if (data.inventory) {
         this.inventory.fromJSON(data.inventory.slots);

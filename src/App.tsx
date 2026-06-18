@@ -8,6 +8,7 @@ import { FurnaceUI } from './ui/FurnaceUI';
 import { CraftingTableUI } from './ui/CraftingTableUI';
 import { ChestUI } from './ui/ChestUI';
 import { EnchantUI } from './ui/EnchantUI';
+import { AnvilUI } from './ui/AnvilUI';
 import type { Enchantment } from './systems/EnchantSystem';
 import type { ItemStack } from './types';
 import { SaveSystem } from './systems/SaveSystem';
@@ -152,6 +153,10 @@ export const App: React.FC = () => {
 
   const handleEnchantItem = useCallback((item: ItemStack, cost: number, enchantment: Enchantment) => {
     return gameRef.current?.enchantItem(item, cost, enchantment) ?? null;
+  }, []);
+
+  const handleSpendLevels = useCallback((cost: number) => {
+    return gameRef.current?.spendLevels(cost) ?? false;
   }, []);
 
   const handleSingleplayerClick = useCallback(() => {
@@ -412,6 +417,19 @@ export const App: React.FC = () => {
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}
           onEnchantItem={handleEnchantItem}
+          getItemIconStyle={getItemIconStyle}
+        />
+      )}
+
+      {/* Anvil UI */}
+      {gameState.openUI === 'anvil' && gameState.inventory && (
+        <AnvilUI
+          inventory={gameState.inventory}
+          xpLevel={gameState.xpLevel}
+          gameMode={gameState.gameMode}
+          onClose={handleCloseUI}
+          onInventoryChange={handleInventoryChange}
+          onSpendLevels={handleSpendLevels}
           getItemIconStyle={getItemIconStyle}
         />
       )}

@@ -1,42 +1,84 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Enchantment } from '../systems/EnchantSystem';
-import { EnchantSystem } from '../systems/EnchantSystem';
 import type { ItemStack } from '../types';
+import { EnchantSystem } from '../systems/EnchantSystem';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { Inventory, INVENTORY_SIZE } from '../player/Inventory';
 
-interface EnchantUIProps {
+interface AnvilUIProps {
   inventory: Inventory;
   xpLevel: number;
   gameMode: 'survival' | 'creative';
   onClose: () => void;
   onInventoryChange: () => void;
-  onEnchantItem: (item: ItemStack, cost: number, enchantment: Enchantment) => ItemStack | null;
+  onSpendLevels: (cost: number) => boolean;
   getItemIconStyle: (id: number, size?: number) => any;
 }
 
 const SLOT_SIZE = 48;
 
-export const EnchantUI: React.FC<EnchantUIProps> = ({
+export const AnvilUI: React.FC<AnvilUIProps> = ({
   inventory,
   xpLevel,
   gameMode,
   onClose,
   onInventoryChange,
-  onEnchantItem,
+  onSpendLevels,
   getItemIconStyle,
 }) => {
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
-  const [enchantSlot, setEnchantSlot] = useState<ItemStack | null>(null);
+  const [leftSlot, setLeftSlot] = useState<ItemStack | null>(null);
+  const [rightSlot, setRightSlot] = useState<ItemStack | null>(null);
+  const [nameValue, setNameValue] = useState('');
   const [hoveredItem, setHoveredItem] = useState<{ item: ItemStack; x: number; y: number } | null>(null);
 
-  const options = useMemo(() => {
-    return EnchantSystem.getOptions(enchantSlot, gameMode === 'creative' ? -1 : xpLevel);
-  }, [enchantSlot, gameMode, xpLevel]);
+  const result = useMemo((): { item: ItemStack; cost: number } | null => {
+    if (!leftSlot) return null;
+    const itemDef = ItemRegistry.get(leftSlot.id);
+    if (!itemDef) return null;
+
+    const output: ItemStack = {
+      ...leftSlot,
+      count: 1,
+      enchantments: leftSlot.enchantments ? [...leftSlot.enchantments] : undefined,
+    };
+    let cost = 0;
+    const cleanName = nameValue.trim();
+
+    if (rightSlot) {
+      if (rightSlot.id !== leftSlot.id) return null;
+      const maxDurability = itemDef.durability;
+      if (maxDurability && leftSlot.durability !== undefined && rightSlot.durability !== undefined) {
+        const repaired = Math.min(maxDurability, leftSlot.durability + rightSlot.durability + Math.floor(maxDurability * 0.12));
+        if (repaired > leftSlot.durability) {
+          output.durability = repaired;
+          cost += 2;
+        }
+      }
+
+      const merged = EnchantSystem.mergeEnchantments(leftSlot, rightSlot);
+      const before = JSON.stringify(leftSlot.enchantments ?? []);
+      const after = JSON.stringify(merged);
+      if (before !== after) {
+        output.enchantments = merged;
+        cost += Math.max(1, merged.length);
+      }
+    }
+
+    if (cleanName && cleanName !== (leftSlot.customName ?? '')) {
+      output.customName = cleanName;
+      cost += 1;
+    } else if (!cleanName && leftSlot.customName) {
+      delete output.customName;
+      cost += 1;
+    }
+
+    if (cost <= 0) return null;
+    return { item: output, cost };
+  }, [leftSlot, nameValue, rightSlot]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
-      const held = document.getElementById('enchant-held-item');
+      const held = document.getElementById('anvil-held-item');
       if (held) {
         held.style.left = `${e.clientX - SLOT_SIZE / 2}px`;
         held.style.top = `${e.clientY - SLOT_SIZE / 2}px`;
@@ -46,17 +88,23 @@ export const EnchantUI: React.FC<EnchantUIProps> = ({
     return () => document.removeEventListener('mousemove', onMove);
   }, []);
 
+  useEffect(() => {
+    if (!leftSlot) {
+      setNameValue('');
+    } else {
+      setNameValue(leftSlot.customName ?? ItemRegistry.getDisplayName(leftSlot.id));
+    }
+  }, [leftSlot]);
+
   const returnLocalItems = useCallback(() => {
-    if (heldItem) {
-      inventory.addItem(heldItem.id, heldItem.count);
-      setHeldItem(null);
-    }
-    if (enchantSlot) {
-      inventory.addItem(enchantSlot.id, enchantSlot.count);
-      setEnchantSlot(null);
-    }
+    if (heldItem) inventory.addItem(heldItem.id, heldItem.count);
+    if (leftSlot) inventory.addItem(leftSlot.id, leftSlot.count);
+    if (rightSlot) inventory.addItem(rightSlot.id, rightSlot.count);
+    setHeldItem(null);
+    setLeftSlot(null);
+    setRightSlot(null);
     onInventoryChange();
-  }, [enchantSlot, heldItem, inventory, onInventoryChange]);
+  }, [heldItem, inventory, leftSlot, onInventoryChange, rightSlot]);
 
   const handleClose = useCallback(() => {
     returnLocalItems();
@@ -65,6 +113,9 @@ export const EnchantUI: React.FC<EnchantUIProps> = ({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isTyping = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+      if (isTyping && e.key !== 'Escape') return;
       if (e.key.toLowerCase() === 'e' || e.key === 'Escape') {
         e.preventDefault();
         handleClose();
@@ -75,24 +126,32 @@ export const EnchantUI: React.FC<EnchantUIProps> = ({
   }, [handleClose]);
 
   const sameStackKind = (a: ItemStack, b: ItemStack) => {
-    return a.id === b.id && JSON.stringify(a.enchantments ?? []) === JSON.stringify(b.enchantments ?? []);
+    return a.id === b.id &&
+      a.customName === b.customName &&
+      JSON.stringify(a.enchantments ?? []) === JSON.stringify(b.enchantments ?? []);
   };
 
-  const handleEnchantSlotClick = useCallback(() => {
-    if (heldItem && !enchantSlot) {
-      if (!EnchantSystem.canEnchantItem(heldItem)) return;
-      setEnchantSlot(heldItem);
+  const setLocalSlot = (slot: 'left' | 'right', item: ItemStack | null) => {
+    if (slot === 'left') setLeftSlot(item);
+    else setRightSlot(item);
+  };
+
+  const getLocalSlot = (slot: 'left' | 'right') => slot === 'left' ? leftSlot : rightSlot;
+
+  const handleLocalSlotClick = (slot: 'left' | 'right') => {
+    const current = getLocalSlot(slot);
+    if (heldItem && !current) {
+      setLocalSlot(slot, heldItem);
       setHeldItem(null);
-    } else if (!heldItem && enchantSlot) {
-      setHeldItem(enchantSlot);
-      setEnchantSlot(null);
-    } else if (heldItem && enchantSlot) {
-      if (!EnchantSystem.canEnchantItem(heldItem)) return;
-      setHeldItem(enchantSlot);
-      setEnchantSlot(heldItem);
+    } else if (!heldItem && current) {
+      setHeldItem(current);
+      setLocalSlot(slot, null);
+    } else if (heldItem && current) {
+      setLocalSlot(slot, heldItem);
+      setHeldItem(current);
     }
     onInventoryChange();
-  }, [enchantSlot, heldItem, onInventoryChange]);
+  };
 
   const handleInventorySlotClick = useCallback((slotIndex: number) => {
     const slotItem = inventory.getSlot(slotIndex);
@@ -115,11 +174,13 @@ export const EnchantUI: React.FC<EnchantUIProps> = ({
     onInventoryChange();
   }, [heldItem, inventory, onInventoryChange]);
 
-  const handleOptionClick = (option: typeof options[number]) => {
-    if (!enchantSlot) return;
-    const result = onEnchantItem(enchantSlot, option.cost, option.enchantment);
+  const handleTakeResult = () => {
     if (!result) return;
-    setEnchantSlot(result);
+    if (gameMode !== 'creative' && xpLevel < result.cost) return;
+    if (!onSpendLevels(result.cost)) return;
+    setHeldItem(result.item);
+    setLeftSlot(null);
+    setRightSlot(null);
     onInventoryChange();
   };
 
@@ -132,9 +193,9 @@ export const EnchantUI: React.FC<EnchantUIProps> = ({
       style={{
         width: SLOT_SIZE,
         height: SLOT_SIZE,
-        background: special ? '#241f35' : '#8b8b8b',
+        background: special ? '#9a9a9a' : '#8b8b8b',
         border: '2px solid',
-        borderColor: special ? '#7b60aa #120d20 #120d20 #7b60aa' : '#373737 #fff #fff #373737',
+        borderColor: '#373737 #fff #fff #373737',
         boxSizing: 'border-box',
         position: 'relative',
         display: 'flex',
@@ -156,15 +217,7 @@ export const EnchantUI: React.FC<EnchantUIProps> = ({
             }} />
           )}
           {item.count > 1 && (
-            <span style={{
-              position: 'absolute',
-              bottom: 1,
-              right: 3,
-              color: '#fff',
-              fontSize: '11px',
-              fontWeight: 'bold',
-              textShadow: '1px 1px 0 #000',
-            }}>
+            <span style={{ position: 'absolute', bottom: 1, right: 3, color: '#fff', fontSize: '11px', fontWeight: 'bold', textShadow: '1px 1px 0 #000' }}>
               {item.count}
             </span>
           )}
@@ -183,7 +236,6 @@ export const EnchantUI: React.FC<EnchantUIProps> = ({
       justifyContent: 'center',
       zIndex: 100,
       fontFamily: '"Courier New", monospace',
-      color: '#eee',
     }}>
       <div style={{
         width: '680px',
@@ -194,70 +246,39 @@ export const EnchantUI: React.FC<EnchantUIProps> = ({
         color: '#222',
         boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
       }}>
-        <div style={{ display: 'flex', gap: '18px', marginBottom: '18px' }}>
-          <div style={{
-            width: '190px',
-            minHeight: '150px',
-            background: '#2a1f3c',
-            border: '3px solid #111',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '12px',
-            color: '#d9ccff',
-          }}>
-            <div style={{ fontSize: '14px', color: '#bfa8ff' }}>Enchantment Table</div>
-            {renderSlot(enchantSlot, handleEnchantSlotClick, true)}
-            <div style={{ fontSize: '11px', color: '#aaa', textAlign: 'center', width: '150px' }}>
-              Level {xpLevel}{gameMode === 'creative' ? ' - Creative' : ''}
-            </div>
-          </div>
-
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {options.length > 0 ? options.map((option) => (
-              <button
-                key={option.enchantment.id}
-                onClick={() => handleOptionClick(option)}
-                style={{
-                  minHeight: '44px',
-                  background: '#3b235f',
-                  color: '#d8c8ff',
-                  border: '2px solid',
-                  borderColor: '#8060b8 #1c102e #1c102e #8060b8',
-                  fontFamily: '"Courier New", monospace',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  padding: '8px 12px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <span>
-                  <span style={{ display: 'block', fontWeight: 'bold' }}>{option.label}</span>
-                  <span style={{ display: 'block', fontSize: '11px', color: '#aaaaff' }}>{option.description}</span>
-                </span>
-                <span style={{ color: '#55ff55', fontWeight: 'bold' }}>{option.cost}L</span>
-              </button>
-            )) : (
-              <div style={{
-                minHeight: '132px',
-                background: '#7f7f7f',
-                border: '2px solid #555',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#333',
-                fontSize: '13px',
-                textAlign: 'center',
-                padding: '12px',
-              }}>
-                Place an enchantable tool, weapon, or armor piece here.
-              </div>
-            )}
+        <div style={{ fontSize: '14px', marginBottom: '12px', color: '#333', fontWeight: 'bold' }}>Anvil</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+          {renderSlot(leftSlot, () => handleLocalSlotClick('left'), true)}
+          <span style={{ fontSize: '22px', color: '#555' }}>+</span>
+          {renderSlot(rightSlot, () => handleLocalSlotClick('right'), true)}
+          <span style={{ fontSize: '22px', color: '#555' }}>→</span>
+          {renderSlot(result?.item ?? null, handleTakeResult, true)}
+          <div style={{ color: result ? '#208020' : '#555', fontSize: '12px', minWidth: '120px' }}>
+            {result ? `${result.cost} level${result.cost === 1 ? '' : 's'}` : 'No repair'}
           </div>
         </div>
+
+        <input
+          value={nameValue}
+          onChange={(e) => setNameValue(e.target.value)}
+          disabled={!leftSlot}
+          maxLength={32}
+          placeholder="Item name"
+          style={{
+            width: '260px',
+            height: '32px',
+            marginBottom: '18px',
+            padding: '0 10px',
+            boxSizing: 'border-box',
+            background: '#1f1f1f',
+            border: '2px solid #555',
+            color: '#fff',
+            fontFamily: '"Courier New", monospace',
+            fontSize: '12px',
+            outline: 'none',
+            opacity: leftSlot ? 1 : 0.45,
+          }}
+        />
 
         <div style={{ fontSize: '12px', marginBottom: '8px', color: '#444' }}>Inventory</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 48px)', gap: '2px' }}>
@@ -271,7 +292,7 @@ export const EnchantUI: React.FC<EnchantUIProps> = ({
 
       {heldItem && (
         <div
-          id="enchant-held-item"
+          id="anvil-held-item"
           style={{
             position: 'fixed',
             width: SLOT_SIZE,

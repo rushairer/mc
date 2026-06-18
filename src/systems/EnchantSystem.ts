@@ -130,6 +130,25 @@ export const EnchantSystem = {
     };
   },
 
+  mergeEnchantments(primary: ItemStack, secondary: ItemStack | null): Enchantment[] {
+    const merged = [...(primary.enchantments ?? [])].map((entry) => ({ ...entry }));
+    if (!secondary?.enchantments) return merged;
+
+    for (const enchantment of secondary.enchantments) {
+      const existing = merged.find((entry) => entry.id === enchantment.id);
+      const maxLevel = ENCHANTMENT_DEFS[enchantment.id].maxLevel;
+      if (!existing) {
+        merged.push({ ...enchantment });
+      } else if (existing.level === enchantment.level) {
+        existing.level = Math.min(maxLevel, existing.level + 1);
+      } else {
+        existing.level = Math.min(maxLevel, Math.max(existing.level, enchantment.level));
+      }
+    }
+
+    return merged.sort((a, b) => a.id.localeCompare(b.id));
+  },
+
   getLevel(item: ItemStack | null | undefined, id: EnchantmentId): number {
     return item?.enchantments?.find((entry) => entry.id === id)?.level ?? 0;
   },

@@ -70,6 +70,7 @@ export interface ItemStack {
   id: number;
   count: number;
   durability?: number;
+  customName?: string;
   enchantments?: { id: 'sharpness' | 'efficiency' | 'protection' | 'unbreaking'; level: number }[];
 }
 

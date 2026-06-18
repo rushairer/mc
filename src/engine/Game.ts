@@ -26,7 +26,7 @@ import { CHUNK_SIZE } from '../constants';
 import type { Enchantment } from '../systems/EnchantSystem';
 import type { BlockFacing, BlockMetadata, ItemStack } from '../types';
 
-export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'enchanting_table' | 'death' | 'menu' | 'pause';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'enchanting_table' | 'anvil' | 'death' | 'menu' | 'pause';
 
 export interface GameState {
   fps: number;
@@ -389,6 +389,11 @@ export class Game {
     document.exitPointerLock();
   }
 
+  openAnvilUI() {
+    this.openUI = 'anvil';
+    document.exitPointerLock();
+  }
+
   enchantItem(item: ItemStack, cost: number, enchantment: Enchantment): ItemStack | null {
     if (this.gameMode !== 'creative' && !this.xp.spendLevels(cost)) {
       return null;
@@ -398,6 +403,13 @@ export class Game {
     this.sound.playXP();
     this.notifyState();
     return enchanted;
+  }
+
+  spendLevels(cost: number): boolean {
+    if (this.gameMode === 'creative') return true;
+    const spent = this.xp.spendLevels(cost);
+    if (spent) this.notifyState();
+    return spent;
   }
 
   startGame(mode?: 'survival' | 'creative') {
@@ -1071,6 +1083,9 @@ export class Game {
         } else if (targetName === 'enchanting_table') {
           this.openEnchantUI();
           this.placeCooldown = 0.5;
+        } else if (targetName.includes('anvil')) {
+          this.openAnvilUI();
+          this.placeCooldown = 0.5;
         } else if (this.isDoorBlock(targetId)) {
           this.toggleDoor(blockPos.x, blockPos.y, blockPos.z);
           this.sound.playLever();
@@ -1191,6 +1206,7 @@ export class Game {
       targetName.includes('furnace') ||
       targetName === 'crafting_table' ||
       targetName === 'enchanting_table' ||
+      targetName.includes('anvil') ||
       targetName === 'lever' ||
       targetName === 'chest' ||
       targetName === 'bed' ||

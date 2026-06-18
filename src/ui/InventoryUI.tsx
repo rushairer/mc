@@ -853,7 +853,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
           minWidth: '120px',
         }}>
           <span style={{ fontWeight: 'bold', fontSize: '13px', color: '#ffffff', textShadow: '1px 1px 0 #000' }}>
-            {getLocalizedItemName(hoveredSlot.item.id, hoveredSlot.itemDef.displayName)}
+            {hoveredSlot.item.customName || getLocalizedItemName(hoveredSlot.item.id, hoveredSlot.itemDef.displayName)}
           </span>
           <span style={{ color: '#888888', fontSize: '10px', textTransform: 'capitalize' }}>
             {getLocalizedCategory(hoveredSlot.itemDef.category)}

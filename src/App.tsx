@@ -36,6 +36,10 @@ const initialGameState: GameState = {
   chatOpen: false,
   chatInitialValue: '',
   chatMessages: [],
+  xpLevel: 0,
+  xpProgress: 0,
+  xpCurrent: 0,
+  xpNext: 7,
 };
 
 export const App: React.FC = () => {

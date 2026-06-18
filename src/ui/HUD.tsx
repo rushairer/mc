@@ -242,6 +242,48 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
             <div style={{ display: 'flex', gap: '1px' }}>{hearts}</div>
             <div style={{ display: 'flex', gap: '1px' }}>{drumsticks}</div>
           </div>
+
+          {/* XP bar */}
+          <div style={{
+            position: 'relative',
+            height: '12px',
+            margin: '1px auto 0',
+            width: '432px',
+            maxWidth: 'calc(100vw - 40px)',
+          }}>
+            <div style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: '4px',
+              height: '5px',
+              background: '#151515',
+              border: '1px solid #050505',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16)',
+            }}>
+              <div style={{
+                width: `${Math.max(0, Math.min(1, state.xpProgress)) * 100}%`,
+                height: '100%',
+                background: 'linear-gradient(180deg, #dfff54 0%, #71d51f 45%, #2f8f0c 100%)',
+                boxShadow: '0 0 4px rgba(150,255,45,0.75)',
+              }} />
+            </div>
+            {state.xpLevel > 0 && (
+              <div style={{
+                position: 'absolute',
+                left: '50%',
+                bottom: '2px',
+                transform: 'translateX(-50%)',
+                color: '#7dff34',
+                fontSize: '15px',
+                fontWeight: 'bold',
+                lineHeight: 1,
+                textShadow: '1px 1px 0 #000, -1px -1px 0 #000, 0 0 4px #000',
+              }}>
+                {state.xpLevel}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

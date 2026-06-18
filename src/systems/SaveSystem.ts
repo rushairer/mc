@@ -30,6 +30,9 @@ export interface SaveData {
     flying: boolean;
     gameMode?: 'survival' | 'creative';
     perspectiveMode?: 'first' | 'third';
+    xpLevel?: number;
+    xpCurrent?: number;
+    xpTotal?: number;
   };
   inventory: {
     slots: ({ id: number; count: number } | null)[];

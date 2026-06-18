@@ -20,6 +20,7 @@ import { ProjectileSystem } from '../systems/ProjectileSystem';
 import { CommandSystem } from '../systems/CommandSystem';
 import { VisualResolver } from '../visual/VisualResolver';
 import { DroppedItemSystem } from '../systems/DroppedItemSystem';
+import { XPSystem } from '../systems/XPSystem';
 import { CHUNK_SIZE } from '../constants';
 import type { BlockFacing, BlockMetadata, ItemStack } from '../types';
 
@@ -51,6 +52,10 @@ export interface GameState {
   chatOpen: boolean;
   chatInitialValue: string;
   chatMessages: string[];
+  xpLevel: number;
+  xpProgress: number;
+  xpCurrent: number;
+  xpNext: number;
 }
 
 export type GameStateListener = (state: GameState) => void;
@@ -76,6 +81,7 @@ export class Game {
   private redstone: RedstoneSystem;
   private projectiles: ProjectileSystem;
   droppedItems!: DroppedItemSystem;
+  private xp: XPSystem;
   private commands: CommandSystem;
   private clock: THREE.Clock;
   running = false;
@@ -130,6 +136,7 @@ export class Game {
     this.weather = new WeatherSystem(this.renderer.scene, this.sound);
     this.redstone = new RedstoneSystem();
     this.projectiles = new ProjectileSystem(this.renderer.scene);
+    this.xp = new XPSystem(this.renderer.scene);
     this.commands = new CommandSystem({
       getPlayerPosition: () => ({
         x: this.player.position.x,
@@ -709,6 +716,14 @@ export class Game {
       () => this.notifyState()
     );
 
+    this.xp.update(
+      dt,
+      this.player.position,
+      (x, y, z) => this.chunks.isSolidBlock(x, y, z),
+      () => this.sound.playXP(),
+      () => this.notifyState()
+    );
+
     // Resolve collisions (mob-mob, player-mob)
     this.resolveCollisions();
 
@@ -1243,6 +1258,7 @@ export class Game {
         }
       }
       this.openUI = 'death';
+      this.xp.reset();
       document.exitPointerLock();
       this.notifyState();
       this.renderer.render();
@@ -1312,6 +1328,10 @@ export class Game {
         );
         this.droppedItems.spawnItem(drop.id, drop.count, dropPos, velocity, 0.5);
       }
+    }
+
+    if (this.gameMode !== 'creative' && mob.def.xpDrop > 0) {
+      this.xp.spawnXP(mob.def.xpDrop, mob.position.clone().add(new THREE.Vector3(0, 0.45, 0)));
     }
   }
 
@@ -1495,6 +1515,7 @@ export class Game {
 
     if (this.player.health <= 0) {
       this.openUI = 'death';
+      this.xp.reset();
       document.exitPointerLock();
       this.notifyState();
       this.renderer.render();
@@ -1543,6 +1564,7 @@ export class Game {
       Math.floor(this.player.position.z)
     );
     const isUnderwater = (headBlock & 0x3FF) === 8 || (headBlock & 0x3FF) === 9;
+    const xpState = this.xp.getState();
 
     const state: GameState = {
       fps: this.currentFps,
@@ -1570,6 +1592,10 @@ export class Game {
       chatOpen: this.chatOpen,
       chatInitialValue: this.chatInitialValue,
       chatMessages: this.chatMessages,
+      xpLevel: xpState.level,
+      xpProgress: xpState.progress,
+      xpCurrent: xpState.current,
+      xpNext: xpState.next,
     };
 
     for (const listener of this.stateListeners) {
@@ -1604,6 +1630,9 @@ export class Game {
         flying: this.player.flying,
         gameMode: this.gameMode,
         perspectiveMode: this.perspectiveMode,
+        xpLevel: this.xp.getState().level,
+        xpCurrent: this.xp.getState().current,
+        xpTotal: this.xp.getState().total,
       },
       inventory: {
         slots: this.inventory.toJSON(),
@@ -1638,6 +1667,11 @@ export class Game {
       if (data.player.perspectiveMode) {
         this.perspectiveMode = data.player.perspectiveMode;
       }
+      this.xp.setState(
+        data.player.xpLevel ?? 0,
+        data.player.xpCurrent ?? 0,
+        data.player.xpTotal ?? 0
+      );
 
       if (data.inventory) {
         this.inventory.fromJSON(data.inventory.slots);
@@ -2159,6 +2193,7 @@ export class Game {
     }
     this.mobs.dispose();
     this.particles.dispose();
+    this.xp.dispose();
     this.weather.dispose();
     this.sound.dispose();
     this.redstone.dispose();

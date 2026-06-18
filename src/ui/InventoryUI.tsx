@@ -632,10 +632,13 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
             }}>
               {filteredCreativeItems.map((id) => {
                 const itemDef = ItemRegistry.get(id);
+                const itemName = itemDef ? getLocalizedItemName(id, itemDef.displayName) : String(id);
                 return (
-                  <div
+                  <button
                     key={id}
                     onClick={() => handleCatalogClick(id)}
+                    title={itemName}
+                    aria-label={itemName}
                     onMouseEnter={(e) => {
                       if (itemDef && !heldItem) {
                         setHoveredSlot({
@@ -668,6 +671,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
                       height: SLOT_SIZE,
                       border: '2px solid #555',
                       background: 'rgba(60,60,60,0.9)',
+                      padding: 0,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -676,7 +680,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
                     }}
                   >
                     <div style={getItemIconStyle(id, 32)} />
-                  </div>
+                  </button>
                 );
               })}
               {filteredCreativeItems.length === 0 && (

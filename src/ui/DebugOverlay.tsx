@@ -1,9 +1,10 @@
 import React from 'react';
 import type { GameState } from '../engine/Game';
 import { useI18n } from '../i18n';
+import { ItemRegistry } from '../items/ItemRegistry';
 
 export const DebugOverlay: React.FC<{ state: GameState; visible: boolean }> = ({ state, visible }) => {
-  const { t, getLocalizedBiomeName } = useI18n();
+  const { t, getLocalizedBiomeName, getLocalizedItemName } = useI18n();
 
   if (!visible) return null;
 
@@ -11,6 +12,10 @@ export const DebugOverlay: React.FC<{ state: GameState; visible: boolean }> = ({
   const groundStr = state.onGround ? t('yes') : t('no');
   const flyingStr = state.flying ? t('yes') : t('no');
   const modeStr = state.gameMode === 'creative' ? t('creativeMode') : t('survivalMode');
+  const selectedDef = state.heldItemId ? ItemRegistry.get(state.heldItemId) : null;
+  const selectedBlock = selectedDef
+    ? getLocalizedItemName(state.heldItemId, selectedDef.displayName)
+    : state.selectedBlock;
 
   return (
     <div style={{
@@ -35,7 +40,7 @@ export const DebugOverlay: React.FC<{ state: GameState; visible: boolean }> = ({
       <div>{t('chunks', { chunks: state.chunkCount })}</div>
       <div>{t('mobs', { mobs: state.mobCount })}</div>
       <div>{t('time', { time: timeStr })}</div>
-      <div>{t('block', { block: state.selectedBlock })}</div>
+      <div>{t('block', { block: selectedBlock })}</div>
       <div>{t('mode', { mode: modeStr })}</div>
       <div>{t('slot', { slot: state.selectedSlot + 1 })}</div>
       <div>&nbsp;</div>
@@ -46,4 +51,3 @@ export const DebugOverlay: React.FC<{ state: GameState; visible: boolean }> = ({
     </div>
   );
 };
-

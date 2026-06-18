@@ -3,6 +3,7 @@ import type { ItemStack } from '../types';
 import { EnchantSystem } from '../systems/EnchantSystem';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { Inventory, INVENTORY_SIZE } from '../player/Inventory';
+import { useI18n } from '../i18n';
 
 interface AnvilUIProps {
   inventory: Inventory;
@@ -25,6 +26,7 @@ export const AnvilUI: React.FC<AnvilUIProps> = ({
   onSpendLevels,
   getItemIconStyle,
 }) => {
+  const { getLocalizedItemName } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
   const [leftSlot, setLeftSlot] = useState<ItemStack | null>(null);
   const [rightSlot, setRightSlot] = useState<ItemStack | null>(null);
@@ -43,6 +45,8 @@ export const AnvilUI: React.FC<AnvilUIProps> = ({
     };
     let cost = 0;
     const cleanName = nameValue.trim();
+    const defaultName = getLocalizedItemName(leftSlot.id, itemDef.displayName);
+    const currentName = leftSlot.customName ?? defaultName;
 
     if (rightSlot) {
       if (rightSlot.id !== leftSlot.id) return null;
@@ -64,17 +68,17 @@ export const AnvilUI: React.FC<AnvilUIProps> = ({
       }
     }
 
-    if (cleanName && cleanName !== (leftSlot.customName ?? '')) {
+    if (cleanName !== currentName) {
       output.customName = cleanName;
       cost += 1;
-    } else if (!cleanName && leftSlot.customName) {
-      delete output.customName;
-      cost += 1;
+      if (!cleanName || cleanName === defaultName) {
+        delete output.customName;
+      }
     }
 
     if (cost <= 0) return null;
     return { item: output, cost };
-  }, [leftSlot, nameValue, rightSlot]);
+  }, [getLocalizedItemName, leftSlot, nameValue, rightSlot]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -92,9 +96,10 @@ export const AnvilUI: React.FC<AnvilUIProps> = ({
     if (!leftSlot) {
       setNameValue('');
     } else {
-      setNameValue(leftSlot.customName ?? ItemRegistry.getDisplayName(leftSlot.id));
+      const def = ItemRegistry.get(leftSlot.id);
+      setNameValue(leftSlot.customName ?? getLocalizedItemName(leftSlot.id, def?.displayName));
     }
-  }, [leftSlot]);
+  }, [getLocalizedItemName, leftSlot]);
 
   const returnLocalItems = useCallback(() => {
     if (heldItem) inventory.addItem(heldItem.id, heldItem.count);
@@ -329,7 +334,7 @@ export const AnvilUI: React.FC<AnvilUIProps> = ({
           minWidth: '130px',
         }}>
           <span style={{ fontWeight: 'bold', fontSize: '13px' }}>
-            {hoveredItem.item.customName || ItemRegistry.getDisplayName(hoveredItem.item.id)}
+            {hoveredItem.item.customName || getLocalizedItemName(hoveredItem.item.id, ItemRegistry.get(hoveredItem.item.id)?.displayName)}
           </span>
           {hoveredItem.item.enchantments?.map((enchantment) => (
             <span key={enchantment.id} style={{ color: '#aaaaff', fontSize: '10px' }}>

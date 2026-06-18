@@ -4,6 +4,7 @@ import { EnchantSystem } from '../systems/EnchantSystem';
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { Inventory, INVENTORY_SIZE } from '../player/Inventory';
+import { useI18n } from '../i18n';
 
 interface EnchantUIProps {
   inventory: Inventory;
@@ -26,6 +27,7 @@ export const EnchantUI: React.FC<EnchantUIProps> = ({
   onEnchantItem,
   getItemIconStyle,
 }) => {
+  const { getLocalizedItemName } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
   const [enchantSlot, setEnchantSlot] = useState<ItemStack | null>(null);
   const [hoveredItem, setHoveredItem] = useState<{ item: ItemStack; x: number; y: number } | null>(null);
@@ -308,7 +310,7 @@ export const EnchantUI: React.FC<EnchantUIProps> = ({
           minWidth: '130px',
         }}>
           <span style={{ fontWeight: 'bold', fontSize: '13px' }}>
-            {hoveredItem.item.customName || ItemRegistry.getDisplayName(hoveredItem.item.id)}
+            {hoveredItem.item.customName || getLocalizedItemName(hoveredItem.item.id, ItemRegistry.get(hoveredItem.item.id)?.displayName)}
           </span>
           {hoveredItem.item.enchantments?.map((enchantment) => (
             <span key={enchantment.id} style={{ color: '#aaaaff', fontSize: '10px' }}>

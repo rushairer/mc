@@ -341,7 +341,7 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
             }}>
               {itemDef ? (
                 <>
-                  <div style={getItemIconStyle(item!.id, 32)} title={itemDef.displayName} />
+                  <div style={getItemIconStyle(item!.id, 32)} title={getLocalizedItemName(item!.id, itemDef.displayName)} />
                   {item!.count > 1 && (
                     <span style={{
                       position: 'absolute',

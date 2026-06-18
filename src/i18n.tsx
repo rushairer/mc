@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { BlockRegistry } from './world/BlockRegistry';
 import { ItemRegistry } from './items/ItemRegistry';
+import { localizeItemDisplayName } from './i18nItemNames';
 
 export type Locale = 'en' | 'zh-CN' | 'zh-TW';
 
@@ -853,53 +854,8 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return localized;
     }
 
-    // Dynamic decomposition translation for Chinese locales
     if (locale !== 'en' && lookupName) {
-      const parts = lookupName.split('_');
-      
-      const cnDict: Record<string, string> = {
-        oak: '橡木', spruce: '云杉', birch: '白桦', jungle: '丛林', acacia: '金合欢', dark: '深色',
-        planks: '木板', log: '原木', leaves: '树叶', sapling: '树苗', sandstone: '砂岩', stone: '石',
-        redstone: '红石', ore: '矿石', block: '块', wool: '羊毛', glass: '玻璃', terracotta: '陶瓦',
-        concrete: '混凝土', powder: '粉', stained: '染色', shulker: '潜影', box: '盒',
-        white: '白色', orange: '橙色', magenta: '品红色', light: '淡', blue: '蓝色', yellow: '黄色',
-        lime: '黄绿色', pink: '粉红色', gray: '灰色', silver: '淡灰色', cyan: '青色', purple: '紫色',
-        brown: '棕色', green: '绿色', red: '红色', black: '黑色',
-        sword: '剑', pickaxe: '镐', axe: '斧', shovel: '铲', hoe: '锄', shears: '剪刀', bow: '弓', arrow: '箭',
-        wooden: '木', iron: '铁', golden: '金', gold: '金', diamond: '钻石', coal: '煤炭', charcoal: '木炭',
-        ingot: '锭', nugget: '粒', stick: '木棍', raw: '生', cooked: '熟', beef: '牛肉', porkchop: '猪排',
-        mutton: '羊肉', chicken: '鸡肉', fish: '鱼', salmon: '鲑鱼', apple: '苹果', bread: '面包',
-        carrot: '胡萝卜', potato: '马铃薯', baked: '烤', beetroot: '甜菜', cookie: '曲奇', melon: '西瓜',
-        pumpkin: '南瓜', pie: '派', cake: '蛋糕', helmet: '头盔', chestplate: '胸甲', leggings: '护腿',
-        boots: '靴子', leather: '皮革', chainmail: '链甲', water: '水', lava: '岩浆', brick: '砖',
-        coarse: '粗糙', podzol: '灰壤', cobblestone: '圆石', mossy: '苔石', obsidian: '黑曜石',
-        grass: '草', torch: '火把', repeater: '中继器', piston: '活塞', lever: '拉杆', chest: '箱子',
-        door: '门', trapdoor: '活板门', bed: '床', double: '双层', slab: '台阶', stairs: '楼梯'
-      };
-
-      const twDict: Record<string, string> = {
-        oak: '橡木', spruce: '杉木', birch: '白樺', jungle: '叢林', acacia: '金合歡', dark: '深色',
-        planks: '木板', log: '原木', leaves: '樹葉', sapling: '樹苗', sandstone: '砂岩', stone: '石',
-        redstone: '紅石', ore: '礦石', block: '塊', wool: '羊毛', glass: '玻璃', terracotta: '陶瓦',
-        concrete: '混凝土', powder: '粉', stained: '染色', shulker: '界伏', box: '盒',
-        white: '白色', orange: '橙色', magenta: '品紅色', light: '淡', blue: '藍色', yellow: '黃色',
-        lime: '黃綠色', pink: '粉紅色', gray: '灰色', silver: '淡灰色', cyan: '青色', purple: '紫色',
-        brown: '棕色', green: '綠色', red: '紅色', black: '黑色',
-        sword: '劍', pickaxe: '鎬', axe: '斧', shovel: '鏟', hoe: '鋤', shears: '剪刀', bow: '弓', arrow: '箭',
-        wooden: '木', iron: '鐵', golden: '金', gold: '金', diamond: '鑽石', coal: '煤炭', charcoal: '木炭',
-        ingot: '錠', nugget: '粒', stick: '木棍', raw: '生', cooked: '熟', beef: '牛肉', porkchop: '豬排',
-        mutton: '羊肉', chicken: '雞肉', fish: '魚', salmon: '鮭魚', apple: '蘋果', bread: '麵包',
-        carrot: '胡蘿蔔', potato: '馬鈴薯', baked: '烤', beetroot: '甜菜', cookie: '曲奇', melon: '西瓜',
-        pumpkin: '南瓜', pie: '派', cake: '蛋糕', helmet: '頭盔', chestplate: '胸甲', leggings: '護腿',
-        boots: '靴子', leather: '皮革', chainmail: '鏈甲', water: '水', lava: '岩漿', brick: '磚',
-        coarse: '粗糙', podzol: '灰壤', cobblestone: '圓石', mossy: '苔石', obsidian: '黑曜石',
-        grass: '草', torch: '火把', repeater: '中繼器', piston: '活塞', lever: '拉桿', chest: '箱子',
-        door: '門', trapdoor: '活板門', bed: '床', double: '雙層', slab: '半磚', stairs: '樓梯'
-      };
-
-      const dict = locale === 'zh-TW' ? twDict : cnDict;
-      const translatedParts = parts.map(p => dict[p] || p);
-      return translatedParts.join('');
+      return localizeItemDisplayName(locale, lookupName, fallbackName);
     }
 
     if (fallbackName) return fallbackName;

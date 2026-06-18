@@ -18,6 +18,7 @@ import { SaveSystem, type SaveData } from '../systems/SaveSystem';
 import { RedstoneSystem } from '../systems/RedstoneSystem';
 import { ProjectileSystem } from '../systems/ProjectileSystem';
 import { CommandSystem } from '../systems/CommandSystem';
+import { DroppedItemSystem } from '../systems/DroppedItemSystem';
 import { CHUNK_SIZE } from '../constants';
 import type { BlockFacing, BlockMetadata, ItemStack } from '../types';
 
@@ -73,6 +74,7 @@ export class Game {
   private sound: SoundSystem;
   private redstone: RedstoneSystem;
   private projectiles: ProjectileSystem;
+  droppedItems!: DroppedItemSystem;
   private commands: CommandSystem;
   private clock: THREE.Clock;
   running = false;
@@ -123,8 +125,8 @@ export class Game {
     this.mobs = new MobSystem(this.renderer.scene);
     this.particles = new ParticleSystem(this.renderer.scene);
     this.fluids = new FluidSystem();
-    this.weather = new WeatherSystem(this.renderer.scene);
     this.sound = new SoundSystem();
+    this.weather = new WeatherSystem(this.renderer.scene, this.sound);
     this.redstone = new RedstoneSystem();
     this.projectiles = new ProjectileSystem(this.renderer.scene);
     this.commands = new CommandSystem({
@@ -140,20 +142,20 @@ export class Game {
       addItem: (id, count) => this.inventory.addItem(id, count),
       setGameMode: (mode) => { this.gameMode = mode; },
       setTimeOfDay: (t) => { this.gameTime = t; },
-      setWeather: (_type) => { /* TODO: add setWeatherType to WeatherSystem */ },
+      setWeather: (type) => { this.weather.setWeatherType(type); },
       getGameMode: () => this.gameMode,
     });
 
     // Default hotbar (Starter Kit)
-    this.inventory.setSlot(0, { id: 130, count: 1 });  // Stone Sword
-    this.inventory.setSlot(1, { id: 132, count: 1 });  // Stone Pickaxe
-    this.inventory.setSlot(2, { id: 133, count: 1 });  // Stone Axe
-    this.inventory.setSlot(3, { id: 172, count: 32 }); // Steak (Food)
-    this.inventory.setSlot(4, { id: 6, count: 64 });   // Oak Log
+    this.inventory.setSlot(0, { id: 272, count: 1 });  // Stone Sword
+    this.inventory.setSlot(1, { id: 274, count: 1 });  // Stone Pickaxe
+    this.inventory.setSlot(2, { id: 275, count: 1 });  // Stone Axe
+    this.inventory.setSlot(3, { id: 364, count: 32 }); // Steak (Food)
+    this.inventory.setSlot(4, { id: 17, count: 64 });   // Oak Log
     this.inventory.setSlot(5, { id: 5, count: 64 });   // Oak Planks
-    this.inventory.setSlot(6, { id: 24, count: 4 });   // Crafting Table
-    this.inventory.setSlot(7, { id: 36, count: 4 });   // Chest
-    this.inventory.setSlot(8, { id: 30, count: 64 });  // Torch
+    this.inventory.setSlot(6, { id: 58, count: 4 });   // Crafting Table
+    this.inventory.setSlot(7, { id: 54, count: 4 });   // Chest
+    this.inventory.setSlot(8, { id: 50, count: 64 });  // Torch
 
 
     // Spawn
@@ -161,6 +163,7 @@ export class Game {
     const spawnZ = 8;
     const spawnY = this.chunks.getWorldGen().getTerrainHeight(spawnX, spawnZ) + 3;
     this.player = new Player(spawnX, spawnY, spawnZ);
+    this.droppedItems = new DroppedItemSystem(this.renderer.scene, (itemId) => this.player.createHeldItemMesh(itemId));
     this.chunks.update(spawnX, spawnZ);
     this.player.resolveStuck(this.chunks);
     this.renderer.scene.add(this.player.mesh);
@@ -257,10 +260,45 @@ export class Game {
           slot.rotation.set(Math.PI / 6, Math.PI / 4, 0); // Rotate slightly for 3D perspective
           mesh.rotation.set(0, 0, 0); // Reset default rotation
         } else if (itemDef.category === 'tool') {
-          // Align tool handle inside hand, point diagonal forward/up-left, tilted at 60 deg (lowered to y = -0.56)
+          // Align tool handle inside hand (lowered to y = -0.56)
           slot.position.set(0.02, -0.56, -0.05);
           slot.rotation.set(0, 0, 0);
-          mesh.rotation.set(-Math.PI / 4, 0, Math.PI / 4); // First person custom rotation (tilted inward towards center crosshair)
+
+          // Get default positions to compute the direction from slot to screen center
+          const defX = 0.42;
+          const defY = -0.02;
+          const defZ = -0.22;
+          const defRotX = Math.PI / 3.2;
+          const defRotY = Math.PI / 4.5;
+          const defRotZ = -Math.PI / 12;
+
+          const armGroupRot = new THREE.Euler(defRotX, defRotY, defRotZ);
+          const slotPos = slot.position.clone();
+          // Calculate the slot position in camera space (idle state)
+          const slotCameraPos = slotPos.applyEuler(armGroupRot).add(new THREE.Vector3(defX, defY, defZ));
+
+          // Screen center target at distance D (D controls how inward/forward it points)
+          const targetDistance = 0.95;
+          const targetCameraPos = new THREE.Vector3(0, 0, -targetDistance);
+
+          // Direction from hand/slot to screen center target
+          const toolDir = new THREE.Vector3().subVectors(targetCameraPos, slotCameraPos).normalize();
+
+          // Align local Y axis (0, 1, 0) with toolDir in camera space
+          const qAlign = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), toolDir);
+
+          // Convert to local space of the slot (which is the child of arm group)
+          const qArm = new THREE.Quaternion().setFromEuler(armGroupRot);
+          const qMesh = qArm.clone().invert().multiply(qAlign);
+
+          // Apply a twist rotation around the tool's local Y axis so the flat side faces the screen naturally
+          // We twist by -Math.PI / 4.5 (approx -40 degrees)
+          const twistAngle = -Math.PI / 4.5;
+          const qTwist = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), twistAngle);
+          qMesh.multiply(qTwist);
+
+          // Apply calculated quaternion to the mesh
+          mesh.quaternion.copy(qMesh);
         } else {
           // Material / Food (lowered to y = -0.58)
           slot.position.set(0.02, -0.58, -0.08);
@@ -269,6 +307,43 @@ export class Game {
         }
       }
     }
+  }
+
+  dropHandItem() {
+    const slotItem = this.inventory.getSlot(this.player.selectedSlot);
+    if (!slotItem) return;
+
+    let dropCount = 1;
+    if (this.gameMode !== 'creative') {
+      dropCount = (this.input.isKeyDown('control') || this.input.isKeyDown('shift')) ? slotItem.count : 1;
+      this.inventory.removeFromSlot(this.player.selectedSlot, dropCount);
+    } else {
+      dropCount = (this.input.isKeyDown('control') || this.input.isKeyDown('shift')) ? slotItem.count : 1;
+    }
+
+    const lookDir = this.player.forward.clone();
+    const spawnPos = this.player.eyePosition.clone().sub(new THREE.Vector3(0, 0.2, 0));
+    
+    const velocity = lookDir.multiplyScalar(3.5).add(new THREE.Vector3(0, 2.0, 0));
+    velocity.x += (Math.random() - 0.5) * 0.5;
+    velocity.z += (Math.random() - 0.5) * 0.5;
+
+    this.droppedItems.spawnItem(slotItem.id, dropCount, spawnPos, velocity, 1.5);
+    this.notifyState();
+  }
+
+  dropItemFromUI(itemId: number, count: number) {
+    if (count <= 0) return;
+
+    const lookDir = this.player.forward.clone();
+    const spawnPos = this.player.eyePosition.clone().sub(new THREE.Vector3(0, 0.2, 0));
+    
+    const velocity = lookDir.multiplyScalar(3.5).add(new THREE.Vector3(0, 2.0, 0));
+    velocity.x += (Math.random() - 0.5) * 0.5;
+    velocity.z += (Math.random() - 0.5) * 0.5;
+
+    this.droppedItems.spawnItem(itemId, count, spawnPos, velocity, 1.5);
+    this.notifyState();
   }
 
   onStateChange(listener: GameStateListener) {
@@ -388,8 +463,8 @@ export class Game {
       const surfaceBlockId = this.chunks.getBlock(rx, ry, rz);
       const belowBlockId = this.chunks.getBlock(rx, ry - 1, rz);
 
-      // Avoid water (13) and lava (14)
-      if (surfaceBlockId === 13 || surfaceBlockId === 14 || belowBlockId === 13 || belowBlockId === 14) {
+      // Avoid water and lava
+      if (BlockRegistry.isFluid(surfaceBlockId) || BlockRegistry.isFluid(belowBlockId)) {
         continue;
       }
 
@@ -463,7 +538,9 @@ export class Game {
 
     // Game time (day/night cycle)
     this.gameTime = (this.gameTime + dt / DAY_LENGTH) % 1;
-    this.renderer.setTimeOfDay(this.gameTime);
+    const lightningOpacity = this.weather.getLightningFlashOpacity();
+    this.renderer.setTimeOfDay(this.gameTime, lightningOpacity);
+    this.chunks.setLightningOffset(lightningOpacity);
     this.chunks.timeOfDay = this.gameTime;
 
     // Rebuild meshes when sun position changes enough to affect brightness
@@ -480,26 +557,37 @@ export class Game {
       Math.floor(this.player.position.y + 1.62),
       Math.floor(this.player.position.z)
     );
-    const isUnderwater = headBlock === 13;
+    const isUnderwater = (headBlock & 0x3FF) === 8 || (headBlock & 0x3FF) === 9;
 
     if (isUnderwater) {
       const sunAngle = this.gameTime * Math.PI * 2;
       const sunY = Math.sin(sunAngle);
       // Day goes from 0.5 to 1.0. Night drops off rapidly to 0.0 (pitch black)
       const sunFactor = sunY >= 0 ? (sunY + 1) / 2 : Math.pow(sunY + 1, 2.0) * 0.5;
+      
+      // Effective sun factor accounts for lightning flash illumination
+      const effectiveSunFactor = THREE.MathUtils.lerp(sunFactor, 1.2, lightningOpacity);
+      
       const waterFogColor = new THREE.Color(
-        0.25 * sunFactor,
-        0.46 * sunFactor,
-        0.89 * sunFactor
+        0.25 * effectiveSunFactor,
+        0.46 * effectiveSunFactor,
+        0.89 * effectiveSunFactor
       );
+      
+      if (lightningOpacity > 0) {
+        // Blend towards light blue/white
+        const flashColor = new THREE.Color(0xd0e0ff);
+        waterFogColor.lerp(flashColor, lightningOpacity * 0.5);
+      }
 
       this.renderer.scene.background = waterFogColor;
       if (this.renderer.scene.fog) {
         const fog = this.renderer.scene.fog as THREE.Fog;
         fog.color.copy(waterFogColor);
         fog.near = 0;
-        // At midnight (sunFactor=0), visibility is only 1.8 blocks
-        fog.far = 36 * Math.max(0.05, sunFactor);
+        // At midnight (sunFactor=0), visibility is only 1.8 blocks, but lightning flashes make it clearer
+        const visibilityFactor = THREE.MathUtils.lerp(Math.max(0.05, sunFactor), 1.0, lightningOpacity);
+        fog.far = 36 * visibilityFactor;
       }
     } else {
       if (this.renderer.scene.fog) {
@@ -617,6 +705,16 @@ export class Game {
       0.6, 1.8
     );
 
+    // Update dropped items
+    this.droppedItems.update(
+      dt,
+      this.player.position,
+      (x, y, z) => this.chunks.isSolidBlock(x, y, z),
+      this.inventory,
+      () => this.sound.playPickup(),
+      () => this.notifyState()
+    );
+
     // Resolve collisions (mob-mob, player-mob)
     this.resolveCollisions();
 
@@ -648,6 +746,12 @@ export class Game {
       this.perspectiveMode = this.perspectiveMode === 'first' ? 'third' : 'first';
       this.input.keys.delete('f5');
       this.notifyState();
+    }
+
+    // Q key → drop active hand item
+    if (!this.chatOpen && this.input.isKeyDown('q')) {
+      this.dropHandItem();
+      this.input.keys.delete('q');
     }
 
     // Chunk loading
@@ -797,10 +901,13 @@ export class Game {
     if (!this.chatOpen && this.input.isMouseDown(0) && this.swordSwingTimer <= 0) {
       // Bow shooting
       const heldItemId = this.inventory.getSlot(this.player.selectedSlot)?.id;
-      if (heldItemId === 190) { // Bow
-        const hasArrow = this.inventory.countItem(191) > 0;
+      const heldItemDef = heldItemId ? ItemRegistry.get(heldItemId) : null;
+      if (heldItemDef && heldItemDef.name === 'bow') { // Bow
+        const arrowDef = ItemRegistry.getByName('arrow');
+        const arrowId = arrowDef?.id ?? 262;
+        const hasArrow = this.inventory.countItem(arrowId) > 0 || this.gameMode === 'creative';
         if (hasArrow) {
-          if (this.gameMode !== 'creative') this.inventory.removeItem(191, 1);
+          if (this.gameMode !== 'creative') this.inventory.removeItem(arrowId, 1);
           this.projectiles.shootArrow(
             this.player.eyePosition.clone(),
             this.player.forward.clone(),
@@ -862,13 +969,19 @@ export class Game {
           }
 
           if (this.gameMode !== 'creative') {
-            // Drop item
+            // Drop item in 3D world
+            const dropPos = new THREE.Vector3(bp.x + 0.5, bp.y + 0.3, bp.z + 0.5);
+            const velocity = new THREE.Vector3(
+              (Math.random() - 0.5) * 1.5,
+              1.5 + Math.random() * 1.5,
+              (Math.random() - 0.5) * 1.5
+            );
             if (isDoor) {
-              this.inventory.addItem(37, 1);
+              this.droppedItems.spawnItem(37, 1, dropPos, velocity, 0.5);
             } else {
               const dropId = ItemRegistry.getBlockDropItem(blockId);
               if (dropId > 0) {
-                this.inventory.addItem(dropId, 1);
+                this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
               }
             }
 
@@ -907,15 +1020,17 @@ export class Game {
       if (this.targetBlock) {
         const { blockPos, faceNormal } = this.targetBlock;
         const targetId = this.chunks.getBlock(blockPos.x, blockPos.y, blockPos.z);
+        const targetDef = BlockRegistry.get(targetId);
+        const targetName = targetDef?.name ?? '';
 
         // Right-click furnace
-        if (targetId === 25) {
+        if (targetName.includes('furnace')) {
           this.openFurnaceUI();
           this.placeCooldown = 0.5;
-        } else if (targetId === 24) {
+        } else if (targetName === 'crafting_table') {
           this.openCraftingTableUI();
           this.placeCooldown = 0.5;
-        } else if (targetId === 36) {
+        } else if (targetName === 'chest') {
           this.openChestUI(blockPos.x, blockPos.y, blockPos.z);
           this.placeCooldown = 0.5;
         } else if (this.isDoorBlock(targetId)) {
@@ -926,7 +1041,7 @@ export class Game {
           this.toggleTrapdoor(blockPos.x, blockPos.y, blockPos.z);
           this.sound.playLever();
           this.placeCooldown = 0.25;
-        } else if (targetId === 34) {
+        } else if (targetName === 'lever') {
           const powered = this.redstone.toggleLever(blockPos.x, blockPos.y, blockPos.z);
           this.updateRedstoneMetadata(blockPos.x, blockPos.y, blockPos.z, {
             powered,
@@ -934,11 +1049,11 @@ export class Game {
           });
           this.sound.playLever();
           this.placeCooldown = 0.25;
-        } else if (targetId === 21) {
+        } else if (targetName === 'tnt') {
           // Ignite TNT
           this.igniteTNT(blockPos.x, blockPos.y, blockPos.z);
           this.placeCooldown = 0.25;
-        } else if (targetId === 75) {
+        } else if (targetName === 'bed') {
           // Bed: set spawn point
           this.bedSpawnPoint = new THREE.Vector3(blockPos.x + 0.5, blockPos.y + 1, blockPos.z + 0.5);
           this.sound.playBlockPlace();
@@ -957,7 +1072,9 @@ export class Game {
           if (!insidePlayer) {
             const slot = this.inventory.getSlot(this.player.selectedSlot);
             if (slot && slot.count > 0) {
-              const blockId = ItemRegistry.isBlock(slot.id) ? slot.id : 0;
+              const itemDef = ItemRegistry.get(slot.id);
+              const isDoorItem = itemDef && itemDef.name.endsWith('door');
+              const blockId = (ItemRegistry.isBlock(slot.id) || isDoorItem) ? slot.id : 0;
               if (blockId > 0) {
                 let facing: BlockFacing = 'north';
                 if (faceNormal.x > 0) facing = 'east';
@@ -967,8 +1084,12 @@ export class Game {
                 else if (faceNormal.z > 0) facing = 'south';
                 else if (faceNormal.z < 0) facing = 'north';
 
-                if (blockId === 37) {
-                  const placed = this.placeDoor(placePos.x, placePos.y, placePos.z);
+                const blockDef = BlockRegistry.get(blockId) || BlockRegistry.getByName(itemDef?.name ?? '');
+                const isSlab = blockDef && blockDef.name.includes('slab') && !blockDef.name.includes('double');
+
+                if (isDoorItem || (blockDef && blockDef.name.endsWith('door') && !blockDef.name.includes('trapdoor'))) {
+                  const doorBlockId = blockDef?.id ?? 64; // Fallback to wooden door block (64)
+                  const placed = this.placeDoor(placePos.x, placePos.y, placePos.z, doorBlockId);
                   if (placed) {
                     this.sound.playBlockPlace();
                     if (this.gameMode !== 'creative') {
@@ -976,21 +1097,18 @@ export class Game {
                     }
                     this.placeCooldown = 0.25;
                   }
-                } else if (blockId >= 41 && blockId <= 46) {
+                } else if (isSlab) {
                   // Slab placement
                   const existingBlock = this.chunks.getBlock(placePos.x, placePos.y, placePos.z);
                   if (existingBlock === blockId) {
-                    // Stacking: convert to full block
-                    const fullBlockMap: Record<number, number> = {
-                      41: 1,  // stone
-                      42: 4,  // cobblestone
-                      43: 5,  // oak_planks
-                      44: 19, // bricks
-                      45: 15, // sandstone
-                      46: 98, // stone_bricks (we'll use 1 for now)
-                    };
-                    const fullBlock = fullBlockMap[blockId] || 1;
-                    this.chunks.setBlock(placePos.x, placePos.y, placePos.z, fullBlock);
+                    // Stacking: convert to double slab block
+                    let doubleBlockId = blockId;
+                    const doubleName = blockDef.name.startsWith('double_') ? blockDef.name : `double_${blockDef.name}`;
+                    const doubleDef = BlockRegistry.getByName(doubleName) || BlockRegistry.getByName(`minecraft:${doubleName}`);
+                    if (doubleDef) {
+                      doubleBlockId = doubleDef.id;
+                    }
+                    this.chunks.setBlock(placePos.x, placePos.y, placePos.z, doubleBlockId);
                     this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, null);
                   } else {
                     this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
@@ -1014,7 +1132,7 @@ export class Game {
                   this.setPlacedBlockMetadata(placePos.x, placePos.y, placePos.z, blockId, facing);
 
                   // If placing water/lava, start fluid simulation
-                  if (blockId === 13 || blockId === 14) {
+                  if (BlockRegistry.isFluid(blockId)) {
                     this.fluids.addSource(placePos.x, placePos.y, placePos.z, blockId);
                   }
                 }
@@ -1029,7 +1147,17 @@ export class Game {
     const foodSlotStack = this.inventory.getSlot(this.player.selectedSlot);
     const isHoldingFood = foodSlotStack && ItemRegistry.isFood(foodSlotStack.id);
     const targetBlockId = this.targetBlock ? this.chunks.getBlock(this.targetBlock.blockPos.x, this.targetBlock.blockPos.y, this.targetBlock.blockPos.z) : 0;
-    const pointingAtInteractive = this.targetBlock && (targetBlockId === 25 || targetBlockId === 24 || targetBlockId === 34 || targetBlockId === 36 || this.isDoorBlock(targetBlockId) || this.isTrapdoorBlock(targetBlockId));
+    const targetDef = targetBlockId ? BlockRegistry.get(targetBlockId) : null;
+    const targetName = targetDef?.name ?? '';
+    const pointingAtInteractive = this.targetBlock && (
+      targetName.includes('furnace') ||
+      targetName === 'crafting_table' ||
+      targetName === 'lever' ||
+      targetName === 'chest' ||
+      targetName === 'bed' ||
+      this.isDoorBlock(targetBlockId) ||
+      this.isTrapdoorBlock(targetBlockId)
+    );
 
     if (!this.chatOpen && this.input.isMouseDown(2) && isHoldingFood && !pointingAtInteractive && this.player.hunger < 20) {
       this.eatingTimer += dt;
@@ -1040,8 +1168,9 @@ export class Game {
         this.sound.playEat();
 
         let foodColor = 0xC0A080;
-        if (foodSlotStack.id === 170) foodColor = 0xFF0000;
-        else if (foodSlotStack.id === 172 || foodSlotStack.id === 173) foodColor = 0xA04040;
+        const baseFoodId = foodSlotStack.id & 0x3FF;
+        if (baseFoodId === 260) foodColor = 0xFF0000;
+        else if (baseFoodId === 363 || baseFoodId === 364) foodColor = 0xA04040;
 
         const front = this.player.eyePosition.clone().add(this.player.forward.multiplyScalar(0.4));
         this.particles.spawnBlockBreak(front.x, front.y, front.z, foodColor);
@@ -1090,11 +1219,33 @@ export class Game {
 
     // Death check
     if (this.player.health <= 0) {
-      // Drop inventory items at death location
+      // Drop inventory items at death location in 3D world
+      const deathPos = this.player.position.clone().add(new THREE.Vector3(0, 0.5, 0));
       for (let i = 0; i < 36; i++) {
         const slot = this.inventory.getSlot(i);
         if (slot) {
-          this.inventory.removeFromSlot(i, slot.count);
+          const velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 4.0,
+            2.0 + Math.random() * 3.0,
+            (Math.random() - 0.5) * 4.0
+          );
+          this.droppedItems.spawnItem(slot.id, slot.count, deathPos, velocity, 1.0);
+          this.inventory.setSlot(i, null);
+        }
+      }
+      // Drop equipped armor as well
+      if (this.inventory.armor && Array.isArray(this.inventory.armor)) {
+        for (let i = 0; i < 4; i++) {
+          const armorItem = this.inventory.armor[i];
+          if (armorItem) {
+            const velocity = new THREE.Vector3(
+              (Math.random() - 0.5) * 4.0,
+              2.0 + Math.random() * 3.0,
+              (Math.random() - 0.5) * 4.0
+            );
+            this.droppedItems.spawnItem(armorItem.id, armorItem.count, deathPos, velocity, 1.0);
+            this.inventory.armor[i] = null;
+          }
         }
       }
       this.openUI = 'death';
@@ -1155,10 +1306,16 @@ export class Game {
       mob.def.bodyColor
     );
 
-    // Drop items
+    // Drop items in 3D world
     for (const drop of mob.def.drops) {
       if (Math.random() < drop.chance) {
-        this.inventory.addItem(drop.id, drop.count);
+        const dropPos = mob.position.clone().add(new THREE.Vector3(0, 0.5, 0));
+        const velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * 1.5,
+          1.5 + Math.random() * 1.5,
+          (Math.random() - 0.5) * 1.5
+        );
+        this.droppedItems.spawnItem(drop.id, drop.count, dropPos, velocity, 0.5);
       }
     }
   }
@@ -1189,6 +1346,18 @@ export class Game {
           if (blockId === 21) {
             this.igniteTNT(bx, by, bz);
             continue;
+          }
+          if (this.gameMode !== 'creative') {
+            const dropId = ItemRegistry.getBlockDropItem(blockId);
+            if (dropId > 0 && Math.random() < 0.6) {
+              const dropPos = new THREE.Vector3(bx + 0.5, by + 0.3, bz + 0.5);
+              const velocity = new THREE.Vector3(
+                (bx + 0.5 - x) * 2.5 + (Math.random() - 0.5) * 1.5,
+                (by + 0.5 - y) * 2.5 + 2.0 + Math.random() * 2.0,
+                (bz + 0.5 - z) * 2.5 + (Math.random() - 0.5) * 1.5
+              );
+              this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
+            }
           }
           this.chunks.setBlock(bx, by, bz, 0);
         }
@@ -1251,26 +1420,27 @@ export class Game {
       const ny = y + dy;
       const nz = z + dz;
       const nb = this.chunks.getBlock(nx, ny, nz);
-      if (nb === 13 || nb === 14) {
+      if (BlockRegistry.isFluid(nb)) {
         this.fluids.addSource(nx, ny, nz, nb);
       }
     }
   }
 
   private getBlockParticleColor(blockId: number): number {
+    const baseId = blockId & 0x3FF;
     const colors: Record<number, number> = {
       1: 0x888888,   // stone
       2: 0x5B8C32,   // grass
       3: 0x8B6914,   // dirt
       4: 0x7A7A7A,   // cobblestone
-      5: 0xBC9862,   // oak planks
-      6: 0x6B511D,   // oak log
-      7: 0x3A7D1A,   // leaves
-      8: 0xE8D7A3,   // sand
-      19: 0x9B4B3A,  // bricks
-      26: 0xCCEEFF,  // glass
+      5: 0xBC9862,   // planks
+      17: 0x6B511D,  // log
+      18: 0x3A7D1A,  // leaves
+      12: 0xE8D7A3,  // sand
+      45: 0x9B4B3A,  // bricks
+      20: 0xCCEEFF,  // glass
     };
-    return colors[blockId] ?? 0xAAAAAA;
+    return colors[baseId] ?? 0xAAAAAA;
   }
 
   private createHighlight() {
@@ -1354,6 +1524,7 @@ export class Game {
     this.input.keys.clear();
     this.input.mouseButtons.clear();
     this.input.requestLock();
+    this.lockCooldown = 0.5;
     this.notifyState();
   }
 
@@ -1376,7 +1547,7 @@ export class Game {
       Math.floor(this.player.position.y + 1.62),
       Math.floor(this.player.position.z)
     );
-    const isUnderwater = headBlock === 13;
+    const isUnderwater = (headBlock & 0x3FF) === 8 || (headBlock & 0x3FF) === 9;
 
     const state: GameState = {
       fps: this.currentFps,
@@ -1421,7 +1592,7 @@ export class Game {
       chunkData.push({
         cx: chunk.cx,
         cz: chunk.cz,
-        data: new Uint8Array(chunk.data),
+        data: new Uint16Array(chunk.data),
         metadata: chunk.serializeMetadata(),
       });
     }
@@ -1516,7 +1687,11 @@ export class Game {
       return;
     }
 
-    if (blockId === 36) {
+    const def = BlockRegistry.get(blockId);
+    if (!def) return;
+    const name = def.name;
+
+    if (name === 'chest') {
       this.chunks.setBlockMeta(x, y, z, {
         facing,
         containerType: 'chest',
@@ -1525,7 +1700,7 @@ export class Game {
       return;
     }
 
-    if (blockId === 39) {
+    if (name.includes('trapdoor')) {
       let hingeFacing = facing;
       if (facing === 'up' || facing === 'down') {
         hingeFacing = this.getPlayerHorizontalFacing();
@@ -1548,24 +1723,32 @@ export class Game {
   }
 
   private getRedstoneType(blockId: number): BlockMetadata['redstoneType'] | null {
-    if (blockId === 30) return 'torch';
-    if (blockId === 31) return 'wire';
-    if (blockId === 32) return 'repeater';
-    if (blockId === 33) return 'piston';
-    if (blockId === 34) return 'lever';
+    const def = BlockRegistry.get(blockId);
+    if (!def) return null;
+    const name = def.name;
+    if (name === 'redstone_torch' || name === 'unlit_redstone_torch') return 'torch';
+    if (name === 'redstone_wire') return 'wire';
+    if (name === 'unpowered_repeater' || name === 'powered_repeater') return 'repeater';
+    if (name === 'piston' || name === 'sticky_piston') return 'piston';
+    if (name === 'lever') return 'lever';
     return null;
   }
 
   private usesFacingMetadata(blockId: number): boolean {
-    return blockId === 24 || blockId === 25 || blockId === 36 || blockId === 39 || blockId === 40;
+    const def = BlockRegistry.get(blockId);
+    if (!def) return false;
+    const name = def.name;
+    return name.includes('furnace') || name === 'chest' || name.includes('trapdoor') || name === 'crafting_table' || name.includes('stairs') || name.includes('repeater') || name.includes('piston') || name.includes('door');
   }
 
   private isDoorBlock(blockId: number): boolean {
-    return blockId === 37 || blockId === 38;
+    const def = BlockRegistry.get(blockId);
+    return def ? def.name.endsWith('door') && !def.name.includes('trapdoor') : false;
   }
 
   private isTrapdoorBlock(blockId: number): boolean {
-    return blockId === 39 || blockId === 40;
+    const def = BlockRegistry.get(blockId);
+    return def ? def.name.includes('trapdoor') : false;
   }
 
   private getPlayerHorizontalFacing(): BlockFacing {
@@ -1623,7 +1806,7 @@ export class Game {
     }
   }
 
-  private placeDoor(x: number, y: number, z: number): boolean {
+  private placeDoor(x: number, y: number, z: number, doorBlockId: number): boolean {
     if (y < 0 || y >= 254) return false;
     if (this.chunks.getBlock(x, y, z) !== 0 || this.chunks.getBlock(x, y + 1, z) !== 0) {
       return false;
@@ -1638,7 +1821,7 @@ export class Game {
 
     const facing = this.getPlayerHorizontalFacing();
     const hinge = this.getDoorHinge(x, y, z, facing);
-    this.chunks.setBlock(x, y, z, 37);
+    this.chunks.setBlock(x, y, z, doorBlockId);
     this.chunks.setBlockMeta(x, y, z, {
       facing,
       doorHalf: 'lower',
@@ -1646,7 +1829,7 @@ export class Game {
       open: false,
     }, true);
 
-    this.chunks.setBlock(x, y + 1, z, 37);
+    this.chunks.setBlock(x, y + 1, z, doorBlockId);
     this.chunks.setBlockMeta(x, y + 1, z, {
       facing,
       doorHalf: 'upper',
@@ -1726,19 +1909,17 @@ export class Game {
 
     const meta = this.chunks.getBlockMeta(x, y, z);
     const open = !(meta?.open ?? false);
-    const facing = meta?.facing ?? 'north';
-    const nextBlockId = open ? 40 : 39;
 
-    this.chunks.setBlock(x, y, z, nextBlockId);
     this.chunks.setBlockMeta(x, y, z, {
       ...meta,
-      facing,
       open,
     }, true);
   }
 
   private ensureChestMetadata(x: number, y: number, z: number): BlockMetadata | null {
-    if (this.chunks.getBlock(x, y, z) !== 36) return null;
+    const blockId = this.chunks.getBlock(x, y, z);
+    const def = BlockRegistry.get(blockId);
+    if (!def || def.name !== 'chest') return null;
 
     const current = this.chunks.getBlockMeta(x, y, z);
     if (current?.containerType === 'chest' && current.inventory) {
@@ -1910,14 +2091,20 @@ export class Game {
 
   getItemIconStyle(itemId: number, iconSize: number = 32): any {
     let key = 'stone';
-    if (itemId >= 1 && itemId <= 99) {
+    if (ItemRegistry.isBlock(itemId)) {
       const block = BlockRegistry.get(itemId);
       if (block) {
+        const bName = block.name;
         // Liquids, torches, repeaters, doors, redstone and levers remain 2D
-        if (itemId === 13 || itemId === 14 || itemId === 30 || itemId === 31 || itemId === 32 || itemId === 34 || itemId === 37 || itemId === 38 || itemId === 39 || itemId === 40) {
-          if (itemId === 37 || itemId === 38) key = 'oak_door_closed';
-          else if (itemId === 39 || itemId === 40) key = 'oak_trapdoor_closed';
-          else if (itemId === 31) key = 'redstone';
+        if (BlockRegistry.isFluid(itemId) || 
+            BlockRegistry.isTorch(itemId) || 
+            BlockRegistry.isDoor(itemId) || 
+            bName.includes('wire') || 
+            bName.includes('repeater') || 
+            bName.includes('lever')) {
+          if (bName.endsWith('door') && !bName.includes('trapdoor')) key = 'oak_door_closed';
+          else if (bName.includes('trapdoor')) key = 'oak_trapdoor_closed';
+          else if (bName.includes('wire')) key = 'redstone';
           else key = block.textureKey;
         } else {
           // All other solid blocks get beautiful 3D isometric icons

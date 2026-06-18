@@ -12,6 +12,9 @@ export interface BlockDef {
   toolCategory?: 'pickaxe' | 'axe' | 'shovel' | 'sword';
   dropsId?: number;             // block ID to drop (default: self)
   luminance: number;            // 0-15 light emission
+  baseId?: number;
+  metadata?: number;
+  displayName?: string;
 }
 
 export type BlockFacing = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
@@ -69,7 +72,7 @@ export interface ItemStack {
 }
 
 export interface WorldSaveData {
-  chunks: { cx: number; cz: number; data: Uint8Array }[];
+  chunks: { cx: number; cz: number; data: Uint16Array }[];
   player: PlayerState;
   inventory: (ItemStack | null)[];
   seed: number;

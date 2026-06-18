@@ -4,7 +4,7 @@ import { BlockRegistry } from './BlockRegistry';
 import type { BlockMetadata, ChunkMeshData, SerializedBlockMetadata } from '../types';
 
 export class Chunk {
-  data: Uint8Array;
+  data: Uint16Array;
   metadata: Map<number, BlockMetadata> = new Map();
   skyLight: Uint8Array;
   blockLight: Uint8Array;
@@ -18,7 +18,7 @@ export class Chunk {
   constructor(cx: number, cz: number) {
     this.cx = cx;
     this.cz = cz;
-    this.data = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * WORLD_HEIGHT);
+    this.data = new Uint16Array(CHUNK_SIZE * CHUNK_SIZE * WORLD_HEIGHT);
     this.skyLight = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * WORLD_HEIGHT);
     this.blockLight = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * WORLD_HEIGHT);
   }
@@ -291,10 +291,10 @@ export class Chunk {
           const meta = this.getBlockMeta(x, y, z);
 
           const isTrans = def.transparent;
-          const isTranslucent = id === 13 || id === 14 || id === 28;
+          const isTranslucent = BlockRegistry.isFluid(id) || (id & 0x3FF) === 79 || (id & 0x3FF) === 20;
           const target = isTranslucent ? transparent : solid;
 
-          if (id === 30) {
+          if (BlockRegistry.isTorch(id)) {
             const skyLight = this.getSkyLightAt(x, y, z);
             const blockLight = this.getBlockLightAt(x, y, z);
             const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
@@ -302,7 +302,7 @@ export class Chunk {
             continue;
           }
 
-          if (id === 37 || id === 38) {
+          if (def.name.endsWith('door') && !def.name.includes('trapdoor')) {
             const skyLight = this.getSkyLightAt(x, y, z);
             const blockLight = this.getBlockLightAt(x, y, z);
             const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
@@ -310,7 +310,7 @@ export class Chunk {
             continue;
           }
 
-          if (id === 39 || id === 40) {
+          if (def.name.includes('trapdoor')) {
             const skyLight = this.getSkyLightAt(x, y, z);
             const blockLight = this.getBlockLightAt(x, y, z);
             const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
@@ -318,8 +318,8 @@ export class Chunk {
             continue;
           }
 
-          // Slabs (IDs 41-46)
-          if (id >= 41 && id <= 46) {
+          // Slabs
+          if (def.name.includes('slab') && !def.name.includes('double')) {
             const skyLight = this.getSkyLightAt(x, y, z);
             const blockLight = this.getBlockLightAt(x, y, z);
             const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
@@ -331,8 +331,8 @@ export class Chunk {
             continue;
           }
 
-          // Stairs (IDs 47-52)
-          if (id >= 47 && id <= 52) {
+          // Stairs
+          if (def.name.includes('stairs')) {
             const skyLight = this.getSkyLightAt(x, y, z);
             const blockLight = this.getBlockLightAt(x, y, z);
             const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
@@ -340,8 +340,8 @@ export class Chunk {
             continue;
           }
 
-          // Fences & walls (IDs 53-56)
-          if (id >= 53 && id <= 56) {
+          // Fences & walls
+          if (def.name.includes('fence') || def.name.includes('wall')) {
             const skyLight = this.getSkyLightAt(x, y, z);
             const blockLight = this.getBlockLightAt(x, y, z);
             const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
@@ -349,8 +349,8 @@ export class Chunk {
             continue;
           }
 
-          // Flowers & plants (IDs 58-65) - cross-shaped rendering
-          if (id >= 58 && id <= 65) {
+          // Flowers & plants - cross-shaped rendering for transparent non-solid blocks
+          if (def.transparent && !def.solid) {
             const skyLight = this.getSkyLightAt(x, y, z);
             const blockLight = this.getBlockLightAt(x, y, z);
             const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
@@ -390,7 +390,8 @@ export class Chunk {
               }
             }
             let depth = 0;
-            if (neighborId === 13) {
+            const isNeighWater = (neighborId & 0x3FF) === 8 || (neighborId & 0x3FF) === 9;
+            if (isNeighWater) {
               let wy = ny;
               const wx = worldX + nx;
               const wz = worldZ + nz;
@@ -398,7 +399,8 @@ export class Chunk {
 
               if (isLocal) {
                 while (wy < WORLD_HEIGHT - 1 && wy - ny < 32) {
-                  if (this.getBlock(nx, wy + 1, nz) === 13) {
+                  const checkBlock = this.getBlock(nx, wy + 1, nz);
+                  if ((checkBlock & 0x3FF) === 8 || (checkBlock & 0x3FF) === 9) {
                     wy++;
                   } else {
                     break;
@@ -406,7 +408,8 @@ export class Chunk {
                 }
               } else {
                 while (wy < WORLD_HEIGHT - 1 && wy - ny < 32) {
-                  if (getNeighborBlock(wx, wy + 1, wz) === 13) {
+                  const checkBlock = getNeighborBlock(wx, wy + 1, wz);
+                  if ((checkBlock & 0x3FF) === 8 || (checkBlock & 0x3FF) === 9) {
                     wy++;
                   } else {
                     break;
@@ -756,7 +759,7 @@ export class Chunk {
   }
 
   private isDoorId(id: number): boolean {
-    return id === 37 || id === 38;
+    return BlockRegistry.isDoor(id);
   }
 
   private addTorchQuad(

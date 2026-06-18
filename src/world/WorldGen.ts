@@ -22,11 +22,11 @@ export interface BiomeConfig {
 
 const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
   [BiomeType.Plains]:    { baseHeight: 98, amplitude: 12, treeChance: 0.005, surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
-  [BiomeType.Desert]:    { baseHeight: 97, amplitude: 6,  treeChance: 0,     surfaceBlock: 8, underBlock: 8, stoneDepth: 3 },
+  [BiomeType.Desert]:    { baseHeight: 97, amplitude: 6,  treeChance: 0,     surfaceBlock: 12, underBlock: 12, stoneDepth: 3 },
   [BiomeType.Mountains]: { baseHeight: 114, amplitude: 50, treeChance: 0.002, surfaceBlock: 2, underBlock: 3, stoneDepth: 4 },
   [BiomeType.Forest]:    { baseHeight: 100, amplitude: 16, treeChance: 0.03,  surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
-  [BiomeType.Snow]:      { baseHeight: 102, amplitude: 20, treeChance: 0.008, surfaceBlock: 27, underBlock: 3, stoneDepth: 3 },
-  [BiomeType.Ocean]:     { baseHeight: 74, amplitude: 10, treeChance: 0,     surfaceBlock: 8, underBlock: 3, stoneDepth: 3 },
+  [BiomeType.Snow]:      { baseHeight: 102, amplitude: 20, treeChance: 0.008, surfaceBlock: 80, underBlock: 3, stoneDepth: 3 },
+  [BiomeType.Ocean]:     { baseHeight: 74, amplitude: 10, treeChance: 0,     surfaceBlock: 12, underBlock: 3, stoneDepth: 3 },
 };
 
 export class WorldGen {
@@ -92,7 +92,7 @@ export class WorldGen {
           let blockId = 0;
 
           if (y === 0) {
-            blockId = 1; // bedrock (stone at bottom)
+            blockId = 7; // bedrock
           } else if (y < height - cfg.stoneDepth) {
             blockId = 1; // stone
           } else if (y < height) {
@@ -100,7 +100,7 @@ export class WorldGen {
           } else if (y === height) {
             blockId = cfg.surfaceBlock; // grass/sand/etc surface
           } else if (y <= SEA_LEVEL && y > height) {
-            blockId = 13; // water
+            blockId = 9; // water (still)
           }
 
           chunk.setBlock(x, y, z, blockId);
@@ -125,12 +125,12 @@ export class WorldGen {
 
           if (cave > threshold && cave2 > 0.05) {
             const current = chunk.getBlock(x, y, z);
-            if (current !== 0 && current !== 13 && current !== 14) {
+            if (current !== 0 && (current & 0x3FF) !== 9 && (current & 0x3FF) !== 11) {
               const height = this.getTerrainHeight(wx, wz);
               if (y <= 10) {
-                chunk.setBlock(x, y, z, 14); // Lava at the very bottom
+                chunk.setBlock(x, y, z, 11); // Lava (still) at the very bottom
               } else if (y <= SEA_LEVEL && height <= SEA_LEVEL) {
-                chunk.setBlock(x, y, z, 13); // Water
+                chunk.setBlock(x, y, z, 9); // Water (still)
               } else {
                 chunk.setBlock(x, y, z, 0); // Air
               }
@@ -154,10 +154,10 @@ export class WorldGen {
 
   private generateOres(chunk: Chunk, worldX: number, worldZ: number) {
     const ores = [
-      { id: 12, min: 5, max: 90, count: 30 },   // coal
-      { id: 11, min: 5, max: 70, count: 22 },   // iron
-      { id: 10, min: 5, max: 50, count: 8 },    // gold
-      { id: 22, min: 5, max: 25, count: 5 },    // diamond
+      { id: 16, min: 5, max: 90, count: 30 },   // coal (16)
+      { id: 15, min: 5, max: 70, count: 22 },   // iron (15)
+      { id: 14, min: 5, max: 50, count: 8 },    // gold (14)
+      { id: 56, min: 5, max: 25, count: 5 },    // diamond (56)
     ];
 
     for (const ore of ores) {
@@ -196,7 +196,8 @@ export class WorldGen {
           for (const [nx, ny, nz] of neighbors) {
             if (nx >= 0 && nx < CHUNK_SIZE && ny >= 0 && ny < WORLD_HEIGHT && nz >= 0 && nz < CHUNK_SIZE) {
               const b = chunk.getBlock(nx, ny, nz);
-              if (b === 0 || b === 13 || b === 14) {
+              const baseB = b & 0x3FF;
+              if (baseB === 0 || baseB === 8 || baseB === 9 || baseB === 10 || baseB === 11) {
                 isWall = true;
                 break;
               }
@@ -207,31 +208,31 @@ export class WorldGen {
             const rand = this.pseudoRandom(wx, y, wz);
             if (y <= 20) {
               if (rand < 0.015) {
-                chunk.setBlock(x, y, z, 22); // Diamond
+                chunk.setBlock(x, y, z, 56); // Diamond Ore (56)
               } else if (rand < 0.035) {
-                chunk.setBlock(x, y, z, 10); // Gold
+                chunk.setBlock(x, y, z, 14); // Gold Ore (14)
               } else if (rand < 0.075) {
-                chunk.setBlock(x, y, z, 11); // Iron
+                chunk.setBlock(x, y, z, 15); // Iron Ore (15)
               } else if (rand < 0.135) {
-                chunk.setBlock(x, y, z, 12); // Coal
+                chunk.setBlock(x, y, z, 16); // Coal Ore (16)
               }
             } else if (y <= 40) {
               if (rand < 0.025) {
-                chunk.setBlock(x, y, z, 10); // Gold
+                chunk.setBlock(x, y, z, 14); // Gold Ore (14)
               } else if (rand < 0.07) {
-                chunk.setBlock(x, y, z, 11); // Iron
+                chunk.setBlock(x, y, z, 15); // Iron Ore (15)
               } else if (rand < 0.14) {
-                chunk.setBlock(x, y, z, 12); // Coal
+                chunk.setBlock(x, y, z, 16); // Coal Ore (16)
               }
             } else if (y <= 80) {
               if (rand < 0.05) {
-                chunk.setBlock(x, y, z, 11); // Iron
+                chunk.setBlock(x, y, z, 15); // Iron Ore (15)
               } else if (rand < 0.13) {
-                chunk.setBlock(x, y, z, 12); // Coal
+                chunk.setBlock(x, y, z, 16); // Coal Ore (16)
               }
             } else if (y <= 120) {
               if (rand < 0.10) {
-                chunk.setBlock(x, y, z, 12); // Coal
+                chunk.setBlock(x, y, z, 16); // Coal Ore (16)
               }
             }
           }
@@ -285,8 +286,8 @@ export class WorldGen {
 
   private placeOakTree(chunk: Chunk, x: number, y: number, z: number) {
     const trunkHeight = 4 + Math.floor(this.pseudoRandom(x, y, z) * 3);
-    const logId = 6;     // oak log
-    const leafId = 7;    // oak leaves
+    const logId = 17;     // oak log
+    const leafId = 18;    // oak leaves
 
     for (let h = 0; h < trunkHeight; h++) {
       if (y + h < WORLD_HEIGHT) chunk.setBlock(x, y + h, z, logId);
@@ -314,8 +315,8 @@ export class WorldGen {
 
   private placeSpruceTree(chunk: Chunk, x: number, y: number, z: number) {
     const trunkHeight = 6 + Math.floor(this.pseudoRandom(x, y, z) * 3);
-    const logId = 66;    // spruce log
-    const leafId = 68;   // spruce leaves
+    const logId = (1 << 10) | 17;    // spruce log
+    const leafId = (1 << 10) | 18;   // spruce leaves
 
     for (let h = 0; h < trunkHeight; h++) {
       if (y + h < WORLD_HEIGHT) chunk.setBlock(x, y + h, z, logId);
@@ -342,8 +343,8 @@ export class WorldGen {
 
   private placeBirchTree(chunk: Chunk, x: number, y: number, z: number) {
     const trunkHeight = 6 + Math.floor(this.pseudoRandom(x, y, z) * 2);
-    const logId = 69;    // birch log
-    const leafId = 71;   // birch leaves
+    const logId = (2 << 10) | 17;    // birch log
+    const leafId = (2 << 10) | 18;   // birch leaves
 
     for (let h = 0; h < trunkHeight; h++) {
       if (y + h < WORLD_HEIGHT) chunk.setBlock(x, y + h, z, logId);
@@ -397,19 +398,19 @@ export class WorldGen {
         const decorRand = this.pseudoRandom(wx * 43, surfaceY, wz * 59);
 
         if (biome === BiomeType.Forest) {
-          if (decorRand < 0.3) chunk.setBlock(x, surfaceY + 1, z, 59); // poppy
-          else if (decorRand < 0.5) chunk.setBlock(x, surfaceY + 1, z, 58); // dandelion
-          else if (decorRand < 0.6) chunk.setBlock(x, surfaceY + 1, z, 61); // fern
-          else chunk.setBlock(x, surfaceY + 1, z, 60); // tall grass
+          if (decorRand < 0.3) chunk.setBlock(x, surfaceY + 1, z, 38); // poppy
+          else if (decorRand < 0.5) chunk.setBlock(x, surfaceY + 1, z, 37); // dandelion
+          else if (decorRand < 0.6) chunk.setBlock(x, surfaceY + 1, z, (2 << 10) | 31); // fern
+          else chunk.setBlock(x, surfaceY + 1, z, (1 << 10) | 31); // tall grass
         } else if (biome === BiomeType.Snow) {
           // Snow biome: less variety
         } else {
           // Plains
-          if (decorRand < 0.2) chunk.setBlock(x, surfaceY + 1, z, 58); // dandelion
-          else if (decorRand < 0.35) chunk.setBlock(x, surfaceY + 1, z, 59); // poppy
-          else if (decorRand < 0.5) chunk.setBlock(x, surfaceY + 1, z, 65); // red tulip
-          else if (decorRand < 0.6) chunk.setBlock(x, surfaceY + 1, z, 63); // blue orchid
-          else chunk.setBlock(x, surfaceY + 1, z, 60); // tall grass
+          if (decorRand < 0.2) chunk.setBlock(x, surfaceY + 1, z, 37); // dandelion
+          else if (decorRand < 0.35) chunk.setBlock(x, surfaceY + 1, z, 38); // poppy
+          else if (decorRand < 0.5) chunk.setBlock(x, surfaceY + 1, z, (4 << 10) | 38); // red tulip
+          else if (decorRand < 0.6) chunk.setBlock(x, surfaceY + 1, z, (1 << 10) | 38); // blue orchid
+          else chunk.setBlock(x, surfaceY + 1, z, (1 << 10) | 31); // tall grass
         }
       }
     }

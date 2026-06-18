@@ -1,3 +1,6 @@
+import { ItemRegistry } from '../items/ItemRegistry';
+import { BlockRegistry } from '../world/BlockRegistry';
+
 export interface CommandContext {
   getPlayerPosition: () => { x: number; y: number; z: number };
   setPlayerPosition: (x: number, y: number, z: number) => void;
@@ -45,13 +48,20 @@ export class CommandSystem {
   }
 
   private cmdGive(args: string[]): CommandResult {
-    if (args.length < 1) return { success: false, message: 'Usage: /give <itemId> [count]' };
-    const id = parseInt(args[0]);
+    if (args.length < 1) return { success: false, message: 'Usage: /give <itemId|itemName> [count]' };
+    const arg0 = args[0];
+    let id = parseInt(arg0);
+    if (isNaN(id)) {
+      const item = ItemRegistry.getByName(arg0) || BlockRegistry.getByName(arg0);
+      if (!item) return { success: false, message: `Unknown item: ${arg0}` };
+      id = item.id;
+    }
     const count = args.length > 1 ? parseInt(args[1]) : 1;
-    if (isNaN(id) || id <= 0) return { success: false, message: 'Invalid item ID' };
+    if (id <= 0) return { success: false, message: 'Invalid item ID' };
     if (isNaN(count) || count <= 0) return { success: false, message: 'Invalid count' };
     this.ctx.addItem(id, count);
-    return { success: true, message: `Gave ${count}x item #${id}` };
+    const displayName = ItemRegistry.get(id)?.displayName ?? `item #${id}`;
+    return { success: true, message: `Gave ${count}x ${displayName}` };
   }
 
   private cmdTp(args: string[]): CommandResult {

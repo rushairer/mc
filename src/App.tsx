@@ -137,6 +137,12 @@ export const App: React.FC = () => {
     }
   }, []);
 
+  const handleDropItem = useCallback((itemId: number, count: number) => {
+    if (gameRef.current) {
+      gameRef.current.dropItemFromUI(itemId, count);
+    }
+  }, []);
+
   const handleSingleplayerClick = useCallback(() => {
     setMenuState('select_world');
   }, []);
@@ -343,6 +349,7 @@ export const App: React.FC = () => {
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
           gameMode={gameState.gameMode}
+          onDropItem={handleDropItem}
         />
       )}
 
@@ -353,6 +360,7 @@ export const App: React.FC = () => {
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
+          onDropItem={handleDropItem}
         />
       )}
 
@@ -363,6 +371,7 @@ export const App: React.FC = () => {
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
+          onDropItem={handleDropItem}
         />
       )}
 
@@ -374,6 +383,7 @@ export const App: React.FC = () => {
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
+          onDropItem={handleDropItem}
         />
       )}
 

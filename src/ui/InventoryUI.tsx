@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { BlockRegistry } from '../world/BlockRegistry';
 import { Inventory, HOTBAR_SIZE, INVENTORY_SIZE } from '../player/Inventory';
 import { findCraftingResult } from '../items/CraftingRecipes';
 import { useI18n } from '../i18n';
@@ -11,11 +12,12 @@ interface InventoryUIProps {
   onInventoryChange: () => void;
   getItemIconStyle: (id: number, size?: number) => any;
   gameMode?: 'survival' | 'creative';
+  onDropItem?: (itemId: number, count: number) => void;
 }
 
 const SLOT_SIZE = 48;
 
-export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle, gameMode = 'survival' }) => {
+export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle, gameMode = 'survival', onDropItem }) => {
   const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
   const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(4).fill(0));
@@ -25,21 +27,45 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     itemDef: any;
     x: number;
     y: number;
+    index: number;
+    type: 'inventory' | 'armor' | 'crafting';
   } | null>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
 
-  const creativeItems = [
-    // Blocks
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 39,
-    // Tools
-    120, 121, 122, 123, 130, 131, 132, 133, 140, 141, 142, 143, 150, 151, 152, 153, 160, 161, 162, 163,
-    // Foods
-    170, 171, 172, 173, 174, 175,
-    // Armor
-    180, 181, 182, 183, 184, 185, 186, 187,
-    // Materials
-    100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112
-  ];
+  const creativeItems = React.useMemo(() => {
+    const blocksList = BlockRegistry.all()
+      .filter(b => {
+        if (b.id === 0 || BlockRegistry.isFluid(b.id) || b.name.includes('double_') || b.name === 'moving_piston') {
+          return false;
+        }
+        // Exclude facing/rotation/state variations.
+        // If it's a packed ID (has metadata), check if it's identical in function to the base ID block.
+        const baseId = b.id & 0x3FF;
+        if (b.id !== baseId) {
+          const baseBlock = BlockRegistry.get(baseId);
+          if (baseBlock) {
+            if (baseBlock.name === b.name ||
+                b.name.includes('facing') ||
+                baseBlock.name.includes('door') ||
+                baseBlock.name.includes('stairs') ||
+                baseBlock.name.includes('piston') ||
+                baseBlock.name.includes('repeater') ||
+                baseBlock.name.includes('lever') ||
+                baseBlock.name.includes('furnace')) {
+              return false;
+            }
+          }
+        }
+        return true;
+      })
+      .map(b => b.id);
+
+    const itemsList = ItemRegistry.all()
+      .filter(item => item.id !== 0 && !item.name.includes('spawn_egg'))
+      .map(item => item.id);
+
+    return Array.from(new Set([...blocksList, ...itemsList]));
+  }, []);
 
   const handleCatalogClick = (itemId: number) => {
     const maxStack = ItemRegistry.getMaxStackSize(itemId);
@@ -180,17 +206,59 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     onClose();
   }, [heldItem, inventory, craftingGrid, onInventoryChange, onClose]);
 
-  // Close on E or Escape key
+  // Close on E or Escape key, drop on Q
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === 'e' || e.key === 'Escape') {
         e.preventDefault();
         handleClose();
+      } else if (e.key.toLowerCase() === 'q') {
+        if (heldItem) {
+          const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? heldItem.count : 1;
+          onDropItem?.(heldItem.id, dropCount);
+          setHeldItem(prev => {
+            if (!prev) return null;
+            const nextCount = prev.count - dropCount;
+            return nextCount > 0 ? { ...prev, count: nextCount } : null;
+          });
+          onInventoryChange();
+        } else if (hoveredSlot) {
+          const { index, type } = hoveredSlot;
+          if (type === 'inventory') {
+            const slotItem = inventory.getSlot(index);
+            if (slotItem) {
+              const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? slotItem.count : 1;
+              onDropItem?.(slotItem.id, dropCount);
+              if (slotItem.count <= dropCount) {
+                inventory.setSlot(index, null);
+                setHoveredSlot(null);
+              } else {
+                slotItem.count -= dropCount;
+                setHoveredSlot({ ...hoveredSlot, item: { ...slotItem } });
+              }
+              onInventoryChange();
+            }
+          } else if (type === 'armor') {
+            const armorItem = inventory.armor?.[index];
+            if (armorItem) {
+              const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? armorItem.count : 1;
+              onDropItem?.(armorItem.id, dropCount);
+              if (armorItem.count <= dropCount) {
+                inventory.armor[index] = null;
+                setHoveredSlot(null);
+              } else {
+                armorItem.count -= dropCount;
+                setHoveredSlot({ ...hoveredSlot, item: { ...armorItem } });
+              }
+              onInventoryChange();
+            }
+          }
+        }
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [handleClose]);
+  }, [handleClose, heldItem, hoveredSlot, inventory, onDropItem, onInventoryChange]);
 
   const armorPlaceholders = [
     <svg key="helmet" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.25, color: '#fff' }}>
@@ -210,7 +278,14 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     </svg>
   ];
 
-  const renderSlot = (item: ItemStack | null, index: number, onClick: () => void, highlight?: boolean, placeholder?: React.ReactNode) => {
+  const renderSlot = (
+    item: ItemStack | null,
+    index: number,
+    onClick: () => void,
+    highlight?: boolean,
+    placeholder?: React.ReactNode,
+    slotType: 'inventory' | 'armor' | 'crafting' = 'inventory'
+  ) => {
     const itemDef = item ? ItemRegistry.get(item.id) : null;
     return (
       <div
@@ -226,6 +301,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
               itemDef,
               x: e.clientX,
               y: e.clientY,
+              index,
+              type: slotType
             });
           }
         }}
@@ -236,6 +313,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
               itemDef,
               x: e.clientX,
               y: e.clientY,
+              index,
+              type: slotType
             });
           }
         }}
@@ -451,30 +530,42 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
   };
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0,0,0,0.7)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 50,
-      fontFamily: '"Courier New", monospace',
-    }}>
-      <div style={{
-        background: 'rgba(40,40,40,0.95)',
-        border: '3px solid #666',
-        borderRadius: '8px',
-        padding: '20px',
-        color: '#fff',
-        position: 'relative',
+    <div
+      onClick={() => {
+        if (heldItem) {
+          onDropItem?.(heldItem.id, heldItem.count);
+          setHeldItem(null);
+          onInventoryChange();
+        }
+      }}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0,0,0,0.7)',
         display: 'flex',
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-      }}>
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 50,
+        fontFamily: '"Courier New", monospace',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'rgba(40,40,40,0.95)',
+          border: '3px solid #666',
+          borderRadius: '8px',
+          padding: '20px',
+          color: '#fff',
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+        }}
+      >
         {/* Creative Item Catalog */}
         {gameMode === 'creative' && (
           <div style={{
@@ -509,6 +600,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
                           itemDef,
                           x: e.clientX,
                           y: e.clientY,
+                          index: -1,
+                          type: 'inventory'
                         });
                       }
                     }}
@@ -519,6 +612,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
                           itemDef,
                           x: e.clientX,
                           y: e.clientY,
+                          index: -1,
+                          type: 'inventory'
                         });
                       }
                     }}
@@ -583,7 +678,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
                   i,
                   () => handleArmorSlotClick(i),
                   false,
-                  armorPlaceholders[i]
+                  armorPlaceholders[i],
+                  'armor'
                 )
               )}
             </div>
@@ -604,11 +700,11 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
                 }}>
                   {craftingGrid.map((id, i) => {
                     const item = id !== 0 ? { id, count: 1 } : null;
-                    return renderSlot(item, i, () => handleSlotClick(i, true));
+                    return renderSlot(item, i, () => handleSlotClick(i, true), false, undefined, 'crafting');
                   })}
                 </div>
                 <div style={{ fontSize: '20px', color: '#aaa' }}>→</div>
-                {renderSlot(craftResult, -1, handleCraftResultClick, true)}
+                {renderSlot(craftResult, -1, handleCraftResultClick, true, undefined, 'crafting')}
               </div>
             </div>
           )}

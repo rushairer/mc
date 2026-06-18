@@ -36,7 +36,7 @@ export interface SaveData {
     armor: ({ id: number; count: number } | null)[];
   };
   seed: number;
-  chunks: { cx: number; cz: number; data: Uint8Array; metadata?: SerializedBlockMetadata[] }[];
+  chunks: { cx: number; cz: number; data: Uint16Array; metadata?: SerializedBlockMetadata[] }[];
   timestamp: number;
 }
 

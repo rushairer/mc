@@ -79,7 +79,7 @@ export class Renderer {
     this.scene.remove(obj);
   }
 
-  setTimeOfDay(t: number) {
+  setTimeOfDay(t: number, lightningOpacity: number = 0) {
     // t: 0..1 cycle
     // 0.0 = sunrise, 0.25 = noon, 0.5 = sunset, 0.75 = midnight
 
@@ -106,12 +106,23 @@ export class Renderer {
       skyColor = nightColor.clone();
     }
 
+    if (lightningOpacity > 0) {
+      const flashSkyColor = new THREE.Color(0xd0e0ff); // Light bluish-white
+      skyColor.lerp(flashSkyColor, lightningOpacity * 0.9);
+    }
+
     // Dynamic fog adjustment based on time of day
     // Day: near = 80, far = 120
     // Night: near = 15, far = 40 (hides distant sky/terrain)
     const nightFogFactor = sunY >= 0 ? 0 : -sunY;
     this.fogNear = 80 - nightFogFactor * 65;
     this.fogFar = 120 - nightFogFactor * 80;
+
+    // During lightning flash, increase fog visibility far distance temporarily
+    if (lightningOpacity > 0) {
+      this.fogNear = THREE.MathUtils.lerp(this.fogNear, 80, lightningOpacity);
+      this.fogFar = THREE.MathUtils.lerp(this.fogFar, 120, lightningOpacity);
+    }
 
     this.scene.background = skyColor;
     if (this.scene.fog) {
@@ -121,7 +132,10 @@ export class Renderer {
     }
 
     // Ambient light intensity
-    const ambientIntensity = 0.03 + sunBrightness * 0.5;
+    let ambientIntensity = 0.03 + sunBrightness * 0.5;
+    if (lightningOpacity > 0) {
+      ambientIntensity = THREE.MathUtils.lerp(ambientIntensity, 1.2, lightningOpacity);
+    }
     this.ambientLight.intensity = ambientIntensity;
 
     // Sun light
@@ -143,6 +157,10 @@ export class Renderer {
       this.ambientLight.color.setHex(0x111122);
     } else {
       this.ambientLight.color.setHex(0xffffff);
+    }
+
+    if (lightningOpacity > 0) {
+      this.ambientLight.color.lerp(new THREE.Color(0xffffff), lightningOpacity);
     }
   }
 

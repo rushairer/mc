@@ -10,6 +10,7 @@ interface ChestUIProps {
   onClose: () => void;
   onInventoryChange: () => void;
   getItemIconStyle: (id: number, size?: number) => any;
+  onDropItem?: (itemId: number, count: number) => void;
 }
 
 const SLOT_SIZE = 48;
@@ -53,6 +54,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
   onClose,
   onInventoryChange,
   getItemIconStyle,
+  onDropItem,
 }) => {
   const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
@@ -62,6 +64,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
     itemDef: any;
     x: number;
     y: number;
+    target: SlotTarget;
   } | null>(null);
 
   const moveHeldRef = useRef({ x: 0, y: 0 });
@@ -136,22 +139,50 @@ export const ChestUI: React.FC<ChestUIProps> = ({
     onClose();
   }, [chestSlots, heldItem, inventory, notifyChanged, onClose]);
 
+  // Close on E or Escape key, drop on Q
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === 'e' || e.key === 'Escape') {
         e.preventDefault();
         handleClose();
+      } else if (e.key.toLowerCase() === 'q') {
+        if (heldItem) {
+          const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? heldItem.count : 1;
+          onDropItem?.(heldItem.id, dropCount);
+          setHeldItem(prev => {
+            if (!prev) return null;
+            const nextCount = prev.count - dropCount;
+            return nextCount > 0 ? { ...prev, count: nextCount } : null;
+          });
+          notifyChanged();
+        } else if (hoveredSlot) {
+          const { target } = hoveredSlot;
+          const slotItem = getSlot(target);
+          if (slotItem) {
+            const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? slotItem.count : 1;
+            onDropItem?.(slotItem.id, dropCount);
+            if (slotItem.count <= dropCount) {
+              setSlot(target, null);
+              setHoveredSlot(null);
+            } else {
+              slotItem.count -= dropCount;
+              setHoveredSlot({ ...hoveredSlot, item: { ...slotItem } });
+            }
+            notifyChanged();
+          }
+        }
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [handleClose]);
+  }, [handleClose, heldItem, hoveredSlot, getSlot, setSlot, notifyChanged, onDropItem]);
 
-  const renderSlot = (item: ItemStack | null, key: string, onClick: () => void) => {
+  const renderSlot = (item: ItemStack | null, target: SlotTarget, onClick: () => void) => {
     const itemDef = item ? ItemRegistry.get(item.id) : null;
+    const slotKey = `${target.type}-${target.index}`;
     return (
       <div
-        key={key}
+        key={slotKey}
         onClick={() => {
           setHoveredSlot(null);
           onClick();
@@ -163,6 +194,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
               itemDef,
               x: e.clientX,
               y: e.clientY,
+              target,
             });
           }
         }}
@@ -173,6 +205,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
               itemDef,
               x: e.clientX,
               y: e.clientY,
+              target,
             });
           }
         }}
@@ -217,27 +250,39 @@ export const ChestUI: React.FC<ChestUIProps> = ({
   };
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0,0,0,0.7)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 50,
-      fontFamily: '"Courier New", monospace',
-    }}>
-      <div style={{
-        background: 'rgba(40,40,40,0.95)',
-        border: '3px solid #666',
-        borderRadius: '8px',
-        padding: '20px',
-        color: '#fff',
-        position: 'relative',
-      }}>
+    <div
+      onClick={() => {
+        if (heldItem) {
+          onDropItem?.(heldItem.id, heldItem.count);
+          setHeldItem(null);
+          notifyChanged();
+        }
+      }}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0,0,0,0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 50,
+        fontFamily: '"Courier New", monospace',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'rgba(40,40,40,0.95)',
+          border: '3px solid #666',
+          borderRadius: '8px',
+          padding: '20px',
+          color: '#fff',
+          position: 'relative',
+        }}
+      >
         <button
           onClick={handleClose}
           style={{
@@ -272,7 +317,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
             gap: '2px',
           }}>
             {Array.from({ length: CHEST_SIZE }, (_, i) =>
-              renderSlot(chestSlots[i] ?? null, `chest-${i}`, () => handleSlotClick({ type: 'chest', index: i }))
+              renderSlot(chestSlots[i] ?? null, { type: 'chest', index: i }, () => handleSlotClick({ type: 'chest', index: i }))
             )}
           </div>
         </div>
@@ -290,7 +335,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
               const slotIndex = i + 9;
               return renderSlot(
                 inventory.getSlot(slotIndex),
-                `inventory-${slotIndex}`,
+                { type: 'player', index: slotIndex },
                 () => handleSlotClick({ type: 'player', index: slotIndex })
               );
             })}
@@ -307,7 +352,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
             {Array.from({ length: 9 }, (_, i) =>
               renderSlot(
                 inventory.getSlot(i),
-                `hotbar-${i}`,
+                { type: 'player', index: i },
                 () => handleSlotClick({ type: 'player', index: i })
               )
             )}

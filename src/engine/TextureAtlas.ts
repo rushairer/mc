@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+import { BlockRegistry } from '../world/BlockRegistry';
+import { ItemRegistry } from '../items/ItemRegistry';
 
-const ATLAS_SIZE = 256;
+const ATLAS_SIZE = 1024;
 const TILE_SIZE = 16;
 const TILES_PER_ROW = ATLAS_SIZE / TILE_SIZE;
 
@@ -897,6 +899,34 @@ export class TextureAtlas {
       ctx.fill();
     });
 
+    // feather
+    this.drawTile('feather', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      // Quill (darker grey shaft)
+      ctx.strokeStyle = '#A0A0A0';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 2, y + 13);
+      ctx.lineTo(x + 13, y + 2);
+      ctx.stroke();
+
+      // White barbs along the shaft
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(x + 4, y + 10, 2, 2);
+      ctx.fillRect(x + 6, y + 8, 2, 2);
+      ctx.fillRect(x + 8, y + 6, 2, 2);
+      ctx.fillRect(x + 10, y + 4, 2, 2);
+      ctx.fillRect(x + 12, y + 2, 2, 2);
+
+      // Light gray details/shadows for depth
+      ctx.fillStyle = '#E5E5E5';
+      ctx.fillRect(x + 3, y + 11, 2, 2);
+      ctx.fillRect(x + 5, y + 9, 2, 2);
+      ctx.fillRect(x + 7, y + 7, 2, 2);
+      ctx.fillRect(x + 9, y + 5, 2, 2);
+      ctx.fillRect(x + 11, y + 3, 2, 2);
+    });
+
     // paper
     this.drawTile('paper', (ctx, x, y, s) => {
       ctx.clearRect(x, y, s, s);
@@ -1295,6 +1325,127 @@ export class TextureAtlas {
       ctx.closePath();
       ctx.fill();
     });
+
+    // ─── Procedural Fallbacks for All Blocks & Items ───
+    const hashColor = (str: string) => {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const r = Math.min(220, Math.max(50, (hash & 0xFF0000) >> 16));
+      const g = Math.min(220, Math.max(50, (hash & 0x00FF00) >> 8));
+      const b = Math.min(220, Math.max(50, hash & 0x0000FF));
+      return {
+        r, g, b,
+        hex: `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`,
+        leftHex: `#${((1 << 24) + ((r * 0.8 | 0) << 16) + ((g * 0.8 | 0) << 8) + (b * 0.8 | 0)).toString(16).slice(1)}`,
+        rightHex: `#${((1 << 24) + ((r * 0.65 | 0) << 16) + ((g * 0.65 | 0) << 8) + (b * 0.65 | 0)).toString(16).slice(1)}`
+      };
+    };
+
+    const drawFallbackBlock = (key: string, name: string) => {
+      const colors = hashColor(name);
+      
+      this.drawTile(key, (ctx, x, y, s) => {
+        ctx.fillStyle = colors.hex;
+        ctx.fillRect(x, y, s, s);
+        
+        // Add pixel noise
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+        for (let i = 0; i < 15; i++) {
+          const px = x + ((Math.sin(i * 123.45) * 50 + 50) % s | 0);
+          const py = y + ((Math.cos(i * 543.21) * 50 + 50) % s | 0);
+          ctx.fillRect(px, py, 2, 2);
+        }
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        for (let i = 0; i < 15; i++) {
+          const px = x + ((Math.cos(i * 987.65) * 50 + 50) % s | 0);
+          const py = y + ((Math.sin(i * 234.56) * 50 + 50) % s | 0);
+          ctx.fillRect(px, py, 2, 2);
+        }
+
+        // Draw patterns based on name
+        if (name.includes('wool')) {
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+          ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+        } else if (name.includes('ore')) {
+          ctx.fillStyle = '#888888';
+          ctx.fillRect(x, y, s, s);
+          ctx.fillStyle = colors.hex;
+          ctx.fillRect(x + 4, y + 4, 3, 3);
+          ctx.fillRect(x + 10, y + 6, 2, 2);
+          ctx.fillRect(x + 5, y + 10, 2, 2);
+        } else if (name.includes('planks')) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+          ctx.fillRect(x, y + 4, s, 1);
+          ctx.fillRect(x, y + 8, s, 1);
+          ctx.fillRect(x, y + 12, s, 1);
+        } else if (name.includes('log')) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+          ctx.fillRect(x + 4, y, 1, s);
+          ctx.fillRect(x + 12, y, 1, s);
+        }
+      });
+    };
+
+    // Draw all block textures
+    for (const b of BlockRegistry.all()) {
+      const key = b.textureKey;
+      if (!this.tileIndex.has(key)) {
+        drawFallbackBlock(key, b.name);
+      }
+      if (b.textureTop && !this.tileIndex.has(b.textureTop)) {
+        drawFallbackBlock(b.textureTop, b.name + '_top');
+      }
+      if (b.textureBottom && !this.tileIndex.has(b.textureBottom)) {
+        drawFallbackBlock(b.textureBottom, b.name + '_bottom');
+      }
+      
+      const iconKey = `${b.name}_icon`;
+      if (!this.tileIndex.has(iconKey)) {
+        const colors = hashColor(b.name);
+        if (b.name.includes('ore')) {
+          drawBlockIcon(b.name, '#909090', '#7a7a7a', '#686868', (ctx, ix, iy, is) => {
+            ctx.fillStyle = colors.hex;
+            ctx.fillRect(ix + 5, iy + 3, 2, 2);
+            ctx.fillRect(ix + 3, iy + 8, 2, 2);
+            ctx.fillRect(ix + 10, iy + 8, 2, 2);
+          });
+        } else {
+          drawBlockIcon(b.name, colors.hex, colors.leftHex, colors.rightHex);
+        }
+      }
+    }
+
+    // Draw all item textures
+    for (const item of ItemRegistry.all()) {
+      const key = item.name;
+      if (!this.tileIndex.has(key)) {
+        if (item.category === 'tool' && item.toolType && item.toolMaterial) {
+          const mat = item.toolMaterial === 'gold' ? 'gold' : item.toolMaterial;
+          drawTool(key, item.toolType, mat);
+        } else if (item.category === 'armor' && item.armorSlot) {
+          const parts = item.name.split('_');
+          const mat = parts[0] === 'gold' ? 'gold' : parts[0];
+          drawArmor(key, item.armorSlot, mat);
+        } else {
+          // Draw generic item (pixelated sphere)
+          const colors = hashColor(item.name);
+          this.drawTile(key, (ctx, x, y, s) => {
+            ctx.clearRect(x, y, s, s);
+            ctx.fillStyle = colors.hex;
+            ctx.beginPath();
+            ctx.arc(x + s / 2, y + s / 2, 4, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.fill();
+
+            // Specular highlight
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x + s / 2 - 1, y + s / 2 - 2, 2, 1);
+          });
+        }
+      }
+    }
   }
 
   private drawOreTile(key: string, spotColor: string) {

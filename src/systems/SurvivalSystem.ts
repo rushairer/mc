@@ -87,7 +87,7 @@ export class SurvivalSystem {
       Math.floor(player.position.y + 1.62), // player eye/head height
       Math.floor(player.position.z)
     );
-    const isUnderwater = headBlock === 13; // water
+    const isUnderwater = (headBlock & 0x3FF) === 8 || (headBlock & 0x3FF) === 9; // flowing or still water
 
     if (isUnderwater) {
       // Consume oxygen

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SoundSystem } from './SoundSystem';
 
 export type WeatherType = 'clear' | 'rain' | 'thunder';
 
@@ -7,6 +8,7 @@ const SNOW_COUNT = 300;
 
 export class WeatherSystem {
   private scene: THREE.Scene;
+  private sound: SoundSystem | null = null;
   private rainParticles: THREE.Points | null = null;
   private snowParticles: THREE.Points | null = null;
   private currentWeather: WeatherType = 'clear';
@@ -27,8 +29,9 @@ export class WeatherSystem {
   private snowPositions: Float32Array;
   private snowVelocities: Float32Array;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, sound?: SoundSystem) {
     this.scene = scene;
+    if (sound) this.sound = sound;
 
     // Rain
     this.rainPositions = new Float32Array(RAIN_COUNT * 3);
@@ -178,6 +181,25 @@ export class WeatherSystem {
       this.lightningFlash.visible = true;
       (this.lightningFlash.material as THREE.MeshBasicMaterial).opacity = 0.8;
     }
+    if (this.sound) {
+      this.sound.playLightning();
+    }
+  }
+
+  setWeatherType(type: WeatherType) {
+    this.currentWeather = type;
+    this.weatherTimer = 0;
+    this.weatherDuration = 300; // Keep this weather for 5 minutes
+    if (type === 'thunder') {
+      this.lightningTimer = 2 + Math.random() * 5; // Start thundering soon
+    }
+  }
+
+  getLightningFlashOpacity(): number {
+    if (this.lightningFlash && this.lightningFlash.visible) {
+      return (this.lightningFlash.material as THREE.MeshBasicMaterial).opacity;
+    }
+    return 0;
   }
 
   getCurrentWeather(): WeatherType {

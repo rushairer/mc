@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { BlockRegistry } from './world/BlockRegistry';
+import { ItemRegistry } from './items/ItemRegistry';
 
 export type Locale = 'en' | 'zh-CN' | 'zh-TW';
 
@@ -159,6 +161,7 @@ export interface TranslationsSchema {
   item_book: string;
   item_redstone: string;
   item_lapis: string;
+  item_feather: string;
   item_wooden_sword: string;
   item_wooden_shovel: string;
   item_wooden_pickaxe: string;
@@ -347,6 +350,7 @@ export const translations: Record<Locale, TranslationsSchema> = {
     item_book: 'Book',
     item_redstone: 'Redstone',
     item_lapis: 'Lapis Lazuli',
+    item_feather: 'Feather',
     item_wooden_sword: 'Wooden Sword',
     item_wooden_shovel: 'Wooden Shovel',
     item_wooden_pickaxe: 'Wooden Pickaxe',
@@ -533,6 +537,7 @@ export const translations: Record<Locale, TranslationsSchema> = {
     item_book: '书',
     item_redstone: '红石粉',
     item_lapis: '青金石',
+    item_feather: '羽毛',
     item_wooden_sword: '木剑',
     item_wooden_shovel: '木铲',
     item_wooden_pickaxe: '木镐',
@@ -719,6 +724,7 @@ export const translations: Record<Locale, TranslationsSchema> = {
     item_book: '書',
     item_redstone: '紅石粉',
     item_lapis: '青金石',
+    item_feather: '羽毛',
     item_wooden_sword: '木劍',
     item_wooden_shovel: '木鏟',
     item_wooden_pickaxe: '木鎬',
@@ -814,52 +820,78 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const getLocalizedItemName = (id: number, fallbackName?: string): string => {
-    const isBlock = id >= 1 && id <= 99;
+    const isBlock = (id & 0x3FF) < 256;
     const prefix = isBlock ? 'block_' : 'item_';
 
     let lookupName = '';
 
-    // To prevent compile issues, we resolve the names by ID directly, matching registration maps in BlockRegistry/ItemRegistry
+    // Get exact name from registry
     if (isBlock) {
-      // Direct hardcoded translation mappings for block IDs to speed up and avoid circular dependencies
-      const blockIdToName: Record<number, string> = {
-        1: 'stone', 2: 'grass_block', 3: 'dirt', 4: 'cobblestone', 5: 'oak_planks',
-        6: 'oak_log', 7: 'oak_leaves', 8: 'sand', 9: 'gravel', 10: 'gold_ore',
-        11: 'iron_ore', 12: 'coal_ore', 13: 'water', 14: 'lava', 15: 'sandstone',
-        16: 'white_wool', 17: 'gold_block', 18: 'iron_block', 19: 'bricks',
-        20: 'bookshelf', 21: 'tnt', 22: 'diamond_ore', 23: 'diamond_block',
-        24: 'crafting_table', 25: 'furnace', 26: 'glass', 27: 'snow_block',
-        28: 'ice', 29: 'clay', 30: 'torch', 31: 'redstone_wire', 32: 'repeater',
-        33: 'piston', 34: 'lever', 35: 'obsidian', 36: 'chest', 37: 'oak_door',
-        38: 'oak_door_open', 39: 'oak_trapdoor', 40: 'oak_trapdoor_open'
-      };
-      lookupName = blockIdToName[id] || '';
+      lookupName = BlockRegistry.get(id)?.name ?? '';
     } else {
-      const itemIdToName: Record<number, string> = {
-        100: 'stick', 101: 'coal', 102: 'iron_ingot', 103: 'gold_ingot', 104: 'diamond',
-        105: 'iron_nugget', 106: 'gold_nugget', 107: 'string', 108: 'flint', 109: 'paper',
-        110: 'book', 111: 'redstone', 112: 'lapis',
-        120: 'wooden_sword', 121: 'wooden_shovel', 122: 'wooden_pickaxe', 123: 'wooden_axe',
-        130: 'stone_sword', 131: 'stone_shovel', 132: 'stone_pickaxe', 133: 'stone_axe',
-        140: 'iron_sword', 141: 'iron_shovel', 142: 'iron_pickaxe', 143: 'iron_axe',
-        150: 'diamond_sword', 151: 'diamond_shovel', 152: 'diamond_pickaxe', 153: 'diamond_axe',
-        160: 'golden_sword', 161: 'golden_shovel', 162: 'golden_pickaxe', 163: 'golden_axe',
-        170: 'apple', 171: 'bread', 172: 'cooked_beef', 173: 'raw_beef', 174: 'raw_porkchop',
-        175: 'cooked_porkchop', 176: 'wheat', 177: 'seeds', 178: 'bucket',
-        180: 'iron_helmet', 181: 'iron_chestplate', 182: 'iron_leggings', 183: 'iron_boots',
-        184: 'diamond_helmet', 185: 'diamond_chestplate', 186: 'diamond_leggings', 187: 'diamond_boots'
-      };
-      lookupName = itemIdToName[id] || '';
+      lookupName = ItemRegistry.get(id)?.name ?? '';
     }
 
     if (!lookupName && fallbackName) {
       lookupName = fallbackName.toLowerCase().replace(/\s+/g, '_');
     }
+    // Remove namespaces
+    lookupName = lookupName.replace(/^minecraft:/, '');
 
+    // Check direct static translation first
     const key = `${prefix}${lookupName}` as keyof TranslationsSchema;
     const localized = translations[locale][key] as string;
     if (localized) {
       return localized;
+    }
+
+    // Dynamic decomposition translation for Chinese locales
+    if (locale !== 'en' && lookupName) {
+      const parts = lookupName.split('_');
+      
+      const cnDict: Record<string, string> = {
+        oak: '橡木', spruce: '云杉', birch: '白桦', jungle: '丛林', acacia: '金合欢', dark: '深色',
+        planks: '木板', log: '原木', leaves: '树叶', sapling: '树苗', sandstone: '砂岩', stone: '石',
+        redstone: '红石', ore: '矿石', block: '块', wool: '羊毛', glass: '玻璃', terracotta: '陶瓦',
+        concrete: '混凝土', powder: '粉', stained: '染色', shulker: '潜影', box: '盒',
+        white: '白色', orange: '橙色', magenta: '品红色', light: '淡', blue: '蓝色', yellow: '黄色',
+        lime: '黄绿色', pink: '粉红色', gray: '灰色', silver: '淡灰色', cyan: '青色', purple: '紫色',
+        brown: '棕色', green: '绿色', red: '红色', black: '黑色',
+        sword: '剑', pickaxe: '镐', axe: '斧', shovel: '铲', hoe: '锄', shears: '剪刀', bow: '弓', arrow: '箭',
+        wooden: '木', iron: '铁', golden: '金', gold: '金', diamond: '钻石', coal: '煤炭', charcoal: '木炭',
+        ingot: '锭', nugget: '粒', stick: '木棍', raw: '生', cooked: '熟', beef: '牛肉', porkchop: '猪排',
+        mutton: '羊肉', chicken: '鸡肉', fish: '鱼', salmon: '鲑鱼', apple: '苹果', bread: '面包',
+        carrot: '胡萝卜', potato: '马铃薯', baked: '烤', beetroot: '甜菜', cookie: '曲奇', melon: '西瓜',
+        pumpkin: '南瓜', pie: '派', cake: '蛋糕', helmet: '头盔', chestplate: '胸甲', leggings: '护腿',
+        boots: '靴子', leather: '皮革', chainmail: '链甲', water: '水', lava: '岩浆', brick: '砖',
+        coarse: '粗糙', podzol: '灰壤', cobblestone: '圆石', mossy: '苔石', obsidian: '黑曜石',
+        grass: '草', torch: '火把', repeater: '中继器', piston: '活塞', lever: '拉杆', chest: '箱子',
+        door: '门', trapdoor: '活板门', bed: '床', double: '双层', slab: '台阶', stairs: '楼梯'
+      };
+
+      const twDict: Record<string, string> = {
+        oak: '橡木', spruce: '杉木', birch: '白樺', jungle: '叢林', acacia: '金合歡', dark: '深色',
+        planks: '木板', log: '原木', leaves: '樹葉', sapling: '樹苗', sandstone: '砂岩', stone: '石',
+        redstone: '紅石', ore: '礦石', block: '塊', wool: '羊毛', glass: '玻璃', terracotta: '陶瓦',
+        concrete: '混凝土', powder: '粉', stained: '染色', shulker: '界伏', box: '盒',
+        white: '白色', orange: '橙色', magenta: '品紅色', light: '淡', blue: '藍色', yellow: '黃色',
+        lime: '黃綠色', pink: '粉紅色', gray: '灰色', silver: '淡灰色', cyan: '青色', purple: '紫色',
+        brown: '棕色', green: '綠色', red: '紅色', black: '黑色',
+        sword: '劍', pickaxe: '鎬', axe: '斧', shovel: '鏟', hoe: '鋤', shears: '剪刀', bow: '弓', arrow: '箭',
+        wooden: '木', iron: '鐵', golden: '金', gold: '金', diamond: '鑽石', coal: '煤炭', charcoal: '木炭',
+        ingot: '錠', nugget: '粒', stick: '木棍', raw: '生', cooked: '熟', beef: '牛肉', porkchop: '豬排',
+        mutton: '羊肉', chicken: '雞肉', fish: '魚', salmon: '鮭魚', apple: '蘋果', bread: '麵包',
+        carrot: '胡蘿蔔', potato: '馬鈴薯', baked: '烤', beetroot: '甜菜', cookie: '曲奇', melon: '西瓜',
+        pumpkin: '南瓜', pie: '派', cake: '蛋糕', helmet: '頭盔', chestplate: '胸甲', leggings: '護腿',
+        boots: '靴子', leather: '皮革', chainmail: '鏈甲', water: '水', lava: '岩漿', brick: '磚',
+        coarse: '粗糙', podzol: '灰壤', cobblestone: '圓石', mossy: '苔石', obsidian: '黑曜石',
+        grass: '草', torch: '火把', repeater: '中繼器', piston: '活塞', lever: '拉桿', chest: '箱子',
+        door: '門', trapdoor: '活板門', bed: '床', double: '雙層', slab: '半磚', stairs: '樓梯'
+      };
+
+      const dict = locale === 'zh-TW' ? twDict : cnDict;
+      const translatedParts = parts.map(p => dict[p] || p);
+      return translatedParts.join('');
     }
 
     if (fallbackName) return fallbackName;

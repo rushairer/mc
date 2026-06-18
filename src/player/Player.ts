@@ -100,7 +100,7 @@ export class Player {
 
       const footBlock = chunks.getBlock(px, py, pz);
       const bodyBlock = chunks.getBlock(px, py + 1, pz);
-      const inFluid = footBlock === 13 || footBlock === 14 || bodyBlock === 13 || bodyBlock === 14;
+      const inFluid = BlockRegistry.isFluid(footBlock) || BlockRegistry.isFluid(bodyBlock);
 
       if (inFluid) {
         // Swimming mode
@@ -163,7 +163,9 @@ export class Player {
       for (let by = minY; by <= maxY; by++) {
         for (let bz = minZ; bz <= maxZ; bz++) {
           const blockId = chunks.getBlock(bx, by, bz);
-          if (blockId === 37 || blockId === 38 || blockId === 39 || blockId === 40) {
+          const def = BlockRegistry.get(blockId);
+          const isDoorOrTrapdoor = def && (def.name.endsWith('door') || def.name.includes('trapdoor'));
+          if (isDoorOrTrapdoor) {
             if (chunks.isSolidBlock(bx, by, bz)) {
               if (
                 this.position.x + hw > bx && this.position.x - hw < bx + 1 &&
@@ -644,13 +646,18 @@ export class Player {
     } else {
       // Food or Material
       let color = 0x8B4513; // default stick/brown
-      if (itemId === 101) color = 0x222222; // coal
-      else if (itemId === 102 || itemId === 105) color = 0xD8D8D8; // iron
-      else if (itemId === 103 || itemId === 106) color = 0xFFD700; // gold
-      else if (itemId === 104) color = 0x5DECF5; // diamond
-      else if (itemId === 170) color = 0xEE2222; // apple
-      else if (itemId === 171) color = 0xD2B48C; // bread
-      else if (itemId === 172 || itemId === 173 || itemId === 174 || itemId === 175) color = 0xA04040; // meat
+      const name = itemDef.name;
+      if (name.includes('coal') || name.includes('charcoal')) color = 0x222222;
+      else if (name.includes('iron_ingot') || name.includes('iron_nugget')) color = 0xD8D8D8;
+      else if (name.includes('gold_ingot') || name.includes('gold_nugget')) color = 0xFFD700;
+      else if (name.includes('diamond')) color = 0x5DECF5;
+      else if (name.includes('apple')) color = 0xEE2222;
+      else if (name.includes('bread')) color = 0xD2B48C;
+      else if (name.includes('beef') || name.includes('porkchop') || name.includes('mutton') || name.includes('chicken') || name.includes('steak') || name.includes('meat') || name.includes('flesh')) color = 0xA04040;
+      else if (name.includes('redstone')) color = 0xFF0000;
+      else if (name.includes('arrow')) color = 0xE0E0E0;
+      else if (name.includes('brick')) color = 0x9B4B3A;
+      else if (name.includes('dye') || name.includes('lapis')) color = 0x2244AA;
 
       const geo = new THREE.BoxGeometry(0.09, 0.09, 0.09);
       const mat = new THREE.MeshLambertMaterial({ color });
@@ -662,31 +669,33 @@ export class Player {
   }
 
   private getBlockColor(blockId: number): number {
-    const colors: Record<number, number> = {
-      1: 0x888888,   // stone
-      2: 0x5B8C32,   // grass
-      3: 0x8B6914,   // dirt
-      4: 0x7A7A7A,   // cobblestone
-      5: 0xBC9862,   // oak planks
-      6: 0x6B511D,   // oak log
-      7: 0x3A7D1A,   // leaves
-      8: 0xE8D7A3,   // sand
-      13: 0x2B4FA8,  // water
-      14: 0xD84400,  // lava
-      19: 0x9B4B3A,  // bricks
-      24: 0xBC9862,  // crafting table
-      25: 0x888888,  // furnace
-      26: 0xCCEEFF,  // glass
-      27: 0xF0F0F0,  // snow
-      28: 0x96C8FF,  // ice
-      29: 0x9EA4B0,  // clay
-      30: 0xFFAA00,  // torch
-      31: 0xCC0000,  // redstone wire
-      32: 0x888888,  // repeater
-      33: 0x888888,  // piston
-      34: 0x666666,  // lever
-      35: 0x1B0B2E,  // obsidian
-    };
-    return colors[blockId] ?? 0xAAAAAA;
+    const def = BlockRegistry.get(blockId);
+    if (!def) return 0xAAAAAA;
+    const name = def.name;
+
+    if (name.includes('stone_brick')) return 0x7A7A7A;
+    if (name.includes('stone') || name.includes('andesite') || name.includes('diorite') || name.includes('granite')) return 0x888888;
+    if (name.includes('grass')) return 0x5B8C32;
+    if (name.includes('dirt')) return 0x8B6914;
+    if (name.includes('cobblestone')) return 0x7A7A7A;
+    if (name.includes('planks') || name.includes('wood') || name === 'crafting_table' || name === 'chest') return 0xBC9862;
+    if (name.includes('log')) return 0x6B511D;
+    if (name.includes('leaves')) return 0x3A7D1A;
+    if (name.includes('sandstone')) return 0xBD9A5F;
+    if (name.includes('sand')) return 0xE8D7A3;
+    if (name.includes('water')) return 0x2B4FA8;
+    if (name.includes('lava')) return 0xD84400;
+    if (name.includes('brick')) return 0x9B4B3A;
+    if (name.includes('furnace')) return 0x888888;
+    if (name.includes('glass')) return 0xCCEEFF;
+    if (name.includes('snow')) return 0xF0F0F0;
+    if (name.includes('ice')) return 0x96C8FF;
+    if (name.includes('clay')) return 0x9EA4B0;
+    if (name.includes('torch')) return 0xFFAA00;
+    if (name.includes('wire') || name.includes('redstone')) return 0xCC0000;
+    if (name.includes('repeater') || name.includes('piston') || name.includes('lever')) return 0x666666;
+    if (name.includes('obsidian')) return 0x1B0B2E;
+
+    return 0xAAAAAA;
   }
 }

@@ -10,11 +10,12 @@ interface FurnaceUIProps {
   onClose: () => void;
   onInventoryChange: () => void;
   getItemIconStyle: (id: number, size?: number) => any;
+  onDropItem?: (itemId: number, count: number) => void;
 }
 
 const SLOT_SIZE = 48;
 
-export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle }) => {
+export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle, onDropItem }) => {
   const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [inputSlot, setInputSlot] = useState<ItemStack | null>(null);
   const [fuelSlot, setFuelSlot] = useState<ItemStack | null>(null);
@@ -27,6 +28,8 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
     itemDef: any;
     x: number;
     y: number;
+    index: number;
+    type: 'inventory' | 'input' | 'fuel' | 'output';
   } | null>(null);
 
   // Check if smelting should start
@@ -43,7 +46,8 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
     }
 
     // Check fuel
-    const isFuel = fuelSlot.id === 101 || fuelSlot.id === 5 || fuelSlot.id === 6;
+    const baseFuelId = fuelSlot.id & 0x3FF;
+    const isFuel = baseFuelId === 263 || baseFuelId === 5 || baseFuelId === 17;
     if (!isFuel) {
       setIsSmelting(false);
       return;
@@ -100,18 +104,38 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
     onClose();
   }, [inputSlot, fuelSlot, outputSlot, inventory, onInventoryChange, onClose]);
 
+  // Close on E or Escape key, drop on Q
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === 'e' || e.key === 'Escape') {
         e.preventDefault();
         handleClose();
+      } else if (e.key.toLowerCase() === 'q') {
+        if (hoveredSlot) {
+          const { index, type } = hoveredSlot;
+          if (type === 'inventory') {
+            const slotItem = inventory.getSlot(index);
+            if (slotItem) {
+              const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? slotItem.count : 1;
+              onDropItem?.(slotItem.id, dropCount);
+              if (slotItem.count <= dropCount) {
+                inventory.setSlot(index, null);
+                setHoveredSlot(null);
+              } else {
+                slotItem.count -= dropCount;
+                setHoveredSlot({ ...hoveredSlot, item: { ...slotItem } });
+              }
+              onInventoryChange();
+            }
+          }
+        }
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [handleClose]);
+  }, [handleClose, hoveredSlot, inventory, onDropItem, onInventoryChange]);
 
-  const renderSlot = (item: ItemStack | null, onClick: () => void) => {
+  const renderSlot = (item: ItemStack | null, onClick: () => void, slotType: 'input' | 'fuel' | 'output' = 'input') => {
     const itemDef = item ? ItemRegistry.get(item.id) : null;
     return (
       <div
@@ -126,6 +150,8 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
               itemDef,
               x: e.clientX,
               y: e.clientY,
+              index: -1,
+              type: slotType,
             });
           }
         }}
@@ -136,6 +162,8 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
               itemDef,
               x: e.clientX,
               y: e.clientY,
+              index: -1,
+              type: slotType,
             });
           }
         }}
@@ -174,27 +202,33 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
   };
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0,0,0,0.7)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 50,
-      fontFamily: '"Courier New", monospace',
-    }}>
-      <div style={{
-        background: 'rgba(40,40,40,0.95)',
-        border: '3px solid #666',
-        borderRadius: '8px',
-        padding: '20px',
-        color: '#fff',
-        position: 'relative',
-      }}>
+    <div
+      onClick={handleClose}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0,0,0,0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 50,
+        fontFamily: '"Courier New", monospace',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'rgba(40,40,40,0.95)',
+          border: '3px solid #666',
+          borderRadius: '8px',
+          padding: '20px',
+          color: '#fff',
+          position: 'relative',
+        }}
+      >
         <button
           onClick={handleClose}
           style={{
@@ -231,7 +265,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
               inventory.addItem(inputSlot.id, inputSlot.count);
               setInputSlot(null);
               onInventoryChange();
-            })}
+            }, 'input')}
           </div>
           <div>
             <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>{t('fuel')}</div>
@@ -240,7 +274,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
               inventory.addItem(fuelSlot.id, fuelSlot.count);
               setFuelSlot(null);
               onInventoryChange();
-            })}
+            }, 'fuel')}
           </div>
           <div style={{ fontSize: '20px', color: '#aaa' }}>→</div>
           <div>
@@ -250,7 +284,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
               inventory.addItem(outputSlot.id, outputSlot.count);
               setOutputSlot(null);
               onInventoryChange();
-            })}
+            }, 'output')}
           </div>
         </div>
 
@@ -288,7 +322,8 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
                 onClick={() => {
                   if (!item) return;
                   const recipe = findSmeltingResult(item.id);
-                  const isFuel = item.id === 101 || item.id === 5 || item.id === 6;
+                  const baseItemId = item.id & 0x3FF;
+                  const isFuel = baseItemId === 263 || baseItemId === 5 || baseItemId === 17;
 
                   setHoveredSlot(null);
 
@@ -309,6 +344,8 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
                       itemDef,
                       x: e.clientX,
                       y: e.clientY,
+                      index: i,
+                      type: 'inventory',
                     });
                   }
                 }}
@@ -319,6 +356,8 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
                       itemDef,
                       x: e.clientX,
                       y: e.clientY,
+                      index: i,
+                      type: 'inventory',
                     });
                   }
                 }}

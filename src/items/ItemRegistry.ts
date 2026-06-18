@@ -1,7 +1,10 @@
 import { BlockRegistry } from '../world/BlockRegistry';
+import rawItems from './data/items.json';
 
 export interface ItemDef {
-  id: number;
+  id: number; // packed ID: (metadata << 10) | baseId
+  baseId: number;
+  metadata: number;
   name: string;
   displayName: string;
   maxStackSize: number;
@@ -28,123 +31,196 @@ const TOOL_STATS = {
 
 // ─── Armor Material Stats ───
 const ARMOR_STATS = {
+  leather: { helmet: 1, chestplate: 3, leggings: 2, boots: 1 },
+  gold:    { helmet: 2, chestplate: 5, leggings: 3, boots: 1 },
+  chainmail:{ helmet: 2, chestplate: 5, leggings: 4, boots: 1 },
   iron:    { helmet: 2, chestplate: 6, leggings: 5, boots: 2 },
   diamond: { helmet: 3, chestplate: 8, leggings: 6, boots: 3 },
 } as const;
 
+// ─── Food Restore Info ───
+const FOOD_STATS: Record<string, { hunger: number; saturation: number }> = {
+  'apple': { hunger: 4, saturation: 2.4 },
+  'bread': { hunger: 5, saturation: 6.0 },
+  'cooked_beef': { hunger: 8, saturation: 12.8 },
+  'steak': { hunger: 8, saturation: 12.8 },
+  'raw_beef': { hunger: 3, saturation: 1.8 },
+  'cooked_porkchop': { hunger: 8, saturation: 12.8 },
+  'raw_porkchop': { hunger: 3, saturation: 1.8 },
+  'cooked_chicken': { hunger: 6, saturation: 7.2 },
+  'raw_chicken': { hunger: 2, saturation: 1.2 },
+  'cooked_mutton': { hunger: 6, saturation: 9.6 },
+  'raw_mutton': { hunger: 2, saturation: 1.2 },
+  'cooked_fish': { hunger: 5, saturation: 6.0 },
+  'raw_fish': { hunger: 2, saturation: 0.4 },
+  'cookie': { hunger: 2, saturation: 0.4 },
+  'melon': { hunger: 2, saturation: 1.2 },
+  'carrot': { hunger: 3, saturation: 3.6 },
+  'potato': { hunger: 1, saturation: 0.6 },
+  'baked_potato': { hunger: 5, saturation: 6.0 },
+  'pumpkin_pie': { hunger: 8, saturation: 4.8 },
+  'golden_apple': { hunger: 4, saturation: 9.6 },
+};
+
+// ─── Block Drop Mappings (Packed IDs) ───
+const BLOCK_DROP_OVERRIDES: Record<number, number | (() => number)> = {
+  2: 3,                 // grass -> dirt
+  16: 263,              // coal ore -> coal
+  56: 264,              // diamond ore -> diamond
+  73: 331,              // redstone ore -> redstone dust
+  21: (4 << 10) | 351,  // lapis ore -> lapis lazuli (dye metadata 4)
+  13: () => Math.random() < 0.1 ? 318 : 13, // gravel -> flint (10%) or gravel
+  82: 337,              // clay block -> clay ball
+};
+
 const items: Map<number, ItemDef> = new Map();
 
-function reg(def: ItemDef) {
-  items.set(def.id, def);
+// ─── Initialize Registry from JSON ───
+for (const item of rawItems) {
+  const baseId = item.id;
+  const isBlock = baseId < 256;
+
+  const registerItem = (id: number, meta: number, name: string, displayName: string) => {
+    // Determine category
+    let category: ItemDef['category'] = isBlock ? 'block' : 'material';
+    let toolType: ItemDef['toolType'] = undefined;
+    let toolMaterial: ItemDef['toolMaterial'] = undefined;
+    let durability: number | undefined = undefined;
+    let damage: number | undefined = undefined;
+    let miningSpeed: number | undefined = undefined;
+    let hungerRestore: number | undefined = undefined;
+    let saturationRestore: number | undefined = undefined;
+    let armorSlot: ItemDef['armorSlot'] = undefined;
+    let armorDefense: number | undefined = undefined;
+
+    // Check if Tool
+    if (name.endsWith('_pickaxe') || name.endsWith('_shovel') || name.endsWith('_axe') || name.endsWith('_sword')) {
+      category = 'tool';
+      if (name.endsWith('_pickaxe')) toolType = 'pickaxe';
+      else if (name.endsWith('_shovel')) toolType = 'shovel';
+      else if (name.endsWith('_axe')) toolType = 'axe';
+      else if (name.endsWith('_sword')) toolType = 'sword';
+
+      // Material
+      if (name.startsWith('wooden_') || name.startsWith('wood_')) toolMaterial = 'wood';
+      else if (name.startsWith('stone_')) toolMaterial = 'stone';
+      else if (name.startsWith('iron_')) toolMaterial = 'iron';
+      else if (name.startsWith('golden_') || name.startsWith('gold_')) toolMaterial = 'gold';
+      else if (name.startsWith('diamond_')) toolMaterial = 'diamond';
+
+      if (toolMaterial) {
+        const stats = TOOL_STATS[toolMaterial];
+        durability = stats.durability;
+        miningSpeed = stats.miningSpeed;
+        damage = toolType === 'sword' ? stats.damage + 3 : (toolType === 'axe' ? stats.damage + 2 : stats.damage);
+      }
+    } else if (name === 'bow') {
+      category = 'tool';
+      toolType = 'sword'; // classified under sword for swing/damage checks in player
+      durability = 384;
+      damage = 1;
+    } else if (name.endsWith('_helmet') || name.endsWith('_chestplate') || name.endsWith('_leggings') || name.endsWith('_boots')) {
+      category = 'armor';
+      if (name.endsWith('_helmet')) armorSlot = 'helmet';
+      else if (name.endsWith('_chestplate')) armorSlot = 'chestplate';
+      else if (name.endsWith('_leggings')) armorSlot = 'leggings';
+      else if (name.endsWith('_boots')) armorSlot = 'boots';
+
+      // Material
+      let materialKey: keyof typeof ARMOR_STATS | undefined = undefined;
+      if (name.startsWith('leather_')) materialKey = 'leather';
+      else if (name.startsWith('golden_') || name.startsWith('gold_')) materialKey = 'gold';
+      else if (name.startsWith('chainmail_')) materialKey = 'chainmail';
+      else if (name.startsWith('iron_')) materialKey = 'iron';
+      else if (name.startsWith('diamond_')) materialKey = 'diamond';
+
+      if (materialKey && armorSlot) {
+        armorDefense = ARMOR_STATS[materialKey][armorSlot];
+        // Approximate durability
+        const baseDurabilities = { helmet: 55, chestplate: 80, leggings: 75, boots: 65 };
+        const multipliers = { leather: 3, gold: 7, chainmail: 12, iron: 15, diamond: 33 };
+        durability = baseDurabilities[armorSlot] * multipliers[materialKey] / 5;
+      }
+    } else {
+      // Check Food
+      for (const [foodName, stats] of Object.entries(FOOD_STATS)) {
+        if (name === foodName || name.endsWith(foodName)) {
+          category = 'food';
+          hungerRestore = stats.hunger;
+          saturationRestore = stats.saturation;
+          break;
+        }
+      }
+    }
+
+    items.set(id, {
+      id,
+      baseId,
+      metadata: meta,
+      name,
+      displayName,
+      maxStackSize: item.stackSize ?? 64,
+      category,
+      toolType,
+      toolMaterial,
+      durability,
+      damage,
+      miningSpeed,
+      hungerRestore,
+      saturationRestore,
+      armorSlot,
+      armorDefense,
+    });
+  };
+
+  // Register variations
+  if (item.variations && item.variations.length > 0) {
+    for (const v of item.variations) {
+      const packedId = (v.metadata << 10) | baseId;
+      const vName = v.displayName.toLowerCase().replace(/ /g, '_');
+      registerItem(packedId, v.metadata, vName, v.displayName);
+    }
+  } else {
+    registerItem(baseId, 0, item.name, item.displayName);
+  }
 }
-
-// ─── Block items (ID 1-99 match block IDs) ───
-// These are implicit — BlockRegistry already has them.
-// We just register the item versions.
-
-// ─── Materials (100-149) ───
-reg({ id: 100, name: 'stick',       displayName: 'Stick',       maxStackSize: 64, category: 'material' });
-reg({ id: 101, name: 'coal',        displayName: 'Coal',        maxStackSize: 64, category: 'material' });
-reg({ id: 102, name: 'iron_ingot',  displayName: 'Iron Ingot',  maxStackSize: 64, category: 'material' });
-reg({ id: 103, name: 'gold_ingot',  displayName: 'Gold Ingot',  maxStackSize: 64, category: 'material' });
-reg({ id: 104, name: 'diamond',     displayName: 'Diamond',     maxStackSize: 64, category: 'material' });
-reg({ id: 105, name: 'iron_nugget', displayName: 'Iron Nugget', maxStackSize: 64, category: 'material' });
-reg({ id: 106, name: 'gold_nugget', displayName: 'Gold Nugget', maxStackSize: 64, category: 'material' });
-reg({ id: 107, name: 'string',      displayName: 'String',      maxStackSize: 64, category: 'material' });
-reg({ id: 108, name: 'flint',       displayName: 'Flint',       maxStackSize: 64, category: 'material' });
-reg({ id: 109, name: 'paper',       displayName: 'Paper',       maxStackSize: 64, category: 'material' });
-reg({ id: 110, name: 'book',        displayName: 'Book',        maxStackSize: 64, category: 'material' });
-reg({ id: 111, name: 'redstone',    displayName: 'Redstone',    maxStackSize: 64, category: 'material' });
-reg({ id: 112, name: 'lapis',       displayName: 'Lapis Lazuli', maxStackSize: 64, category: 'material' });
-
-// ─── Wooden Tools (120-124) ───
-const W = TOOL_STATS.wood;
-reg({ id: 120, name: 'wooden_sword',   displayName: 'Wooden Sword',   maxStackSize: 1, category: 'tool', toolType: 'sword',   toolMaterial: 'wood', durability: W.durability, damage: W.damage + 3, miningSpeed: W.miningSpeed });
-reg({ id: 121, name: 'wooden_shovel',  displayName: 'Wooden Shovel',  maxStackSize: 1, category: 'tool', toolType: 'shovel',  toolMaterial: 'wood', durability: W.durability, damage: W.damage, miningSpeed: W.miningSpeed });
-reg({ id: 122, name: 'wooden_pickaxe', displayName: 'Wooden Pickaxe', maxStackSize: 1, category: 'tool', toolType: 'pickaxe', toolMaterial: 'wood', durability: W.durability, damage: W.damage, miningSpeed: W.miningSpeed });
-reg({ id: 123, name: 'wooden_axe',    displayName: 'Wooden Axe',     maxStackSize: 1, category: 'tool', toolType: 'axe',     toolMaterial: 'wood', durability: W.durability, damage: W.damage + 2, miningSpeed: W.miningSpeed });
-
-// ─── Stone Tools (130-134) ───
-const S = TOOL_STATS.stone;
-reg({ id: 130, name: 'stone_sword',   displayName: 'Stone Sword',   maxStackSize: 1, category: 'tool', toolType: 'sword',   toolMaterial: 'stone', durability: S.durability, damage: S.damage + 3, miningSpeed: S.miningSpeed });
-reg({ id: 131, name: 'stone_shovel',  displayName: 'Stone Shovel',  maxStackSize: 1, category: 'tool', toolType: 'shovel',  toolMaterial: 'stone', durability: S.durability, damage: S.damage, miningSpeed: S.miningSpeed });
-reg({ id: 132, name: 'stone_pickaxe', displayName: 'Stone Pickaxe', maxStackSize: 1, category: 'tool', toolType: 'pickaxe', toolMaterial: 'stone', durability: S.durability, damage: S.damage, miningSpeed: S.miningSpeed });
-reg({ id: 133, name: 'stone_axe',    displayName: 'Stone Axe',     maxStackSize: 1, category: 'tool', toolType: 'axe',     toolMaterial: 'stone', durability: S.durability, damage: S.damage + 2, miningSpeed: S.miningSpeed });
-
-// ─── Iron Tools (140-144) ───
-const I = TOOL_STATS.iron;
-reg({ id: 140, name: 'iron_sword',   displayName: 'Iron Sword',   maxStackSize: 1, category: 'tool', toolType: 'sword',   toolMaterial: 'iron', durability: I.durability, damage: I.damage + 3, miningSpeed: I.miningSpeed });
-reg({ id: 141, name: 'iron_shovel',  displayName: 'Iron Shovel',  maxStackSize: 1, category: 'tool', toolType: 'shovel',  toolMaterial: 'iron', durability: I.durability, damage: I.damage, miningSpeed: I.miningSpeed });
-reg({ id: 142, name: 'iron_pickaxe', displayName: 'Iron Pickaxe', maxStackSize: 1, category: 'tool', toolType: 'pickaxe', toolMaterial: 'iron', durability: I.durability, damage: I.damage, miningSpeed: I.miningSpeed });
-reg({ id: 143, name: 'iron_axe',    displayName: 'Iron Axe',     maxStackSize: 1, category: 'tool', toolType: 'axe',     toolMaterial: 'iron', durability: I.durability, damage: I.damage + 2, miningSpeed: I.miningSpeed });
-
-// ─── Diamond Tools (150-154) ───
-const D = TOOL_STATS.diamond;
-reg({ id: 150, name: 'diamond_sword',   displayName: 'Diamond Sword',   maxStackSize: 1, category: 'tool', toolType: 'sword',   toolMaterial: 'diamond', durability: D.durability, damage: D.damage + 3, miningSpeed: D.miningSpeed });
-reg({ id: 151, name: 'diamond_shovel',  displayName: 'Diamond Shovel',  maxStackSize: 1, category: 'tool', toolType: 'shovel',  toolMaterial: 'diamond', durability: D.durability, damage: D.damage, miningSpeed: D.miningSpeed });
-reg({ id: 152, name: 'diamond_pickaxe', displayName: 'Diamond Pickaxe', maxStackSize: 1, category: 'tool', toolType: 'pickaxe', toolMaterial: 'diamond', durability: D.durability, damage: D.damage, miningSpeed: D.miningSpeed });
-reg({ id: 153, name: 'diamond_axe',    displayName: 'Diamond Axe',     maxStackSize: 1, category: 'tool', toolType: 'axe',     toolMaterial: 'diamond', durability: D.durability, damage: D.damage + 2, miningSpeed: D.miningSpeed });
-
-// ─── Golden Tools (160-164) ───
-const G = TOOL_STATS.gold;
-reg({ id: 160, name: 'golden_sword',   displayName: 'Golden Sword',   maxStackSize: 1, category: 'tool', toolType: 'sword',   toolMaterial: 'gold', durability: G.durability, damage: G.damage + 3, miningSpeed: G.miningSpeed });
-reg({ id: 161, name: 'golden_shovel',  displayName: 'Golden Shovel',  maxStackSize: 1, category: 'tool', toolType: 'shovel',  toolMaterial: 'gold', durability: G.durability, damage: G.damage, miningSpeed: G.miningSpeed });
-reg({ id: 162, name: 'golden_pickaxe', displayName: 'Golden Pickaxe', maxStackSize: 1, category: 'tool', toolType: 'pickaxe', toolMaterial: 'gold', durability: G.durability, damage: G.damage, miningSpeed: G.miningSpeed });
-reg({ id: 163, name: 'golden_axe',    displayName: 'Golden Axe',     maxStackSize: 1, category: 'tool', toolType: 'axe',     toolMaterial: 'gold', durability: G.durability, damage: G.damage + 2, miningSpeed: G.miningSpeed });
-
-// ─── Food (170-179) ───
-reg({ id: 170, name: 'apple',       displayName: 'Apple',       maxStackSize: 64, category: 'food', hungerRestore: 4, saturationRestore: 2.4 });
-reg({ id: 171, name: 'bread',       displayName: 'Bread',       maxStackSize: 64, category: 'food', hungerRestore: 5, saturationRestore: 6.0 });
-reg({ id: 172, name: 'cooked_beef', displayName: 'Steak',       maxStackSize: 64, category: 'food', hungerRestore: 8, saturationRestore: 12.8 });
-reg({ id: 173, name: 'raw_beef',    displayName: 'Raw Beef',    maxStackSize: 64, category: 'food', hungerRestore: 3, saturationRestore: 1.8 });
-reg({ id: 174, name: 'raw_porkchop',displayName: 'Raw Porkchop',maxStackSize: 64, category: 'food', hungerRestore: 3, saturationRestore: 1.8 });
-reg({ id: 175, name: 'cooked_porkchop', displayName: 'Cooked Porkchop', maxStackSize: 64, category: 'food', hungerRestore: 8, saturationRestore: 12.8 });
-reg({ id: 176, name: 'wheat',       displayName: 'Wheat',       maxStackSize: 64, category: 'material' });
-reg({ id: 177, name: 'seeds',       displayName: 'Seeds',       maxStackSize: 64, category: 'material' });
-reg({ id: 178, name: 'bucket',      displayName: 'Bucket',      maxStackSize: 16, category: 'material' });
-
-// ─── Armor (180-195) ───
-reg({ id: 180, name: 'iron_helmet',      displayName: 'Iron Helmet',      maxStackSize: 1, category: 'armor', armorSlot: 'helmet',      armorDefense: ARMOR_STATS.iron.helmet,      durability: 165 });
-reg({ id: 181, name: 'iron_chestplate',  displayName: 'Iron Chestplate',  maxStackSize: 1, category: 'armor', armorSlot: 'chestplate',  armorDefense: ARMOR_STATS.iron.chestplate,  durability: 240 });
-reg({ id: 182, name: 'iron_leggings',    displayName: 'Iron Leggings',    maxStackSize: 1, category: 'armor', armorSlot: 'leggings',    armorDefense: ARMOR_STATS.iron.leggings,    durability: 225 });
-reg({ id: 183, name: 'iron_boots',       displayName: 'Iron Boots',       maxStackSize: 1, category: 'armor', armorSlot: 'boots',       armorDefense: ARMOR_STATS.iron.boots,       durability: 195 });
-reg({ id: 184, name: 'diamond_helmet',   displayName: 'Diamond Helmet',   maxStackSize: 1, category: 'armor', armorSlot: 'helmet',      armorDefense: ARMOR_STATS.diamond.helmet,   durability: 363 });
-reg({ id: 185, name: 'diamond_chestplate',displayName:'Diamond Chestplate',maxStackSize: 1, category: 'armor', armorSlot: 'chestplate',  armorDefense: ARMOR_STATS.diamond.chestplate, durability: 528 });
-reg({ id: 186, name: 'diamond_leggings', displayName: 'Diamond Leggings', maxStackSize: 1, category: 'armor', armorSlot: 'leggings',    armorDefense: ARMOR_STATS.diamond.leggings, durability: 495 });
-reg({ id: 187, name: 'diamond_boots',    displayName: 'Diamond Boots',    maxStackSize: 1, category: 'armor', armorSlot: 'boots',       armorDefense: ARMOR_STATS.diamond.boots,    durability: 429 });
-
-// ─── Ranged Weapons ───
-reg({ id: 190, name: 'bow',   displayName: 'Bow',   maxStackSize: 1, category: 'tool', toolType: 'sword', durability: 384, damage: 1 });
-reg({ id: 191, name: 'arrow', displayName: 'Arrow', maxStackSize: 64, category: 'material' });
 
 export const ItemRegistry = {
   get(id: number): ItemDef | undefined {
-    if (id >= 1 && id <= 99) {
-      // Block-as-item
+    // Check direct item registration
+    const it = items.get(id);
+    if (it) return it;
+
+    // Fallback: block-as-item
+    const baseId = id & 0x3FF;
+    if (baseId < 256) {
       const block = BlockRegistry.get(id);
       if (!block) return undefined;
       return {
         id,
+        baseId: block.baseId ?? (block.id & 0x3FF),
+        metadata: block.metadata ?? (block.id >> 10),
         name: block.name,
-        displayName: block.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        displayName: block.displayName ?? block.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
         maxStackSize: 64,
         category: 'block',
       };
     }
-    return items.get(id);
+    return undefined;
   },
 
   isBlock(id: number): boolean {
-    return id >= 1 && id <= 99;
+    const baseId = id & 0x3FF;
+    return baseId >= 1 && baseId < 256;
   },
 
   isTool(id: number): boolean {
-    const item = items.get(id);
+    const item = this.get(id);
     return item?.category === 'tool';
   },
 
   isFood(id: number): boolean {
-    const item = items.get(id);
+    const item = this.get(id);
     return item?.category === 'food';
   },
 
@@ -154,13 +230,13 @@ export const ItemRegistry = {
   },
 
   getToolMiningSpeed(id: number, blockId: number): number {
-    const item = items.get(id);
+    const item = this.get(id);
     if (!item || item.category !== 'tool') return 1;
 
     const block = BlockRegistry.get(blockId);
     if (!block) return 1;
 
-    // Correct tool = 2x speed bonus (simplified from vanilla's complex multipliers)
+    // Matching tool speed bonus
     if (block.toolCategory && item.toolType === block.toolCategory) {
       return item.miningSpeed ?? 1;
     }
@@ -175,20 +251,15 @@ export const ItemRegistry = {
     return block.hardness / speed;
   },
 
-  // Map block drops to item IDs
   getBlockDropItem(blockId: number): number {
-    const block = BlockRegistry.get(blockId);
-    if (!block) return 0;
-    if (block.dropsId) return block.dropsId;
+    // Check drop overrides
+    const override = BLOCK_DROP_OVERRIDES[blockId];
+    if (override !== undefined) {
+      return typeof override === 'function' ? override() : override;
+    }
 
-    // Ore → raw material drops
-    if (blockId === 12) return 101; // coal_ore → coal
-    if (blockId === 11) return 102; // iron_ore → iron_ingot (simplified)
-    if (blockId === 10) return 103; // gold_ore → gold_ingot
-    if (blockId === 22) return 104; // diamond_ore → diamond
-    if (blockId === 29) return 29;  // clay → clay
-
-    return blockId; // default: drop self
+    // Default: block drops its own ID
+    return blockId;
   },
 
   getDisplayName(id: number): string {
@@ -197,7 +268,15 @@ export const ItemRegistry = {
     return item.displayName;
   },
 
-  getAll(): ItemDef[] {
+  all(): ItemDef[] {
     return Array.from(items.values());
+  },
+
+  getByName(name: string): ItemDef | undefined {
+    // Exact or normalized name match
+    for (const item of items.values()) {
+      if (item.name === name || item.name === `minecraft:${name}`) return item;
+    }
+    return undefined;
   },
 };

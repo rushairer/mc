@@ -34,6 +34,24 @@ export class ChunkManager {
       side: THREE.FrontSide,
       depthWrite: false,
     });
+
+    const setupLightningShader = (material: THREE.Material) => {
+      material.onBeforeCompile = (shader) => {
+        shader.uniforms.lightningOffset = { value: 0 };
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <common>',
+          '#include <common>\nuniform float lightningOffset;'
+        );
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <color_vertex>',
+          '#include <color_vertex>\nvColor = clamp(vColor + vec3(lightningOffset), 0.0, 1.0);'
+        );
+        material.userData.shader = shader;
+      };
+    };
+
+    setupLightningShader(this.material);
+    setupLightningShader(this.transparentMaterial);
   }
 
   static key(cx: number, cz: number): string {
@@ -127,7 +145,9 @@ export class ChunkManager {
 
   isSolidBlock(wx: number, wy: number, wz: number): boolean {
     const blockId = this.getBlock(wx, wy, wz);
-    if (blockId === 37 || blockId === 38 || blockId === 39 || blockId === 40) {
+    const def = BlockRegistry.get(blockId);
+    const isDoorOrTrapdoor = def && (def.name.endsWith('door') || def.name.includes('trapdoor'));
+    if (isDoorOrTrapdoor) {
       const meta = this.getBlockMeta(wx, wy, wz);
       return !meta?.open;
     }
@@ -145,7 +165,7 @@ export class ChunkManager {
     chunk.setBlockMeta(lx, wy, lz, metadata, markDirty);
   }
 
-  restoreChunk(cx: number, cz: number, data: Uint8Array, metadata?: SerializedBlockMetadata[]) {
+  restoreChunk(cx: number, cz: number, data: Uint16Array, metadata?: SerializedBlockMetadata[]) {
     const key = ChunkManager.key(cx, cz);
     let chunk = this.chunks.get(key);
     if (!chunk) {
@@ -164,7 +184,7 @@ export class ChunkManager {
       }
     }
 
-    chunk.data = new Uint8Array(data);
+    chunk.data = new Uint16Array(data);
     chunk.restoreMetadata(metadata);
     this.computeChunkLight(chunk);
     this.rebuildChunkMesh(chunk);
@@ -307,6 +327,15 @@ export class ChunkManager {
       chunk.transparentMesh.matrixAutoUpdate = false;
       chunk.transparentMesh.updateMatrix();
       this.scene.add(chunk.transparentMesh);
+    }
+  }
+
+  setLightningOffset(offset: number) {
+    if (this.material.userData.shader) {
+      this.material.userData.shader.uniforms.lightningOffset.value = offset;
+    }
+    if (this.transparentMaterial.userData.shader) {
+      this.transparentMaterial.userData.shader.uniforms.lightningOffset.value = offset;
     }
   }
 

@@ -1,213 +1,165 @@
-/**
- * Crafting recipes.
- *
- * Pattern is a flat array of 9 item IDs for a 3×3 grid.
- * Use 0 for empty slots.
- * Shapeless recipes have pattern=null (any arrangement works).
- */
+import rawRecipes from './data/recipes.json';
 
-export interface CraftingRecipe {
-  pattern: (number | null)[];   // 9 elements for 3×3, null = wildcard
-  result: { id: number; count: number };
-  shapeless?: boolean;
+interface RawRecipeIngredient {
+  id: number;
+  metadata?: number;
 }
 
-export const CRAFTING_RECIPES: CraftingRecipe[] = [
-  // ─── Planks from any log ───
-  { pattern: [6, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 5, count: 4 }, shapeless: true },
+type RawRecipeCell = number | RawRecipeIngredient | (number | RawRecipeIngredient)[] | null;
 
-  // ─── Sticks ───
-  { pattern: [5, 0, 0, 5, 0, 0, 0, 0, 0], result: { id: 100, count: 4 } },
+interface RawRecipe {
+  inShape?: RawRecipeCell[][];
+  ingredients?: RawRecipeCell[];
+  result: {
+    id: number;
+    count: number;
+    metadata?: number;
+  };
+}
 
-  // ─── Crafting Table ───
-  { pattern: [5, 5, 0, 5, 5, 0, 0, 0, 0], result: { id: 24, count: 1 } },
+const recipesData = rawRecipes as Record<string, RawRecipe[]>;
 
-  // ─── Furnace ───
-  { pattern: [4, 4, 4, 4, 0, 4, 4, 4, 4], result: { id: 25, count: 1 } },
+// Helper to check if a player item (packed ID) matches a recipe ingredient
+function matchIngredient(playerItem: number, recipeItem: RawRecipeCell): boolean {
+  if (recipeItem === null) {
+    return playerItem === 0;
+  }
+  if (playerItem === 0) {
+    return false; // recipe expects an item, but player slot is empty
+  }
 
-  // ─── Torches ───
-  { pattern: [101, 0, 0, 100, 0, 0, 0, 0, 0], result: { id: 30, count: 4 } },
+  // If choices array
+  if (Array.isArray(recipeItem)) {
+    return recipeItem.some(choice => matchSingleIngredient(playerItem, choice));
+  }
 
-  // ─── Chest ───
-  { pattern: [5, 5, 5, 5, 0, 5, 5, 5, 5], result: { id: 36, count: 1 } },
+  return matchSingleIngredient(playerItem, recipeItem);
+}
 
-  // ─── Oak Door ───
-  { pattern: [5, 5, 0, 5, 5, 0, 5, 5, 0], result: { id: 37, count: 3 } },
+function matchSingleIngredient(playerItem: number, choice: number | RawRecipeIngredient): boolean {
+  const pBaseId = playerItem & 0x3FF;
+  const pMeta = playerItem >> 10;
 
-  // ─── Oak Trapdoor ───
-  { pattern: [5, 5, 5, 5, 5, 5, 0, 0, 0], result: { id: 39, count: 2 } },
+  if (typeof choice === 'number') {
+    // If it's a number, match base ID or exact packed ID (if choice is somehow packed)
+    return pBaseId === choice || playerItem === choice;
+  } else {
+    const cBaseId = choice.id;
+    const cMeta = choice.metadata ?? 0;
+    const packedChoiceId = (cMeta << 10) | cBaseId;
 
-  // ─── Wooden Tools ───
-  { pattern: [5, 5, 5, 0, 100, 0, 0, 100, 0], result: { id: 122, count: 1 } }, // pickaxe
-  { pattern: [5, 5, 0, 5, 100, 0, 0, 100, 0], result: { id: 123, count: 1 } }, // axe
-  { pattern: [0, 5, 5, 0, 100, 5, 0, 100, 0], result: { id: 123, count: 1 } }, // axe mirrored
-  { pattern: [5, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 121, count: 1 } }, // shovel
-  { pattern: [5, 0, 0, 5, 0, 0, 100, 0, 0], result: { id: 120, count: 1 } }, // sword
+    // Try exact packed match first
+    if (playerItem === packedChoiceId) return true;
 
-  // ─── Stone Tools ───
-  { pattern: [4, 4, 4, 0, 100, 0, 0, 100, 0], result: { id: 132, count: 1 } },
-  { pattern: [4, 4, 0, 4, 100, 0, 0, 100, 0], result: { id: 133, count: 1 } },
-  { pattern: [0, 4, 4, 0, 100, 4, 0, 100, 0], result: { id: 133, count: 1 } },
-  { pattern: [4, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 131, count: 1 } },
-  { pattern: [4, 0, 0, 4, 0, 0, 100, 0, 0], result: { id: 130, count: 1 } },
-
-  // ─── Iron Tools ───
-  { pattern: [102, 102, 102, 0, 100, 0, 0, 100, 0], result: { id: 142, count: 1 } },
-  { pattern: [102, 102, 0, 102, 100, 0, 0, 100, 0], result: { id: 143, count: 1 } },
-  { pattern: [0, 102, 102, 0, 100, 102, 0, 100, 0], result: { id: 143, count: 1 } },
-  { pattern: [102, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 141, count: 1 } },
-  { pattern: [102, 0, 0, 102, 0, 0, 100, 0, 0], result: { id: 140, count: 1 } },
-
-  // ─── Diamond Tools ───
-  { pattern: [104, 104, 104, 0, 100, 0, 0, 100, 0], result: { id: 152, count: 1 } },
-  { pattern: [104, 104, 0, 104, 100, 0, 0, 100, 0], result: { id: 153, count: 1 } },
-  { pattern: [0, 104, 104, 0, 100, 104, 0, 100, 0], result: { id: 153, count: 1 } },
-  { pattern: [104, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 151, count: 1 } },
-  { pattern: [104, 0, 0, 104, 0, 0, 100, 0, 0], result: { id: 150, count: 1 } },
-
-  // ─── Golden Tools ───
-  { pattern: [103, 103, 103, 0, 100, 0, 0, 100, 0], result: { id: 162, count: 1 } },
-  { pattern: [103, 103, 0, 103, 100, 0, 0, 100, 0], result: { id: 163, count: 1 } },
-  { pattern: [0, 103, 103, 0, 100, 103, 0, 100, 0], result: { id: 163, count: 1 } },
-  { pattern: [103, 0, 0, 100, 0, 0, 100, 0, 0], result: { id: 161, count: 1 } },
-  { pattern: [103, 0, 0, 103, 0, 0, 100, 0, 0], result: { id: 160, count: 1 } },
-
-  // ─── Iron Armor ───
-  { pattern: [102, 102, 102, 102, 0, 102, 0, 0, 0], result: { id: 180, count: 1 } },
-  { pattern: [102, 0, 102, 102, 102, 102, 102, 102, 102], result: { id: 181, count: 1 } },
-  { pattern: [102, 102, 102, 102, 0, 102, 102, 0, 102], result: { id: 182, count: 1 } },
-  { pattern: [102, 0, 102, 102, 0, 102, 0, 0, 0], result: { id: 183, count: 1 } }, // boots (top-left aligned)
-
-  // ─── Diamond Armor ───
-  { pattern: [104, 104, 104, 104, 0, 104, 0, 0, 0], result: { id: 184, count: 1 } },
-  { pattern: [104, 0, 104, 104, 104, 104, 104, 104, 104], result: { id: 185, count: 1 } },
-  { pattern: [104, 104, 104, 104, 0, 104, 104, 0, 104], result: { id: 186, count: 1 } },
-  { pattern: [104, 0, 104, 104, 0, 104, 0, 0, 0], result: { id: 187, count: 1 } }, // boots (top-left aligned)
-
-  // ─── Bucket ───
-  { pattern: [102, 0, 102, 0, 102, 0, 0, 0, 0], result: { id: 178, count: 1 } },
-
-  // ─── Bread ───
-  { pattern: [176, 176, 176, 0, 0, 0, 0, 0, 0], result: { id: 171, count: 1 } },
-
-  // ─── Paper (Crafted from 3 Wood Planks in a row since Sugarcane doesn't exist) ───
-  { pattern: [5, 5, 5, 0, 0, 0, 0, 0, 0], result: { id: 109, count: 3 } },
-
-  // ─── Book ───
-  { pattern: [109, 109, 109, 0, 107, 0, 0, 0, 0], result: { id: 110, count: 1 } },
-
-  // ─── Bookshelf ───
-  { pattern: [5, 5, 5, 110, 110, 110, 5, 5, 5], result: { id: 20, count: 1 } },
-
-  // ─── Sandstone ───
-  { pattern: [8, 8, 0, 8, 8, 0, 0, 0, 0], result: { id: 15, count: 1 } },
-
-  // ─── White Wool ───
-  { pattern: [107, 107, 0, 107, 107, 0, 0, 0, 0], result: { id: 16, count: 1 } },
-
-  // ─── TNT ───
-  { pattern: [101, 8, 101, 8, 101, 8, 101, 8, 101], result: { id: 21, count: 1 } },
-
-  // ─── Lever ───
-  { pattern: [100, 0, 0, 4, 0, 0, 0, 0, 0], result: { id: 34, count: 1 } },
-
-  // ─── Piston ───
-  { pattern: [5, 5, 5, 4, 102, 4, 4, 111, 4], result: { id: 33, count: 1 } },
-
-  // ─── Repeater ───
-  { pattern: [30, 111, 30, 1, 1, 1, 0, 0, 0], result: { id: 32, count: 1 } },
-
-  // ─── Block compression ───
-  { pattern: [102, 102, 102, 102, 102, 102, 102, 102, 102], result: { id: 18, count: 1 } },  // iron block
-  { pattern: [103, 103, 103, 103, 103, 103, 103, 103, 103], result: { id: 17, count: 1 } },  // gold block
-  { pattern: [104, 104, 104, 104, 104, 104, 104, 104, 104], result: { id: 23, count: 1 } },  // diamond block
-
-  // ─── Block → Ingots (reverse) ───
-  { pattern: [18, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 102, count: 9 }, shapeless: true },
-  { pattern: [17, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 103, count: 9 }, shapeless: true },
-  { pattern: [23, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 104, count: 9 }, shapeless: true },
-
-  // ─── Nugget conversions ───
-  { pattern: [102, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 105, count: 9 }, shapeless: true }, // iron ingot -> 9 nuggets
-  { pattern: [103, 0, 0, 0, 0, 0, 0, 0, 0], result: { id: 106, count: 9 }, shapeless: true }, // gold ingot -> 9 nuggets
-  { pattern: [105, 105, 105, 105, 105, 105, 105, 105, 105], result: { id: 102, count: 1 } }, // 9 iron nuggets -> ingot
-  { pattern: [106, 106, 106, 106, 106, 106, 106, 106, 106], result: { id: 103, count: 1 } }, // 9 gold nuggets -> ingot
-
-  // ─── Bed ───
-  { pattern: [16, 16, 16, 5, 5, 5, 0, 0, 0], result: { id: 75, count: 1 } }, // 3 wool + 3 planks
-
-  // ─── Slabs (3 planks/stones = 6 slabs) ───
-  { pattern: [5, 5, 5, 0, 0, 0, 0, 0, 0], result: { id: 43, count: 6 } },    // oak slab
-  { pattern: [4, 4, 4, 0, 0, 0, 0, 0, 0], result: { id: 42, count: 6 } },    // cobblestone slab
-  { pattern: [1, 1, 1, 0, 0, 0, 0, 0, 0], result: { id: 41, count: 6 } },    // stone slab
-  { pattern: [19, 19, 19, 0, 0, 0, 0, 0, 0], result: { id: 44, count: 6 } }, // brick slab
-
-  // ─── Stairs (6 blocks = 4 stairs) ───
-  { pattern: [5, 0, 0, 5, 5, 0, 5, 5, 5], result: { id: 47, count: 4 } },    // oak stairs
-  { pattern: [4, 0, 0, 4, 4, 0, 4, 4, 4], result: { id: 48, count: 4 } },    // cobblestone stairs
-
-  // ─── Fences (4 planks + 2 sticks = 3 fences) ───
-  { pattern: [5, 100, 5, 5, 100, 5, 0, 0, 0], result: { id: 53, count: 3 } }, // oak fence
-
-  // ─── Bow ───
-  { pattern: [100, 102, 0, 100, 0, 102, 100, 102, 0], result: { id: 190, count: 1 } }, // stick + string(iron ingot sub)
-
-  // ─── Arrow (flint + stick + feather) ───
-  { pattern: [4, 0, 0, 100, 0, 0, 16, 0, 0], result: { id: 191, count: 4 } }, // simplified
-];
-
-/**
- * Check if grid contents match a recipe.
- * grid: array of 9 item IDs (0 = empty).
- * Returns recipe result or null.
- */
-export function findCraftingResult(grid: number[]): { id: number; count: number } | null {
-  for (const recipe of CRAFTING_RECIPES) {
-    if (recipe.shapeless) {
-      if (matchShapeless(grid, recipe.pattern)) {
-        return recipe.result;
-      }
-    } else {
-      if (matchShaped(grid, recipe.pattern)) {
-        return recipe.result;
-      }
+    // Fallback: if choice specifies no metadata or metadata is 0, allow matching any metadata of the same base ID
+    // E.g., any planks (base ID 5) can match planks ingredient in general recipes like stick or chest.
+    if (cMeta === 0 || choice.metadata === undefined) {
+      return pBaseId === cBaseId;
     }
+
+    return false;
   }
-  return null;
 }
 
-function matchShapeless(grid: number[], pattern: (number | null)[]): boolean {
-  const gridItems = grid.filter(id => id > 0).sort();
-  const patItems = pattern.filter(id => id !== null && id > 0).sort();
+// Bipartite matching / backtracking search for shapeless recipe matching
+function matchShapelessIngredients(activeItems: number[], ingredients: RawRecipeCell[]): boolean {
+  if (activeItems.length !== ingredients.length) return false;
 
-  if (gridItems.length !== patItems.length) return false;
+  const visited = new Array(ingredients.length).fill(false);
 
-  for (let i = 0; i < gridItems.length; i++) {
-    if (patItems[i] !== null && gridItems[i] !== patItems[i]) return false;
-  }
-  return true;
-}
+  function backtrack(itemIdx: number): boolean {
+    if (itemIdx === activeItems.length) return true;
+    const playerItem = activeItems[itemIdx];
 
-function matchShaped(grid: number[], pattern: (number | null)[]): boolean {
-  // Try all possible offsets within the grid
-  for (let rowOff = 0; rowOff <= 1; rowOff++) {
-    for (let colOff = 0; colOff <= 1; colOff++) {
-      let match = true;
-      for (let pr = 0; pr < 3; pr++) {
-        for (let pc = 0; pc < 3; pc++) {
-          const pIdx = pr * 3 + pc;
-          const gIdx = (pr + rowOff) * 3 + (pc + colOff);
-          const patVal = pattern[pIdx];
-          const gridVal = gIdx < 9 ? grid[gIdx] : 0;
-
-          if (patVal === null) continue; // wildcard
-          if (patVal === 0 && gridVal !== 0) { match = false; break; }
-          if (patVal !== 0 && gridVal !== patVal) { match = false; break; }
+    for (let i = 0; i < ingredients.length; i++) {
+      if (!visited[i]) {
+        if (matchIngredient(playerItem, ingredients[i])) {
+          visited[i] = true;
+          if (backtrack(itemIdx + 1)) return true;
+          visited[i] = false;
         }
-        if (!match) break;
       }
-      if (match) return true;
+    }
+    return false;
+  }
+
+  return backtrack(0);
+}
+
+export function findCraftingResult(grid: number[]): { id: number; count: number } | null {
+  // grid is 9 elements flat representing a 3x3 crafting grid.
+  // 0 = empty.
+
+  // 1. Get bounds of active items in grid
+  let minRow = 3, maxRow = -1, minCol = 3, maxCol = -1;
+  let activeCount = 0;
+
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const idx = r * 3 + c;
+      if (grid[idx] > 0) {
+        if (r < minRow) minRow = r;
+        if (r > maxRow) maxRow = r;
+        if (c < minCol) minCol = c;
+        if (c > maxCol) maxCol = c;
+        activeCount++;
+      }
     }
   }
-  return false;
+
+  if (activeCount === 0) return null;
+
+  const hPlayer = maxRow - minRow + 1;
+  const wPlayer = maxCol - minCol + 1;
+
+  // Build the player's trimmed 2D grid
+  const playerGrid: number[][] = [];
+  for (let r = 0; r < hPlayer; r++) {
+    playerGrid.push([]);
+    for (let c = 0; c < wPlayer; c++) {
+      const gRow = minRow + r;
+      const gCol = minCol + c;
+      playerGrid[r].push(grid[gRow * 3 + gCol]);
+    }
+  }
+
+  const activePlayerItems = grid.filter(id => id > 0);
+
+  // 2. Iterate through all recipes in recipes.json
+  for (const [resultIdStr, recipes] of Object.entries(recipesData)) {
+    for (const recipe of recipes) {
+      const packedResultId = ((recipe.result.metadata ?? 0) << 10) | recipe.result.id;
+
+      // Check Shaped Recipe
+      if (recipe.inShape) {
+        const hRecipe = recipe.inShape.length;
+        const wRecipe = recipe.inShape[0].length;
+
+        if (hRecipe === hPlayer && wRecipe === wPlayer) {
+          let match = true;
+          for (let r = 0; r < hPlayer; r++) {
+            for (let c = 0; c < wPlayer; c++) {
+              if (!matchIngredient(playerGrid[r][c], recipe.inShape[r][c])) {
+                match = false;
+                break;
+              }
+            }
+            if (!match) break;
+          }
+          if (match) {
+            return { id: packedResultId, count: recipe.result.count };
+          }
+        }
+      }
+
+      // Check Shapeless Recipe
+      if (recipe.ingredients) {
+        if (matchShapelessIngredients(activePlayerItems, recipe.ingredients)) {
+          return { id: packedResultId, count: recipe.result.count };
+        }
+      }
+    }
+  }
+
+  return null;
 }

@@ -69,6 +69,24 @@ export class SoundSystem {
     osc.stop(ctx.currentTime + 0.1);
   }
 
+  playPickup() {
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    // A quick pop/click with rising frequency
+    osc.frequency.setValueAtTime(300, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.08);
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+    osc.connect(gain).connect(this.sfxGain!);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.08);
+  }
+
+
   playHurt() {
     const ctx = this.ensureCtx();
     if (!ctx) return;

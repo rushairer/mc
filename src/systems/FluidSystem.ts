@@ -6,7 +6,7 @@ interface FluidUpdate {
   y: number;
   z: number;
   level: number; // 1-7 for water, 1-4 for lava
-  type: number;  // 13=water, 14=lava
+  type: number;  // 8/9 = water, 10/11 = lava
 }
 
 const MAX_UPDATES_PER_TICK = 20;
@@ -37,12 +37,14 @@ export class FluidSystem {
       this.processed.add(key);
       count++;
 
-      // Water (id 13) spreads
-      if (upd.type === 13) {
+      const baseType = upd.type & 0x3FF;
+
+      // Water (id 8/9) spreads
+      if (baseType === 8 || baseType === 9) {
         this.processWater(upd, getBlock, setBlock, nextQueue);
       }
-      // Lava (id 14) spreads slower
-      if (upd.type === 14) {
+      // Lava (id 10/11) spreads slower
+      if (baseType === 10 || baseType === 11) {
         this.processLava(upd, getBlock, setBlock, nextQueue);
       }
     }
@@ -64,15 +66,10 @@ export class FluidSystem {
     setBlock: (x: number, y: number, z: number, id: number) => void,
     nextQueue: FluidUpdate[]
   ) {
-    const dirs = [
-      [0, -1, 0], // down (priority)
-      [-1, 0, 0], [1, 0, 0], [0, 0, -1], [0, 0, 1], // horizontal
-    ];
-
     // Flow down first
     if (getBlock(upd.x, upd.y - 1, upd.z) === 0) {
-      setBlock(upd.x, upd.y - 1, upd.z, 13);
-      nextQueue.push({ x: upd.x, y: upd.y - 1, z: upd.z, level: 7, type: 13 });
+      setBlock(upd.x, upd.y - 1, upd.z, 8); // flowing water
+      nextQueue.push({ x: upd.x, y: upd.y - 1, z: upd.z, level: 7, type: 8 });
       return;
     }
 
@@ -84,8 +81,8 @@ export class FluidSystem {
         const neighbor = getBlock(nx, upd.y, nz);
 
         if (neighbor === 0) {
-          setBlock(nx, upd.y, nz, 13);
-          nextQueue.push({ x: nx, y: upd.y, z: nz, level: upd.level - 1, type: 13 });
+          setBlock(nx, upd.y, nz, 8); // flowing water
+          nextQueue.push({ x: nx, y: upd.y, z: nz, level: upd.level - 1, type: 8 });
         }
       }
     }
@@ -97,10 +94,10 @@ export class FluidSystem {
     setBlock: (x: number, y: number, z: number, id: number) => void,
     nextQueue: FluidUpdate[]
   ) {
-    // Lava flows slower and shorter distance
+    // Flow down first
     if (getBlock(upd.x, upd.y - 1, upd.z) === 0) {
-      setBlock(upd.x, upd.y - 1, upd.z, 14);
-      nextQueue.push({ x: upd.x, y: upd.y - 1, z: upd.z, level: 4, type: 14 });
+      setBlock(upd.x, upd.y - 1, upd.z, 10); // flowing lava
+      nextQueue.push({ x: upd.x, y: upd.y - 1, z: upd.z, level: 4, type: 10 });
       return;
     }
 
@@ -111,17 +108,18 @@ export class FluidSystem {
         const neighbor = getBlock(nx, upd.y, nz);
 
         if (neighbor === 0) {
-          setBlock(nx, upd.y, nz, 14);
-          nextQueue.push({ x: nx, y: upd.y, z: nz, level: upd.level - 1, type: 14 });
+          setBlock(nx, upd.y, nz, 10); // flowing lava
+          nextQueue.push({ x: nx, y: upd.y, z: nz, level: upd.level - 1, type: 10 });
         }
 
-        // Water + Lava = Cobblestone
-        if (neighbor === 13 && upd.type === 14) {
+        // Water + Lava = Cobblestone (base ID 4)
+        const neighBase = neighbor & 0x3FF;
+        const updBase = upd.type & 0x3FF;
+        if ((neighBase === 8 || neighBase === 9) && (updBase === 10 || updBase === 11)) {
           setBlock(nx, upd.y, nz, 4); // cobblestone
         }
-        // Lava + Water = Obsidian (if source)
-        if (neighbor === 14 && upd.type === 13) {
-          // Simplified: just cobblestone
+        // Lava + Water = Cobblestone/Obsidian
+        if ((neighBase === 10 || neighBase === 11) && (updBase === 8 || updBase === 9)) {
           setBlock(upd.x, upd.y, upd.z, 4);
         }
       }

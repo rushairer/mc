@@ -10,11 +10,12 @@ interface CraftingTableUIProps {
   onClose: () => void;
   onInventoryChange: () => void;
   getItemIconStyle: (id: number, size?: number) => any;
+  onDropItem?: (itemId: number, count: number) => void;
 }
 
 const SLOT_SIZE = 48;
 
-export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle }) => {
+export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle, onDropItem }) => {
   const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
   const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(9).fill(0));
@@ -24,6 +25,8 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
     itemDef: any;
     x: number;
     y: number;
+    index: number;
+    type: 'inventory' | 'crafting';
   } | null>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
 
@@ -119,19 +122,53 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
     onClose();
   }, [heldItem, inventory, craftingGrid, onInventoryChange, onClose]);
 
-  // Close on E or Escape key
+  // Close on E or Escape key, drop on Q
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === 'e' || e.key === 'Escape') {
         e.preventDefault();
         handleClose();
+      } else if (e.key.toLowerCase() === 'q') {
+        if (heldItem) {
+          const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? heldItem.count : 1;
+          onDropItem?.(heldItem.id, dropCount);
+          setHeldItem(prev => {
+            if (!prev) return null;
+            const nextCount = prev.count - dropCount;
+            return nextCount > 0 ? { ...prev, count: nextCount } : null;
+          });
+          onInventoryChange();
+        } else if (hoveredSlot) {
+          const { index, type } = hoveredSlot;
+          if (type === 'inventory') {
+            const slotItem = inventory.getSlot(index);
+            if (slotItem) {
+              const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? slotItem.count : 1;
+              onDropItem?.(slotItem.id, dropCount);
+              if (slotItem.count <= dropCount) {
+                inventory.setSlot(index, null);
+                setHoveredSlot(null);
+              } else {
+                slotItem.count -= dropCount;
+                setHoveredSlot({ ...hoveredSlot, item: { ...slotItem } });
+              }
+              onInventoryChange();
+            }
+          }
+        }
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [handleClose]);
+  }, [handleClose, heldItem, hoveredSlot, inventory, onDropItem, onInventoryChange]);
 
-  const renderSlot = (item: ItemStack | null, index: number, onClick: () => void, highlight?: boolean) => {
+  const renderSlot = (
+    item: ItemStack | null,
+    index: number,
+    onClick: () => void,
+    highlight?: boolean,
+    slotType: 'inventory' | 'crafting' = 'inventory'
+  ) => {
     const itemDef = item ? ItemRegistry.get(item.id) : null;
     return (
       <div
@@ -147,6 +184,8 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
               itemDef,
               x: e.clientX,
               y: e.clientY,
+              index,
+              type: slotType,
             });
           }
         }}
@@ -157,6 +196,8 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
               itemDef,
               x: e.clientX,
               y: e.clientY,
+              index,
+              type: slotType,
             });
           }
         }}
@@ -228,27 +269,39 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
   };
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0,0,0,0.7)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 50,
-      fontFamily: '"Courier New", monospace',
-    }}>
-      <div style={{
-        background: 'rgba(40,40,40,0.95)',
-        border: '3px solid #666',
-        borderRadius: '8px',
-        padding: '20px',
-        color: '#fff',
-        position: 'relative',
-      }}>
+    <div
+      onClick={() => {
+        if (heldItem) {
+          onDropItem?.(heldItem.id, heldItem.count);
+          setHeldItem(null);
+          onInventoryChange();
+        }
+      }}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0,0,0,0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 50,
+        fontFamily: '"Courier New", monospace',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'rgba(40,40,40,0.95)',
+          border: '3px solid #666',
+          borderRadius: '8px',
+          padding: '20px',
+          color: '#fff',
+          position: 'relative',
+        }}
+      >
         <button
           onClick={handleClose}
           style={{
@@ -285,11 +338,11 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
             }}>
               {craftingGrid.map((id, i) => {
                 const item = id !== 0 ? { id, count: 1 } : null;
-                return renderSlot(item, i, () => handleSlotClick(i, true));
+                return renderSlot(item, i, () => handleSlotClick(i, true), false, 'crafting');
               })}
             </div>
             <div style={{ fontSize: '20px', color: '#aaa' }}>→</div>
-            {renderSlot(craftResult, -1, handleCraftResultClick, true)}
+            {renderSlot(craftResult, -1, handleCraftResultClick, true, 'crafting')}
           </div>
         </div>
 

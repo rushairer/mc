@@ -23,6 +23,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
   const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(4).fill(0));
   const [craftResult, setCraftResult] = useState<{ id: number; count: number } | null>(null);
+  const [creativeSearch, setCreativeSearch] = useState('');
   const [hoveredSlot, setHoveredSlot] = useState<{
     item: ItemStack;
     itemDef: any;
@@ -67,6 +68,24 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
 
     return Array.from(new Set([...blocksList, ...itemsList]));
   }, []);
+
+  const filteredCreativeItems = React.useMemo(() => {
+    const query = creativeSearch.trim().toLowerCase();
+    if (!query) return creativeItems;
+
+    return creativeItems.filter((id) => {
+      const itemDef = ItemRegistry.get(id);
+      if (!itemDef) return false;
+      const localizedName = getLocalizedItemName(id, itemDef.displayName);
+      return [
+        String(id),
+        itemDef.name,
+        itemDef.displayName,
+        localizedName,
+        itemDef.category,
+      ].some((value) => value.toLowerCase().includes(query));
+    });
+  }, [creativeItems, creativeSearch, getLocalizedItemName]);
 
   const handleCatalogClick = (itemId: number) => {
     const maxStack = ItemRegistry.getMaxStackSize(itemId);
@@ -210,6 +229,10 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
   // Close on E or Escape key, drop on Q
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isTyping = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+      if (isTyping && e.key !== 'Escape') return;
+
       if (e.key.toLowerCase() === 'e' || e.key === 'Escape') {
         e.preventDefault();
         handleClose();
@@ -576,6 +599,25 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
             flexDirection: 'column',
           }}>
             <div style={{ fontSize: '14px', marginBottom: '8px', color: '#ffaa00', fontWeight: 'bold' }}>{t('creativeCatalog')}</div>
+            <input
+              value={creativeSearch}
+              onChange={(e) => setCreativeSearch(e.target.value)}
+              placeholder={t('creativeSearchPlaceholder')}
+              style={{
+                height: '32px',
+                marginBottom: '8px',
+                padding: '0 10px',
+                boxSizing: 'border-box',
+                background: '#1f1f1f',
+                border: '2px solid #555',
+                borderTopColor: '#222',
+                borderLeftColor: '#222',
+                color: '#fff',
+                fontFamily: '"Courier New", monospace',
+                fontSize: '12px',
+                outline: 'none',
+              }}
+            />
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(6, 48px)',
@@ -588,7 +630,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
               borderRadius: '4px',
               padding: '4px',
             }}>
-              {creativeItems.map((id) => {
+              {filteredCreativeItems.map((id) => {
                 const itemDef = ItemRegistry.get(id);
                 return (
                   <div
@@ -637,6 +679,20 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
                   </div>
                 );
               })}
+              {filteredCreativeItems.length === 0 && (
+                <div style={{
+                  gridColumn: '1 / -1',
+                  minHeight: '96px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#aaa',
+                  fontSize: '12px',
+                  textAlign: 'center',
+                }}>
+                  {t('creativeNoResults')}
+                </div>
+              )}
             </div>
           </div>
         )}

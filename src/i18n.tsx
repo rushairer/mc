@@ -61,6 +61,8 @@ export interface TranslationsSchema {
   crafting2x2: string;
   craftingTable3x3: string;
   creativeCatalog: string;
+  creativeSearchPlaceholder: string;
+  creativeNoResults: string;
   furnace: string;
   input: string;
   fuel: string;
@@ -250,6 +252,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     crafting2x2: 'Crafting (2×2)',
     craftingTable3x3: 'Crafting Table (3×3)',
     creativeCatalog: 'Creative Catalog',
+    creativeSearchPlaceholder: 'Search items...',
+    creativeNoResults: 'No matching items',
     furnace: 'Furnace',
     input: 'Input',
     fuel: 'Fuel',
@@ -437,6 +441,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     crafting2x2: '合成 (2×2)',
     craftingTable3x3: '工作台 (3×3)',
     creativeCatalog: '创造模式物品栏',
+    creativeSearchPlaceholder: '搜索物品...',
+    creativeNoResults: '没有匹配的物品',
     furnace: '熔炉',
     input: '输入',
     fuel: '燃料',
@@ -624,6 +630,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     crafting2x2: '合成 (2×2)',
     craftingTable3x3: '工作台 (3×3)',
     creativeCatalog: '創造模式物品欄',
+    creativeSearchPlaceholder: '搜尋物品...',
+    creativeNoResults: '沒有匹配的物品',
     furnace: '熔爐',
     input: '輸入',
     fuel: '燃料',

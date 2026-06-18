@@ -9,11 +9,25 @@ import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
 import type { BlockFacing } from '../types';
 
+export interface RedstoneEntity {
+  pos: { x: number; y: number; z: number };
+  type: 'player' | 'mob' | 'item';
+  width: number;
+}
+
+function tripwireHookMeta(facing: BlockFacing, attached: boolean, powered: boolean): number {
+  let fVal = 0;
+  if (facing === 'west') fVal = 1;
+  else if (facing === 'north') fVal = 2;
+  else if (facing === 'east') fVal = 3;
+  return fVal + (attached ? 4 : 0) + (powered ? 8 : 0);
+}
+
 export interface RedstoneComponent {
   x: number;
   y: number;
   z: number;
-  type: 'wire' | 'torch' | 'repeater' | 'piston' | 'lever' | 'button' | 'comparator' | 'observer' | 'daylight_detector';
+  type: 'wire' | 'torch' | 'repeater' | 'piston' | 'lever' | 'button' | 'comparator' | 'observer' | 'daylight_detector' | 'pressure_plate' | 'tripwire_hook' | 'tripwire';
   signal: number;
   facing: BlockFacing;
   state: boolean; // on/off for torch, extended for piston, mode for comparator, active pulse for observer
@@ -69,7 +83,8 @@ export class RedstoneSystem {
     triggerSound?: (soundType: any) => void,
     onComponentChange?: (component: RedstoneComponent) => void,
     gameTime: number = 0,
-    getBlockMeta?: (x: number, y: number, z: number) => any
+    getBlockMeta?: (x: number, y: number, z: number) => any,
+    entities: RedstoneEntity[] = []
   ) {
     this.tickTimer += dt;
     if (this.tickTimer < this.tickInterval) return;
@@ -82,7 +97,10 @@ export class RedstoneSystem {
         comp.type !== 'lever' &&
         comp.type !== 'daylight_detector' &&
         comp.type !== 'observer' &&
-        comp.type !== 'comparator'
+        comp.type !== 'comparator' &&
+        comp.type !== 'pressure_plate' &&
+        comp.type !== 'tripwire_hook' &&
+        comp.type !== 'tripwire'
       ) {
         comp.signal = 0;
         if (comp.type !== 'piston') {
@@ -143,6 +161,107 @@ export class RedstoneSystem {
           comp.signal = 0;
         }
         onComponentChange?.(comp);
+      } else if (comp.type === 'pressure_plate') {
+        const blockId = getBlock(comp.x, comp.y, comp.z);
+        const baseId = blockId & 0x3FF;
+
+        const activeEntities = entities.filter(e => {
+          if (baseId === 70 && e.type === 'item') return false; // Stone doesn't detect items
+          return this.isEntityOnBlock(e.pos, comp.x, comp.y, comp.z, e.width);
+        });
+        const count = activeEntities.length;
+
+        let targetSignal = 0;
+        if (count > 0) {
+          if (baseId === 72 || baseId === 70) {
+            targetSignal = 15;
+          } else if (baseId === 147) { // light weighted (gold)
+            targetSignal = Math.min(15, count);
+          } else if (baseId === 148) { // heavy weighted (iron)
+            targetSignal = Math.min(15, Math.ceil(count / 10));
+          }
+        }
+
+        const becamePowered = targetSignal > 0;
+        const wasPowered = comp.state;
+
+        comp.signal = targetSignal;
+        comp.state = becamePowered;
+
+        const newMeta = becamePowered ? 1 : 0;
+        setBlock(comp.x, comp.y, comp.z, (newMeta << 10) | baseId);
+
+        if (becamePowered !== wasPowered) {
+          triggerSound?.(becamePowered ? 'click_on' : 'click_off');
+        }
+        onComponentChange?.(comp);
+      } else if (comp.type === 'tripwire_hook') {
+        const blockId = getBlock(comp.x, comp.y, comp.z);
+        const baseId = blockId & 0x3FF;
+
+        const dir = this.getFacingDirection(comp.facing);
+        const opp = this.getOppositeFacing(comp.facing);
+        let foundMatch = false;
+        let matchHook: RedstoneComponent | null = null;
+        const stringsList: [number, number, number][] = [];
+
+        for (let dist = 1; dist <= 40; dist++) {
+          const sx = comp.x + dir[0] * dist;
+          const sy = comp.y;
+          const sz = comp.z + dir[2] * dist;
+          const bid = getBlock(sx, sy, sz);
+          const base = bid & 0x3FF;
+
+          if (base === 132) { // tripwire string
+            stringsList.push([sx, sy, sz]);
+          } else if (base === 131) { // tripwire hook
+            const neigh = this.get(sx, sy, sz);
+            if (neigh && neigh.facing === opp) {
+              foundMatch = true;
+              matchHook = neigh;
+            }
+            break;
+          } else {
+            break;
+          }
+        }
+
+        let isPowered = false;
+        if (foundMatch && matchHook) {
+          const checkBlocks = [[comp.x, comp.y, comp.z], [matchHook.x, matchHook.y, matchHook.z], ...stringsList];
+          isPowered = entities.some(e =>
+            checkBlocks.some(([bx, by, bz]) => this.isEntityOnBlock(e.pos, bx, by, bz, e.width))
+          );
+        }
+
+        const wasPowered = comp.state;
+        comp.signal = isPowered ? 15 : 0;
+        comp.state = isPowered;
+
+        const metadataValue = tripwireHookMeta(comp.facing, foundMatch, isPowered);
+        setBlock(comp.x, comp.y, comp.z, (metadataValue << 10) | baseId);
+
+        if (isPowered !== wasPowered) {
+          triggerSound?.(isPowered ? 'click_on' : 'click_off');
+        }
+        onComponentChange?.(comp);
+
+        if (foundMatch) {
+          for (const [sx, sy, sz] of stringsList) {
+            const sMeta = isPowered ? 7 : 6;
+            setBlock(sx, sy, sz, (sMeta << 10) | 132);
+          }
+        }
+      } else if (comp.type === 'tripwire') {
+        const blockId = getBlock(comp.x, comp.y, comp.z);
+        const meta = blockId >> 10;
+        const isAttached = meta === 6 || meta === 7;
+
+        if (!isAttached) {
+          const hasEntity = entities.some(e => this.isEntityOnBlock(e.pos, comp.x, comp.y, comp.z, e.width));
+          const sMeta = hasEntity ? 3 : 2;
+          setBlock(comp.x, comp.y, comp.z, (sMeta << 10) | 132);
+        }
       }
     }
 
@@ -155,7 +274,9 @@ export class RedstoneSystem {
           comp.type === 'lever' ||
           comp.type === 'daylight_detector' ||
           comp.type === 'observer' ||
-          comp.type === 'comparator')
+          comp.type === 'comparator' ||
+          comp.type === 'pressure_plate' ||
+          comp.type === 'tripwire_hook')
       ) {
         queue.push(comp);
       }
@@ -260,9 +381,12 @@ export class RedstoneSystem {
       const current = queue.shift()!;
       const newSignal = Math.max(0, current.signal - 1);
 
-      // Repeater and comparator only propagate in their facing direction
+      // Repeater and comparator only propagate in their facing direction; tripwire hook only propagates to its attached block
       const isRepeaterOrComparator = current.type === 'repeater' || current.type === 'comparator';
-      const allowedDirs = isRepeaterOrComparator ? [this.getFacingDirection(current.facing)] : dirs;
+      const isTripwireHook = current.type === 'tripwire_hook';
+      const allowedDirs = isRepeaterOrComparator
+        ? [this.getFacingDirection(current.facing)]
+        : (isTripwireHook ? [this.getFacingDirection(this.getOppositeFacing(current.facing))] : dirs);
 
       for (const [dx, dy, dz] of allowedDirs) {
         const nx = current.x + dx;
@@ -341,6 +465,22 @@ export class RedstoneSystem {
     }
   }
 
+  private isEntityOnBlock(entityPos: { x: number; y: number; z: number }, x: number, y: number, z: number, entityWidth = 0.6): boolean {
+    const halfW = entityWidth / 2;
+    const xMin = x - halfW;
+    const xMax = x + 1 + halfW;
+    const zMin = z - halfW;
+    const zMax = z + 1 + halfW;
+    return (
+      entityPos.y >= y - 0.15 &&
+      entityPos.y <= y + 0.25 &&
+      entityPos.x >= xMin &&
+      entityPos.x <= xMax &&
+      entityPos.z >= zMin &&
+      entityPos.z <= zMax
+    );
+  }
+
   private getComparatorDirections(facing: BlockFacing): {
     front: [number, number, number];
     back: [number, number, number];
@@ -358,6 +498,17 @@ export class RedstoneSystem {
         return { front: [-1, 0, 0], back: [1, 0, 0], left: [0, 0, 1], right: [0, 0, -1] };
       default:
         return { front: [0, 0, -1], back: [0, 0, 1], left: [-1, 0, 0], right: [1, 0, 0] };
+    }
+  }
+
+  private getOppositeFacing(facing: BlockFacing): BlockFacing {
+    switch (facing) {
+      case 'up': return 'down';
+      case 'down': return 'up';
+      case 'north': return 'south';
+      case 'south': return 'north';
+      case 'east': return 'west';
+      case 'west': return 'east';
     }
   }
 

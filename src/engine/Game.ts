@@ -15,7 +15,7 @@ import { FluidSystem } from '../systems/FluidSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
 import { SoundSystem } from '../systems/SoundSystem';
 import { SaveSystem, type SaveData } from '../systems/SaveSystem';
-import { RedstoneSystem } from '../systems/RedstoneSystem';
+import { RedstoneSystem, type RedstoneEntity } from '../systems/RedstoneSystem';
 import { ProjectileSystem } from '../systems/ProjectileSystem';
 import { CommandSystem } from '../systems/CommandSystem';
 import { VisualResolver } from '../visual/VisualResolver';
@@ -1443,6 +1443,16 @@ export class Game {
     }
 
     // Redstone simulation
+    const entitiesList: RedstoneEntity[] = [
+      { pos: this.player.position, type: 'player' as const, width: 0.6 }
+    ];
+    for (const mob of this.mobs.mobs.values()) {
+      entitiesList.push({ pos: mob.position, type: 'mob' as const, width: mob.def.width });
+    }
+    for (const item of this.droppedItems.items.values()) {
+      entitiesList.push({ pos: item.position, type: 'item' as const, width: 0.3 });
+    }
+
     this.redstone.update(
       dt,
       (x, y, z) => this.chunks.getBlock(x, y, z),
@@ -1456,6 +1466,7 @@ export class Game {
       (soundType) => {
         if (soundType === 'piston_extend') this.sound.playPistonExtend();
         else if (soundType === 'piston_retract') this.sound.playPistonRetract();
+        else if (soundType === 'click_on' || soundType === 'click_off') this.sound.playLever();
       },
       (component) => {
         this.updateRedstoneMetadata(component.x, component.y, component.z, {
@@ -1465,7 +1476,8 @@ export class Game {
         });
       },
       this.gameTime,
-      (x, y, z) => this.chunks.getBlockMeta(x, y, z)
+      (x, y, z) => this.chunks.getBlockMeta(x, y, z),
+      entitiesList
     );
 
     // Fluid simulation
@@ -1977,6 +1989,52 @@ export class Game {
       return;
     }
 
+    if (name.includes('pressure_plate')) {
+      this.redstone.register(x, y, z, 'pressure_plate', 'up');
+      this.chunks.setBlockMeta(x, y, z, {
+        facing: 'up',
+        redstoneType: 'pressure_plate',
+        powered: false,
+        signal: 0,
+      }, true);
+      return;
+    }
+
+    if (name === 'tripwire') {
+      this.redstone.register(x, y, z, 'tripwire', 'up');
+      this.chunks.setBlockMeta(x, y, z, {
+        facing: 'up',
+        redstoneType: 'tripwire',
+        powered: false,
+        signal: 0,
+      }, true);
+      return;
+    }
+
+    if (name === 'tripwire_hook') {
+      let hookFacing = facing;
+      if (hookFacing === 'up' || hookFacing === 'down') {
+        hookFacing = this.getPlayerHorizontalFacing();
+      }
+      let meta = 0;
+      if (hookFacing === 'south') meta = 0;
+      else if (hookFacing === 'west') meta = 1;
+      else if (hookFacing === 'north') meta = 2;
+      else if (hookFacing === 'east') meta = 3;
+
+      const packedId = (meta << 10) | blockId;
+      this.chunks.setBlock(x, y, z, packedId);
+
+      this.redstone.register(x, y, z, 'tripwire_hook', hookFacing);
+      this.chunks.setBlockMeta(x, y, z, {
+        facing: hookFacing,
+        redstoneType: 'tripwire_hook',
+        powered: false,
+        signal: 0,
+      }, true);
+      return;
+    }
+
     const redstoneType = this.getRedstoneType(blockId);
     if (redstoneType) {
       this.redstone.register(x, y, z, redstoneType, facing);
@@ -2066,6 +2124,9 @@ export class Game {
     if (name === 'unpowered_comparator' || name === 'powered_comparator') return 'comparator';
     if (name === 'observer') return 'observer';
     if (name === 'daylight_detector' || name === 'daylight_detector_inverted') return 'daylight_detector';
+    if (name.includes('pressure_plate')) return 'pressure_plate';
+    if (name === 'tripwire_hook') return 'tripwire_hook';
+    if (name === 'tripwire') return 'tripwire';
     return null;
   }
 
@@ -2073,7 +2134,7 @@ export class Game {
     const def = BlockRegistry.get(blockId);
     if (!def) return false;
     const name = def.name;
-    return name.includes('furnace') || name === 'chest' || name === 'hopper' || name.includes('trapdoor') || name === 'crafting_table' || name.includes('stairs') || name.includes('repeater') || name.includes('piston') || name.includes('door') || name.includes('comparator') || name === 'observer';
+    return name.includes('furnace') || name === 'chest' || name === 'hopper' || name.includes('trapdoor') || name === 'crafting_table' || name.includes('stairs') || name.includes('repeater') || name.includes('piston') || name.includes('door') || name.includes('comparator') || name === 'observer' || name === 'tripwire_hook';
   }
 
   private isDoorBlock(blockId: number): boolean {

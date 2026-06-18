@@ -341,6 +341,58 @@ export class Chunk {
             continue;
           }
 
+          // Pressure plates
+          if (def.name.includes('pressure_plate')) {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            const isPressed = (id >> 10) === 1;
+            const height = isPressed ? 0.03 : 0.06;
+            const bounds: CuboidBounds = {
+              minX: 0.0625, maxX: 0.9375,
+              minY: 0, maxY: height,
+              minZ: 0.0625, maxZ: 0.9375
+            };
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness);
+            continue;
+          }
+
+          // Tripwire (String)
+          if (def.name === 'tripwire') {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            const bounds: CuboidBounds = {
+              minX: 0.4, maxX: 0.6,
+              minY: 0.05, maxY: 0.07,
+              minZ: 0.4, maxZ: 0.6
+            };
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness);
+            continue;
+          }
+
+          // Tripwire Hook
+          if (def.name === 'tripwire_hook') {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            const meta = id >> 10;
+            const facingIndex = meta & 3; // 0: south, 1: west, 2: north, 3: east
+            
+            let bounds: CuboidBounds;
+            if (facingIndex === 0) { // south (attached to north wall)
+              bounds = { minX: 0.375, maxX: 0.625, minY: 0.2, maxY: 0.7, minZ: 0, maxZ: 0.25 };
+            } else if (facingIndex === 1) { // west (attached to east wall)
+              bounds = { minX: 0.75, maxX: 1, minY: 0.2, maxY: 0.7, minZ: 0.375, maxZ: 0.625 };
+            } else if (facingIndex === 2) { // north (attached to south wall)
+              bounds = { minX: 0.375, maxX: 0.625, minY: 0.2, maxY: 0.7, minZ: 0.75, maxZ: 1 };
+            } else { // east (attached to west wall)
+              bounds = { minX: 0, maxX: 0.25, minY: 0.2, maxY: 0.7, minZ: 0.375, maxZ: 0.625 };
+            }
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness);
+            continue;
+          }
+
           // Fences & walls
           if (def.name.includes('fence') || def.name.includes('wall')) {
             const skyLight = this.getSkyLightAt(x, y, z);

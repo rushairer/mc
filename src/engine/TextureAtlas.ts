@@ -896,6 +896,42 @@ export class TextureAtlas {
       ctx.fillRect(x, y + 11, s, 1);
     });
 
+    // light weighted pressure plate (gold)
+    this.drawTile('light_weighted_pressure_plate', (ctx, x, y, s) => {
+      ctx.fillStyle = '#fce205';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#d4af37';
+      ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+    });
+
+    // heavy weighted pressure plate (iron)
+    this.drawTile('heavy_weighted_pressure_plate', (ctx, x, y, s) => {
+      ctx.fillStyle = '#e7e7e7';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#c0c0c0';
+      ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+    });
+
+    // tripwire hook
+    this.drawTile('tripwire_hook', (ctx, x, y, s) => {
+      ctx.fillStyle = '#9c704c';
+      ctx.fillRect(x + 2, y + 4, s - 4, s - 8);
+      ctx.strokeStyle = '#5a3d24';
+      ctx.strokeRect(x + 2.5, y + 4.5, s - 5, s - 9);
+      ctx.fillStyle = '#c0c0c0';
+      ctx.fillRect(x + 6, y + 6, 4, 4);
+      ctx.fillStyle = '#777777';
+      ctx.fillRect(x + 7, y + 10, 2, 4);
+    });
+
+    // tripwire (string)
+    this.drawTile('tripwire', (ctx, x, y, s) => {
+      ctx.fillStyle = 'rgba(0,0,0,0)';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#e0e0e0';
+      ctx.fillRect(x, y + 7, s, 2);
+    });
+
     // glass
     this.drawTile('glass', (ctx, x, y, s) => {
       ctx.clearRect(x, y, s, s);

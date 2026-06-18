@@ -176,6 +176,25 @@ export const VisualResolver = {
       return 'block:observer_side';
     }
 
+    if (name === 'stone_pressure_plate') {
+      return 'block:stone';
+    }
+    if (name === 'wooden_pressure_plate') {
+      return 'block:oak_planks';
+    }
+    if (name === 'light_weighted_pressure_plate') {
+      return 'block:light_weighted_pressure_plate';
+    }
+    if (name === 'heavy_weighted_pressure_plate') {
+      return 'block:heavy_weighted_pressure_plate';
+    }
+    if (name === 'tripwire_hook') {
+      return 'block:tripwire_hook';
+    }
+    if (name === 'tripwire') {
+      return 'block:tripwire';
+    }
+
     const legacy = BlockRegistry.getTextureForFace(blockId, face);
     return `block:${legacy}`;
   },

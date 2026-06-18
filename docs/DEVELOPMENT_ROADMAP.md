@@ -90,7 +90,7 @@
 | 2.4 | 酿造台 + 药水配方 + 药水效果 + 状态效果系统 | ✅ | 新建 `BrewingSystem.ts`, `PotionEffect.ts`, `BrewingUI.tsx` |
 | 2.5 | 漏斗（自动物品传输） | ✅ | `BlockRegistry.ts`, 新建 `HopperSystem.ts` |
 | 2.6 | 红石比较器 + 侦测器 + 阳光传感器 | ✅ | `RedstoneSystem.ts`, `BlockRegistry.ts` |
-| 2.7 | 压力板（石质/木质/测重） + 绊线钩 | ⬜ | `RedstoneSystem.ts`, `BlockRegistry.ts` |
+| 2.7 | 压力板（石质/木质/测重） + 绊线钩 | ✅ | `RedstoneSystem.ts`, `BlockRegistry.ts` |
 | 2.8 | 下界传送门（黑曜石框架 + 传送动画 + 维度切换） | ⬜ | `Game.ts`, `DimensionGenerator.ts` |
 | 2.9 | 下界维度完成：下界岩/灵魂沙/地狱疣/下界砖方块 | ⬜ | `DimensionGenerator.ts`, `BlockRegistry.ts` |
 | 2.10 | 下界生物：烈焰人、僵尸猪灵、岩浆怪、凋灵骷髅 | ⬜ | `MobSystem.ts`, `Mob.ts` |

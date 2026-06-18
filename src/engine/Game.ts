@@ -1105,6 +1105,7 @@ export class Game {
             this.chunks.setBlock(bp.x, bp.y, bp.z, 0);
             this.redstone.unregister(bp.x, bp.y, bp.z);
             this.chunks.setBlockMeta(bp.x, bp.y, bp.z, null);
+            this.redstone.observeBlockChange(bp.x, bp.y, bp.z);
           }
           this.sound.playBlockBreak();
           this.breakProgress = 0;
@@ -1155,6 +1156,37 @@ export class Game {
           this.placeCooldown = 0.25;
         } else if (this.isTrapdoorBlock(targetId)) {
           this.toggleTrapdoor(blockPos.x, blockPos.y, blockPos.z);
+          this.sound.playLever();
+          this.placeCooldown = 0.25;
+        } else if (targetName === 'daylight_detector' || targetName === 'daylight_detector_inverted') {
+          const isNormal = targetId === 151 || (targetId & 0x3FF) === 151;
+          const newBaseId = isNormal ? 178 : 151;
+          const metaVal = (targetId >> 10) & 0xF;
+          const newPackedId = (metaVal << 10) | newBaseId;
+          const currentMeta = this.chunks.getBlockMeta(blockPos.x, blockPos.y, blockPos.z);
+          this.chunks.setBlock(blockPos.x, blockPos.y, blockPos.z, newPackedId);
+          this.chunks.setBlockMeta(blockPos.x, blockPos.y, blockPos.z, {
+            ...currentMeta,
+            facing: 'up',
+            redstoneType: 'daylight_detector',
+          }, true);
+
+          this.redstone.register(blockPos.x, blockPos.y, blockPos.z, 'daylight_detector', 'up');
+          this.sound.playLever();
+          this.placeCooldown = 0.25;
+        } else if (targetName === 'unpowered_comparator' || targetName === 'powered_comparator') {
+          const metaVal = (targetId >> 10) & 0x7;
+          const newMeta = metaVal < 4 ? metaVal + 4 : metaVal - 4;
+          const newPackedId = (newMeta << 10) | (targetId & 0x3FF);
+          const currentMeta = this.chunks.getBlockMeta(blockPos.x, blockPos.y, blockPos.z);
+          this.chunks.setBlock(blockPos.x, blockPos.y, blockPos.z, newPackedId);
+          this.chunks.setBlockMeta(blockPos.x, blockPos.y, blockPos.z, {
+            ...currentMeta,
+            facing: currentMeta?.facing ?? 'north',
+            redstoneType: 'comparator',
+            open: newMeta >= 4,
+          }, true);
+
           this.sound.playLever();
           this.placeCooldown = 0.25;
         } else if (targetName === 'lever') {
@@ -1226,10 +1258,12 @@ export class Game {
                     }
                     this.chunks.setBlock(placePos.x, placePos.y, placePos.z, doubleBlockId);
                     this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, null);
+                    this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
                   } else {
                     this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
                     const slabHalf = faceNormal.y > 0 ? 'bottom' : 'top';
                     this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, { slabHalf });
+                    this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
                   }
                   this.sound.playBlockPlace();
                   if (this.gameMode !== 'creative') {
@@ -1246,6 +1280,7 @@ export class Game {
 
                   // Register redstone component if it is one
                   this.setPlacedBlockMetadata(placePos.x, placePos.y, placePos.z, blockId, facing);
+                  this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
 
                   // If placing water/lava, start fluid simulation
                   if (BlockRegistry.isFluid(blockId)) {
@@ -1411,7 +1446,13 @@ export class Game {
     this.redstone.update(
       dt,
       (x, y, z) => this.chunks.getBlock(x, y, z),
-      (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
+      (x, y, z, id) => {
+        const currentMeta = this.chunks.getBlockMeta(x, y, z);
+        this.chunks.setBlock(x, y, z, id);
+        if (currentMeta) {
+          this.chunks.setBlockMeta(x, y, z, currentMeta, true);
+        }
+      },
       (soundType) => {
         if (soundType === 'piston_extend') this.sound.playPistonExtend();
         else if (soundType === 'piston_retract') this.sound.playPistonRetract();
@@ -1422,7 +1463,9 @@ export class Game {
           signal: component.signal,
           extended: component.type === 'piston' ? component.state : undefined,
         });
-      }
+      },
+      this.gameTime,
+      (x, y, z) => this.chunks.getBlockMeta(x, y, z)
     );
 
     // Fluid simulation
@@ -1874,6 +1917,66 @@ export class Game {
   }
 
   private setPlacedBlockMetadata(x: number, y: number, z: number, blockId: number, facing: BlockFacing) {
+    const def = BlockRegistry.get(blockId);
+    if (!def) return;
+    const name = def.name;
+
+    if (name === 'unpowered_comparator' || name === 'powered_comparator') {
+      const playerFacing = this.getPlayerHorizontalFacing();
+      let meta = 0;
+      if (playerFacing === 'south') meta = 0;
+      else if (playerFacing === 'west') meta = 1;
+      else if (playerFacing === 'north') meta = 2;
+      else if (playerFacing === 'east') meta = 3;
+
+      const packedId = (meta << 10) | blockId;
+      this.chunks.setBlock(x, y, z, packedId);
+
+      this.redstone.register(x, y, z, 'comparator', playerFacing);
+      this.chunks.setBlockMeta(x, y, z, {
+        facing: playerFacing,
+        redstoneType: 'comparator',
+        powered: false,
+        signal: 0,
+        open: false,
+      }, true);
+      return;
+    }
+
+    if (name === 'observer') {
+      let observerFacing: BlockFacing = 'north';
+      let meta = 2;
+      if (facing === 'up') { observerFacing = 'down'; meta = 0; }
+      else if (facing === 'down') { observerFacing = 'up'; meta = 1; }
+      else if (facing === 'south') { observerFacing = 'north'; meta = 2; }
+      else if (facing === 'north') { observerFacing = 'south'; meta = 3; }
+      else if (facing === 'east') { observerFacing = 'west'; meta = 4; }
+      else if (facing === 'west') { observerFacing = 'east'; meta = 5; }
+
+      const packedId = (meta << 10) | blockId;
+      this.chunks.setBlock(x, y, z, packedId);
+
+      this.redstone.register(x, y, z, 'observer', observerFacing);
+      this.chunks.setBlockMeta(x, y, z, {
+        facing: observerFacing,
+        redstoneType: 'observer',
+        powered: false,
+        signal: 0,
+      }, true);
+      return;
+    }
+
+    if (name === 'daylight_detector' || name === 'daylight_detector_inverted') {
+      this.redstone.register(x, y, z, 'daylight_detector', 'up');
+      this.chunks.setBlockMeta(x, y, z, {
+        facing: 'up',
+        redstoneType: 'daylight_detector',
+        powered: false,
+        signal: 0,
+      }, true);
+      return;
+    }
+
     const redstoneType = this.getRedstoneType(blockId);
     if (redstoneType) {
       this.redstone.register(x, y, z, redstoneType, facing);
@@ -1886,10 +1989,6 @@ export class Game {
       }, true);
       return;
     }
-
-    const def = BlockRegistry.get(blockId);
-    if (!def) return;
-    const name = def.name;
 
     if (name === 'chest') {
       this.chunks.setBlockMeta(x, y, z, {
@@ -1964,6 +2063,9 @@ export class Game {
     if (name === 'unpowered_repeater' || name === 'powered_repeater') return 'repeater';
     if (name === 'piston' || name === 'sticky_piston') return 'piston';
     if (name === 'lever') return 'lever';
+    if (name === 'unpowered_comparator' || name === 'powered_comparator') return 'comparator';
+    if (name === 'observer') return 'observer';
+    if (name === 'daylight_detector' || name === 'daylight_detector_inverted') return 'daylight_detector';
     return null;
   }
 
@@ -1971,7 +2073,7 @@ export class Game {
     const def = BlockRegistry.get(blockId);
     if (!def) return false;
     const name = def.name;
-    return name.includes('furnace') || name === 'chest' || name === 'hopper' || name.includes('trapdoor') || name === 'crafting_table' || name.includes('stairs') || name.includes('repeater') || name.includes('piston') || name.includes('door');
+    return name.includes('furnace') || name === 'chest' || name === 'hopper' || name.includes('trapdoor') || name === 'crafting_table' || name.includes('stairs') || name.includes('repeater') || name.includes('piston') || name.includes('door') || name.includes('comparator') || name === 'observer';
   }
 
   private isDoorBlock(blockId: number): boolean {
@@ -2061,6 +2163,7 @@ export class Game {
       hinge,
       open: false,
     }, true);
+    this.redstone.observeBlockChange(x, y, z);
 
     this.chunks.setBlock(x, y + 1, z, doorBlockId);
     this.chunks.setBlockMeta(x, y + 1, z, {
@@ -2069,6 +2172,7 @@ export class Game {
       hinge,
       open: false,
     }, true);
+    this.redstone.observeBlockChange(x, y + 1, z);
 
     return true;
   }
@@ -2110,6 +2214,7 @@ export class Game {
       hinge,
       open,
     }, true);
+    this.redstone.observeBlockChange(base.x, base.y, base.z);
 
     if (this.isDoorBlock(this.chunks.getBlock(base.x, base.y + 1, base.z))) {
       this.chunks.setBlock(base.x, base.y + 1, base.z, blockId);
@@ -2120,6 +2225,7 @@ export class Game {
         hinge,
         open,
       }, true);
+      this.redstone.observeBlockChange(base.x, base.y + 1, base.z);
     }
   }
 
@@ -2129,10 +2235,12 @@ export class Game {
 
     this.chunks.setBlock(base.x, base.y, base.z, 0);
     this.chunks.setBlockMeta(base.x, base.y, base.z, null);
+    this.redstone.observeBlockChange(base.x, base.y, base.z);
 
     if (this.isDoorBlock(this.chunks.getBlock(base.x, base.y + 1, base.z))) {
       this.chunks.setBlock(base.x, base.y + 1, base.z, 0);
       this.chunks.setBlockMeta(base.x, base.y + 1, base.z, null);
+      this.redstone.observeBlockChange(base.x, base.y + 1, base.z);
     }
   }
 
@@ -2147,6 +2255,7 @@ export class Game {
       ...meta,
       open,
     }, true);
+    this.redstone.observeBlockChange(x, y, z);
   }
 
   private ensureChestMetadata(x: number, y: number, z: number): BlockMetadata | null {
@@ -2277,6 +2386,7 @@ export class Game {
       ...current,
       ...patch,
     });
+    this.redstone.observeBlockChange(x, y, z);
   }
 
   private restoreRedstoneFromLoadedChunks() {

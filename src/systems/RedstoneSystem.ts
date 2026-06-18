@@ -6,16 +6,17 @@
  */
 
 import { BlockRegistry } from '../world/BlockRegistry';
+import { ItemRegistry } from '../items/ItemRegistry';
 import type { BlockFacing } from '../types';
 
 export interface RedstoneComponent {
   x: number;
   y: number;
   z: number;
-  type: 'wire' | 'torch' | 'repeater' | 'piston' | 'lever' | 'button';
+  type: 'wire' | 'torch' | 'repeater' | 'piston' | 'lever' | 'button' | 'comparator' | 'observer' | 'daylight_detector';
   signal: number;
   facing: BlockFacing;
-  state: boolean; // on/off for torch, extended for piston
+  state: boolean; // on/off for torch, extended for piston, mode for comparator, active pulse for observer
 }
 
 const WIRE_ID = 31;     // redstone wire block ID (placeholder)
@@ -65,8 +66,10 @@ export class RedstoneSystem {
     dt: number,
     getBlock: (x: number, y: number, z: number) => number,
     setBlock: (x: number, y: number, z: number, id: number) => void,
-    triggerSound?: (soundType: 'piston_extend' | 'piston_retract') => void,
-    onComponentChange?: (component: RedstoneComponent) => void
+    triggerSound?: (soundType: any) => void,
+    onComponentChange?: (component: RedstoneComponent) => void,
+    gameTime: number = 0,
+    getBlockMeta?: (x: number, y: number, z: number) => any
   ) {
     this.tickTimer += dt;
     if (this.tickTimer < this.tickInterval) return;
@@ -74,7 +77,13 @@ export class RedstoneSystem {
 
     // Reset all signals except sources
     for (const comp of this.components.values()) {
-      if (comp.type !== 'torch' && comp.type !== 'lever') {
+      if (
+        comp.type !== 'torch' &&
+        comp.type !== 'lever' &&
+        comp.type !== 'daylight_detector' &&
+        comp.type !== 'observer' &&
+        comp.type !== 'comparator'
+      ) {
         comp.signal = 0;
         if (comp.type !== 'piston') {
           comp.state = false;
@@ -83,7 +92,7 @@ export class RedstoneSystem {
       }
     }
 
-    // Tick sources first (torches, levers)
+    // Tick sources first
     for (const comp of this.components.values()) {
       if (comp.type === 'torch') {
         const attachedBlock = this.getAttachedBlock(comp);
@@ -105,18 +114,142 @@ export class RedstoneSystem {
           comp.signal = 0;
         }
         onComponentChange?.(comp);
+      } else if (comp.type === 'daylight_detector') {
+        const isDaylight = Math.sin(gameTime * 2 * Math.PI);
+        const blockId = getBlock(comp.x, comp.y, comp.z);
+        const baseId = blockId & 0x3FF;
+        const isInverted = baseId === 178;
+        let signalVal = 0;
+        if (isDaylight > 0) {
+          signalVal = Math.round(isDaylight * 15);
+        }
+        if (isInverted) {
+          signalVal = 15 - signalVal;
+        }
+        comp.signal = Math.max(0, Math.min(15, signalVal));
+        comp.state = comp.signal > 0;
+
+        // Update block ID in chunk
+        const currentMeta = (blockId >> 10) & 0xF;
+        if (currentMeta !== comp.signal) {
+          setBlock(comp.x, comp.y, comp.z, (comp.signal << 10) | baseId);
+        }
+        onComponentChange?.(comp);
+      } else if (comp.type === 'observer') {
+        if (comp.state) {
+          comp.signal = 15;
+          comp.state = false; // pulse ends
+        } else {
+          comp.signal = 0;
+        }
+        onComponentChange?.(comp);
       }
     }
 
     // Propagate signal through wires (BFS)
     const queue: RedstoneComponent[] = [];
-    const visited = new Set<string>();
-
     for (const comp of this.components.values()) {
-      if (comp.signal > 0 && (comp.type === 'torch' || comp.type === 'lever')) {
+      if (
+        comp.signal > 0 &&
+        (comp.type === 'torch' ||
+          comp.type === 'lever' ||
+          comp.type === 'daylight_detector' ||
+          comp.type === 'observer' ||
+          comp.type === 'comparator')
+      ) {
         queue.push(comp);
-        visited.add(RedstoneSystem.key(comp.x, comp.y, comp.z));
       }
+    }
+
+    this.propagate(queue, getBlock, setBlock, triggerSound, onComponentChange);
+
+    // Update comparators based on stable inputs
+    if (getBlockMeta) {
+      let comparatorChanged = true;
+      let iterations = 0;
+
+      while (comparatorChanged && iterations < 10) {
+        comparatorChanged = false;
+        iterations++;
+        const changedComparators: RedstoneComponent[] = [];
+
+        for (const comp of this.components.values()) {
+          if (comp.type === 'comparator') {
+            const blockId = getBlock(comp.x, comp.y, comp.z);
+            const baseId = blockId & 0x3FF;
+            const meta = blockId >> 10;
+            const subtractMode = (meta & 4) !== 0;
+
+            const dirs = this.getComparatorDirections(comp.facing);
+
+            // 1. Back input
+            const bx = comp.x + dirs.back[0];
+            const by = comp.y + dirs.back[1];
+            const bz = comp.z + dirs.back[2];
+
+            let backSignal = 0;
+            const containerSignal = this.getContainerSignal(bx, by, bz, getBlockMeta);
+            if (containerSignal !== null) {
+              backSignal = containerSignal;
+            } else {
+              const backComp = this.get(bx, by, bz);
+              backSignal = backComp ? backComp.signal : 0;
+            }
+
+            // 2. Side inputs
+            const lx = comp.x + dirs.left[0];
+            const ly = comp.y + dirs.left[1];
+            const lz = comp.z + dirs.left[2];
+            const leftComp = this.get(lx, ly, lz);
+            const leftSignal = leftComp ? leftComp.signal : 0;
+
+            const rx = comp.x + dirs.right[0];
+            const ry = comp.y + dirs.right[1];
+            const rz = comp.z + dirs.right[2];
+            const rightComp = this.get(rx, ry, rz);
+            const rightSignal = rightComp ? rightComp.signal : 0;
+
+            const sideSignal = Math.max(leftSignal, rightSignal);
+
+            // 3. Compute output
+            let output = 0;
+            if (subtractMode) {
+              output = Math.max(0, backSignal - sideSignal);
+            } else {
+              output = backSignal >= sideSignal ? backSignal : 0;
+            }
+
+            if (comp.signal !== output) {
+              comp.signal = output;
+              comp.state = output > 0;
+
+              const newBaseId = output > 0 ? 150 : 149;
+              setBlock(comp.x, comp.y, comp.z, (meta << 10) | newBaseId);
+
+              onComponentChange?.(comp);
+              changedComparators.push(comp);
+              comparatorChanged = true;
+            }
+          }
+        }
+
+        if (changedComparators.length > 0) {
+          this.propagate(changedComparators, getBlock, setBlock, triggerSound, onComponentChange);
+        }
+      }
+    }
+  }
+
+  private propagate(
+    queue: RedstoneComponent[],
+    getBlock: (x: number, y: number, z: number) => number,
+    setBlock: (x: number, y: number, z: number, id: number) => void,
+    triggerSound?: (soundType: any) => void,
+    onComponentChange?: (component: RedstoneComponent) => void
+  ) {
+    const visited = new Set<string>();
+    for (const comp of queue) {
+      visited.add(RedstoneSystem.key(comp.x, comp.y, comp.z));
     }
 
     const dirs = [
@@ -127,7 +260,11 @@ export class RedstoneSystem {
       const current = queue.shift()!;
       const newSignal = Math.max(0, current.signal - 1);
 
-      for (const [dx, dy, dz] of dirs) {
+      // Repeater and comparator only propagate in their facing direction
+      const isRepeaterOrComparator = current.type === 'repeater' || current.type === 'comparator';
+      const allowedDirs = isRepeaterOrComparator ? [this.getFacingDirection(current.facing)] : dirs;
+
+      for (const [dx, dy, dz] of allowedDirs) {
         const nx = current.x + dx;
         const ny = current.y + dy;
         const nz = current.z + dz;
@@ -148,7 +285,7 @@ export class RedstoneSystem {
             neighbor.signal = 15;
             neighbor.state = true;
             onComponentChange?.(neighbor);
-            queue.push(neighbor); // repeaters propagate max signal
+            queue.push(neighbor);
             visited.add(key);
           }
         } else if (neighbor.type === 'piston') {
@@ -157,7 +294,6 @@ export class RedstoneSystem {
             onComponentChange?.(neighbor);
             if (triggerSound) triggerSound('piston_extend');
 
-            // Push block in facing direction
             const pDir = this.getFacingDirection(neighbor.facing);
             const frontX = neighbor.x + pDir[0];
             const frontY = neighbor.y + pDir[1];
@@ -183,6 +319,75 @@ export class RedstoneSystem {
     }
   }
 
+  observeBlockChange(x: number, y: number, z: number) {
+    const neighborDirs: { dir: [number, number, number]; targetFacing: BlockFacing }[] = [
+      { dir: [1, 0, 0], targetFacing: 'west' },
+      { dir: [-1, 0, 0], targetFacing: 'east' },
+      { dir: [0, 1, 0], targetFacing: 'down' },
+      { dir: [0, -1, 0], targetFacing: 'up' },
+      { dir: [0, 0, 1], targetFacing: 'north' },
+      { dir: [0, 0, -1], targetFacing: 'south' },
+    ];
+    for (const { dir, targetFacing } of neighborDirs) {
+      const nx = x + dir[0];
+      const ny = y + dir[1];
+      const nz = z + dir[2];
+      const comp = this.get(nx, ny, nz);
+      if (comp && comp.type === 'observer') {
+        if (comp.facing === targetFacing) {
+          comp.state = true; // start pulse
+        }
+      }
+    }
+  }
+
+  private getComparatorDirections(facing: BlockFacing): {
+    front: [number, number, number];
+    back: [number, number, number];
+    left: [number, number, number];
+    right: [number, number, number];
+  } {
+    switch (facing) {
+      case 'north':
+        return { front: [0, 0, -1], back: [0, 0, 1], left: [-1, 0, 0], right: [1, 0, 0] };
+      case 'south':
+        return { front: [0, 0, 1], back: [0, 0, -1], left: [1, 0, 0], right: [-1, 0, 0] };
+      case 'east':
+        return { front: [1, 0, 0], back: [-1, 0, 0], left: [0, 0, -1], right: [0, 0, 1] };
+      case 'west':
+        return { front: [-1, 0, 0], back: [1, 0, 0], left: [0, 0, 1], right: [0, 0, -1] };
+      default:
+        return { front: [0, 0, -1], back: [0, 0, 1], left: [-1, 0, 0], right: [1, 0, 0] };
+    }
+  }
+
+  private getContainerSignal(
+    x: number,
+    y: number,
+    z: number,
+    getBlockMeta: (x: number, y: number, z: number) => any
+  ): number | null {
+    const meta = getBlockMeta(x, y, z);
+    if (!meta || !meta.containerType || !meta.inventory) return null;
+    const inventory: any[] = meta.inventory;
+    let sumCounts = 0;
+    let sumMaxStacks = 0;
+    let hasItems = false;
+    for (const slot of inventory) {
+      if (slot && slot.count > 0) {
+        hasItems = true;
+        sumCounts += slot.count;
+        const itemDef = ItemRegistry.get(slot.id);
+        const maxStack = itemDef?.maxStackSize ?? 64;
+        sumMaxStacks += maxStack;
+      } else {
+        sumMaxStacks += 64;
+      }
+    }
+    if (!hasItems) return 0;
+    return Math.floor(1 + 14 * sumCounts / sumMaxStacks);
+  }
+
   private getFacingDirection(facing: RedstoneComponent['facing']): [number, number, number] {
     const dirs: Record<string, [number, number, number]> = {
       north: [0, 0, -1], south: [0, 0, 1], east: [1, 0, 0], west: [-1, 0, 0],
@@ -201,14 +406,12 @@ export class RedstoneSystem {
   }
 
   private isRepeaterInput(repeater: RedstoneComponent, source: RedstoneComponent): boolean {
-    // Simplified: any adjacent signal counts as input
     const dx = Math.abs(repeater.x - source.x);
     const dy = Math.abs(repeater.y - source.y);
     const dz = Math.abs(repeater.z - source.z);
     return dx + dy + dz === 1;
   }
 
-  /** Toggle a lever at position. Returns new state. */
   toggleLever(x: number, y: number, z: number): boolean {
     const comp = this.get(x, y, z);
     if (comp && comp.type === 'lever') {

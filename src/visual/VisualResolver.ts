@@ -1,6 +1,18 @@
 import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
-import type { BlockDef } from '../types';
+import type { BlockDef, BlockFacing } from '../types';
+
+function getOppositeFacing(facing: BlockFacing): BlockFacing {
+  switch (facing) {
+    case 'up': return 'down';
+    case 'down': return 'up';
+    case 'north': return 'south';
+    case 'south': return 'north';
+    case 'east': return 'west';
+    case 'west': return 'east';
+  }
+}
+
 
 export type VisualFace = 'top' | 'bottom' | 'right' | 'left' | 'front' | 'back';
 export type ItemVisualKind = 'block' | 'tool' | 'sprite';
@@ -124,6 +136,45 @@ export const VisualResolver = {
     if (name.includes('redstone_wire')) return 'block:redstone_wire';
     if (name.includes('repeater')) return 'block:repeater';
     if (name.includes('lever')) return 'block:lever';
+
+    if (name.includes('comparator')) {
+      const isPowered = name.includes('powered');
+      if (faceName === 'top') {
+        return `block:${isPowered ? 'comparator_on' : 'comparator_off'}`;
+      }
+      return 'block:stone';
+    }
+
+    if (name.includes('daylight_detector')) {
+      const isInverted = name.includes('inverted');
+      if (faceName === 'top') {
+        return `block:${isInverted ? 'daylight_detector_inverted_top' : 'daylight_detector_top'}`;
+      }
+      return 'block:daylight_detector_side';
+    }
+
+    if (name.includes('observer')) {
+      const meta = metadata(blockId);
+      const facings: BlockFacing[] = ['down', 'up', 'north', 'south', 'west', 'east'];
+      const F = facings[meta] ?? 'north';
+      
+      let D: BlockFacing = 'north';
+      if (faceName === 'top') D = 'up';
+      else if (faceName === 'bottom') D = 'down';
+      else if (faceName === 'right') D = 'east';
+      else if (faceName === 'left') D = 'west';
+      else if (faceName === 'front') D = 'south';
+      else if (faceName === 'back') D = 'north';
+
+      if (D === F) {
+        return 'block:observer_front';
+      }
+      const oppositeF = getOppositeFacing(F);
+      if (D === oppositeF) {
+        return 'block:observer_back';
+      }
+      return 'block:observer_side';
+    }
 
     const legacy = BlockRegistry.getTextureForFace(blockId, face);
     return `block:${legacy}`;

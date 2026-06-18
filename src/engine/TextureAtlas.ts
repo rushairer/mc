@@ -787,6 +787,115 @@ export class TextureAtlas {
       ctx.fillRect(x + 3, y + 8, s - 6, s - 8);
     });
 
+    // daylight detector
+    this.drawTile('daylight_detector_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#9c704c';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#5a3d24';
+      ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+      ctx.fillStyle = '#4484a4';
+      const margin = 2;
+      const size = (s - margin * 2) / 3;
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          ctx.fillRect(x + margin + c * size + 0.5, y + margin + r * size + 0.5, size - 1, size - 1);
+        }
+      }
+    });
+
+    this.drawTile('daylight_detector_inverted_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#9c704c';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#5a3d24';
+      ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+      ctx.fillStyle = '#5c4c6c';
+      const margin = 2;
+      const size = (s - margin * 2) / 3;
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          ctx.fillRect(x + margin + c * size + 0.5, y + margin + r * size + 0.5, size - 1, size - 1);
+        }
+      }
+    });
+
+    this.drawTile('daylight_detector_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#9c704c';
+      ctx.fillRect(x, y, s, 4);
+      ctx.fillStyle = '#5a3d24';
+      ctx.fillRect(x, y + 4, s, 1);
+      ctx.fillStyle = '#7a7a7a';
+      ctx.fillRect(x, y + 5, s, s - 5);
+      ctx.fillStyle = '#606060';
+      ctx.fillRect(x + 2, y + 8, 2, 2);
+      ctx.fillRect(x + 10, y + 11, 2, 2);
+    });
+
+    // redstone comparator
+    this.drawTile('comparator_off', (ctx, x, y, s) => {
+      ctx.fillStyle = '#8f8f8f';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#6a6a6a';
+      ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+      ctx.fillStyle = '#500000';
+      ctx.fillRect(x + 7, y + 3, 2, 10);
+      ctx.fillRect(x + 4, y + 7, 8, 2);
+      ctx.fillStyle = '#500000';
+      ctx.fillRect(x + 3, y + 10, 2, 2);
+      ctx.fillRect(x + 11, y + 10, 2, 2);
+      ctx.fillRect(x + 7, y + 2, 2, 2);
+    });
+
+    this.drawTile('comparator_on', (ctx, x, y, s) => {
+      ctx.fillStyle = '#8f8f8f';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#6a6a6a';
+      ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+      ctx.fillStyle = '#ff0000';
+      ctx.fillRect(x + 7, y + 3, 2, 10);
+      ctx.fillRect(x + 4, y + 7, 8, 2);
+      ctx.fillStyle = '#ff5500';
+      ctx.fillRect(x + 3, y + 10, 2, 2);
+      ctx.fillRect(x + 11, y + 10, 2, 2);
+      ctx.fillRect(x + 7, y + 2, 2, 2);
+    });
+
+    // observer
+    this.drawTile('observer_front', (ctx, x, y, s) => {
+      ctx.fillStyle = '#5c5e62';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#383a3d';
+      ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+      ctx.fillStyle = '#40a0c0';
+      ctx.fillRect(x + 3, y + 5, 3, 2);
+      ctx.fillRect(x + 10, y + 5, 3, 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x + 4, y + 5, 1, 1);
+      ctx.fillRect(x + 11, y + 5, 1, 1);
+      ctx.fillStyle = '#2d2f33';
+      ctx.fillRect(x + 4, y + 9, 8, 2);
+    });
+
+    this.drawTile('observer_back', (ctx, x, y, s) => {
+      ctx.fillStyle = '#5c5e62';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#383a3d';
+      ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+      ctx.fillStyle = '#2d2f33';
+      ctx.fillRect(x + 5, y + 5, 6, 6);
+      ctx.fillStyle = '#a02020';
+      ctx.fillRect(x + 6, y + 6, 4, 4);
+    });
+
+    this.drawTile('observer_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#5c5e62';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#383a3d';
+      ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+      ctx.fillStyle = '#4a4b4e';
+      ctx.fillRect(x, y + 4, s, 1);
+      ctx.fillRect(x, y + 11, s, 1);
+    });
+
     // glass
     this.drawTile('glass', (ctx, x, y, s) => {
       ctx.clearRect(x, y, s, s);

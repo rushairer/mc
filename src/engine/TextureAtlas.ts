@@ -1055,6 +1055,26 @@ export class TextureAtlas {
       ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
     });
 
+    // portal
+    this.drawTile('portal', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = 'rgba(74, 20, 140, 0.7)';
+      ctx.fillRect(x, y, s, s);
+      
+      ctx.fillStyle = 'rgba(233, 30, 99, 0.4)';
+      for (let i = 0; i < 4; i++) {
+        ctx.fillRect(x + Math.floor(Math.random() * s), y, 2, s);
+        ctx.fillRect(x, y + Math.floor(Math.random() * s), s, 2);
+      }
+      
+      for (let i = 0; i < 12; i++) {
+        const px = x + Math.random() * s;
+        const py = y + Math.random() * s;
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(186, 104, 200, 0.7)' : 'rgba(224, 64, 251, 0.7)';
+        ctx.fillRect(px | 0, py | 0, 2, 2);
+      }
+    });
+
     // ─── Materials ───
     // stick
     this.drawTile('stick', (ctx, x, y, s) => {

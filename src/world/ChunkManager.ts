@@ -5,10 +5,19 @@ import { BlockRegistry } from './BlockRegistry';
 import { CHUNK_SIZE, WORLD_HEIGHT, RENDER_DISTANCE } from '../constants';
 import { TextureAtlas } from '../engine/TextureAtlas';
 import type { BlockMetadata, SerializedBlockMetadata } from '../types';
+import { Dimension, DimensionGenerator } from './DimensionGenerator';
 
 export class ChunkManager {
-  chunks: Map<string, Chunk> = new Map();
+  overworldChunks: Map<string, Chunk> = new Map();
+  netherChunks: Map<string, Chunk> = new Map();
+  currentDimension: Dimension = Dimension.Overworld;
+
+  get chunks(): Map<string, Chunk> {
+    return this.currentDimension === Dimension.Overworld ? this.overworldChunks : this.netherChunks;
+  }
+
   private worldGen: WorldGen;
+  dimensionGen: DimensionGenerator;
   private atlas: TextureAtlas;
   private scene: THREE.Scene;
   private material: THREE.MeshBasicMaterial;
@@ -19,6 +28,7 @@ export class ChunkManager {
     this.scene = scene;
     this.atlas = atlas;
     this.worldGen = new WorldGen(seed);
+    this.dimensionGen = new DimensionGenerator(seed);
 
     this.material = new THREE.MeshBasicMaterial({
       map: atlas.getTexture(),
@@ -165,12 +175,13 @@ export class ChunkManager {
     chunk.setBlockMeta(lx, wy, lz, metadata, markDirty);
   }
 
-  restoreChunk(cx: number, cz: number, data: Uint16Array, metadata?: SerializedBlockMetadata[]) {
+  restoreChunk(cx: number, cz: number, data: Uint16Array, metadata?: SerializedBlockMetadata[], dimension: number = 0) {
     const key = ChunkManager.key(cx, cz);
-    let chunk = this.chunks.get(key);
+    const targetMap = dimension === 1 ? this.netherChunks : this.overworldChunks;
+    let chunk = targetMap.get(key);
     if (!chunk) {
       chunk = new Chunk(cx, cz);
-      this.chunks.set(key, chunk);
+      targetMap.set(key, chunk);
     } else {
       if (chunk.mesh) {
         this.scene.remove(chunk.mesh);
@@ -187,8 +198,13 @@ export class ChunkManager {
     chunk.data = new Uint16Array(data);
     chunk.restoreMetadata(metadata);
     this.repairLegacyDoorBlocks(chunk);
-    this.computeChunkLight(chunk);
-    this.rebuildChunkMesh(chunk);
+
+    if (this.currentDimension === dimension) {
+      this.computeChunkLight(chunk);
+      this.rebuildChunkMesh(chunk);
+    } else {
+      chunk.dirty = true;
+    }
 
     this.markDirty(cx - 1, cz);
     this.markDirty(cx + 1, cz);
@@ -263,7 +279,11 @@ export class ChunkManager {
 
   private loadChunk(cx: number, cz: number) {
     const chunk = new Chunk(cx, cz);
-    this.worldGen.generateChunk(chunk);
+    if (this.currentDimension === Dimension.Overworld) {
+      this.worldGen.generateChunk(chunk);
+    } else {
+      this.dimensionGen.generateNetherChunk(chunk);
+    }
     this.chunks.set(ChunkManager.key(cx, cz), chunk);
     this.computeChunkLight(chunk);
     this.rebuildChunkMesh(chunk);
@@ -282,6 +302,22 @@ export class ChunkManager {
 
     chunk.computeSkyLight(getNeighborBlock);
     chunk.computeBlockLight();
+  }
+
+  unloadAllMeshes() {
+    for (const chunk of this.chunks.values()) {
+      if (chunk.mesh) {
+        this.scene.remove(chunk.mesh);
+        chunk.mesh.geometry.dispose();
+        chunk.mesh = null;
+      }
+      if (chunk.transparentMesh) {
+        this.scene.remove(chunk.transparentMesh);
+        chunk.transparentMesh.geometry.dispose();
+        chunk.transparentMesh = null;
+      }
+      chunk.dirty = true;
+    }
   }
 
   private unloadChunk(key: string, chunk: Chunk) {

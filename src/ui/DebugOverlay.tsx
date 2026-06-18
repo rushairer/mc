@@ -37,6 +37,7 @@ export const DebugOverlay: React.FC<{ state: GameState; visible: boolean }> = ({
       <div>&nbsp;</div>
       <div>{t('xyz', { x: state.playerX, y: state.playerY, z: state.playerZ })}</div>
       <div>{t('biome', { biome: getLocalizedBiomeName(state.biome) })}</div>
+      <div>Dimension: {state.currentDimension === 1 ? 'Nether' : 'Overworld'}</div>
       <div>{t('chunks', { chunks: state.chunkCount })}</div>
       <div>{t('mobs', { mobs: state.mobCount })}</div>
       <div>{t('time', { time: timeStr })}</div>

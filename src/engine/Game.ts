@@ -3,6 +3,7 @@ import { Renderer } from './Renderer';
 import { InputManager } from './InputManager';
 import { TextureAtlas } from './TextureAtlas';
 import { ChunkManager } from '../world/ChunkManager';
+import { WorldGen } from '../world/WorldGen';
 import { Player } from '../player/Player';
 import { Inventory } from '../player/Inventory';
 import { BlockRegistry } from '../world/BlockRegistry';
@@ -19,6 +20,7 @@ import { RedstoneSystem, type RedstoneEntity } from '../systems/RedstoneSystem';
 import { ProjectileSystem } from '../systems/ProjectileSystem';
 import { CommandSystem } from '../systems/CommandSystem';
 import { VisualResolver } from '../visual/VisualResolver';
+import { Dimension, DimensionGenerator } from '../world/DimensionGenerator';
 import { DroppedItemSystem } from '../systems/DroppedItemSystem';
 import { XPSystem } from '../systems/XPSystem';
 import { EnchantSystem } from '../systems/EnchantSystem';
@@ -64,6 +66,8 @@ export interface GameState {
   xpCurrent: number;
   xpNext: number;
   activePotionEffects: ActivePotionEffect[];
+  portalProgress: number;
+  currentDimension: number;
 }
 
 export type GameStateListener = (state: GameState) => void;
@@ -104,6 +108,8 @@ export class Game {
   private breakCooldown = 0;
   private placeCooldown = 0;
   private lockCooldown = 0;
+  private portalTimer = 0;
+  private portalCooldown = 0;
   openUI: UIType = 'none';
   gameMode: 'survival' | 'creative' = 'survival';
   private autoSaveTimer = 0;
@@ -728,6 +734,29 @@ export class Game {
       fly: false,
     }, this.chunks);
 
+    // Portal teleportation check
+    const px = Math.floor(this.player.position.x);
+    const py = Math.floor(this.player.position.y);
+    const pz = Math.floor(this.player.position.z);
+    const feetBlock = this.chunks.getBlock(px, py, pz) & 0x3FF;
+    const headBlockPortal = this.chunks.getBlock(px, py + 1, pz) & 0x3FF;
+    const inPortal = feetBlock === 90 || headBlockPortal === 90;
+
+    if (this.portalCooldown > 0) {
+      this.portalCooldown -= dt;
+      this.portalTimer = 0;
+    } else if (inPortal) {
+      const PORTAL_DELAY = this.gameMode === 'creative' ? 0.5 : 3.0;
+      this.portalTimer += dt;
+      if (this.portalTimer >= PORTAL_DELAY) {
+        this.teleportDimension();
+        this.portalTimer = 0;
+        this.portalCooldown = 4.0;
+      }
+    } else {
+      this.portalTimer = Math.max(0, this.portalTimer - dt * 2.0);
+    }
+
     // Mob system
     const isNight = this.isNight();
     this.mobs.update(dt, this.player.position, isNight,
@@ -1127,6 +1156,27 @@ export class Game {
         const targetId = this.chunks.getBlock(blockPos.x, blockPos.y, blockPos.z);
         const targetDef = BlockRegistry.get(targetId);
         const targetName = targetDef?.name ?? '';
+
+        const slot = this.inventory.getSlot(this.player.selectedSlot);
+        const heldItemId = slot?.id ?? 0;
+
+        if (heldItemId === 259) { // Flint and Steel
+          const placePos = blockPos.clone().add(faceNormal);
+          const dimGen = this.chunks.dimensionGen;
+          const result = dimGen.findAndActivatePortalFrame(
+            (x, y, z) => this.chunks.getBlock(x, y, z),
+            (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
+            placePos.x, placePos.y, placePos.z
+          );
+          if (result) {
+            this.sound.playBlockPlace(); // flint sound
+            if (this.gameMode !== 'creative') {
+              this.inventory.damageTool(this.player.selectedSlot);
+            }
+            this.placeCooldown = 0.25;
+            return;
+          }
+        }
 
         // Right-click furnace
         if (targetName.includes('furnace')) {
@@ -1820,6 +1870,8 @@ export class Game {
       xpCurrent: xpState.current,
       xpNext: xpState.next,
       activePotionEffects: this.potionEffects.getEffects(),
+      portalProgress: Math.min(1.0, this.portalTimer / (this.gameMode === 'creative' ? 0.5 : 3.0)),
+      currentDimension: this.chunks.currentDimension,
     };
 
     for (const listener of this.stateListeners) {
@@ -1831,14 +1883,123 @@ export class Game {
     return this.gameTime >= NIGHT_START && this.gameTime <= NIGHT_END;
   }
 
+  private teleportDimension() {
+    const currentDim = this.chunks.currentDimension;
+    const targetDim = currentDim === Dimension.Overworld ? Dimension.Nether : Dimension.Overworld;
+
+    // 1. Scaled coordinates
+    let targetX = this.player.position.x;
+    let targetZ = this.player.position.z;
+    if (targetDim === Dimension.Nether) {
+      targetX = Math.floor(targetX / 8);
+      targetZ = Math.floor(targetZ / 8);
+    } else {
+      targetX = Math.floor(targetX * 8);
+      targetZ = Math.floor(targetZ * 8);
+    }
+
+    // 2. Safely unload old dimension meshes
+    this.chunks.unloadAllMeshes();
+
+    // 3. Switch active dimension
+    this.chunks.currentDimension = targetDim;
+
+    // 4. Ensure destination portal exists
+    const safeY = this.ensureDestinationPortal(Math.floor(targetX), Math.floor(targetZ), targetDim);
+
+    // 5. Position player
+    this.player.position.set(targetX + 0.5, safeY + 0.5, targetZ + 0.5);
+    this.player.velocity.set(0, 0, 0);
+
+    // 6. Refresh chunks around player immediately
+    this.chunks.update(this.player.position.x, this.player.position.z);
+    this.player.resolveStuck(this.chunks);
+
+    // Play portal teleport sound
+    this.sound.playPickup();
+    this.notifyState();
+  }
+
+  private ensureDestinationPortal(tx: number, tz: number, targetDim: number): number {
+    const radius = 16;
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dz = -radius; dz <= radius; dz++) {
+        for (let y = 30; y < 110; y++) {
+          const x = tx + dx;
+          const z = tz + dz;
+          if ((this.chunks.getBlock(x, y, z) & 0x3FF) === 90) {
+            return y;
+          }
+        }
+      }
+    }
+
+    let targetY = 60;
+    if (targetDim === Dimension.Overworld) {
+      const h = this.chunks.getWorldGen().getTerrainHeight(tx, tz);
+      targetY = Math.max(50, h);
+    } else {
+      targetY = 60;
+    }
+
+    const axis = 'x';
+    const dx = 1;
+    const dz = 0;
+    
+    const x0 = tx;
+    const y0 = targetY + 1;
+    const z0 = tz;
+
+    // Place obsidian (49)
+    // Bottom bar
+    this.chunks.setBlock(x0, y0 - 1, z0, 49);
+    this.chunks.setBlock(x0 + dx, y0 - 1, z0 + dz, 49);
+    // Top bar
+    this.chunks.setBlock(x0, y0 + 3, z0, 49);
+    this.chunks.setBlock(x0 + dx, y0 + 3, z0 + dz, 49);
+    // Left pillar
+    this.chunks.setBlock(x0 - dx, y0, z0 - dz, 49);
+    this.chunks.setBlock(x0 - dx, y0 + 1, z0 - dz, 49);
+    this.chunks.setBlock(x0 - dx, y0 + 2, z0 - dz, 49);
+    // Right pillar
+    this.chunks.setBlock(x0 + 2 * dx, y0, z0 + 2 * dz, 49);
+    this.chunks.setBlock(x0 + 2 * dx, y0 + 1, z0 + 2 * dz, 49);
+    this.chunks.setBlock(x0 + 2 * dx, y0 + 2, z0 + 2 * dz, 49);
+
+    // Corners
+    this.chunks.setBlock(x0 - dx, y0 - 1, z0 - dz, 49);
+    this.chunks.setBlock(x0 + 2 * dx, y0 - 1, z0 + 2 * dz, 49);
+    this.chunks.setBlock(x0 - dx, y0 + 3, z0 - dz, 49);
+    this.chunks.setBlock(x0 + 2 * dx, y0 + 3, z0 + 2 * dz, 49);
+
+    // Portal blocks (90)
+    for (let w = 0; w < 2; w++) {
+      for (let h = 0; h < 3; h++) {
+        this.chunks.setBlock(x0 + w * dx, y0 + h, z0 + w * dz, 90);
+      }
+    }
+
+    return y0;
+  }
+
   private async saveGame() {
     const chunkData: SaveData['chunks'] = [];
-    for (const [, chunk] of this.chunks.chunks) {
+    for (const [, chunk] of this.chunks.overworldChunks) {
       chunkData.push({
         cx: chunk.cx,
         cz: chunk.cz,
         data: new Uint16Array(chunk.data),
         metadata: chunk.serializeMetadata(),
+        dimension: 0,
+      });
+    }
+    for (const [, chunk] of this.chunks.netherChunks) {
+      chunkData.push({
+        cx: chunk.cx,
+        cz: chunk.cz,
+        data: new Uint16Array(chunk.data),
+        metadata: chunk.serializeMetadata(),
+        dimension: 1,
       });
     }
 
@@ -1858,6 +2019,7 @@ export class Game {
         xpCurrent: this.xp.getState().current,
         xpTotal: this.xp.getState().total,
         activePotionEffects: this.potionEffects.getEffects(),
+        currentDimension: this.chunks.currentDimension,
       },
       inventory: {
         slots: this.inventory.toJSON(),
@@ -1892,6 +2054,11 @@ export class Game {
       if (data.player.perspectiveMode) {
         this.perspectiveMode = data.player.perspectiveMode;
       }
+      if (data.player.currentDimension !== undefined) {
+        this.chunks.currentDimension = data.player.currentDimension;
+      } else {
+        this.chunks.currentDimension = Dimension.Overworld;
+      }
       this.xp.setState(
         data.player.xpLevel ?? 0,
         data.player.xpCurrent ?? 0,
@@ -1912,8 +2079,10 @@ export class Game {
       }
 
       if (data.chunks) {
+        this.chunks.overworldChunks.clear();
+        this.chunks.netherChunks.clear();
         for (const chunk of data.chunks) {
-          this.chunks.restoreChunk(chunk.cx, chunk.cz, chunk.data, chunk.metadata);
+          this.chunks.restoreChunk(chunk.cx, chunk.cz, chunk.data, chunk.metadata, chunk.dimension ?? 0);
         }
       }
 

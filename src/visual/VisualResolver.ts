@@ -99,6 +99,7 @@ export const VisualResolver = {
 
     if (base === 8 || base === 9 || name.includes('water')) return 'block:water';
     if (base === 10 || base === 11 || name.includes('lava')) return 'block:lava';
+    if (base === 90 || name === 'portal') return 'block:portal';
 
     if (name.includes('planks')) {
       const material = woodMaterialFromName(name) ?? 'oak';

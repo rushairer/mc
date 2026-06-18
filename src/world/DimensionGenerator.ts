@@ -123,13 +123,13 @@ export class DimensionGenerator {
     // Check all obsidian border blocks
     for (let h = 0; h < 5; h++) {
       // Left/right pillars
-      if (getBlock(x - dx, y + h, z - dz) !== 1) return false; // obsidian (stone placeholder)
-      if (getBlock(x + dx * 3, y + h, z + dz * 3) !== 1) return false;
+      if (getBlock(x - dx, y + h, z - dz) !== 49) return false; // obsidian (stone placeholder was 1)
+      if (getBlock(x + dx * 3, y + h, z + dz * 3) !== 49) return false;
 
       // Top/bottom bars
       if (h === 0 || h === 4) {
         for (let w = 0; w < 4; w++) {
-          if (getBlock(x + dx * w, y + h, z + dz * w) !== 1) return false;
+          if (getBlock(x + dx * w, y + h, z + dz * w) !== 49) return false;
         }
       }
     }
@@ -157,8 +157,91 @@ export class DimensionGenerator {
 
     for (let h = 1; h <= 3; h++) {
       for (let w = 1; w <= 2; w++) {
-        // Use water texture as portal placeholder (purple-ish)
-        setBlock(x + dx * w, y + h, z + dz * w, 13); // portal block placeholder
+        setBlock(x + dx * w, y + h, z + dz * w, 90);
+      }
+    }
+  }
+
+  /**
+   * Robust search: scans all 6 possible portal positions relative to a clicked air block.
+   */
+  findAndActivatePortalFrame(
+    getBlock: (x: number, y: number, z: number) => number,
+    setBlock: (x: number, y: number, z: number, id: number) => void,
+    ax: number, ay: number, az: number
+  ): { cx: number; cy: number; cz: number; axis: 'x' | 'z' } | null {
+    for (const axis of ['x', 'z'] as const) {
+      const dx = axis === 'x' ? 1 : 0;
+      const dz = axis === 'z' ? 1 : 0;
+
+      for (let w = 0; w < 2; w++) {
+        for (let h = 0; h < 3; h++) {
+          const x0 = ax - w * dx;
+          const y0 = ay - h;
+          const z0 = az - w * dz;
+
+          if (this.checkPortalAtBottomLeft(getBlock, x0, y0, z0, axis)) {
+            this.activatePortalAt(setBlock, x0, y0, z0, axis);
+            return {
+              cx: x0 + dx * 0.5 + 0.5,
+              cy: y0 + 1,
+              cz: z0 + dz * 0.5 + 0.5,
+              axis,
+            };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  checkPortalAtBottomLeft(
+    getBlock: (x: number, y: number, z: number) => number,
+    x0: number, y0: number, z0: number,
+    axis: 'x' | 'z'
+  ): boolean {
+    const dx = axis === 'x' ? 1 : 0;
+    const dz = axis === 'z' ? 1 : 0;
+
+    // Check bottom obsidian
+    for (let w = 0; w < 2; w++) {
+      if (getBlock(x0 + w * dx, y0 - 1, z0 + w * dz) !== 49) return false;
+    }
+    // Check top obsidian
+    for (let w = 0; w < 2; w++) {
+      if (getBlock(x0 + w * dx, y0 + 3, z0 + w * dz) !== 49) return false;
+    }
+    // Check left pillar obsidian
+    for (let h = 0; h < 3; h++) {
+      if (getBlock(x0 - dx, y0 + h, z0 - dz) !== 49) return false;
+    }
+    // Check right pillar obsidian
+    for (let h = 0; h < 3; h++) {
+      if (getBlock(x0 + 2 * dx, y0 + h, z0 + 2 * dz) !== 49) return false;
+    }
+
+    // Check inside is air or portal
+    for (let w = 0; w < 2; w++) {
+      for (let h = 0; h < 3; h++) {
+        const id = getBlock(x0 + w * dx, y0 + h, z0 + w * dz);
+        if (id !== 0 && id !== 90) return false;
+      }
+    }
+
+    return true;
+  }
+
+  activatePortalAt(
+    setBlock: (x: number, y: number, z: number, id: number) => void,
+    x0: number, y0: number, z0: number,
+    axis: 'x' | 'z'
+  ) {
+    const dx = axis === 'x' ? 1 : 0;
+    const dz = axis === 'z' ? 1 : 0;
+
+    for (let w = 0; w < 2; w++) {
+      for (let h = 0; h < 3; h++) {
+        setBlock(x0 + w * dx, y0 + h, z0 + w * dz, 90);
       }
     }
   }

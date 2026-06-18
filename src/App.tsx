@@ -50,6 +50,8 @@ const initialGameState: GameState = {
   xpCurrent: 0,
   xpNext: 7,
   activePotionEffects: [],
+  portalProgress: 0,
+  currentDimension: 0,
 };
 
 export const App: React.FC = () => {
@@ -310,7 +312,16 @@ export const App: React.FC = () => {
         }
       `}</style>
 
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <div 
+        ref={containerRef} 
+        style={{ 
+          width: '100%', 
+          height: '100%',
+          transform: gameState.portalProgress > 0 
+            ? `translate(${(Math.random() - 0.5) * gameState.portalProgress * 10}px, ${(Math.random() - 0.5) * gameState.portalProgress * 10}px)` 
+            : 'none'
+        }} 
+      />
 
       {/* Underwater blue screen tint */}
       {gameState.openUI === 'none' && gameState.isUnderwater && (
@@ -328,6 +339,22 @@ export const App: React.FC = () => {
           pointerEvents: 'none',
           mixBlendMode: 'multiply',
           zIndex: 10,
+        }} />
+      )}
+
+      {/* Nether portal purple overlay tint */}
+      {gameState.openUI === 'none' && gameState.portalProgress > 0 && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: `rgba(106, 27, 154, ${gameState.portalProgress * 0.7})`,
+          backdropFilter: `blur(${gameState.portalProgress * 3}px)`,
+          pointerEvents: 'none',
+          zIndex: 10,
+          transition: 'background 0.05s ease-out, backdrop-filter 0.05s ease-out',
         }} />
       )}
 

@@ -35,13 +35,14 @@ export interface SaveData {
     xpCurrent?: number;
     xpTotal?: number;
     activePotionEffects?: ActivePotionEffect[];
+    currentDimension?: number;
   };
   inventory: {
     slots: (ItemStack | null)[];
     armor: (ItemStack | null)[];
   };
   seed: number;
-  chunks: { cx: number; cz: number; data: Uint16Array; metadata?: SerializedBlockMetadata[] }[];
+  chunks: { cx: number; cz: number; data: Uint16Array; metadata?: SerializedBlockMetadata[]; dimension?: number }[];
   timestamp: number;
 }
 

@@ -5,6 +5,7 @@ import { BlockRegistry } from '../world/BlockRegistry';
 import { Inventory, HOTBAR_SIZE, INVENTORY_SIZE } from '../player/Inventory';
 import { findCraftingResult } from '../items/CraftingRecipes';
 import { useI18n } from '../i18n';
+import { EnchantSystem } from '../systems/EnchantSystem';
 
 interface InventoryUIProps {
   inventory: Inventory;
@@ -801,6 +802,11 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
           <span style={{ color: '#888888', fontSize: '10px', textTransform: 'capitalize' }}>
             {getLocalizedCategory(hoveredSlot.itemDef.category)}
           </span>
+          {hoveredSlot.item.enchantments?.map((enchantment) => (
+            <span key={enchantment.id} style={{ color: '#aaaaff', fontSize: '10px' }}>
+              {EnchantSystem.getDisplayName(enchantment)}
+            </span>
+          ))}
           {hoveredSlot.item.durability !== undefined && hoveredSlot.itemDef.durability && (
             <span style={{ color: '#55FF55', fontSize: '10px' }}>
               {t('durability', { current: hoveredSlot.item.durability, max: hoveredSlot.itemDef.durability })}

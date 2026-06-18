@@ -23,9 +23,10 @@ import { DroppedItemSystem } from '../systems/DroppedItemSystem';
 import { XPSystem } from '../systems/XPSystem';
 import { EnchantSystem } from '../systems/EnchantSystem';
 import { CHUNK_SIZE } from '../constants';
+import type { Enchantment } from '../systems/EnchantSystem';
 import type { BlockFacing, BlockMetadata, ItemStack } from '../types';
 
-export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'death' | 'menu' | 'pause';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'enchanting_table' | 'death' | 'menu' | 'pause';
 
 export interface GameState {
   fps: number;
@@ -381,6 +382,22 @@ export class Game {
     this.openChestPos = new THREE.Vector3(x, y, z);
     this.openUI = 'chest';
     document.exitPointerLock();
+  }
+
+  openEnchantUI() {
+    this.openUI = 'enchanting_table';
+    document.exitPointerLock();
+  }
+
+  enchantItem(item: ItemStack, cost: number, enchantment: Enchantment): ItemStack | null {
+    if (this.gameMode !== 'creative' && !this.xp.spendLevels(cost)) {
+      return null;
+    }
+
+    const enchanted = EnchantSystem.apply(item, enchantment);
+    this.sound.playXP();
+    this.notifyState();
+    return enchanted;
   }
 
   startGame(mode?: 'survival' | 'creative') {
@@ -1051,6 +1068,9 @@ export class Game {
         } else if (targetName === 'chest') {
           this.openChestUI(blockPos.x, blockPos.y, blockPos.z);
           this.placeCooldown = 0.5;
+        } else if (targetName === 'enchanting_table') {
+          this.openEnchantUI();
+          this.placeCooldown = 0.5;
         } else if (this.isDoorBlock(targetId)) {
           this.toggleDoor(blockPos.x, blockPos.y, blockPos.z);
           this.sound.playLever();
@@ -1170,6 +1190,7 @@ export class Game {
     const pointingAtInteractive = this.targetBlock && (
       targetName.includes('furnace') ||
       targetName === 'crafting_table' ||
+      targetName === 'enchanting_table' ||
       targetName === 'lever' ||
       targetName === 'chest' ||
       targetName === 'bed' ||

@@ -7,6 +7,9 @@ import { ChatBar } from './ui/ChatBar';
 import { FurnaceUI } from './ui/FurnaceUI';
 import { CraftingTableUI } from './ui/CraftingTableUI';
 import { ChestUI } from './ui/ChestUI';
+import { EnchantUI } from './ui/EnchantUI';
+import type { Enchantment } from './systems/EnchantSystem';
+import type { ItemStack } from './types';
 import { SaveSystem } from './systems/SaveSystem';
 import { useI18n, translations } from './i18n';
 
@@ -145,6 +148,10 @@ export const App: React.FC = () => {
     if (gameRef.current) {
       gameRef.current.dropItemFromUI(itemId, count);
     }
+  }, []);
+
+  const handleEnchantItem = useCallback((item: ItemStack, cost: number, enchantment: Enchantment) => {
+    return gameRef.current?.enchantItem(item, cost, enchantment) ?? null;
   }, []);
 
   const handleSingleplayerClick = useCallback(() => {
@@ -393,6 +400,19 @@ export const App: React.FC = () => {
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
           onDropItem={handleDropItem}
+        />
+      )}
+
+      {/* Enchantment Table UI */}
+      {gameState.openUI === 'enchanting_table' && gameState.inventory && (
+        <EnchantUI
+          inventory={gameState.inventory}
+          xpLevel={gameState.xpLevel}
+          gameMode={gameState.gameMode}
+          onClose={handleCloseUI}
+          onInventoryChange={handleInventoryChange}
+          onEnchantItem={handleEnchantItem}
+          getItemIconStyle={getItemIconStyle}
         />
       )}
 

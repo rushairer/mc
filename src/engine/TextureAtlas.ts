@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { VisualResolver } from '../visual/VisualResolver';
 
 const ATLAS_SIZE = 1024;
 const TILE_SIZE = 16;
@@ -39,7 +40,7 @@ export class TextureAtlas {
   }
 
   getIconStyle(key: string, iconSize: number = 32): any {
-    const idx = this.tileIndex.get(key);
+    const idx = this.tileIndex.get(this.resolveKey(key));
     if (idx === undefined) {
       return {};
     }
@@ -57,7 +58,7 @@ export class TextureAtlas {
   }
 
   getUV(key: string): { u0: number; v0: number; u1: number; v1: number } {
-    const idx = this.tileIndex.get(key);
+    const idx = this.tileIndex.get(this.resolveKey(key));
     if (idx === undefined) {
       return { u0: 0, v0: 0, u1: 1 / TILES_PER_ROW, v1: 1 / TILES_PER_ROW };
     }
@@ -81,6 +82,26 @@ export class TextureAtlas {
     const idx = this.nextIndex++;
     this.tileIndex.set(key, idx);
     return idx;
+  }
+
+  private resolveKey(key: string): string {
+    if (this.tileIndex.has(key)) return key;
+    if (key.startsWith('block:') || key.startsWith('item:')) {
+      const legacy = key.replace(/^(block|item):/, '');
+      if (this.tileIndex.has(legacy)) return legacy;
+    }
+    if (key.startsWith('icon:block:') || key.startsWith('icon:item:')) {
+      const legacy = `${key.replace(/^icon:(block|item):/, '')}_icon`;
+      if (this.tileIndex.has(legacy)) return legacy;
+    }
+    return key;
+  }
+
+  private aliasTile(alias: string, target: string) {
+    const idx = this.tileIndex.get(target);
+    if (idx !== undefined) {
+      this.tileIndex.set(alias, idx);
+    }
   }
 
   private drawTile(key: string, draw: (ctx: CanvasRenderingContext2D, x: number, y: number, s: number) => void) {
@@ -121,6 +142,21 @@ export class TextureAtlas {
         const b = 30 + Math.random() * 30 | 0;
         ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.fillRect(px | 0, py | 0, 2, 1);
+      }
+    });
+
+    this.drawTile('grass_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#8B6914';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#5B8C32';
+      ctx.fillRect(x, y, s, 4);
+      for (let i = 0; i < s; i += 3) {
+        const h = 1 + (i % 5);
+        ctx.fillRect(x + i, y + 4, 1, h);
+      }
+      ctx.fillStyle = 'rgba(90, 55, 20, 0.35)';
+      for (let i = 0; i < 12; i++) {
+        ctx.fillRect(x + ((i * 5) % s), y + 7 + ((i * 3) % 8), 2, 1);
       }
     });
 
@@ -238,6 +274,22 @@ export class TextureAtlas {
       }
     });
 
+    this.drawTile('jungle_planks', (ctx, x, y, s) => {
+      ctx.fillStyle = '#A8794B';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#8F633D';
+      for (let i = 0; i < 4; i++) ctx.fillRect(x, y + i * 4 + 3, s, 1);
+      ctx.fillRect(x + 6, y, 1, s);
+    });
+
+    this.drawTile('dark_oak_planks', (ctx, x, y, s) => {
+      ctx.fillStyle = '#4C321F';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#382416';
+      for (let i = 0; i < 4; i++) ctx.fillRect(x, y + i * 4 + 3, s, 1);
+      ctx.fillRect(x + 9, y, 1, s);
+    });
+
     // spruce_log_side
     this.drawTile('spruce_log_side', (ctx, x, y, s) => {
       ctx.fillStyle = '#3B2616';
@@ -260,13 +312,20 @@ export class TextureAtlas {
 
     // birch_log_side
     this.drawTile('birch_log_side', (ctx, x, y, s) => {
-      ctx.fillStyle = '#D4D4C8';
+      ctx.fillStyle = '#DAD6B8';
       ctx.fillRect(x, y, s, s);
-      for (let i = 0; i < 4; i++) {
-        ctx.fillStyle = '#3A3A30';
-        const px = x + 2 + i * 4;
-        ctx.fillRect(px, y, 2, s);
-      }
+      ctx.fillStyle = '#C9C39C';
+      ctx.fillRect(x + 3, y, 1, s);
+      ctx.fillRect(x + 11, y, 1, s);
+      ctx.fillStyle = '#3E3A2C';
+      ctx.fillRect(x + 1, y + 2, 4, 1);
+      ctx.fillRect(x + 9, y + 4, 5, 1);
+      ctx.fillRect(x + 4, y + 7, 3, 1);
+      ctx.fillRect(x + 12, y + 9, 3, 1);
+      ctx.fillRect(x + 2, y + 12, 5, 1);
+      ctx.fillStyle = '#EEE8C8';
+      ctx.fillRect(x + 6, y, 1, s);
+      ctx.fillRect(x + 14, y, 1, s);
     });
 
     // birch_log_top
@@ -293,6 +352,42 @@ export class TextureAtlas {
       ctx.fillRect(x, y, s, s);
       ctx.fillStyle = '#BA6338';
       ctx.fillRect(x + 4, y + 4, 8, 8);
+    });
+
+    this.drawTile('jungle_log_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#6F4D2E';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#5D3D24';
+      for (let i = 1; i < s; i += 4) ctx.fillRect(x + i, y, 1, s);
+    });
+
+    this.drawTile('jungle_log_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#9B6B3B';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#6F4D2E';
+      for (let r = 2; r < s / 2; r += 2) {
+        ctx.beginPath();
+        ctx.arc(x + s / 2, y + s / 2, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    });
+
+    this.drawTile('dark_oak_log_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#3A2518';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#25170F';
+      for (let i = 2; i < s; i += 4) ctx.fillRect(x + i, y, 1, s);
+    });
+
+    this.drawTile('dark_oak_log_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#4C321F';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#2C1B10';
+      for (let r = 2; r < s / 2; r += 2) {
+        ctx.beginPath();
+        ctx.arc(x + s / 2, y + s / 2, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     });
 
     // spruce_leaves
@@ -329,6 +424,20 @@ export class TextureAtlas {
         ctx.fillStyle = `rgb(${50 + Math.random() * 30 | 0},${90 + Math.random() * 40 | 0},${15 + Math.random() * 15 | 0})`;
         ctx.fillRect(px | 0, py | 0, 2, 2);
       }
+    });
+
+    this.drawTile('jungle_leaves', (ctx, x, y, s) => {
+      ctx.fillStyle = '#2F7D3A';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#245F2D';
+      for (let i = 0; i < 35; i++) ctx.fillRect(x + ((i * 7) % s), y + ((i * 5) % s), 2, 2);
+    });
+
+    this.drawTile('dark_oak_leaves', (ctx, x, y, s) => {
+      ctx.fillStyle = '#254F18';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#193A10';
+      for (let i = 0; i < 35; i++) ctx.fillRect(x + ((i * 7) % s), y + ((i * 5) % s), 2, 2);
     });
 
     // ─── Flowers & Plants ───
@@ -443,35 +552,24 @@ export class TextureAtlas {
     // water
     this.drawTile('water', (ctx, x, y, s) => {
       ctx.clearRect(x, y, s, s);
-      // Vanilla-style water: bright blue, partially transparent, with blocky flowing streaks.
-      ctx.fillStyle = 'rgba(63, 118, 228, 0.58)';
+      ctx.fillStyle = 'rgba(36, 102, 212, 0.74)';
       ctx.fillRect(x, y, s, s);
 
-      const light = 'rgba(109, 160, 255, 0.34)';
-      const mid = 'rgba(73, 134, 238, 0.30)';
-      const dark = 'rgba(33, 77, 174, 0.24)';
+      const light = 'rgba(150, 205, 255, 0.10)';
+      const mid = 'rgba(58, 128, 230, 0.08)';
+      const dark = 'rgba(12, 58, 150, 0.11)';
 
       ctx.fillStyle = light;
-      ctx.fillRect(x + 1, y + 2, 6, 1);
-      ctx.fillRect(x + 7, y + 3, 4, 1);
-      ctx.fillRect(x + 12, y + 1, 2, 1);
-      ctx.fillRect(x + 3, y + 9, 5, 1);
-      ctx.fillRect(x + 8, y + 10, 4, 1);
-      ctx.fillRect(x + 12, y + 13, 3, 1);
+      ctx.fillRect(x + 2, y + 4, 7, 1);
+      ctx.fillRect(x + 7, y + 11, 6, 1);
 
       ctx.fillStyle = mid;
-      ctx.fillRect(x + 0, y + 5, 4, 1);
-      ctx.fillRect(x + 4, y + 6, 5, 1);
-      ctx.fillRect(x + 10, y + 7, 4, 1);
-      ctx.fillRect(x + 1, y + 13, 5, 1);
-      ctx.fillRect(x + 7, y + 14, 4, 1);
+      ctx.fillRect(x + 1, y + 7, 5, 1);
+      ctx.fillRect(x + 10, y + 8, 4, 1);
 
       ctx.fillStyle = dark;
-      ctx.fillRect(x + 9, y + 0, 5, 1);
-      ctx.fillRect(x + 12, y + 4, 3, 1);
-      ctx.fillRect(x + 0, y + 11, 3, 1);
-      ctx.fillRect(x + 5, y + 12, 6, 1);
-      ctx.fillRect(x + 13, y + 9, 2, 1);
+      ctx.fillRect(x + 11, y + 2, 3, 1);
+      ctx.fillRect(x + 3, y + 14, 4, 1);
     });
 
     // lava
@@ -1165,6 +1263,26 @@ export class TextureAtlas {
       });
     };
 
+    const drawFluidIcon = (key: string, color: string, ripple: string) => {
+      this.drawTile(`${key}_icon`, (ctx, x, y, s) => {
+        ctx.clearRect(x, y, s, s);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x + 8, y + 2);
+        ctx.lineTo(x + 14, y + 5);
+        ctx.lineTo(x + 14, y + 11);
+        ctx.lineTo(x + 8, y + 14);
+        ctx.lineTo(x + 2, y + 11);
+        ctx.lineTo(x + 2, y + 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = ripple;
+        ctx.fillRect(x + 4, y + 6, 5, 1);
+        ctx.fillRect(x + 8, y + 9, 4, 1);
+        ctx.fillRect(x + 5, y + 12, 6, 1);
+      });
+    };
+
     // Solid blocks
     drawBlockIcon('stone', '#909090', '#7a7a7a', '#686868');
     drawBlockIcon('dirt', '#8f6547', '#7b573d', '#684a34');
@@ -1236,6 +1354,25 @@ export class TextureAtlas {
     });
 
     drawBlockIcon('oak_leaves', '#407020', '#35601a', '#2c5015');
+    drawBlockIcon('spruce_planks', '#6b4226', '#57351f', '#452a19');
+    drawBlockIcon('birch_planks', '#d4c49a', '#b8a77f', '#9f8e68');
+    drawBlockIcon('jungle_planks', '#a8794b', '#8d643e', '#735132');
+    drawBlockIcon('acacia_planks', '#ba6338', '#9f522e', '#854427');
+    drawBlockIcon('dark_oak_planks', '#4c321f', '#3a2518', '#2b1a11');
+    drawBlockIcon('spruce_log', '#6b4226', '#4a2e1a', '#382314');
+    drawBlockIcon('birch_log', '#e4d8aa', '#d7cfaa', '#bfb58e');
+    drawBlockIcon('jungle_log', '#9b6b3b', '#6f4d2e', '#5a3d24');
+    drawBlockIcon('acacia_log', '#ba6338', '#7c4b38', '#62392b');
+    drawBlockIcon('dark_oak_log', '#4c321f', '#3a2518', '#2b1a11');
+    drawBlockIcon('spruce_leaves', '#2f5a22', '#264a1c', '#1e3b16');
+    drawBlockIcon('birch_leaves', '#6fa533', '#5b8a2a', '#4a7022');
+    drawBlockIcon('jungle_leaves', '#2f7d3a', '#286a31', '#205527');
+    drawBlockIcon('acacia_leaves', '#4d8a24', '#3f711d', '#325b18');
+    drawBlockIcon('dark_oak_leaves', '#254f18', '#1d3f13', '#16300e');
+    drawFluidIcon('water', 'rgba(55, 125, 238, 0.82)', 'rgba(170, 210, 255, 0.45)');
+    drawFluidIcon('flowing_water', 'rgba(55, 125, 238, 0.82)', 'rgba(170, 210, 255, 0.45)');
+    drawFluidIcon('lava', 'rgba(220, 82, 16, 0.95)', 'rgba(255, 210, 70, 0.7)');
+    drawFluidIcon('flowing_lava', 'rgba(220, 82, 16, 0.95)', 'rgba(255, 210, 70, 0.7)');
     drawBlockIcon('sand', '#dec192', '#bf9e71', '#a18357');
     drawBlockIcon('gravel', '#998d8d', '#857878', '#706464');
 
@@ -1403,16 +1540,20 @@ export class TextureAtlas {
       
       const iconKey = `${b.name}_icon`;
       if (!this.tileIndex.has(iconKey)) {
-        const colors = hashColor(b.name);
+        const colors = VisualResolver.getIconColors(b.id);
         if (b.name.includes('ore')) {
           drawBlockIcon(b.name, '#909090', '#7a7a7a', '#686868', (ctx, ix, iy, is) => {
-            ctx.fillStyle = colors.hex;
+            ctx.fillStyle = colors.top;
             ctx.fillRect(ix + 5, iy + 3, 2, 2);
             ctx.fillRect(ix + 3, iy + 8, 2, 2);
             ctx.fillRect(ix + 10, iy + 8, 2, 2);
           });
+        } else if (BlockRegistry.isFluid(b.id)) {
+          const fluidColor = b.name.includes('lava') ? 'rgba(220, 82, 16, 0.95)' : 'rgba(55, 125, 238, 0.82)';
+          const rippleColor = b.name.includes('lava') ? 'rgba(255, 210, 70, 0.7)' : 'rgba(170, 210, 255, 0.45)';
+          drawFluidIcon(b.name, fluidColor, rippleColor);
         } else {
-          drawBlockIcon(b.name, colors.hex, colors.leftHex, colors.rightHex);
+          drawBlockIcon(b.name, colors.top, colors.left, colors.right);
         }
       }
     }
@@ -1429,21 +1570,85 @@ export class TextureAtlas {
           const mat = parts[0] === 'gold' ? 'gold' : parts[0];
           drawArmor(key, item.armorSlot, mat);
         } else {
-          // Draw generic item (pixelated sphere)
+          // Draw generic item sprite with a semantic pixel silhouette.
           const colors = hashColor(item.name);
           this.drawTile(key, (ctx, x, y, s) => {
             ctx.clearRect(x, y, s, s);
+            const name = item.name;
             ctx.fillStyle = colors.hex;
-            ctx.beginPath();
-            ctx.arc(x + s / 2, y + s / 2, 4, 0, Math.PI * 2);
-            ctx.closePath();
-            ctx.fill();
 
-            // Specular highlight
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(x + s / 2 - 1, y + s / 2 - 2, 2, 1);
+            if (name.includes('ingot')) {
+              ctx.fillRect(x + 4, y + 5, 8, 5);
+              ctx.fillStyle = 'rgba(255,255,255,0.35)';
+              ctx.fillRect(x + 5, y + 5, 5, 1);
+            } else if (name.includes('nugget') || name.includes('coal') || name.includes('diamond') || name.includes('lapis')) {
+              ctx.fillRect(x + 6, y + 4, 4, 2);
+              ctx.fillRect(x + 5, y + 6, 6, 4);
+              ctx.fillRect(x + 6, y + 10, 4, 2);
+              ctx.fillStyle = 'rgba(255,255,255,0.35)';
+              ctx.fillRect(x + 6, y + 5, 2, 1);
+            } else if (name.includes('seeds') || name.includes('dye') || name.includes('redstone')) {
+              ctx.fillRect(x + 4, y + 9, 2, 2);
+              ctx.fillRect(x + 7, y + 7, 2, 2);
+              ctx.fillRect(x + 10, y + 10, 2, 2);
+              ctx.fillRect(x + 6, y + 11, 2, 1);
+            } else if (name.includes('door')) {
+              ctx.fillRect(x + 5, y + 2, 7, 12);
+              ctx.fillStyle = 'rgba(0,0,0,0.25)';
+              ctx.fillRect(x + 6, y + 3, 2, 4);
+              ctx.fillRect(x + 9, y + 3, 2, 4);
+              ctx.fillRect(x + 6, y + 8, 2, 4);
+              ctx.fillRect(x + 9, y + 8, 2, 4);
+            } else if (name.includes('paper')) {
+              ctx.fillStyle = '#F2F0D8';
+              ctx.fillRect(x + 4, y + 2, 8, 12);
+              ctx.fillStyle = '#D8D2AA';
+              ctx.fillRect(x + 6, y + 5, 5, 1);
+              ctx.fillRect(x + 6, y + 8, 4, 1);
+            } else if (name.includes('book')) {
+              ctx.fillStyle = '#7A3B22';
+              ctx.fillRect(x + 3, y + 3, 10, 10);
+              ctx.fillStyle = '#E8D8AA';
+              ctx.fillRect(x + 5, y + 4, 6, 8);
+            } else if (item.category === 'food' || name.includes('apple') || name.includes('bread')) {
+              ctx.fillRect(x + 4, y + 5, 8, 6);
+              ctx.fillRect(x + 5, y + 3, 5, 2);
+              ctx.fillStyle = 'rgba(255,255,255,0.3)';
+              ctx.fillRect(x + 5, y + 5, 3, 1);
+            } else {
+              ctx.fillRect(x + 5, y + 4, 6, 2);
+              ctx.fillRect(x + 4, y + 6, 8, 5);
+              ctx.fillRect(x + 5, y + 11, 6, 1);
+              ctx.fillStyle = 'rgba(255,255,255,0.35)';
+              ctx.fillRect(x + 6, y + 5, 3, 1);
+            }
           });
         }
+      }
+    }
+
+    for (const key of Array.from(this.tileIndex.keys())) {
+      if (!key.includes(':')) {
+        this.aliasTile(`block:${key}`, key);
+        this.aliasTile(`item:${key}`, key);
+      }
+      if (key.endsWith('_icon')) {
+        const baseKey = key.slice(0, -'_icon'.length);
+        this.aliasTile(`icon:block:${baseKey}`, key);
+        this.aliasTile(`icon:item:${baseKey}`, key);
+      }
+    }
+
+    this.aliasTile('icon:block:grass', 'grass_block_icon');
+    this.aliasTile('icon:block:log', 'oak_log_icon');
+    this.aliasTile('icon:block:planks', 'oak_planks_icon');
+    this.aliasTile('icon:block:leaves', 'oak_leaves_icon');
+
+    for (const block of BlockRegistry.all()) {
+      const iconKey = VisualResolver.getBlockIconKey(block.id);
+      const resolvedLegacy = this.resolveKey(iconKey);
+      if (this.tileIndex.has(resolvedLegacy)) {
+        this.aliasTile(`icon:block:${block.name}`, resolvedLegacy);
       }
     }
   }

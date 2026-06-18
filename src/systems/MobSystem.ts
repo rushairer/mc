@@ -59,7 +59,7 @@ export class MobSystem {
     let surfaceY = -1;
     for (let y = 255; y >= 0; y--) {
       const block = getBlock(wx, y, wz);
-      if (block !== 0 && block !== 13 && block !== 14) {
+      if (block !== 0 && !BlockRegistry.isFluid(block)) {
         surfaceY = y + 1;
         break;
       }

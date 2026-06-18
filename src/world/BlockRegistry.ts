@@ -19,6 +19,8 @@ const TEXTURE_OVERRIDES: Record<string, { textureKey: string; textureTop?: strin
   'chest': { textureKey: 'chest_side', textureTop: 'chest_top', textureBottom: 'chest_top' },
 };
 
+const normalizeName = (name: string) => name.toLowerCase().replace(/ /g, '_');
+
 // ─── Initialize Registry from JSON ───
 for (const b of rawBlocks) {
   // Determine if transparent, solid, etc.
@@ -38,14 +40,23 @@ for (const b of rawBlocks) {
 
   // Helper to get texture properties
   const getTextureProperties = (name: string) => {
-    // Check direct match or stem match (e.g. spruce_planks fits planks)
-    let key = name;
-    if (name.includes('planks')) key = 'oak_planks'; // default fallback for planks
-    if (name.includes('leaves')) key = 'oak_leaves'; // default fallback for leaves
+    const normalized = normalizeName(name);
+    let key = normalized;
+
+    // Preserve variant-specific textures that the atlas already draws.
+    if (normalized.includes('spruce') && normalized.includes('planks')) key = 'spruce_planks';
+    else if (normalized.includes('birch') && normalized.includes('planks')) key = 'birch_planks';
+    else if (normalized.includes('acacia') && normalized.includes('planks')) key = 'acacia_planks';
+    else if (normalized.includes('planks')) key = 'oak_planks';
+
+    if (normalized.includes('spruce') && normalized.includes('leaves')) key = 'spruce_leaves';
+    else if (normalized.includes('birch') && normalized.includes('leaves')) key = 'birch_leaves';
+    else if (normalized.includes('acacia') && normalized.includes('leaves')) key = 'acacia_leaves';
+    else if (normalized.includes('leaves')) key = 'oak_leaves';
     
     // Check specific texture overrides
     for (const [ovrKey, ovrVal] of Object.entries(TEXTURE_OVERRIDES)) {
-      if (name === ovrKey || name.includes(ovrKey)) {
+      if (normalized === ovrKey || normalized.includes(ovrKey)) {
         return ovrVal;
       }
     }
@@ -68,11 +79,14 @@ for (const b of rawBlocks) {
       hardness: b.hardness ?? 1.0,
       toolCategory,
       luminance: emitLight,
+      baseId: b.id,
+      metadata: 0,
+      displayName: b.displayName,
     });
 
     for (const v of b.variations) {
       const packedId = (v.metadata << 10) | b.id;
-      const vName = v.displayName.toLowerCase().replace(/ /g, '_');
+      const vName = normalizeName(v.displayName);
       const tex = getTextureProperties(vName);
       blocks.set(packedId, {
         id: packedId,
@@ -85,6 +99,9 @@ for (const b of rawBlocks) {
         hardness: b.hardness ?? 1.0,
         toolCategory,
         luminance: emitLight,
+        baseId: b.id,
+        metadata: v.metadata,
+        displayName: v.displayName,
       });
     }
   } else {
@@ -101,6 +118,9 @@ for (const b of rawBlocks) {
       hardness: b.hardness ?? 1.0,
       toolCategory,
       luminance: emitLight,
+      baseId: b.id,
+      metadata: 0,
+      displayName: b.displayName,
     });
   }
 }
@@ -125,18 +145,18 @@ export const BlockRegistry = {
 
   isTransparent(id: number): boolean {
     if (id === 0) return true;
-    const b = blocks.get(id);
+    const b = this.get(id);
     return b ? b.transparent : false;
   },
 
   isSolid(id: number): boolean {
     if (id === 0) return false;
-    const b = blocks.get(id);
+    const b = this.get(id);
     return b ? b.solid : false;
   },
 
   getTextureForFace(id: number, face: number): string {
-    const b = blocks.get(id);
+    const b = this.get(id);
     if (!b) return 'stone';
     if (face === 0 && b.textureTop) return b.textureTop;
     if (face === 1 && b.textureBottom) return b.textureBottom;
@@ -157,7 +177,7 @@ export const BlockRegistry = {
 
   getLuminance(id: number): number {
     if (id === 0) return 0;
-    const b = blocks.get(id);
+    const b = this.get(id);
     return b ? b.luminance : 0;
   },
 

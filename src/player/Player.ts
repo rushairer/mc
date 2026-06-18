@@ -6,6 +6,7 @@ import {
 import { ChunkManager } from '../world/ChunkManager';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { VisualResolver } from '../visual/VisualResolver';
 
 export class Player {
   position: THREE.Vector3;
@@ -272,7 +273,7 @@ export class Player {
       if (bx === prevBlock.x && by === prevBlock.y && bz === prevBlock.z) continue;
 
       const blockId = chunks.getBlock(bx, by, bz);
-      if (blockId !== 0 && BlockRegistry.isSolid(blockId)) {
+      if (blockId !== 0 && chunks.isSolidBlock(bx, by, bz)) {
         const faceNormal = new THREE.Vector3(
           prevBlock.x - bx,
           prevBlock.y - by,
@@ -413,7 +414,7 @@ export class Player {
     if (itemId === 0) return;
 
     // Create new mesh
-    const mesh = this.createHeldItemMesh(itemId);
+    const mesh = this.createItemVisualMesh(itemId);
     if (mesh) {
       slot.add(mesh);
     }
@@ -578,6 +579,10 @@ export class Player {
   }
 
   createHeldItemMesh(itemId: number): THREE.Object3D | null {
+    return this.createItemVisualMesh(itemId);
+  }
+
+  createItemVisualMesh(itemId: number): THREE.Object3D | null {
     const group = new THREE.Group();
 
     const getMaterialColor = (mat: string): number => {
@@ -591,9 +596,10 @@ export class Player {
     const itemDef = ItemRegistry.get(itemId);
     if (!itemDef) return null;
 
-    if (itemDef.category === 'block') {
+    if (VisualResolver.getItemVisualKind(itemId) === 'block') {
+      const placeBlockId = ItemRegistry.getPlaceBlockId(itemId) ?? itemId;
       const geo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
-      const color = this.getBlockColor(itemId);
+      const color = this.getBlockColor(placeBlockId);
       const mat = new THREE.MeshLambertMaterial({ color });
       const mesh = new THREE.Mesh(geo, mat);
       group.add(mesh);
@@ -659,9 +665,10 @@ export class Player {
       else if (name.includes('brick')) color = 0x9B4B3A;
       else if (name.includes('dye') || name.includes('lapis')) color = 0x2244AA;
 
-      const geo = new THREE.BoxGeometry(0.09, 0.09, 0.09);
+      const geo = new THREE.BoxGeometry(0.11, 0.11, 0.015);
       const mat = new THREE.MeshLambertMaterial({ color });
       const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.y = -Math.PI / 8;
       group.add(mesh);
     }
 
@@ -669,6 +676,12 @@ export class Player {
   }
 
   private getBlockColor(blockId: number): number {
+    const def = BlockRegistry.get(blockId);
+    if (!def) return 0xAAAAAA;
+    return VisualResolver.getBlockAverageColor(blockId);
+  }
+
+  private getLegacyBlockColor(blockId: number): number {
     const def = BlockRegistry.get(blockId);
     if (!def) return 0xAAAAAA;
     const name = def.name;

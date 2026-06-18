@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CHUNK_SIZE, WORLD_HEIGHT } from '../constants';
 import { BlockRegistry } from './BlockRegistry';
+import { VisualResolver } from '../visual/VisualResolver';
 import type { BlockMetadata, ChunkMeshData, SerializedBlockMetadata } from '../types';
 
 export class Chunk {
@@ -349,8 +350,10 @@ export class Chunk {
             continue;
           }
 
-          // Flowers & plants - cross-shaped rendering for transparent non-solid blocks
-          if (def.transparent && !def.solid) {
+          // Flowers & plants - cross-shaped rendering for transparent non-solid blocks.
+          // Fluids are also transparent/non-solid, but they must render as culled voxel
+          // surfaces; treating water as a plant fills oceans with crossed internal planes.
+          if (def.transparent && !def.solid && !BlockRegistry.isFluid(id)) {
             const skyLight = this.getSkyLightAt(x, y, z);
             const blockLight = this.getBlockLightAt(x, y, z);
             const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
@@ -359,6 +362,10 @@ export class Chunk {
           }
 
           // Check 6 faces
+          // Compute fluid level for rendering: still water defaults to 8 (full height)
+          const fluidLevel = BlockRegistry.isFluid(id)
+            ? (meta?.fluidLevel ?? ((id & 0x3FF) === 9 || (id & 0x3FF) === 11 ? 8 : 7))
+            : 0;
           for (let face = 0; face < 6; face++) {
             const [dx, dy, dz] = FACE_DIRS[face];
             const nx = x + dx;
@@ -383,8 +390,10 @@ export class Chunk {
                 continue;
               } else {
                 // Neighbor is transparent:
-                // If this block is also transparent, cull if they are the same block type
-                if (isTrans && neighborId === id) {
+                // If both blocks are the same transparent family, cull the internal face.
+                const bothWater = BlockRegistry.isWater(id) && BlockRegistry.isWater(neighborId);
+                const bothLava = BlockRegistry.isLava(id) && BlockRegistry.isLava(neighborId);
+                if (isTrans && (neighborId === id || bothWater || bothLava)) {
                   continue;
                 }
               }
@@ -435,7 +444,7 @@ export class Chunk {
             }
 
             const lightBrightness = this.getAdjustedBrightness(faceSkyLight, faceBlockLight, timeOfDay);
-            this.addFace(target, x, y, z, face, id, atlas, depth, lightBrightness);
+            this.addFace(target, x, y, z, face, id, atlas, depth, lightBrightness, fluidLevel);
           }
         }
       }
@@ -454,31 +463,41 @@ export class Chunk {
     blockId: number,
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
     waterDepth: number = 0,
-    lightBrightness: number = 1.0
+    lightBrightness: number = 1.0,
+    fluidLevel: number = 8
   ) {
-    const texKey = BlockRegistry.getTextureForFace(blockId, face);
+    const texKey = VisualResolver.getBlockFaceTexture(blockId, face);
     const uv = atlas.getUV(texKey);
 
     const verts = FACE_QUADS[face];
     const baseIdx = data.positions.length / 3;
+    const isFluid = BlockRegistry.isFluid(blockId);
+    // Source water (level 8) → 15/16 height; flowing water → (level-1)/8 height
+    const surfaceY = fluidLevel >= 8 ? 15 / 16 : (fluidLevel - 1) / 8;
 
     for (const [vx, vy, vz] of verts) {
-      data.positions.push(x + vx, y + vy, z + vz);
+      // Lower top vertices of fluid blocks to match surface height
+      let adjVy = vy;
+      if (isFluid && vy > 0) {
+        adjVy = surfaceY;
+      }
+      data.positions.push(x + vx, y + adjVy, z + vz);
       const [nx, ny, nz] = FACE_DIRS[face];
       data.normals.push(nx, ny, nz);
     }
 
-    // UV mapping
+    // UV mapping — scale v-coords when fluid surface is lower
+    const uvVScale = isFluid ? surfaceY : 1;
     if (face === 2 || face === 3) {
       data.uvs.push(uv.u0, uv.v0);
-      data.uvs.push(uv.u0, uv.v1);
-      data.uvs.push(uv.u1, uv.v1);
+      data.uvs.push(uv.u0, uv.v0 + (uv.v1 - uv.v0) * uvVScale);
+      data.uvs.push(uv.u1, uv.v0 + (uv.v1 - uv.v0) * uvVScale);
       data.uvs.push(uv.u1, uv.v0);
     } else {
       data.uvs.push(uv.u0, uv.v0);
       data.uvs.push(uv.u1, uv.v0);
-      data.uvs.push(uv.u1, uv.v1);
-      data.uvs.push(uv.u0, uv.v1);
+      data.uvs.push(uv.u1, uv.v0 + (uv.v1 - uv.v0) * uvVScale);
+      data.uvs.push(uv.u0, uv.v0 + (uv.v1 - uv.v0) * uvVScale);
     }
 
     // Compute brightness from lightBrightness + face direction shading
@@ -486,7 +505,7 @@ export class Chunk {
     // Clamp minimum so nothing is completely black
     brightness = Math.max(0.0, Math.min(1.0, brightness));
 
-    if (waterDepth > 0 && blockId !== 13) {
+    if (waterDepth > 0 && !BlockRegistry.isWater(blockId)) {
       const tint = Math.max(0.12, Math.pow(0.82, waterDepth));
       brightness *= tint;
     }
@@ -726,7 +745,7 @@ export class Chunk {
       const faceName = FACE_NAMES[faceIndex];
       if (!shouldDraw[faceName]) return;
 
-      const texKey = customTextureKeys ? customTextureKeys[faceIndex] : BlockRegistry.getTextureForFace(blockId, faceIndex);
+      const texKey = customTextureKeys ? customTextureKeys[faceIndex] : VisualResolver.getBlockFaceTexture(blockId, faceIndex);
       const uv = atlas.getUV(texKey);
       const baseIdx = data.positions.length / 3;
 
@@ -838,8 +857,11 @@ export class Chunk {
     // Check connections to adjacent blocks
     const wx = worldX + x;
     const wz = worldZ + z;
-    const isFence = (bid: number) => bid >= 53 && bid <= 56;
-    const connectsTo = (bid: number) => isFence(bid) || BlockRegistry.isSolid(bid);
+    const isFenceLike = (bid: number) => {
+      const def = BlockRegistry.get(bid);
+      return !!def && (def.name.includes('fence') || def.name.includes('wall'));
+    };
+    const connectsTo = (bid: number) => isFenceLike(bid) || BlockRegistry.isSolid(bid);
 
     // North (-Z)
     if (connectsTo(getNeighborBlock(wx, y, wz - 1))) {
@@ -870,7 +892,7 @@ export class Chunk {
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
     lightBrightness: number = 1.0
   ) {
-    const texKey = BlockRegistry.getTextureForFace(blockId, 0);
+    const texKey = VisualResolver.getBlockFaceTexture(blockId, 0);
     const uv = atlas.getUV(texKey);
     const brightness = Math.max(0.0, lightBrightness);
 

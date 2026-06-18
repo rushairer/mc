@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CHUNK_SIZE, WORLD_HEIGHT } from '../constants';
+import type { BlockMetadata } from '../types';
 
 interface FluidUpdate {
   x: number;
@@ -20,7 +21,8 @@ export class FluidSystem {
   update(
     dt: number,
     getBlock: (x: number, y: number, z: number) => number,
-    setBlock: (x: number, y: number, z: number, id: number) => void
+    setBlock: (x: number, y: number, z: number, id: number) => void,
+    setBlockMeta: (x: number, y: number, z: number, meta: BlockMetadata | null) => void
   ) {
     this.tickTimer += dt;
     if (this.tickTimer < this.tickInterval) return;
@@ -41,11 +43,11 @@ export class FluidSystem {
 
       // Water (id 8/9) spreads
       if (baseType === 8 || baseType === 9) {
-        this.processWater(upd, getBlock, setBlock, nextQueue);
+        this.processWater(upd, getBlock, setBlock, setBlockMeta, nextQueue);
       }
       // Lava (id 10/11) spreads slower
       if (baseType === 10 || baseType === 11) {
-        this.processLava(upd, getBlock, setBlock, nextQueue);
+        this.processLava(upd, getBlock, setBlock, setBlockMeta, nextQueue);
       }
     }
 
@@ -60,15 +62,29 @@ export class FluidSystem {
     this.queue.push({ x, y, z, level: 7, type });
   }
 
+  /** Place a fluid block and persist its level to metadata. */
+  private placeFluid(
+    x: number, y: number, z: number,
+    id: number, level: number,
+    setBlock: (x: number, y: number, z: number, id: number) => void,
+    setBlockMeta: (x: number, y: number, z: number, meta: BlockMetadata | null) => void
+  ) {
+    setBlock(x, y, z, id);
+    // fluidLevel: level 7→8 (source full height), level 6→7, …, level 1→2
+    // flow-down uses level 7 → fluidLevel 8
+    setBlockMeta(x, y, z, { fluidLevel: level + 1 });
+  }
+
   private processWater(
     upd: FluidUpdate,
     getBlock: (x: number, y: number, z: number) => number,
     setBlock: (x: number, y: number, z: number, id: number) => void,
+    setBlockMeta: (x: number, y: number, z: number, meta: BlockMetadata | null) => void,
     nextQueue: FluidUpdate[]
   ) {
     // Flow down first
     if (getBlock(upd.x, upd.y - 1, upd.z) === 0) {
-      setBlock(upd.x, upd.y - 1, upd.z, 8); // flowing water
+      this.placeFluid(upd.x, upd.y - 1, upd.z, 8, 7, setBlock, setBlockMeta);
       nextQueue.push({ x: upd.x, y: upd.y - 1, z: upd.z, level: 7, type: 8 });
       return;
     }
@@ -81,7 +97,7 @@ export class FluidSystem {
         const neighbor = getBlock(nx, upd.y, nz);
 
         if (neighbor === 0) {
-          setBlock(nx, upd.y, nz, 8); // flowing water
+          this.placeFluid(nx, upd.y, nz, 8, upd.level - 1, setBlock, setBlockMeta);
           nextQueue.push({ x: nx, y: upd.y, z: nz, level: upd.level - 1, type: 8 });
         }
       }
@@ -92,11 +108,12 @@ export class FluidSystem {
     upd: FluidUpdate,
     getBlock: (x: number, y: number, z: number) => number,
     setBlock: (x: number, y: number, z: number, id: number) => void,
+    setBlockMeta: (x: number, y: number, z: number, meta: BlockMetadata | null) => void,
     nextQueue: FluidUpdate[]
   ) {
     // Flow down first
     if (getBlock(upd.x, upd.y - 1, upd.z) === 0) {
-      setBlock(upd.x, upd.y - 1, upd.z, 10); // flowing lava
+      this.placeFluid(upd.x, upd.y - 1, upd.z, 10, 4, setBlock, setBlockMeta);
       nextQueue.push({ x: upd.x, y: upd.y - 1, z: upd.z, level: 4, type: 10 });
       return;
     }
@@ -108,7 +125,7 @@ export class FluidSystem {
         const neighbor = getBlock(nx, upd.y, nz);
 
         if (neighbor === 0) {
-          setBlock(nx, upd.y, nz, 10); // flowing lava
+          this.placeFluid(nx, upd.y, nz, 10, upd.level - 1, setBlock, setBlockMeta);
           nextQueue.push({ x: nx, y: upd.y, z: nz, level: upd.level - 1, type: 10 });
         }
 

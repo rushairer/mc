@@ -18,6 +18,7 @@ export interface ItemDef {
   saturationRestore?: number;
   armorSlot?: 'helmet' | 'chestplate' | 'leggings' | 'boots';
   armorDefense?: number;
+  placeBlockId?: number;
 }
 
 // ─── Tool Material Stats ───
@@ -71,6 +72,41 @@ const BLOCK_DROP_OVERRIDES: Record<number, number | (() => number)> = {
   21: (4 << 10) | 351,  // lapis ore -> lapis lazuli (dye metadata 4)
   13: () => Math.random() < 0.1 ? 318 : 13, // gravel -> flint (10%) or gravel
   82: 337,              // clay block -> clay ball
+};
+
+// Vanilla has several inventory items whose item ID differs from the block ID
+// placed into the world. Keep this map explicit so icons, hand meshes, and
+// right-click placement can agree on one source of truth.
+const ITEM_PLACE_BLOCK_OVERRIDES: Record<number, number> = {
+  295: 59,  // wheat seeds -> wheat crop
+  323: 63,  // sign -> standing sign
+  324: 64,  // oak door
+  330: 71,  // iron door
+  331: 55,  // redstone dust -> redstone wire
+  338: 83,  // sugar cane
+  354: 92,  // cake
+  355: 26,  // bed
+  356: 93,  // repeater -> unpowered repeater
+  361: 104, // pumpkin seeds -> pumpkin stem
+  362: 105, // melon seeds -> melon stem
+  372: 115, // nether wart
+  379: 117, // brewing stand
+  380: 118, // cauldron
+  390: 140, // flower pot
+  391: 141, // carrot crop
+  392: 142, // potato crop
+  397: 144, // skull
+  1421: (1 << 10) | 144, // wither skeleton skull
+  2445: (2 << 10) | 144, // zombie head
+  3469: (3 << 10) | 144, // player head
+  4493: (4 << 10) | 144, // creeper head
+  404: 149, // comparator -> unpowered comparator
+  427: 193, // spruce door
+  428: 194, // birch door
+  429: 195, // jungle door
+  430: 196, // acacia door
+  431: 197, // dark oak door
+  435: 207, // beetroot seeds
 };
 
 const items: Map<number, ItemDef> = new Map();
@@ -170,6 +206,7 @@ for (const item of rawItems) {
       saturationRestore,
       armorSlot,
       armorDefense,
+      placeBlockId: ITEM_PLACE_BLOCK_OVERRIDES[id] ?? (isBlock ? id : undefined),
     });
   };
 
@@ -210,8 +247,16 @@ export const ItemRegistry = {
   },
 
   isBlock(id: number): boolean {
+    return this.getPlaceBlockId(id) !== undefined;
+  },
+
+  getPlaceBlockId(id: number): number | undefined {
+    const item = this.get(id);
+    if (item?.placeBlockId !== undefined) return item.placeBlockId;
+
     const baseId = id & 0x3FF;
-    return baseId >= 1 && baseId < 256;
+    if (baseId >= 1 && baseId < 256) return id;
+    return undefined;
   },
 
   isTool(id: number): boolean {

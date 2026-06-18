@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BlockRegistry } from '../world/BlockRegistry';
 
 export type ProjectileType = 'arrow' | 'snowball' | 'egg';
 
@@ -91,7 +92,7 @@ export class ProjectileSystem {
         const by = Math.floor(checkPos.y);
         const bz = Math.floor(checkPos.z);
         const block = getBlock(bx, by, bz);
-        if (block !== 0 && block !== 13 && block !== 14) {
+        if (block !== 0 && !BlockRegistry.isFluid(block)) {
           proj.position.copy(checkPos);
           proj.inGround = true;
           hitBlock = true;

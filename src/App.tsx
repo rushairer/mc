@@ -298,8 +298,13 @@ export const App: React.FC = () => {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(63, 118, 228, 0.18)',
+          background: [
+            'radial-gradient(circle at 50% 42%, rgba(126, 190, 255, 0.09), rgba(14, 64, 148, 0.36) 72%)',
+            'linear-gradient(180deg, rgba(72, 145, 255, 0.24), rgba(2, 32, 92, 0.34))',
+            'repeating-linear-gradient(0deg, rgba(180, 220, 255, 0.05) 0 2px, transparent 2px 14px)',
+          ].join(', '),
           pointerEvents: 'none',
+          mixBlendMode: 'multiply',
           zIndex: 10,
         }} />
       )}

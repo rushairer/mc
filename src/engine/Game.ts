@@ -18,6 +18,7 @@ import { SaveSystem, type SaveData } from '../systems/SaveSystem';
 import { RedstoneSystem } from '../systems/RedstoneSystem';
 import { ProjectileSystem } from '../systems/ProjectileSystem';
 import { CommandSystem } from '../systems/CommandSystem';
+import { VisualResolver } from '../visual/VisualResolver';
 import { DroppedItemSystem } from '../systems/DroppedItemSystem';
 import { CHUNK_SIZE } from '../constants';
 import type { BlockFacing, BlockMetadata, ItemStack } from '../types';
@@ -163,7 +164,7 @@ export class Game {
     const spawnZ = 8;
     const spawnY = this.chunks.getWorldGen().getTerrainHeight(spawnX, spawnZ) + 3;
     this.player = new Player(spawnX, spawnY, spawnZ);
-    this.droppedItems = new DroppedItemSystem(this.renderer.scene, (itemId) => this.player.createHeldItemMesh(itemId));
+    this.droppedItems = new DroppedItemSystem(this.renderer.scene, (itemId) => this.player.createItemVisualMesh(itemId));
     this.chunks.update(spawnX, spawnZ);
     this.player.resolveStuck(this.chunks);
     this.renderer.scene.add(this.player.mesh);
@@ -248,7 +249,7 @@ export class Game {
     if (itemId === 0) return;
 
     // Reuse Player's 3D mesh generator
-    const mesh = this.player.createHeldItemMesh(itemId);
+    const mesh = this.player.createItemVisualMesh(itemId);
     if (mesh) {
       slot.add(mesh);
 
@@ -562,18 +563,12 @@ export class Game {
     if (isUnderwater) {
       const sunAngle = this.gameTime * Math.PI * 2;
       const sunY = Math.sin(sunAngle);
-      // Day goes from 0.5 to 1.0. Night drops off rapidly to 0.0 (pitch black)
-      const sunFactor = sunY >= 0 ? (sunY + 1) / 2 : Math.pow(sunY + 1, 2.0) * 0.5;
-      
-      // Effective sun factor accounts for lightning flash illumination
-      const effectiveSunFactor = THREE.MathUtils.lerp(sunFactor, 1.2, lightningOpacity);
-      
-      const waterFogColor = new THREE.Color(
-        0.25 * effectiveSunFactor,
-        0.46 * effectiveSunFactor,
-        0.89 * effectiveSunFactor
-      );
-      
+      const daylight = sunY >= 0 ? THREE.MathUtils.lerp(0.35, 1.0, sunY) : 0.18;
+      const effectiveDaylight = THREE.MathUtils.lerp(daylight, 1.0, lightningOpacity);
+      const deepWaterColor = new THREE.Color(0.015, 0.11, 0.30);
+      const shallowWaterColor = new THREE.Color(0.06, 0.30, 0.72);
+      const waterFogColor = deepWaterColor.clone().lerp(shallowWaterColor, effectiveDaylight);
+
       if (lightningOpacity > 0) {
         // Blend towards light blue/white
         const flashColor = new THREE.Color(0xd0e0ff);
@@ -584,10 +579,9 @@ export class Game {
       if (this.renderer.scene.fog) {
         const fog = this.renderer.scene.fog as THREE.Fog;
         fog.color.copy(waterFogColor);
-        fog.near = 0;
-        // At midnight (sunFactor=0), visibility is only 1.8 blocks, but lightning flashes make it clearer
-        const visibilityFactor = THREE.MathUtils.lerp(Math.max(0.05, sunFactor), 1.0, lightningOpacity);
-        fog.far = 36 * visibilityFactor;
+        fog.near = 0.35;
+        const visibility = THREE.MathUtils.lerp(8, 22, effectiveDaylight);
+        fog.far = THREE.MathUtils.lerp(visibility, 30, lightningOpacity);
       }
     } else {
       if (this.renderer.scene.fog) {
@@ -871,7 +865,7 @@ export class Game {
         const by = Math.floor(checkPos.y);
         const bz = Math.floor(checkPos.z);
         const blockId = this.chunks.getBlock(bx, by, bz);
-        if (blockId !== 0 && BlockRegistry.isSolid(blockId)) {
+        if (blockId !== 0 && this.chunks.isSolidBlock(bx, by, bz)) {
           finalD = Math.max(0.2, d - 0.2);
           break;
         }
@@ -1074,7 +1068,7 @@ export class Game {
             if (slot && slot.count > 0) {
               const itemDef = ItemRegistry.get(slot.id);
               const isDoorItem = itemDef && itemDef.name.endsWith('door');
-              const blockId = (ItemRegistry.isBlock(slot.id) || isDoorItem) ? slot.id : 0;
+              const blockId = ItemRegistry.getPlaceBlockId(slot.id) ?? 0;
               if (blockId > 0) {
                 let facing: BlockFacing = 'north';
                 if (faceNormal.x > 0) facing = 'east';
@@ -1276,7 +1270,8 @@ export class Game {
     // Fluid simulation
     this.fluids.update(dt,
       (x, y, z) => this.chunks.getBlock(x, y, z),
-      (x, y, z, id) => this.chunks.setBlock(x, y, z, id)
+      (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
+      (x, y, z, meta) => this.chunks.setBlockMeta(x, y, z, meta)
     );
 
     // Particles
@@ -1867,7 +1862,7 @@ export class Game {
     const open = !(lowerMeta?.open ?? upperMeta?.open ?? false);
     const facing = lowerMeta?.facing ?? upperMeta?.facing ?? 'north';
     const hinge = lowerMeta?.hinge ?? upperMeta?.hinge ?? 'left';
-    const blockId = open ? 38 : 37;
+    const blockId = this.chunks.getBlock(base.x, base.y, base.z);
 
     this.chunks.setBlock(base.x, base.y, base.z, blockId);
     this.chunks.setBlockMeta(base.x, base.y, base.z, {
@@ -2090,31 +2085,7 @@ export class Game {
   }
 
   getItemIconStyle(itemId: number, iconSize: number = 32): any {
-    let key = 'stone';
-    if (ItemRegistry.isBlock(itemId)) {
-      const block = BlockRegistry.get(itemId);
-      if (block) {
-        const bName = block.name;
-        // Liquids, torches, repeaters, doors, redstone and levers remain 2D
-        if (BlockRegistry.isFluid(itemId) || 
-            BlockRegistry.isTorch(itemId) || 
-            BlockRegistry.isDoor(itemId) || 
-            bName.includes('wire') || 
-            bName.includes('repeater') || 
-            bName.includes('lever')) {
-          if (bName.endsWith('door') && !bName.includes('trapdoor')) key = 'oak_door_closed';
-          else if (bName.includes('trapdoor')) key = 'oak_trapdoor_closed';
-          else if (bName.includes('wire')) key = 'redstone';
-          else key = block.textureKey;
-        } else {
-          // All other solid blocks get beautiful 3D isometric icons
-          key = `${block.name}_icon`;
-        }
-      }
-    } else {
-      const item = ItemRegistry.get(itemId);
-      if (item) key = item.name;
-    }
+    const key = VisualResolver.getItemIconKey(itemId);
     return this.atlas.getIconStyle(key, iconSize);
   }
 
@@ -2147,9 +2118,9 @@ export class Game {
   private updateDynamicLighting() {
     const lightPositions: THREE.Vector3[] = [];
     
-    // Check if player is holding a torch (id = 30)
+    // Check if player is holding a torch
     const heldItemId = this.inventory.getSlot(this.player.selectedSlot)?.id ?? 0;
-    if (heldItemId === 30) {
+    if (BlockRegistry.isTorch(heldItemId)) {
       lightPositions.push(new THREE.Vector3(
         this.player.position.x,
         this.player.position.y + 1.0,
@@ -2167,8 +2138,8 @@ export class Game {
       for (let dy = -radius; dy <= radius; dy++) {
         for (let dz = -radius; dz <= radius; dz++) {
           const blockId = this.chunks.getBlock(px + dx, py + dy, pz + dz);
-          // Torch (30) or Lava (14)
-          if (blockId === 30 || blockId === 14) {
+          // Torch or Lava
+          if (BlockRegistry.isTorch(blockId) || BlockRegistry.isLava(blockId)) {
             lightPositions.push(new THREE.Vector3(px + dx + 0.5, py + dy + 0.5, pz + dz + 0.5));
           }
         }

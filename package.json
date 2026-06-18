@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "generate:visual-map": "node scripts/generate-visual-map.mjs",
+    "generate:assets": "node scripts/generate-procedural-assets.mjs",
+    "audit:items": "node scripts/audit-items-world.mjs"
   },
   "dependencies": {
     "react": "^18.2.0",

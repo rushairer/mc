@@ -186,6 +186,7 @@ export class ChunkManager {
 
     chunk.data = new Uint16Array(data);
     chunk.restoreMetadata(metadata);
+    this.repairLegacyDoorBlocks(chunk);
     this.computeChunkLight(chunk);
     this.rebuildChunkMesh(chunk);
 
@@ -193,6 +194,24 @@ export class ChunkManager {
     this.markDirty(cx + 1, cz);
     this.markDirty(cx, cz - 1);
     this.markDirty(cx, cz + 1);
+  }
+
+  private repairLegacyDoorBlocks(chunk: Chunk) {
+    for (const { index, metadata } of chunk.serializeMetadata()) {
+      if (!metadata.doorHalf) continue;
+
+      const blockId = chunk.data[index];
+      const def = BlockRegistry.get(blockId);
+      if (def && def.name.endsWith('door') && !def.name.includes('trapdoor')) continue;
+
+      // Older interaction code accidentally rewrote open/closed doors to
+      // flower IDs 37/38. Keep this surgical so normal flowers stay intact.
+      if (blockId === 37 || blockId === 38) {
+        chunk.data[index] = 64;
+        chunk.metadata.set(index, metadata);
+        chunk.dirty = true;
+      }
+    }
   }
 
   private markDirty(cx: number, cz: number) {

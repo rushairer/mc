@@ -5,6 +5,7 @@
  * Signal strength: 0-15 (0 = no signal, 15 = max)
  */
 
+import { BlockRegistry } from '../world/BlockRegistry';
 import type { BlockFacing } from '../types';
 
 export interface RedstoneComponent {
@@ -163,7 +164,7 @@ export class RedstoneSystem {
             const frontZ = neighbor.z + pDir[2];
             const pushId = getBlock(frontX, frontY, frontZ);
 
-            if (pushId !== 0 && pushId !== 35 && pushId !== 13 && pushId !== 14) {
+            if (pushId !== 0 && (pushId & 0x3FF) !== 49 && !BlockRegistry.isFluid(pushId)) {
               const targetX = frontX + pDir[0];
               const targetY = frontY + pDir[1];
               const targetZ = frontZ + pDir[2];

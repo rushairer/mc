@@ -23,11 +23,12 @@ import { DroppedItemSystem } from '../systems/DroppedItemSystem';
 import { XPSystem } from '../systems/XPSystem';
 import { EnchantSystem } from '../systems/EnchantSystem';
 import { PotionEffectSystem } from '../systems/PotionEffect';
+import { HopperSystem } from '../systems/HopperSystem';
 import { CHUNK_SIZE } from '../constants';
 import type { Enchantment } from '../systems/EnchantSystem';
 import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '../types';
 
-export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'death' | 'menu' | 'pause';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'death' | 'menu' | 'pause';
 
 export interface GameState {
   fps: number;
@@ -47,6 +48,9 @@ export interface GameState {
   openUI: UIType;
   inventory: Inventory;
   chestInventory: (ItemStack | null)[] | null;
+  hopperInventory: (ItemStack | null)[] | null;
+  furnaceInventory: (ItemStack | null)[] | null;
+  brewingInventory: (ItemStack | null)[] | null;
   heldItemId: number;
   isNight: boolean;
   isUnderwater: boolean;
@@ -87,6 +91,7 @@ export class Game {
   droppedItems!: DroppedItemSystem;
   private xp: XPSystem;
   private potionEffects: PotionEffectSystem;
+  private hoppers: HopperSystem;
   private commands: CommandSystem;
   private clock: THREE.Clock;
   running = false;
@@ -117,6 +122,9 @@ export class Game {
   private fpArmGroup!: THREE.Group;
   private fpLastHeldItemId = -1;
   private openChestPos: THREE.Vector3 | null = null;
+  private openHopperPos: THREE.Vector3 | null = null;
+  private openFurnacePos: THREE.Vector3 | null = null;
+  private openBrewingPos: THREE.Vector3 | null = null;
   private lastLightRebuildTime = -1;
   private lightScanTimer = 0;
 
@@ -178,6 +186,7 @@ export class Game {
     const spawnY = this.chunks.getWorldGen().getTerrainHeight(spawnX, spawnZ) + 3;
     this.player = new Player(spawnX, spawnY, spawnZ);
     this.droppedItems = new DroppedItemSystem(this.renderer.scene, (itemId) => this.player.createItemVisualMesh(itemId));
+    this.hoppers = new HopperSystem(this.chunks, this.droppedItems, () => this.notifyState());
     this.chunks.update(spawnX, spawnZ);
     this.player.resolveStuck(this.chunks);
     this.renderer.scene.add(this.player.mesh);
@@ -369,7 +378,11 @@ export class Game {
     document.exitPointerLock();
   }
 
-  openFurnaceUI() {
+  openFurnaceUI(x: number, y: number, z: number) {
+    const metadata = this.ensureFurnaceMetadata(x, y, z);
+    if (!metadata) return;
+
+    this.openFurnacePos = new THREE.Vector3(x, y, z);
     this.openUI = 'furnace';
     document.exitPointerLock();
   }
@@ -388,6 +401,15 @@ export class Game {
     document.exitPointerLock();
   }
 
+  openHopperUI(x: number, y: number, z: number) {
+    const metadata = this.ensureHopperMetadata(x, y, z);
+    if (!metadata) return;
+
+    this.openHopperPos = new THREE.Vector3(x, y, z);
+    this.openUI = 'hopper';
+    document.exitPointerLock();
+  }
+
   openEnchantUI() {
     this.openUI = 'enchanting_table';
     document.exitPointerLock();
@@ -398,7 +420,11 @@ export class Game {
     document.exitPointerLock();
   }
 
-  openBrewingUI() {
+  openBrewingUI(x: number, y: number, z: number) {
+    const metadata = this.ensureBrewingMetadata(x, y, z);
+    if (!metadata) return;
+
+    this.openBrewingPos = new THREE.Vector3(x, y, z);
     this.openUI = 'brewing_stand';
     document.exitPointerLock();
   }
@@ -462,6 +488,12 @@ export class Game {
   closeUI() {
     if (this.openUI === 'chest') {
       this.openChestPos = null;
+    } else if (this.openUI === 'hopper') {
+      this.openHopperPos = null;
+    } else if (this.openUI === 'furnace') {
+      this.openFurnacePos = null;
+    } else if (this.openUI === 'brewing_stand') {
+      this.openBrewingPos = null;
     }
     this.openUI = 'none';
     this.input.requestLock();
@@ -1056,6 +1088,20 @@ export class Game {
           if (isDoor) {
             this.breakDoor(bp.x, bp.y, bp.z);
           } else {
+            const meta = this.chunks.getBlockMeta(bp.x, bp.y, bp.z);
+            if (meta?.inventory) {
+              for (const slot of meta.inventory) {
+                if (slot && slot.count > 0) {
+                  const dropPos = new THREE.Vector3(bp.x + 0.5, bp.y + 0.5, bp.z + 0.5);
+                  const velocity = new THREE.Vector3(
+                    (Math.random() - 0.5) * 1.5,
+                    1.5 + Math.random() * 1.5,
+                    (Math.random() - 0.5) * 1.5
+                  );
+                  this.droppedItems.spawnItem(slot.id, slot.count, dropPos, velocity, 0.5);
+                }
+              }
+            }
             this.chunks.setBlock(bp.x, bp.y, bp.z, 0);
             this.redstone.unregister(bp.x, bp.y, bp.z);
             this.chunks.setBlockMeta(bp.x, bp.y, bp.z, null);
@@ -1083,13 +1129,16 @@ export class Game {
 
         // Right-click furnace
         if (targetName.includes('furnace')) {
-          this.openFurnaceUI();
+          this.openFurnaceUI(blockPos.x, blockPos.y, blockPos.z);
           this.placeCooldown = 0.5;
         } else if (targetName === 'crafting_table') {
           this.openCraftingTableUI();
           this.placeCooldown = 0.5;
         } else if (targetName === 'chest') {
           this.openChestUI(blockPos.x, blockPos.y, blockPos.z);
+          this.placeCooldown = 0.5;
+        } else if (targetName === 'hopper') {
+          this.openHopperUI(blockPos.x, blockPos.y, blockPos.z);
           this.placeCooldown = 0.5;
         } else if (targetName === 'enchanting_table') {
           this.openEnchantUI();
@@ -1098,7 +1147,7 @@ export class Game {
           this.openAnvilUI();
           this.placeCooldown = 0.5;
         } else if (targetName === 'brewing_stand') {
-          this.openBrewingUI();
+          this.openBrewingUI(blockPos.x, blockPos.y, blockPos.z);
           this.placeCooldown = 0.5;
         } else if (this.isDoorBlock(targetId)) {
           this.toggleDoor(blockPos.x, blockPos.y, blockPos.z);
@@ -1224,6 +1273,7 @@ export class Game {
       targetName === 'brewing_stand' ||
       targetName === 'lever' ||
       targetName === 'chest' ||
+      targetName === 'hopper' ||
       targetName === 'bed' ||
       this.isDoorBlock(targetBlockId) ||
       this.isTrapdoorBlock(targetBlockId)
@@ -1382,6 +1432,9 @@ export class Game {
       (x, y, z, meta) => this.chunks.setBlockMeta(x, y, z, meta)
     );
 
+    // Hopper simulation
+    this.hoppers.update(dt);
+
     // Particles
     this.particles.update(dt);
 
@@ -1454,6 +1507,20 @@ export class Game {
             this.igniteTNT(bx, by, bz);
             continue;
           }
+          const meta = this.chunks.getBlockMeta(bx, by, bz);
+          if (meta?.inventory) {
+            for (const slot of meta.inventory) {
+              if (slot && slot.count > 0) {
+                const dropPos = new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5);
+                const velocity = new THREE.Vector3(
+                  (bx + 0.5 - x) * 2.5 + (Math.random() - 0.5) * 1.5,
+                  (by + 0.5 - y) * 2.5 + 2.0 + Math.random() * 2.0,
+                  (bz + 0.5 - z) * 2.5 + (Math.random() - 0.5) * 1.5
+                );
+                this.droppedItems.spawnItem(slot.id, slot.count, dropPos, velocity, 0.5);
+              }
+            }
+          }
           if (this.gameMode !== 'creative') {
             const dropId = ItemRegistry.getBlockDropItem(blockId);
             if (dropId > 0 && Math.random() < 0.6) {
@@ -1467,6 +1534,8 @@ export class Game {
             }
           }
           this.chunks.setBlock(bx, by, bz, 0);
+          this.redstone.unregister(bx, by, bz);
+          this.chunks.setBlockMeta(bx, by, bz, null);
         }
       }
     }
@@ -1680,6 +1749,9 @@ export class Game {
       openUI: this.openUI,
       inventory: this.inventory,
       chestInventory: this.getOpenChestInventory(),
+      hopperInventory: this.getOpenHopperInventory(),
+      furnaceInventory: this.getOpenFurnaceInventory(),
+      brewingInventory: this.getOpenBrewingInventory(),
       heldItemId: selectedSlot?.id ?? 0,
       isNight: this.isNight(),
       isUnderwater,
@@ -1828,6 +1900,39 @@ export class Game {
       return;
     }
 
+    if (name === 'hopper') {
+      let hopperFacing: BlockFacing = 'down';
+      if (facing !== 'up' && facing !== 'down') {
+        if (facing === 'north') hopperFacing = 'south';
+        else if (facing === 'south') hopperFacing = 'north';
+        else if (facing === 'east') hopperFacing = 'west';
+        else if (facing === 'west') hopperFacing = 'east';
+      }
+      this.chunks.setBlockMeta(x, y, z, {
+        facing: hopperFacing,
+        containerType: 'hopper',
+        inventory: new Array(5).fill(null),
+      }, true);
+      return;
+    }
+
+    if (name.includes('furnace')) {
+      this.chunks.setBlockMeta(x, y, z, {
+        facing,
+        containerType: 'furnace',
+        inventory: new Array(3).fill(null),
+      }, true);
+      return;
+    }
+
+    if (name === 'brewing_stand') {
+      this.chunks.setBlockMeta(x, y, z, {
+        containerType: 'brewing_stand',
+        inventory: new Array(5).fill(null),
+      }, true);
+      return;
+    }
+
     if (name.includes('trapdoor')) {
       let hingeFacing = facing;
       if (facing === 'up' || facing === 'down') {
@@ -1866,7 +1971,7 @@ export class Game {
     const def = BlockRegistry.get(blockId);
     if (!def) return false;
     const name = def.name;
-    return name.includes('furnace') || name === 'chest' || name.includes('trapdoor') || name === 'crafting_table' || name.includes('stairs') || name.includes('repeater') || name.includes('piston') || name.includes('door');
+    return name.includes('furnace') || name === 'chest' || name === 'hopper' || name.includes('trapdoor') || name === 'crafting_table' || name.includes('stairs') || name.includes('repeater') || name.includes('piston') || name.includes('door');
   }
 
   private isDoorBlock(blockId: number): boolean {
@@ -2063,6 +2168,63 @@ export class Game {
     return metadata;
   }
 
+  private ensureHopperMetadata(x: number, y: number, z: number): BlockMetadata | null {
+    const blockId = this.chunks.getBlock(x, y, z);
+    const def = BlockRegistry.get(blockId);
+    if (!def || def.name !== 'hopper') return null;
+
+    const current = this.chunks.getBlockMeta(x, y, z);
+    if (current?.containerType === 'hopper' && current.inventory) {
+      return current;
+    }
+
+    const metadata: BlockMetadata = {
+      ...current,
+      containerType: 'hopper',
+      inventory: new Array(5).fill(null),
+    };
+    this.chunks.setBlockMeta(x, y, z, metadata);
+    return metadata;
+  }
+
+  private ensureFurnaceMetadata(x: number, y: number, z: number): BlockMetadata | null {
+    const blockId = this.chunks.getBlock(x, y, z);
+    const def = BlockRegistry.get(blockId);
+    if (!def || !def.name.includes('furnace')) return null;
+
+    const current = this.chunks.getBlockMeta(x, y, z);
+    if (current?.containerType === 'furnace' && current.inventory) {
+      return current;
+    }
+
+    const metadata: BlockMetadata = {
+      ...current,
+      containerType: 'furnace',
+      inventory: new Array(3).fill(null), // 0: input, 1: fuel, 2: output
+    };
+    this.chunks.setBlockMeta(x, y, z, metadata);
+    return metadata;
+  }
+
+  private ensureBrewingMetadata(x: number, y: number, z: number): BlockMetadata | null {
+    const blockId = this.chunks.getBlock(x, y, z);
+    const def = BlockRegistry.get(blockId);
+    if (!def || def.name !== 'brewing_stand') return null;
+
+    const current = this.chunks.getBlockMeta(x, y, z);
+    if (current?.containerType === 'brewing_stand' && current.inventory) {
+      return current;
+    }
+
+    const metadata: BlockMetadata = {
+      ...current,
+      containerType: 'brewing_stand',
+      inventory: new Array(5).fill(null), // 0..2: potions, 3: ingredient, 4: fuel
+    };
+    this.chunks.setBlockMeta(x, y, z, metadata);
+    return metadata;
+  }
+
   private getOpenChestInventory(): (ItemStack | null)[] | null {
     if (!this.openChestPos) return null;
 
@@ -2070,6 +2232,39 @@ export class Game {
       this.openChestPos.x,
       this.openChestPos.y,
       this.openChestPos.z
+    );
+    return metadata?.inventory ?? null;
+  }
+
+  private getOpenHopperInventory(): (ItemStack | null)[] | null {
+    if (!this.openHopperPos) return null;
+
+    const metadata = this.ensureHopperMetadata(
+      this.openHopperPos.x,
+      this.openHopperPos.y,
+      this.openHopperPos.z
+    );
+    return metadata?.inventory ?? null;
+  }
+
+  private getOpenFurnaceInventory(): (ItemStack | null)[] | null {
+    if (!this.openFurnacePos) return null;
+
+    const metadata = this.ensureFurnaceMetadata(
+      this.openFurnacePos.x,
+      this.openFurnacePos.y,
+      this.openFurnacePos.z
+    );
+    return metadata?.inventory ?? null;
+  }
+
+  private getOpenBrewingInventory(): (ItemStack | null)[] | null {
+    if (!this.openBrewingPos) return null;
+
+    const metadata = this.ensureBrewingMetadata(
+      this.openBrewingPos.x,
+      this.openBrewingPos.y,
+      this.openBrewingPos.z
     );
     return metadata?.inventory ?? null;
   }

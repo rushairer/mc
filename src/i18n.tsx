@@ -72,6 +72,8 @@ export interface TranslationsSchema {
   brewingBottle: string;
   brewingNeeds: string;
   chest: string;
+  hopper: string;
+  done: string;
   durability: string;
 
   // Debug Overlay
@@ -266,6 +268,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     brewingBottle: 'Bottle',
     brewingNeeds: 'Add bottles, fuel, and ingredient',
     chest: 'Chest',
+    hopper: 'Hopper',
+    done: 'Done',
     durability: 'Durability: {current} / {max}',
     fps: '{fps} fps',
     xyz: 'XYZ: {x} / {y} / {z}',
@@ -458,6 +462,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     brewingBottle: '瓶子',
     brewingNeeds: '加入瓶子、燃料和原料',
     chest: '箱子',
+    hopper: '漏斗',
+    done: '完成',
     durability: '耐久度: {current} / {max}',
     fps: '{fps} 帧/秒',
     xyz: 'XYZ坐标: {x} / {y} / {z}',
@@ -650,6 +656,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     brewingBottle: '瓶子',
     brewingNeeds: '放入瓶子、燃料和原料',
     chest: '箱子',
+    hopper: '漏斗',
+    done: '完成',
     durability: '耐久度: {current} / {max}',
     fps: '{fps} 幀/秒',
     xyz: 'XYZ座標: {x} / {y} / {z}',

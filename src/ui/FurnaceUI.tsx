@@ -7,6 +7,7 @@ import { useI18n } from '../i18n';
 
 interface FurnaceUIProps {
   inventory: Inventory;
+  furnaceSlots: (ItemStack | null)[];
   onClose: () => void;
   onInventoryChange: () => void;
   getItemIconStyle: (id: number, size?: number) => any;
@@ -15,11 +16,27 @@ interface FurnaceUIProps {
 
 const SLOT_SIZE = 48;
 
-export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle, onDropItem }) => {
+export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, furnaceSlots, onClose, onInventoryChange, getItemIconStyle, onDropItem }) => {
   const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
-  const [inputSlot, setInputSlot] = useState<ItemStack | null>(null);
-  const [fuelSlot, setFuelSlot] = useState<ItemStack | null>(null);
-  const [outputSlot, setOutputSlot] = useState<ItemStack | null>(null);
+  const [inputSlot, setInputSlot] = useState<ItemStack | null>(furnaceSlots[0]);
+  const [fuelSlot, setFuelSlot] = useState<ItemStack | null>(furnaceSlots[1]);
+  const [outputSlot, setOutputSlot] = useState<ItemStack | null>(furnaceSlots[2]);
+
+  // Sync state changes back to furnaceSlots and notify parent
+  useEffect(() => {
+    furnaceSlots[0] = inputSlot;
+    onInventoryChange();
+  }, [inputSlot, furnaceSlots, onInventoryChange]);
+
+  useEffect(() => {
+    furnaceSlots[1] = fuelSlot;
+    onInventoryChange();
+  }, [fuelSlot, furnaceSlots, onInventoryChange]);
+
+  useEffect(() => {
+    furnaceSlots[2] = outputSlot;
+    onInventoryChange();
+  }, [outputSlot, furnaceSlots, onInventoryChange]);
   const [isSmelting, setIsSmelting] = useState(false);
   const [smeltProgress, setSmeltProgress] = useState(0);
   const [fuelProgress, setFuelProgress] = useState(0);
@@ -97,12 +114,8 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, onClose, onInve
   }, [isSmelting, inputSlot, fuelSlot]);
 
   const handleClose = useCallback(() => {
-    if (inputSlot) inventory.addItem(inputSlot.id, inputSlot.count);
-    if (fuelSlot) inventory.addItem(fuelSlot.id, fuelSlot.count);
-    if (outputSlot) inventory.addItem(outputSlot.id, outputSlot.count);
-    onInventoryChange();
     onClose();
-  }, [inputSlot, fuelSlot, outputSlot, inventory, onInventoryChange, onClose]);
+  }, [onClose]);
 
   // Close on E or Escape key, drop on Q
   useEffect(() => {

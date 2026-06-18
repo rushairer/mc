@@ -765,6 +765,28 @@ export class TextureAtlas {
       ctx.fillRect(x + 5, y + 6, 6, 6);
     });
 
+    // hopper
+    this.drawTile('hopper_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#4a4d53';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#1b1c1e';
+      ctx.fillRect(x + 2, y + 2, s - 4, s - 4);
+      ctx.strokeStyle = '#2d2f33';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+    });
+
+    this.drawTile('hopper_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#3c3e42';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#4a4d53';
+      ctx.fillRect(x, y, s, 4); // top rim
+      ctx.fillStyle = '#2d2f33';
+      ctx.fillRect(x, y + 4, s, 1); // border under top rim
+      ctx.fillStyle = '#2d2f33';
+      ctx.fillRect(x + 3, y + 8, s - 6, s - 8);
+    });
+
     // glass
     this.drawTile('glass', (ctx, x, y, s) => {
       ctx.clearRect(x, y, s, s);

@@ -8,6 +8,7 @@ import { useI18n } from '../i18n';
 
 interface BrewingUIProps {
   inventory: Inventory;
+  brewingSlots: (ItemStack | null)[];
   onClose: () => void;
   onInventoryChange: () => void;
   getItemIconStyle: (id: number, size?: number) => any;
@@ -16,12 +17,31 @@ interface BrewingUIProps {
 const SLOT_SIZE = 48;
 const BLAZE_POWDER_ID = 377;
 
-export const BrewingUI: React.FC<BrewingUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle }) => {
+export const BrewingUI: React.FC<BrewingUIProps> = ({ inventory, brewingSlots, onClose, onInventoryChange, getItemIconStyle }) => {
   const { t, getLocalizedItemName, getLocalizedDisplayName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
-  const [bottles, setBottles] = useState<Array<ItemStack | null>>([null, null, null]);
-  const [ingredient, setIngredient] = useState<ItemStack | null>(null);
-  const [fuel, setFuel] = useState<ItemStack | null>(null);
+  const [bottles, setBottles] = useState<Array<ItemStack | null>>([brewingSlots[0], brewingSlots[1], brewingSlots[2]]);
+  const [ingredient, setIngredient] = useState<ItemStack | null>(brewingSlots[3]);
+  const [fuel, setFuel] = useState<ItemStack | null>(brewingSlots[4]);
+
+  // Sync state changes back to brewingSlots and notify parent
+  useEffect(() => {
+    brewingSlots[0] = bottles[0];
+    brewingSlots[1] = bottles[1];
+    brewingSlots[2] = bottles[2];
+    onInventoryChange();
+  }, [bottles, brewingSlots, onInventoryChange]);
+
+  useEffect(() => {
+    brewingSlots[3] = ingredient;
+    onInventoryChange();
+  }, [ingredient, brewingSlots, onInventoryChange]);
+
+  useEffect(() => {
+    brewingSlots[4] = fuel;
+    onInventoryChange();
+  }, [fuel, brewingSlots, onInventoryChange]);
+
   const [progress, setProgress] = useState(0);
   const [hoveredItem, setHoveredItem] = useState<{ item: ItemStack; x: number; y: number } | null>(null);
 
@@ -55,24 +75,13 @@ export const BrewingUI: React.FC<BrewingUIProps> = ({ inventory, onClose, onInve
     if (fuel && fuel.count <= 0) setFuel(null);
   }, [fuel, ingredient]);
 
-  const returnLocalItems = useCallback(() => {
-    if (heldItem) inventory.addStack(heldItem);
-    if (ingredient) inventory.addStack(ingredient);
-    if (fuel) inventory.addStack(fuel);
-    for (const bottle of bottles) {
-      if (bottle) inventory.addStack(bottle);
-    }
-    setHeldItem(null);
-    setIngredient(null);
-    setFuel(null);
-    setBottles([null, null, null]);
-    onInventoryChange();
-  }, [bottles, fuel, heldItem, ingredient, inventory, onInventoryChange]);
-
   const handleClose = useCallback(() => {
-    returnLocalItems();
+    if (heldItem) {
+      inventory.addStack(heldItem);
+      setHeldItem(null);
+    }
     onClose();
-  }, [onClose, returnLocalItems]);
+  }, [heldItem, inventory, onClose]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {

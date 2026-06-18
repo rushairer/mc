@@ -23,8 +23,9 @@ export type BlockFacing = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
 export interface BlockMetadata {
   facing?: BlockFacing;
   redstoneType?: 'wire' | 'torch' | 'repeater' | 'piston' | 'lever' | 'button';
-  containerType?: 'chest';
+  containerType?: 'chest' | 'hopper' | 'furnace' | 'brewing_stand';
   inventory?: (ItemStack | null)[];
+  transferCooldown?: number; // for hoppers
   doorHalf?: 'lower' | 'upper';
   hinge?: 'left' | 'right';
   open?: boolean;

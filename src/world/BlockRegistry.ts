@@ -17,6 +17,7 @@ const TEXTURE_OVERRIDES: Record<string, { textureKey: string; textureTop?: strin
   'lit_furnace': { textureKey: 'furnace_front_lit', textureTop: 'furnace_top', textureBottom: 'furnace_top' },
   'tnt': { textureKey: 'tnt_side', textureTop: 'tnt_top', textureBottom: 'tnt_bottom' },
   'chest': { textureKey: 'chest_side', textureTop: 'chest_top', textureBottom: 'chest_top' },
+  'hopper': { textureKey: 'hopper_side', textureTop: 'hopper_top', textureBottom: 'hopper_side' },
 };
 
 const normalizeName = (name: string) => name.toLowerCase().replace(/ /g, '_');

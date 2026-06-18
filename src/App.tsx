@@ -10,6 +10,7 @@ import { ChestUI } from './ui/ChestUI';
 import { EnchantUI } from './ui/EnchantUI';
 import { AnvilUI } from './ui/AnvilUI';
 import { BrewingUI } from './ui/BrewingUI';
+import { HopperUI } from './ui/HopperUI';
 import type { Enchantment } from './systems/EnchantSystem';
 import type { ItemStack } from './types';
 import { SaveSystem } from './systems/SaveSystem';
@@ -33,6 +34,9 @@ const initialGameState: GameState = {
   openUI: 'none',
   inventory: null as any,
   chestInventory: null,
+  hopperInventory: null,
+  furnaceInventory: null,
+  brewingInventory: null,
   heldItemId: 0,
   isNight: false,
   isUnderwater: false,
@@ -377,9 +381,10 @@ export const App: React.FC = () => {
       )}
 
       {/* Furnace UI */}
-      {gameState.openUI === 'furnace' && gameState.inventory && (
+      {gameState.openUI === 'furnace' && gameState.inventory && gameState.furnaceInventory && (
         <FurnaceUI
           inventory={gameState.inventory}
+          furnaceSlots={gameState.furnaceInventory}
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
@@ -403,6 +408,18 @@ export const App: React.FC = () => {
         <ChestUI
           inventory={gameState.inventory}
           chestSlots={gameState.chestInventory}
+          onClose={handleCloseUI}
+          onInventoryChange={handleInventoryChange}
+          getItemIconStyle={getItemIconStyle}
+          onDropItem={handleDropItem}
+        />
+      )}
+
+      {/* Hopper UI */}
+      {gameState.openUI === 'hopper' && gameState.inventory && gameState.hopperInventory && (
+        <HopperUI
+          inventory={gameState.inventory}
+          hopperSlots={gameState.hopperInventory}
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
@@ -437,9 +454,10 @@ export const App: React.FC = () => {
       )}
 
       {/* Brewing Stand UI */}
-      {gameState.openUI === 'brewing_stand' && gameState.inventory && (
+      {gameState.openUI === 'brewing_stand' && gameState.inventory && gameState.brewingInventory && (
         <BrewingUI
           inventory={gameState.inventory}
+          brewingSlots={gameState.brewingInventory}
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}

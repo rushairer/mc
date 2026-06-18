@@ -70,6 +70,7 @@ export interface ItemStack {
   id: number;
   count: number;
   durability?: number;
+  enchantments?: { id: 'sharpness' | 'efficiency' | 'protection' | 'unbreaking'; level: number }[];
 }
 
 export interface WorldSaveData {

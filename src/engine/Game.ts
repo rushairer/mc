@@ -21,6 +21,7 @@ import { CommandSystem } from '../systems/CommandSystem';
 import { VisualResolver } from '../visual/VisualResolver';
 import { DroppedItemSystem } from '../systems/DroppedItemSystem';
 import { XPSystem } from '../systems/XPSystem';
+import { EnchantSystem } from '../systems/EnchantSystem';
 import { CHUNK_SIZE } from '../constants';
 import type { BlockFacing, BlockMetadata, ItemStack } from '../types';
 
@@ -899,13 +900,17 @@ export class Game {
     this.updateHighlight();
 
     // ─── Left click: attack mobs OR break blocks ───
-    const selectedItemId = this.inventory.getSlot(this.player.selectedSlot)?.id ?? 0;
+    const selectedItemStack = this.inventory.getSlot(this.player.selectedSlot);
+    const selectedItemId = selectedItemStack?.id ?? 0;
     const isHoldingSword = ItemRegistry.isTool(selectedItemId) &&
       ItemRegistry.get(selectedItemId)?.toolType === 'sword';
     const isHoldingTool = ItemRegistry.isTool(selectedItemId);
-    const attackDamage = isHoldingTool
+    const baseAttackDamage = isHoldingTool
       ? (ItemRegistry.get(selectedItemId)?.damage ?? 1)
       : 1;
+    const attackDamage = baseAttackDamage + EnchantSystem.getSharpnessBonus(
+      EnchantSystem.getLevel(selectedItemStack, 'sharpness')
+    );
 
     if (!this.chatOpen && this.input.isMouseDown(0) && this.swordSwingTimer <= 0) {
       // Bow shooting
@@ -953,10 +958,14 @@ export class Game {
         if (this.gameMode === 'creative') {
           this.breakProgress = 1.0;
         } else {
-          const breakTime = ItemRegistry.getBreakTime(
+          const baseBreakTime = ItemRegistry.getBreakTime(
             this.chunks.getBlock(bp.x, bp.y, bp.z),
             selectedItemId
           );
+          const efficiency = EnchantSystem.getEfficiencyMultiplier(
+            EnchantSystem.getLevel(selectedItemStack, 'efficiency')
+          );
+          const breakTime = baseBreakTime / efficiency;
 
           if (this.breakingBlockPos && this.breakingBlockPos.equals(bp)) {
             this.breakProgress += dt / Math.max(breakTime, 0.05);
@@ -1491,7 +1500,10 @@ export class Game {
 
     if (type === 'mob' || type === 'fall') {
       const reduction = Math.min(0.8, defense * 0.04);
-      finalDamage = Math.max(1, amount * (1 - reduction));
+      const protectionReduction = this.inventory.armor.reduce((sum, item) => {
+        return sum + EnchantSystem.getProtectionReduction(EnchantSystem.getLevel(item, 'protection'));
+      }, 0);
+      finalDamage = Math.max(1, amount * (1 - Math.min(0.9, reduction + protectionReduction)));
       
       if (defense > 0) {
         this.inventory.damageArmor(1);

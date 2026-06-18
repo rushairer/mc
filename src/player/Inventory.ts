@@ -1,5 +1,6 @@
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { EnchantSystem } from '../systems/EnchantSystem';
 
 export const INVENTORY_SIZE = 36;  // 0-8 = hotbar, 9-35 = main
 export const HOTBAR_SIZE = 9;
@@ -91,6 +92,10 @@ export class Inventory {
       const def = ItemRegistry.get(slot.id);
       if (slot.durability === undefined) {
         slot.durability = def?.durability ?? 100;
+      }
+
+      if (!EnchantSystem.shouldUseDurability(slot)) {
+        return false;
       }
 
       slot.durability -= 1;
@@ -197,6 +202,10 @@ export class Inventory {
       if (armorItem.durability === undefined) {
         armorItem.durability = def?.durability ?? 100;
       }
+      if (!EnchantSystem.shouldUseDurability(armorItem)) {
+        return;
+      }
+
       armorItem.durability -= amount;
       if (armorItem.durability <= 0) {
         this.armor[randomIndex] = null; // armor broke!

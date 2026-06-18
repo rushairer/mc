@@ -123,6 +123,14 @@ export class XPSystem {
     }
   }
 
+  spendLevels(levels: number): boolean {
+    const cost = Math.max(0, Math.floor(levels));
+    if (this.level < cost) return false;
+    this.level -= cost;
+    this.current = Math.min(this.current, this.getXPForNextLevel(this.level) - 1);
+    return true;
+  }
+
   setState(level: number, current: number, total: number) {
     this.level = Math.max(0, Math.floor(level));
     this.current = Math.max(0, Math.floor(current));

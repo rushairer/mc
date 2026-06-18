@@ -1,4 +1,5 @@
 import type { SerializedBlockMetadata } from '../types';
+import type { ItemStack } from '../types';
 
 const DB_NAME = 'minecraft_clone_save';
 const DB_VERSION = 1;
@@ -35,8 +36,8 @@ export interface SaveData {
     xpTotal?: number;
   };
   inventory: {
-    slots: ({ id: number; count: number } | null)[];
-    armor: ({ id: number; count: number } | null)[];
+    slots: (ItemStack | null)[];
+    armor: (ItemStack | null)[];
   };
   seed: number;
   chunks: { cx: number; cz: number; data: Uint16Array; metadata?: SerializedBlockMetadata[] }[];

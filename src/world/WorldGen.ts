@@ -47,6 +47,10 @@ const DEAD_BUSH = 32;
 const TALL_GRASS = (1 << 10) | 31;
 const FERN = (2 << 10) | 31;
 const BLUE_ORCHID = (1 << 10) | 38;
+const SANDSTONE = 24;
+const CHISELED_SANDSTONE = (1 << 10) | 24;
+const SMOOTH_SANDSTONE = (2 << 10) | 24;
+const SANDSTONE_STAIRS = 128;
 const STONE_BRICKS = 98;
 const MOSSY_STONE_BRICKS = (1 << 10) | 98;
 const CRACKED_STONE_BRICKS = (2 << 10) | 98;
@@ -58,9 +62,22 @@ const CHEST = 54;
 const PLANKS = 5;
 const WEB = 30;
 const RAIL = 66;
+const COBBLESTONE_STAIRS = 67;
+const STONE_PRESSURE_PLATE = 70;
+const TNT = 46;
 const FENCE = 85;
 const IRON_BARS = 101;
 const TORCH = 50;
+const JUNGLE_PLANKS = (3 << 10) | 5;
+const JUNGLE_STAIRS = 136;
+const TRIPWIRE_HOOK = 131;
+const TRIPWIRE = 132;
+const LEVER = 69;
+const STICKY_PISTON = 29;
+const REDSTONE_WIRE = 55;
+const REDSTONE_TORCH = 76;
+const CAULDRON = 118;
+const CRAFTING_TABLE = 58;
 const END_PORTAL = 119;
 const END_PORTAL_FRAME = 120;
 
@@ -267,16 +284,383 @@ export class WorldGen {
     // Phase 6: Villages
     VillageSystem.generateChunk(this, chunk);
 
-    // Phase 7: Dungeons
+    // Phase 7: Surface structures
+    this.generateSurfaceStructures(chunk, worldX, worldZ);
+
+    // Phase 8: Dungeons
     this.generateDungeons(chunk, worldX, worldZ);
 
-    // Phase 8: Abandoned mineshafts
+    // Phase 9: Abandoned mineshafts
     this.generateMineshafts(chunk, worldX, worldZ);
 
-    // Phase 9: Stronghold portal rooms
+    // Phase 10: Stronghold portal rooms
     this.generateStrongholds(chunk, worldX, worldZ);
 
     chunk.dirty = true;
+  }
+
+  private generateSurfaceStructures(chunk: Chunk, worldX: number, worldZ: number) {
+    this.generateBiomeStructure(
+      chunk,
+      worldX,
+      worldZ,
+      19,
+      1409,
+      BiomeType.Desert,
+      (surfaceY) => this.placeDesertTemple(chunk, worldX, worldZ, surfaceY)
+    );
+    this.generateBiomeStructure(
+      chunk,
+      worldX,
+      worldZ,
+      23,
+      1861,
+      BiomeType.Jungle,
+      (surfaceY) => this.placeJungleTemple(chunk, worldX, worldZ, surfaceY)
+    );
+    this.generateBiomeStructure(
+      chunk,
+      worldX,
+      worldZ,
+      17,
+      2213,
+      BiomeType.Swamp,
+      (surfaceY) => this.placeWitchHut(chunk, worldX, worldZ, surfaceY)
+    );
+  }
+
+  private generateBiomeStructure(
+    chunk: Chunk,
+    worldX: number,
+    worldZ: number,
+    spacing: number,
+    salt: number,
+    biome: BiomeType,
+    place: (surfaceY: number) => void
+  ) {
+    const cx = chunk.cx;
+    const cz = chunk.cz;
+    const offsetX = Math.floor(this.pseudoRandom(this.seed, salt, 17) * spacing);
+    const offsetZ = Math.floor(this.pseudoRandom(this.seed, salt, 31) * spacing);
+
+    if (this.positiveMod(cx - offsetX, spacing) !== 0 || this.positiveMod(cz - offsetZ, spacing) !== 0) {
+      return;
+    }
+
+    const distanceFromSpawnChunks = Math.sqrt(cx * cx + cz * cz);
+    if (distanceFromSpawnChunks < 3) return;
+
+    const centerX = worldX + 8;
+    const centerZ = worldZ + 8;
+    if (this.getBiome(centerX, centerZ) !== biome) return;
+
+    const surfaceY = this.getTerrainHeight(centerX, centerZ);
+    if (surfaceY < SEA_LEVEL - 2 || surfaceY > WORLD_HEIGHT - 16) return;
+    if (!this.isStructureFootprintStable(worldX, worldZ, surfaceY, biome)) return;
+
+    place(surfaceY);
+  }
+
+  private isStructureFootprintStable(worldX: number, worldZ: number, surfaceY: number, biome: BiomeType): boolean {
+    for (let x = 3; x <= 12; x += 3) {
+      for (let z = 3; z <= 12; z += 3) {
+        const wx = worldX + x;
+        const wz = worldZ + z;
+        if (this.getBiome(wx, wz) !== biome) return false;
+        if (Math.abs(this.getTerrainHeight(wx, wz) - surfaceY) > 4) return false;
+      }
+    }
+    return true;
+  }
+
+  private placeDesertTemple(chunk: Chunk, worldX: number, worldZ: number, surfaceY: number) {
+    const floorY = surfaceY + 1;
+    this.clearStructureVolume(chunk, 2, 13, floorY, floorY + 12, 2, 13);
+
+    for (let x = 2; x <= 13; x++) {
+      for (let z = 2; z <= 13; z++) {
+        const edge = x === 2 || x === 13 || z === 2 || z === 13;
+        chunk.setBlock(x, floorY, z, edge ? SMOOTH_SANDSTONE : SANDSTONE);
+        if (edge && x >= 4 && x <= 11 && z >= 4 && z <= 11) {
+          chunk.setBlock(x, floorY + 1, z, SANDSTONE);
+        }
+      }
+    }
+
+    const towerBounds: Array<[number, number, number, number]> = [[2, 4, 2, 4], [11, 13, 2, 4], [2, 4, 11, 13], [11, 13, 11, 13]];
+    for (const [minX, maxX, minZ, maxZ] of towerBounds) {
+      for (let x = minX; x <= maxX; x++) {
+        for (let z = minZ; z <= maxZ; z++) {
+          for (let y = floorY + 1; y <= floorY + 7; y++) {
+            const shell = x === minX || x === maxX || z === minZ || z === maxZ;
+            chunk.setBlock(x, y, z, shell ? SANDSTONE : 0);
+          }
+        }
+      }
+    }
+
+    for (let x = 4; x <= 11; x++) {
+      for (let z = 4; z <= 11; z++) {
+        const boundary = x === 4 || x === 11 || z === 4 || z === 11;
+        if (boundary) {
+          for (let y = floorY + 2; y <= floorY + 5; y++) {
+            chunk.setBlock(x, y, z, this.getTempleSandstone(worldX + x, y, worldZ + z));
+          }
+        }
+        chunk.setBlock(x, floorY + 6, z, boundary ? SANDSTONE : 0);
+      }
+    }
+
+    for (let y = floorY + 1; y <= floorY + 3; y++) {
+      chunk.setBlock(8, y, 4, 0);
+      chunk.setBlock(8, y, 11, 0);
+      chunk.setBlock(4, y, 8, 0);
+      chunk.setBlock(11, y, 8, 0);
+    }
+
+    chunk.setBlock(8, floorY + 1, 8, CHISELED_SANDSTONE);
+    chunk.setBlock(7, floorY + 1, 8, CHISELED_SANDSTONE);
+    chunk.setBlock(8, floorY + 1, 7, CHISELED_SANDSTONE);
+    chunk.setBlock(7, floorY + 1, 7, STONE_PRESSURE_PLATE);
+
+    const trapY = Math.max(4, floorY - 8);
+    for (let x = 6; x <= 9; x++) {
+      for (let z = 6; z <= 9; z++) {
+        chunk.setBlock(x, trapY, z, SANDSTONE);
+        for (let y = trapY + 1; y <= floorY; y++) chunk.setBlock(x, y, z, 0);
+      }
+    }
+    chunk.setBlock(7, trapY + 1, 7, TNT);
+    chunk.setBlock(8, trapY + 1, 7, TNT);
+    chunk.setBlock(7, trapY + 1, 8, TNT);
+    chunk.setBlock(8, trapY + 1, 8, TNT);
+
+    const chests = [[6, trapY + 1, 7], [9, trapY + 1, 8], [7, trapY + 1, 9], [8, trapY + 1, 6]] as const;
+    for (const [x, y, z] of chests) {
+      chunk.setBlock(x, y, z, CHEST);
+      chunk.setBlockMeta(x, y, z, {
+        containerType: 'chest',
+        inventory: this.createDesertTempleLoot(worldX + x, y, worldZ + z),
+      }, true);
+    }
+
+    for (const [x, z, block] of [[5, 5, SANDSTONE_STAIRS], [10, 5, (1 << 10) | SANDSTONE_STAIRS], [5, 10, (2 << 10) | SANDSTONE_STAIRS], [10, 10, (3 << 10) | SANDSTONE_STAIRS]] as const) {
+      chunk.setBlock(x, floorY + 2, z, block);
+    }
+  }
+
+  private placeJungleTemple(chunk: Chunk, worldX: number, worldZ: number, surfaceY: number) {
+    const floorY = surfaceY + 1;
+    this.clearStructureVolume(chunk, 2, 13, floorY, floorY + 9, 2, 13);
+
+    for (let x = 3; x <= 12; x++) {
+      for (let z = 3; z <= 12; z++) {
+        for (let y = floorY; y <= floorY + 6; y++) {
+          const boundary = x === 3 || x === 12 || z === 3 || z === 12 || y === floorY || y === floorY + 6;
+          if (boundary) {
+            chunk.setBlock(x, y, z, this.getJungleTempleStone(worldX + x, y, worldZ + z));
+          } else {
+            chunk.setBlock(x, y, z, 0);
+          }
+        }
+      }
+    }
+
+    for (let y = floorY + 1; y <= floorY + 3; y++) {
+      chunk.setBlock(7, y, 3, 0);
+      chunk.setBlock(8, y, 3, 0);
+    }
+
+    for (let x = 5; x <= 10; x++) {
+      for (let z = 5; z <= 10; z++) {
+        chunk.setBlock(x, floorY + 3, z, this.getJungleTempleStone(worldX + x, floorY + 3, worldZ + z));
+      }
+    }
+
+    for (let z = 5; z <= 10; z++) {
+      chunk.setBlock(6, floorY + 1, z, TRIPWIRE);
+      chunk.setBlock(9, floorY + 1, z, TRIPWIRE);
+    }
+    chunk.setBlock(5, floorY + 2, 6, TRIPWIRE_HOOK);
+    chunk.setBlock(10, floorY + 2, 6, (2 << 10) | TRIPWIRE_HOOK);
+    chunk.setBlock(5, floorY + 2, 9, TRIPWIRE_HOOK);
+    chunk.setBlock(10, floorY + 2, 9, (2 << 10) | TRIPWIRE_HOOK);
+    chunk.setBlock(4, floorY + 2, 6, STICKY_PISTON);
+    chunk.setBlock(11, floorY + 2, 9, STICKY_PISTON);
+    chunk.setBlock(4, floorY + 2, 7, REDSTONE_WIRE);
+    chunk.setBlock(11, floorY + 2, 8, REDSTONE_WIRE);
+    chunk.setBlock(5, floorY + 2, 10, LEVER);
+    chunk.setBlock(6, floorY + 2, 10, LEVER);
+    chunk.setBlock(7, floorY + 2, 10, LEVER);
+
+    chunk.setBlock(8, floorY + 1, 8, CHEST);
+    chunk.setBlockMeta(8, floorY + 1, 8, {
+      containerType: 'chest',
+      inventory: this.createJungleTempleLoot(worldX + 8, floorY + 1, worldZ + 8),
+    }, true);
+    chunk.setBlock(10, floorY + 4, 10, CHEST);
+    chunk.setBlockMeta(10, floorY + 4, 10, {
+      containerType: 'chest',
+      inventory: this.createJungleTempleLoot(worldX + 10, floorY + 4, worldZ + 10),
+    }, true);
+
+    for (const [x, y, z] of [[4, floorY + 2, 4], [11, floorY + 2, 4], [4, floorY + 5, 11], [11, floorY + 5, 11]]) {
+      chunk.setBlock(x, y, z, REDSTONE_TORCH);
+    }
+    for (const [x, z, block] of [[4, 4, COBBLESTONE_STAIRS], [11, 4, (1 << 10) | COBBLESTONE_STAIRS], [4, 11, (2 << 10) | COBBLESTONE_STAIRS], [11, 11, (3 << 10) | COBBLESTONE_STAIRS]] as const) {
+      chunk.setBlock(x, floorY + 7, z, block);
+    }
+  }
+
+  private placeWitchHut(chunk: Chunk, worldX: number, worldZ: number, surfaceY: number) {
+    const floorY = Math.max(surfaceY + 2, SEA_LEVEL + 2);
+    this.clearStructureVolume(chunk, 3, 12, surfaceY + 1, floorY + 7, 3, 12);
+
+    for (const [x, z] of [[4, 4], [11, 4], [4, 11], [11, 11]] as const) {
+      for (let y = surfaceY + 1; y <= floorY; y++) {
+        chunk.setBlock(x, y, z, (3 << 10) | 17);
+      }
+    }
+
+    for (let x = 4; x <= 11; x++) {
+      for (let z = 4; z <= 11; z++) {
+        chunk.setBlock(x, floorY, z, JUNGLE_PLANKS);
+        chunk.setBlock(x, floorY + 5, z, JUNGLE_PLANKS);
+      }
+    }
+
+    for (let x = 4; x <= 11; x++) {
+      for (let z = 4; z <= 11; z++) {
+        const wall = x === 4 || x === 11 || z === 4 || z === 11;
+        if (!wall) continue;
+        for (let y = floorY + 1; y <= floorY + 4; y++) {
+          const doorway = z === 4 && (x === 7 || x === 8) && y <= floorY + 3;
+          const window = y === floorY + 3 && (x === 4 || x === 11) && z >= 6 && z <= 9;
+          chunk.setBlock(x, y, z, doorway || window ? 0 : JUNGLE_PLANKS);
+        }
+      }
+    }
+
+    for (let x = 3; x <= 12; x++) {
+      for (let z = 3; z <= 12; z++) {
+        const edge = x === 3 || x === 12 || z === 3 || z === 12;
+        chunk.setBlock(x, floorY + 6, z, edge ? JUNGLE_STAIRS : JUNGLE_PLANKS);
+      }
+    }
+
+    for (let z = 2; z <= 4; z++) {
+      chunk.setBlock(7, floorY, z, JUNGLE_PLANKS);
+      chunk.setBlock(8, floorY, z, JUNGLE_PLANKS);
+    }
+
+    chunk.setBlock(5, floorY + 1, 5, CAULDRON);
+    chunk.setBlock(10, floorY + 1, 5, CRAFTING_TABLE);
+    chunk.setBlock(10, floorY + 1, 10, CHEST);
+    chunk.setBlockMeta(10, floorY + 1, 10, {
+      containerType: 'chest',
+      inventory: this.createWitchHutLoot(worldX + 10, floorY + 1, worldZ + 10),
+    }, true);
+    chunk.setBlock(5, floorY + 3, 10, TORCH);
+  }
+
+  private clearStructureVolume(chunk: Chunk, minX: number, maxX: number, minY: number, maxY: number, minZ: number, maxZ: number) {
+    for (let x = minX; x <= maxX; x++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        for (let y = minY; y <= maxY && y < WORLD_HEIGHT; y++) {
+          if (y >= 0) chunk.setBlock(x, y, z, 0);
+        }
+      }
+    }
+  }
+
+  private getTempleSandstone(wx: number, y: number, wz: number): number {
+    const rand = this.pseudoRandom(wx, y + 2477, wz);
+    if (rand < 0.12) return CHISELED_SANDSTONE;
+    if (rand < 0.3) return SMOOTH_SANDSTONE;
+    return SANDSTONE;
+  }
+
+  private getJungleTempleStone(wx: number, y: number, wz: number): number {
+    const rand = this.pseudoRandom(wx, y + 2689, wz);
+    return rand < 0.52 ? MOSSY_COBBLESTONE : COBBLESTONE;
+  }
+
+  private createDesertTempleLoot(wx: number, y: number, wz: number): (ItemStack | null)[] {
+    return this.createWeightedLoot(wx, y, wz, [
+      { id: 266, min: 2, max: 7, weight: 14 },
+      { id: 265, min: 2, max: 6, weight: 14 },
+      { id: 264, min: 1, max: 3, weight: 4 },
+      { id: 388, min: 1, max: 5, weight: 8 },
+      { id: 352, min: 4, max: 8, weight: 12 },
+      { id: 289, min: 2, max: 6, weight: 10 },
+      { id: 367, min: 3, max: 7, weight: 10 },
+      { id: 329, min: 1, max: 1, weight: 3 },
+      { id: 322, min: 1, max: 2, weight: 2 },
+    ], 3, 6);
+  }
+
+  private createJungleTempleLoot(wx: number, y: number, wz: number): (ItemStack | null)[] {
+    return this.createWeightedLoot(wx, y, wz, [
+      { id: 265, min: 2, max: 7, weight: 16 },
+      { id: 266, min: 2, max: 7, weight: 12 },
+      { id: 264, min: 1, max: 2, weight: 5 },
+      { id: 388, min: 1, max: 3, weight: 6 },
+      { id: 331, min: 4, max: 9, weight: 12 },
+      { id: 262, min: 3, max: 8, weight: 10 },
+      { id: 352, min: 3, max: 8, weight: 9 },
+      { id: 287, min: 2, max: 6, weight: 9 },
+      { id: 329, min: 1, max: 1, weight: 3 },
+      { id: 403, min: 1, max: 1, weight: 2 },
+    ], 4, 7);
+  }
+
+  private createWitchHutLoot(wx: number, y: number, wz: number): (ItemStack | null)[] {
+    return this.createWeightedLoot(wx, y, wz, [
+      { id: 331, min: 1, max: 4, weight: 14 },
+      { id: 287, min: 1, max: 4, weight: 12 },
+      { id: 289, min: 1, max: 3, weight: 10 },
+      { id: 353, min: 1, max: 4, weight: 10 },
+      { id: 374, min: 1, max: 3, weight: 8 },
+      { id: 373, min: 1, max: 1, weight: 5 },
+      { id: 388, min: 1, max: 2, weight: 3 },
+      { id: 260, min: 1, max: 2, weight: 5 },
+    ], 3, 5);
+  }
+
+  private createWeightedLoot(
+    wx: number,
+    y: number,
+    wz: number,
+    lootTable: Array<{ id: number; min: number; max: number; weight: number }>,
+    minRolls: number,
+    maxRolls: number
+  ): (ItemStack | null)[] {
+    const inventory: (ItemStack | null)[] = new Array(27).fill(null);
+    const totalWeight = lootTable.reduce((sum, entry) => sum + entry.weight, 0);
+    const rolls = minRolls + Math.floor(this.pseudoRandom(wx, y + 1, wz) * (maxRolls - minRolls + 1));
+
+    for (let roll = 0; roll < rolls; roll++) {
+      let slot = Math.floor(this.pseudoRandom(wx + roll * 43, y + 2, wz - roll * 17) * inventory.length);
+      for (let attempts = 0; attempts < inventory.length && inventory[slot]; attempts++) {
+        slot = (slot + 1) % inventory.length;
+      }
+      if (inventory[slot]) continue;
+
+      let pick = this.pseudoRandom(wx - roll * 19, y + 3, wz + roll * 37) * totalWeight;
+      let selected = lootTable[0];
+      for (const entry of lootTable) {
+        pick -= entry.weight;
+        if (pick <= 0) {
+          selected = entry;
+          break;
+        }
+      }
+
+      const count = selected.min + Math.floor(this.pseudoRandom(wx + roll * 7, y + 4, wz + roll * 11) * (selected.max - selected.min + 1));
+      inventory[slot] = { id: selected.id, count };
+    }
+
+    return inventory;
   }
 
   private generateMineshafts(chunk: Chunk, worldX: number, worldZ: number) {

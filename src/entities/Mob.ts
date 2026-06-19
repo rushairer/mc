@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 
-export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken';
+export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton';
 
 export interface MobDef {
   type: MobType;
@@ -27,6 +27,10 @@ const MOB_DEFS: Record<MobType, MobDef> = {
   pig:      { type: 'pig',      health: 10, speed: 1.8, damage: 0, hostile: false, width: 0.7, height: 0.9, bodyColor: 0xFFB6C1, headColor: 0xFF9999, xpDrop: 3,  drops: [{ id: 319, count: 2, chance: 1.0 }] }, // raw porkchop (319)
   sheep:    { type: 'sheep',    health: 8,  speed: 1.5, damage: 0, hostile: false, width: 0.8, height: 1.3, bodyColor: 0xE8E8E8, headColor: 0xD0D0D0, xpDrop: 3,  drops: [{ id: 35, count: 2, chance: 1.0 }] }, // white wool (35)
   chicken:  { type: 'chicken',  health: 4,  speed: 2.0, damage: 0, hostile: false, width: 0.4, height: 0.7, bodyColor: 0xFFFFFF, headColor: 0xFF0000, xpDrop: 3,  drops: [{ id: 288, count: 1, chance: 0.7 }, { id: 344, count: 1, chance: 0.5 }] }, // feather (288), egg (344)
+  blaze:           { type: 'blaze',           health: 20, speed: 1.8, damage: 4, hostile: true,  width: 0.6, height: 1.8, bodyColor: 0xFFAA00, headColor: 0xFFD700, eyeColor: 0x000000, xpDrop: 10, drops: [{ id: 369, count: 1, chance: 0.5 }] },
+  zombie_pigman:   { type: 'zombie_pigman',   health: 20, speed: 2.3, damage: 5, hostile: false, width: 0.6, height: 1.8, bodyColor: 0xEA899A, headColor: 0x5D8A62, eyeColor: 0x000000, xpDrop: 5,  drops: [{ id: 367, count: 1, chance: 0.5 }, { id: 371, count: 1, chance: 0.3 }, { id: 266, count: 1, chance: 0.05 }] },
+  magma_cube:      { type: 'magma_cube',      health: 16, speed: 1.5, damage: 4, hostile: true,  width: 1.2, height: 1.2, bodyColor: 0x260d0d, headColor: 0xFF5500, eyeColor: 0xFF5500, xpDrop: 4,  drops: [{ id: 378, count: 1, chance: 0.25 }] },
+  wither_skeleton: { type: 'wither_skeleton', health: 20, speed: 2.5, damage: 4, hostile: true,  width: 0.7, height: 2.4, bodyColor: 0x242424, headColor: 0x242424, eyeColor: 0xFF0000, xpDrop: 5,  drops: [{ id: 352, count: 1, chance: 0.8 }, { id: 263, count: 1, chance: 0.3 }, { id: 1421, count: 1, chance: 0.025 }] },
 };
 
 const MOB_MAX_AIR = 15.0;
@@ -51,20 +55,50 @@ export class Mob {
   despawnTimer = 0;
   fuseTimer = -1; // -1 = not fusing, >=0 = counting down
   shootTimer = 0; // Skeleton arrow cooldown
+  size = 1; // For magma_cube size (1, 2, or 3)
+  isAngry = false; // For zombie_pigman neutrality pack anger
+  angerTimer = 0;
   private halfWidth: number;
   private air = MOB_MAX_AIR;
   private drownTimer = 0;
+  private magmaCubeJumpTimer = 0;
 
   static nextId = 1;
 
-  constructor(type: MobType, x: number, y: number, z: number) {
+  get width(): number {
+    return this.def.type === 'magma_cube' ? this.def.width * (this.size / 3) : this.def.width;
+  }
+
+  get height(): number {
+    return this.def.type === 'magma_cube' ? this.def.height * (this.size / 3) : this.def.height;
+  }
+
+  get damage(): number {
+    if (this.def.type === 'magma_cube') {
+      return this.size === 3 ? 4 : (this.size === 2 ? 2 : 0);
+    }
+    return this.def.damage;
+  }
+
+  get speed(): number {
+    if (this.def.type === 'magma_cube') {
+      return this.size === 3 ? 1.5 : (this.size === 2 ? 1.8 : 2.2);
+    }
+    return this.def.speed;
+  }
+
+  constructor(type: MobType, x: number, y: number, z: number, size = 3) {
     this.id = Mob.nextId++;
     this.def = MOB_DEFS[type];
+    this.size = type === 'magma_cube' ? size : 1;
     this.position = new THREE.Vector3(x, y, z);
     this.velocity = new THREE.Vector3(0, 0, 0);
-    this.health = this.def.health;
-    this.halfWidth = this.def.width / 2;
+    this.health = type === 'magma_cube' ? (size === 3 ? 16 : (size === 2 ? 4 : 1)) : this.def.health;
+    this.halfWidth = this.width / 2;
     this.mesh = this.createMesh();
+    if (type === 'magma_cube') {
+      this.mesh.scale.setScalar(size / 3);
+    }
     this.mesh.position.set(x, y, z);
   }
 
@@ -74,58 +108,83 @@ export class Mob {
     const bodyColor = this.def.bodyColor;
     const headColor = this.def.headColor ?? bodyColor;
 
-    if (type === 'zombie' || type === 'skeleton') {
+    if (type === 'zombie' || type === 'skeleton' || type === 'zombie_pigman' || type === 'wither_skeleton') {
       // Humanoid
       const isZombie = type === 'zombie';
-      const skinColor = isZombie ? 0x2E8B57 : 0xC8C8C8;
-      const clothesColor = isZombie ? 0x008080 : 0xC8C8C8;
+      const isPigman = type === 'zombie_pigman';
+      const isWither = type === 'wither_skeleton';
+
+      let skinColor = 0xC8C8C8;
+      let clothesColor = 0xC8C8C8;
+
+      if (isZombie) {
+        skinColor = 0x2E8B57;
+        clothesColor = 0x008080;
+      } else if (isPigman) {
+        skinColor = 0xEA899A; // pink skin
+        clothesColor = 0x5D8A62; // green rotting flesh / loincloth
+      } else if (isWither) {
+        skinColor = 0x242424; // dark charcoal
+        clothesColor = 0x242424;
+      }
+
+      const scaleY = isWither ? 1.33 : 1.0;
+      const scaleXZ = isWither ? 1.16 : 1.0;
 
       // Body
-      const bodyGeo = new THREE.BoxGeometry(0.48, 0.6, 0.24);
+      const bodyGeo = new THREE.BoxGeometry(0.48 * scaleXZ, 0.6 * scaleY, 0.24 * scaleXZ);
       const bodyMat = new THREE.MeshLambertMaterial({ color: clothesColor });
       const body = new THREE.Mesh(bodyGeo, bodyMat);
-      body.position.y = 1.05;
+      body.position.y = 1.05 * scaleY;
       group.add(body);
 
       // Head
-      const headGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+      const headGeo = new THREE.BoxGeometry(0.4 * scaleXZ, 0.4 * scaleY, 0.4 * scaleXZ);
       const headMat = new THREE.MeshLambertMaterial({ color: skinColor });
       const head = new THREE.Mesh(headGeo, headMat);
       head.name = 'head';
-      head.position.set(0, 1.55, 0);
+      head.position.set(0, 1.55 * scaleY, 0);
       group.add(head);
 
+      // Snout for Pigman
+      if (isPigman) {
+        const snoutGeo = new THREE.BoxGeometry(0.12, 0.08, 0.06);
+        const snoutMat = new THREE.MeshLambertMaterial({ color: 0xFF8888 });
+        const snout = new THREE.Mesh(snoutGeo, snoutMat);
+        snout.position.set(0, 1.51 * scaleY, 0.21 * scaleXZ);
+        group.add(snout);
+      }
+
       // Eyes
-      const eyeGeo = new THREE.BoxGeometry(0.06, 0.03, 0.02);
-      const eyeMat = new THREE.MeshLambertMaterial({ color: isZombie ? 0x000000 : 0x333333 });
+      const eyeGeo = new THREE.BoxGeometry(0.06 * scaleXZ, 0.03 * scaleY, 0.02);
+      const eyeMat = new THREE.MeshLambertMaterial({ color: isWither ? 0xFF0000 : (isZombie ? 0x000000 : 0x333333) });
       const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
       const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
-      eyeL.position.set(-0.1, 1.55, 0.201);
-      eyeR.position.set(0.1, 1.55, 0.201);
+      eyeL.position.set(-0.1 * scaleXZ, 1.55 * scaleY, 0.201 * scaleXZ);
+      eyeR.position.set(0.1 * scaleXZ, 1.55 * scaleY, 0.201 * scaleXZ);
       group.add(eyeL, eyeR);
 
       // Legs
-      const legGeo = new THREE.BoxGeometry(0.2, 0.75, 0.2);
+      const legGeo = new THREE.BoxGeometry(0.2 * scaleXZ, 0.75 * scaleY, 0.2 * scaleXZ);
       const legMat = new THREE.MeshLambertMaterial({ color: clothesColor });
       const legL = new THREE.Mesh(legGeo, legMat);
       legL.name = 'legL';
-      legL.position.set(-0.12, 0.375, 0);
+      legL.position.set(-0.12 * scaleXZ, 0.375 * scaleY, 0);
       const legR = new THREE.Mesh(legGeo, legMat);
       legR.name = 'legR';
-      legR.position.set(0.12, 0.375, 0);
+      legR.position.set(0.12 * scaleXZ, 0.375 * scaleY, 0);
       group.add(legL, legR);
 
       // Arms (pointing forward)
-      const armGeo = new THREE.BoxGeometry(0.2, 0.6, 0.2);
+      const armGeo = new THREE.BoxGeometry(0.2 * scaleXZ, 0.6 * scaleY, 0.2 * scaleXZ);
       const armMat = new THREE.MeshLambertMaterial({ color: skinColor });
       const armL = new THREE.Mesh(armGeo, armMat);
-      armL.position.set(-0.34, 1.05, 0.2);
+      armL.position.set(-0.34 * scaleXZ, 1.05 * scaleY, 0.2 * scaleXZ);
       armL.rotation.x = -Math.PI / 2; // Point forward
       const armR = new THREE.Mesh(armGeo, armMat);
-      armR.position.set(0.34, 1.05, 0.2);
+      armR.position.set(0.34 * scaleXZ, 1.05 * scaleY, 0.2 * scaleXZ);
       armR.rotation.x = -Math.PI / 2;
       group.add(armL, armR);
-
     } else if (type === 'creeper') {
       // Creeper
       // Body
@@ -376,6 +435,41 @@ export class Mob {
       legR.name = 'legR';
       legR.position.set(0.08, 0.125, 0);
       group.add(legL, legR);
+    } else if (type === 'blaze') {
+      // Blaze: head + orbiting rods
+      const headGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+      const headMat = new THREE.MeshLambertMaterial({ color: 0xFFD700, emissive: 0x332200 });
+      const head = new THREE.Mesh(headGeo, headMat);
+      head.position.set(0, 1.2, 0);
+      group.add(head);
+
+      const rodGeo = new THREE.BoxGeometry(0.08, 0.4, 0.08);
+      const rodMat = new THREE.MeshLambertMaterial({ color: 0xFFAA00, emissive: 0x442200 });
+
+      for (let i = 0; i < 6; i++) {
+        const rod = new THREE.Mesh(rodGeo, rodMat);
+        rod.name = `rod_${i}`;
+        const angle = (i / 6) * Math.PI * 2;
+        const radius = 0.35;
+        rod.position.set(Math.cos(angle) * radius, 0.6 + (i % 3) * 0.3, Math.sin(angle) * radius);
+        group.add(rod);
+      }
+
+    } else if (type === 'magma_cube') {
+      // Magma Cube: dark red/black box + glowing orange eyes
+      const bodyGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+      const bodyMat = new THREE.MeshLambertMaterial({ color: 0x260d0d });
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.position.y = 0.4;
+      group.add(body);
+
+      const eyeGeo = new THREE.BoxGeometry(0.15, 0.15, 0.02);
+      const eyeMat = new THREE.MeshLambertMaterial({ color: 0xFF5500, emissive: 0xFF2200 });
+      const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+      const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+      eyeL.position.set(-0.2, 0.45, 0.401);
+      eyeR.position.set(0.2, 0.45, 0.401);
+      group.add(eyeL, eyeR);
     }
 
     return group;
@@ -385,14 +479,21 @@ export class Mob {
     dt: number,
     playerPos: THREE.Vector3,
     getBlock: (x: number, y: number, z: number) => number,
-    hurtPlayer: (damage: number, knockback: THREE.Vector3) => void,
+    hurtPlayer: (damage: number, knockback: THREE.Vector3, attacker?: Mob) => void,
     isSolidBlock?: (x: number, y: number, z: number) => boolean,
     gameMode: 'survival' | 'creative' = 'survival',
-    onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void
+    onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, type: 'arrow' | 'fireball') => void
   ) {
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
     this.despawnTimer += dt;
+
+    if (this.def.type === 'zombie_pigman' && this.isAngry) {
+      this.angerTimer = Math.max(0, this.angerTimer - dt);
+      if (this.angerTimer <= 0) {
+        this.isAngry = false;
+      }
+    }
 
     // Despawn after 5 minutes if far from player
     const distToPlayer = this.position.distanceTo(playerPos);
@@ -404,7 +505,11 @@ export class Mob {
     const fluidState = this.getFluidState(getBlock);
 
     // AI
-    this.updateAI(dt, playerPos, getBlock, fluidState.inWater, gameMode);
+    if (this.def.type === 'magma_cube') {
+      this.updateMagmaCubeMovement(dt, playerPos, getBlock);
+    } else {
+      this.updateAI(dt, playerPos, getBlock, fluidState.inWater, gameMode);
+    }
 
     // Drowning: like vanilla land mobs, only the head/eyes being in water consumes air.
     if (fluidState.headInWater) {
@@ -433,7 +538,12 @@ export class Mob {
       this.velocity.z *= 0.55;
     } else {
       // Physics - gravity
-      if (!this.onGround) {
+      if (this.def.type === 'blaze') {
+        const targetY = playerPos.y + 1 + Math.sin(Date.now() * 0.003) * 0.5;
+        this.velocity.y = (targetY - this.position.y) * 1.5;
+        this.velocity.y = Math.max(-2, Math.min(2, this.velocity.y));
+        this.onGround = false;
+      } else if (!this.onGround) {
         this.velocity.y += -28 * dt;
       }
     }
@@ -442,7 +552,8 @@ export class Mob {
     this.moveWithCollision(dt, getBlock, isSolidBlock);
 
     // Hostile mob attacks player
-    if (this.def.hostile && gameMode !== 'creative') {
+    const isHostile = this.def.hostile || (this.def.type === 'zombie_pigman' && this.isAngry);
+    if (isHostile && gameMode !== 'creative') {
       if (this.def.type === 'creeper') {
         // Creeper: start fuse when close, cancel when far
         if (distToPlayer < 3) {
@@ -464,7 +575,7 @@ export class Mob {
               .normalize()
               .multiplyScalar(4);
             knockback.y = 3;
-            hurtPlayer(this.def.damage, knockback);
+            hurtPlayer(this.damage, knockback, this);
             this.attackCooldown = 1.0;
           }
         }
@@ -476,8 +587,8 @@ export class Mob {
           dir.y += 0.5; // Aim slightly up
           dir.normalize();
           const origin = this.position.clone();
-          origin.y += this.def.height * 0.75;
-          onShoot(origin, dir);
+          origin.y += this.height * 0.75;
+          onShoot(origin, dir, 'arrow');
           this.shootTimer = 2.0; // 2 second cooldown
         }
         // Melee fallback
@@ -487,17 +598,41 @@ export class Mob {
             .normalize()
             .multiplyScalar(4);
           knockback.y = 3;
-          hurtPlayer(this.def.damage, knockback);
+          hurtPlayer(this.damage, knockback, this);
           this.attackCooldown = 1.0;
         }
-      } else if (distToPlayer < 1.8 && this.attackCooldown <= 0) {
-        const knockback = new THREE.Vector3()
-          .subVectors(playerPos, this.position)
-          .normalize()
-          .multiplyScalar(4);
-        knockback.y = 3;
-        hurtPlayer(this.def.damage, knockback);
-        this.attackCooldown = 1.0;
+      } else if (this.def.type === 'blaze' && onShoot) {
+        // Blaze: shoot fireballs at player within 16 blocks
+        this.shootTimer = Math.max(0, this.shootTimer - dt);
+        if (distToPlayer < 16 && this.shootTimer <= 0) {
+          const dir = new THREE.Vector3().subVectors(playerPos, this.position).normalize();
+          const origin = this.position.clone();
+          origin.y += this.height * 0.75;
+          onShoot(origin, dir, 'fireball');
+          this.shootTimer = 3.0; // 3 second cooldown
+        }
+        // Melee fallback
+        if (distToPlayer < 1.8 && this.attackCooldown <= 0) {
+          const knockback = new THREE.Vector3()
+            .subVectors(playerPos, this.position)
+            .normalize()
+            .multiplyScalar(4);
+          knockback.y = 3;
+          hurtPlayer(this.damage, knockback, this);
+          this.attackCooldown = 1.0;
+        }
+      } else {
+        // Generic melee attack (zombie, pigman, spider, magma_cube)
+        const range = this.def.type === 'magma_cube' ? (this.width / 2 + 1.0) : 1.8;
+        if (distToPlayer < range && this.attackCooldown <= 0) {
+          const knockback = new THREE.Vector3()
+            .subVectors(playerPos, this.position)
+            .normalize()
+            .multiplyScalar(4);
+          knockback.y = 3;
+          hurtPlayer(this.damage, knockback, this);
+          this.attackCooldown = 1.0;
+        }
       }
     }
 
@@ -529,6 +664,37 @@ export class Mob {
     if (legFR) legFR.rotation.x = -swingAngle;
     if (legBL) legBL.rotation.x = -swingAngle;
     if (legBR) legBR.rotation.x = swingAngle;
+
+    // Blaze orbiting rods animation
+    if (this.def.type === 'blaze') {
+      const time = Date.now() * 0.003;
+      for (let i = 0; i < 6; i++) {
+        const rod = this.mesh.getObjectByName(`rod_${i}`);
+        if (rod) {
+          const angle = (i / 6) * Math.PI * 2 + time;
+          const radius = 0.35 + Math.sin(time + i) * 0.05;
+          rod.position.x = Math.cos(angle) * radius;
+          rod.position.z = Math.sin(angle) * radius;
+          rod.rotation.y = time;
+        }
+      }
+    }
+
+    // Magma Cube squish/stretch animation
+    if (this.def.type === 'magma_cube') {
+      const baseScale = this.size / 3;
+      if (!this.onGround) {
+        // Stretch in air
+        this.mesh.scale.set(baseScale * 0.8, baseScale * 1.3, baseScale * 0.8);
+      } else {
+        // Squish when landing
+        if (this.magmaCubeJumpTimer < 0.25) {
+          this.mesh.scale.set(baseScale * 1.2, baseScale * 0.7, baseScale * 1.2);
+        } else {
+          this.mesh.scale.setScalar(baseScale);
+        }
+      }
+    }
 
     // Flash red when hurt
     if (this.hurtTimer > 0) {
@@ -648,8 +814,8 @@ export class Mob {
     const mx = Math.floor(this.position.x);
     const mz = Math.floor(this.position.z);
     const footY = Math.floor(this.position.y);
-    const bodyY = Math.floor(this.position.y + Math.min(1, this.def.height * 0.55));
-    const headY = Math.floor(this.position.y + this.def.height * 0.9);
+    const bodyY = Math.floor(this.position.y + Math.min(1, this.height * 0.55));
+    const headY = Math.floor(this.position.y + this.height * 0.9);
 
     const footBlock = getBlock(mx, footY, mz);
     const bodyBlock = getBlock(mx, bodyY, mz);
@@ -729,7 +895,7 @@ export class Mob {
     const minX = Math.floor(this.position.x - hw);
     const maxX = Math.floor(this.position.x + hw);
     const minY = Math.floor(this.position.y);
-    const maxY = Math.floor(this.position.y + this.def.height);
+    const maxY = Math.floor(this.position.y + this.height);
     const minZ = Math.floor(this.position.z - hw);
     const maxZ = Math.floor(this.position.z + hw);
 
@@ -744,7 +910,7 @@ export class Mob {
             if (isSolid) {
               if (
                 this.position.x + hw > bx && this.position.x - hw < bx + 1 &&
-                this.position.y + this.def.height > by && this.position.y < by + 1 &&
+                this.position.y + this.height > by && this.position.y < by + 1 &&
                 this.position.z + hw > bz && this.position.z - hw < bz + 1
               ) {
                 ignoredBlocks.add(`${bx},${by},${bz}`);
@@ -801,7 +967,7 @@ export class Mob {
     const minX = Math.floor(this.position.x - hw);
     const maxX = Math.floor(this.position.x + hw);
     const minY = Math.floor(this.position.y);
-    const maxY = Math.floor(this.position.y + this.def.height);
+    const maxY = Math.floor(this.position.y + this.height);
     const minZ = Math.floor(this.position.z - hw);
     const maxZ = Math.floor(this.position.z + hw);
 
@@ -822,7 +988,7 @@ export class Mob {
 
           if (
             this.position.x + hw > bx && this.position.x - hw < bx + 1 &&
-            this.position.y + this.def.height > by && this.position.y < by + 1 &&
+            this.position.y + this.height > by && this.position.y < by + 1 &&
             this.position.z + hw > bz && this.position.z - hw < bz + 1
           ) {
             return true;
@@ -831,6 +997,40 @@ export class Mob {
       }
     }
     return false;
+  }
+
+  private updateMagmaCubeMovement(
+    dt: number,
+    playerPos: THREE.Vector3,
+    getBlock: (x: number, y: number, z: number) => number
+  ) {
+    if (this.onGround) {
+      this.velocity.x = 0;
+      this.velocity.z = 0;
+      
+      this.magmaCubeJumpTimer += dt;
+      const jumpInterval = 0.8 + Math.random() * 0.7;
+      if (this.magmaCubeJumpTimer >= jumpInterval) {
+        this.magmaCubeJumpTimer = 0;
+        
+        const distToPlayer = this.position.distanceTo(playerPos);
+        const dir = new THREE.Vector3();
+        if (distToPlayer < 16) {
+          dir.subVectors(playerPos, this.position);
+          dir.y = 0;
+          dir.normalize();
+        } else {
+          const angle = Math.random() * Math.PI * 2;
+          dir.set(Math.cos(angle), 0, Math.sin(angle));
+        }
+        
+        const jumpHeight = this.size === 3 ? 7.5 : (this.size === 2 ? 6.0 : 4.5);
+        this.velocity.y = jumpHeight;
+        this.velocity.x = dir.x * this.speed * 1.5;
+        this.velocity.z = dir.z * this.speed * 1.5;
+        this.onGround = false;
+      }
+    }
   }
 
   takeDamage(amount: number, knockbackDir?: THREE.Vector3) {

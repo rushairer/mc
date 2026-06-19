@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 
-export type ProjectileType = 'arrow' | 'snowball' | 'egg';
+export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'fireball';
 
 export interface Projectile {
   id: number;
@@ -50,6 +50,37 @@ export class ProjectileSystem {
     mesh.position.copy(origin);
     this.scene.add(mesh);
     this.projectiles.set(arrow.id, arrow);
+  }
+
+  shootFireball(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage: number = 4) {
+    const mesh = this.createFireballMesh();
+    const vel = direction.clone().normalize().multiplyScalar(15);
+
+    const fireball: Projectile = {
+      id: this.nextId++,
+      type: 'fireball',
+      position: origin.clone(),
+      velocity: vel,
+      damage,
+      fromPlayer,
+      lifetime: 10,
+      mesh,
+      inGround: false,
+    };
+
+    mesh.position.copy(origin);
+    this.scene.add(mesh);
+    this.projectiles.set(fireball.id, fireball);
+  }
+
+  private createFireballMesh(): THREE.Mesh {
+    const geo = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+    const mat = new THREE.MeshLambertMaterial({
+      color: 0xFF5500,
+      emissive: 0xFF2200,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    return mesh;
   }
 
   update(

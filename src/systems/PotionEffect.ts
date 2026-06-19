@@ -1,4 +1,4 @@
-export type PotionEffectId = 'healing' | 'regeneration' | 'speed' | 'fire_resistance' | 'poison';
+export type PotionEffectId = 'healing' | 'regeneration' | 'speed' | 'fire_resistance' | 'poison' | 'wither';
 
 export interface PotionEffectData {
   id: PotionEffectId;
@@ -16,6 +16,7 @@ const EFFECT_NAMES: Record<PotionEffectId, string> = {
   speed: 'Speed',
   fire_resistance: 'Fire Resistance',
   poison: 'Poison',
+  wither: 'Wither',
 };
 
 export const PotionEffects = {
@@ -53,7 +54,7 @@ export class PotionEffectSystem {
     }
   }
 
-  update(dt: number, heal: (amount: number) => void, damage: (amount: number) => void) {
+  update(dt: number, heal: (amount: number) => void, damage: (amount: number, lethal?: boolean) => void) {
     for (let i = this.effects.length - 1; i >= 0; i--) {
       const effect = this.effects[i];
       effect.remaining -= dt;
@@ -74,6 +75,12 @@ export class PotionEffectSystem {
         if (this.tickTimers.poison >= 2.0) {
           this.tickTimers.poison = 0;
           damage(effect.level);
+        }
+      } else if (effect.id === 'wither') {
+        this.tickTimers.wither = (this.tickTimers.wither ?? 0) + dt;
+        if (this.tickTimers.wither >= 2.0) {
+          this.tickTimers.wither = 0;
+          damage(effect.level, true);
         }
       }
     }

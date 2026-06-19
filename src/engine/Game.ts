@@ -761,17 +761,27 @@ export class Game {
     const isNight = this.isNight();
     this.mobs.update(dt, this.player.position, isNight,
       (x, y, z) => this.chunks.getBlock(x, y, z),
-      (damage, knockback) => {
+      (damage, knockback, attacker) => {
         this.damagePlayer(damage, 'mob', knockback);
+        if (attacker && attacker.def.type === 'wither_skeleton') {
+          this.potionEffects.apply({ id: 'wither', level: 1, duration: 10.0 }, (amount) => {
+            this.player.health = Math.min(20, this.player.health + amount);
+          });
+        }
       },
       (x, y, z) => this.chunks.isSolidBlock(x, y, z),
       this.gameMode,
       (mob) => {
         this.handleMobDeath(mob);
       },
-      (origin, direction) => {
-        this.projectiles.shootArrow(origin, direction, false, 4);
-      }
+      (origin, direction, type) => {
+        if (type === 'fireball') {
+          this.projectiles.shootFireball(origin, direction, false, 4);
+        } else {
+          this.projectiles.shootArrow(origin, direction, false, 4);
+        }
+      },
+      this.chunks.currentDimension
     );
 
     // Check creeper explosions
@@ -799,10 +809,15 @@ export class Game {
       (damage, knockback) => this.damagePlayer(damage, 'mob', knockback),
       (mobId, damage, knockback) => {
         const mob = this.mobs.mobs.get(mobId);
-        if (mob) mob.takeDamage(damage, knockback);
+        if (mob) {
+          mob.takeDamage(damage, knockback);
+          if (mob.def.type === 'zombie_pigman') {
+            this.mobs.makePigmenAngry(mob.position, 32);
+          }
+        }
       },
       () => Array.from(this.mobs.mobs.values()).map(m => ({
-        id: m.id, position: m.position, width: m.def.width, height: m.def.height
+        id: m.id, position: m.position, width: m.width, height: m.height
       })),
       this.player.position,
       0.6, 1.8
@@ -1472,7 +1487,20 @@ export class Game {
     this.potionEffects.update(
       dt,
       (amount) => { this.player.health = Math.min(20, this.player.health + amount); },
-      (amount) => { this.player.health = Math.max(1, this.player.health - amount); }
+      (amount, lethal) => {
+        const minHealth = lethal ? 0 : 1;
+        const finalHealth = Math.max(minHealth, this.player.health - amount);
+        if (finalHealth !== this.player.health) {
+          this.player.health = finalHealth;
+          if (this.player.health <= 0) {
+            this.damagePlayer(amount, 'wither');
+          } else {
+            // Play hurt sound and flash red
+            this.damageFlashTimer = 0.3;
+            this.sound.playHurt();
+          }
+        }
+      }
     );
 
     // Death check
@@ -1590,16 +1618,32 @@ export class Game {
       mob.def.bodyColor
     );
 
-    // Drop items in 3D world
-    for (const drop of mob.def.drops) {
-      if (Math.random() < drop.chance) {
-        const dropPos = mob.position.clone().add(new THREE.Vector3(0, 0.5, 0));
-        const velocity = new THREE.Vector3(
-          (Math.random() - 0.5) * 1.5,
-          1.5 + Math.random() * 1.5,
-          (Math.random() - 0.5) * 1.5
-        );
-        this.droppedItems.spawnItem(drop.id, drop.count, dropPos, velocity, 0.5);
+    // Magma Cube split logic
+    if (mob.def.type === 'magma_cube' && mob.size > 1) {
+      const splitCount = 2 + Math.floor(Math.random() * 3); // 2 to 4
+      const nextSize = mob.size - 1;
+      for (let i = 0; i < splitCount; i++) {
+        const ox = (Math.random() - 0.5) * 0.5;
+        const oz = (Math.random() - 0.5) * 0.5;
+        this.mobs.spawnMob('magma_cube', mob.position.x + ox, mob.position.y + 0.1, mob.position.z + oz, nextSize);
+      }
+    }
+
+    // Drop items in 3D world (magma cubes only drop if size === 1)
+    const isMagmaCube = mob.def.type === 'magma_cube';
+    const shouldDrop = !isMagmaCube || mob.size === 1;
+
+    if (shouldDrop) {
+      for (const drop of mob.def.drops) {
+        if (Math.random() < drop.chance) {
+          const dropPos = mob.position.clone().add(new THREE.Vector3(0, 0.5, 0));
+          const velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 1.5,
+            1.5 + Math.random() * 1.5,
+            (Math.random() - 0.5) * 1.5
+          );
+          this.droppedItems.spawnItem(drop.id, drop.count, dropPos, velocity, 0.5);
+        }
       }
     }
 
@@ -1772,7 +1816,7 @@ export class Game {
     }
   }
 
-  damagePlayer(amount: number, type: 'mob' | 'fall' | 'drown' | 'starve', knockback?: THREE.Vector3) {
+  damagePlayer(amount: number, type: 'mob' | 'fall' | 'drown' | 'starve' | 'wither', knockback?: THREE.Vector3) {
     if (this.gameMode === 'creative') return;
 
     let finalDamage = amount;
@@ -1923,6 +1967,7 @@ export class Game {
 
     // 2. Safely unload old dimension meshes
     this.chunks.unloadAllMeshes();
+    this.mobs.dispose();
 
     // 3. Switch active dimension
     this.chunks.currentDimension = targetDim;

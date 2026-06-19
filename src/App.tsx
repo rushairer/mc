@@ -12,6 +12,7 @@ import { AnvilUI } from './ui/AnvilUI';
 import { BrewingUI } from './ui/BrewingUI';
 import { HopperUI } from './ui/HopperUI';
 import { TradingUI } from './ui/TradingUI';
+import { EndPoemUI } from './ui/EndPoemUI';
 import type { Enchantment } from './systems/EnchantSystem';
 import type { TradeOffer } from './systems/VillageSystem';
 import type { ItemStack } from './types';
@@ -150,6 +151,12 @@ export const App: React.FC = () => {
   const handleRespawn = useCallback(() => {
     if (gameRef.current) {
       gameRef.current.respawn();
+    }
+  }, []);
+
+  const handleEndPoemComplete = useCallback(() => {
+    if (gameRef.current) {
+      gameRef.current.completeEndPoem();
     }
   }, []);
 
@@ -559,6 +566,14 @@ export const App: React.FC = () => {
             {t('respawn')}
           </button>
         </div>
+      )}
+
+      {/* End Poem UI */}
+      {gameState.openUI === 'end_poem' && (
+        <EndPoemUI
+          onComplete={handleEndPoemComplete}
+          playerName="Steve"
+        />
       )}
 
       {/* Pause Menu UI */}

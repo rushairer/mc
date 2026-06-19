@@ -38,7 +38,7 @@ const ENDER_EYE_ID = 381;
 const END_PORTAL_ID = 119;
 const END_PORTAL_FRAME_ID = 120;
 
-export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause' | 'end_poem';
 
 export interface GameState {
   fps: number;
@@ -860,7 +860,11 @@ export class Game {
       this.portalCooldown -= dt;
       this.portalTimer = 0;
     } else if (exitingEndPortal) {
-      this.teleportFromEndToOverworld();
+      this.openUI = 'end_poem';
+      try {
+        document.exitPointerLock();
+      } catch (e) {}
+      this.notifyState();
       this.portalTimer = 0;
       this.portalCooldown = 4.0;
     } else if (enteringEndPortal) {
@@ -976,6 +980,12 @@ export class Game {
       0.6, 1.8,
       (pos, fromPlayer, damage) => {
         this.handlePotionSplash(pos, fromPlayer, damage);
+      },
+      (pos, shattered) => {
+        this.handleEnderEyeDone(pos, shattered);
+      },
+      (pos) => {
+        this.handleEnderEyeUpdate(pos);
       }
     );
     this.handleDragonProjectileHits();
@@ -1684,6 +1694,10 @@ export class Game {
             }
           }
         }
+      }
+
+      if (heldItemId === ENDER_EYE_ID && this.placeCooldown <= 0) {
+        this.throwEnderEye();
       }
     }
 
@@ -2649,6 +2663,90 @@ export class Game {
     } catch (e) {
       console.warn('Load failed:', e);
     }
+  }
+
+  completeEndPoem() {
+    this.openUI = 'none';
+    this.teleportFromEndToOverworld();
+    this.input.requestLock();
+    this.lockCooldown = 0.5;
+    this.notifyState();
+  }
+
+  private throwEnderEye() {
+    const spacing = 24;
+    const offsetX = Math.floor(this.pseudoRandom(this.seed, 19, 7) * spacing);
+    const offsetZ = Math.floor(this.pseudoRandom(this.seed, 31, 11) * spacing);
+
+    let nearestDist = Infinity;
+    let nearestX = 0;
+    let nearestZ = 8;
+    let nearestY = 30;
+
+    const pcx = Math.floor(this.player.position.x / 16);
+    const pcz = Math.floor(this.player.position.z / 16);
+
+    for (let i = -10; i <= 10; i++) {
+      for (let j = -10; j <= 10; j++) {
+        const scx = offsetX + Math.round((pcx - offsetX) / spacing + i) * spacing;
+        const scz = offsetZ + Math.round((pcz - offsetZ) / spacing + j) * spacing;
+        
+        const distFromSpawn = Math.sqrt(scx * scx + scz * scz);
+        if (distFromSpawn < 8) continue;
+        
+        const sx = scx * 16 + 8;
+        const sz = scz * 16 + 8;
+        
+        const dx = sx - this.player.position.x;
+        const dz = sz - this.player.position.z;
+        const distSq = dx * dx + dz * dz;
+        if (distSq < nearestDist) {
+          nearestDist = distSq;
+          nearestX = sx;
+          nearestZ = sz;
+          const roomY = 26 + Math.floor(this.pseudoRandom(scx, this.seed, scz) * 22);
+          nearestY = roomY + 2;
+        }
+      }
+    }
+
+    const targetPos = new THREE.Vector3(nearestX, nearestY, nearestZ);
+    const origin = this.player.eyePosition.clone();
+    
+    this.projectiles.shootEnderEye(origin, targetPos);
+    
+    this.sound.playLever(); // throw sound
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+    this.placeCooldown = 0.5;
+    this.notifyState();
+  }
+
+  private handleEnderEyeDone(pos: THREE.Vector3, shattered: boolean) {
+    if (shattered) {
+      this.particles.spawnBlockBreak(pos.x, pos.y, pos.z, 0x1E5E4A, 30);
+      this.sound.playExplosion();
+    } else {
+      const velocity = new THREE.Vector3(0, -0.5, 0);
+      this.droppedItems.spawnItem(ENDER_EYE_ID, 1, pos, velocity, 0.5);
+    }
+  }
+
+  private handleEnderEyeUpdate(pos: THREE.Vector3) {
+    const color = Math.random() < 0.5 ? 0x1E5E4A : 0x8a2be2;
+    this.particles.spawnBlockBreak(pos.x, pos.y, pos.z, color, 1);
+  }
+
+  private pseudoRandom(x: number, y: number, z: number): number {
+    let h = (x * 374761393 + y * 668265263 + z * 1274126177 + this.seed) | 0;
+    h = (h ^ (h >> 13)) * 1274126177;
+    h = h ^ (h >> 16);
+    return (h & 0x7fffffff) / 0x7fffffff;
+  }
+
+  private positiveMod(value: number, mod: number): number {
+    return ((value % mod) + mod) % mod;
   }
 
   private useEnderEyeOnPortalFrame(x: number, y: number, z: number): boolean {

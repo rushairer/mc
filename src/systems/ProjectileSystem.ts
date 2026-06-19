@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 
-export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'fireball' | 'potion' | 'shulker_bullet';
+export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'fireball' | 'potion' | 'shulker_bullet' | 'eye_of_ender';
 
 export interface Projectile {
   id: number;
@@ -13,6 +13,7 @@ export interface Projectile {
   lifetime: number;
   mesh: THREE.Mesh | THREE.Group;
   inGround: boolean;
+  targetPos?: THREE.Vector3;
 }
 
 const ARROW_GRAVITY = -12;
@@ -122,6 +123,36 @@ export class ProjectileSystem {
     this.projectiles.set(bullet.id, bullet);
   }
 
+  shootEnderEye(origin: THREE.Vector3, targetPos: THREE.Vector3) {
+    const mesh = this.createEnderEyeMesh();
+    // Compute horizontal direction towards stronghold
+    const dir = new THREE.Vector3().subVectors(targetPos, origin);
+    dir.y = 0;
+    dir.normalize();
+
+    // Initial speed and upward rise
+    const speed = 12;
+    const vel = dir.clone().multiplyScalar(speed);
+    vel.y = 4.0; // rises up
+
+    const eye: Projectile = {
+      id: this.nextId++,
+      type: 'eye_of_ender',
+      position: origin.clone(),
+      velocity: vel,
+      damage: 0,
+      fromPlayer: true,
+      lifetime: 3.5, // 3.5s lifetime
+      mesh,
+      inGround: false,
+      targetPos: targetPos.clone(),
+    };
+
+    mesh.position.copy(origin);
+    this.scene.add(mesh);
+    this.projectiles.set(eye.id, eye);
+  }
+
   private createFireballMesh(): THREE.Mesh {
     const geo = new THREE.BoxGeometry(0.25, 0.25, 0.25);
     const mat = new THREE.MeshLambertMaterial({
@@ -146,6 +177,15 @@ export class ProjectileSystem {
     return group;
   }
 
+  private createEnderEyeMesh(): THREE.Mesh {
+    const geo = new THREE.SphereGeometry(0.18, 8, 8);
+    const mat = new THREE.MeshLambertMaterial({
+      color: 0x1E5E4A,
+      emissive: 0x0A2B20,
+    });
+    return new THREE.Mesh(geo, mat);
+  }
+
   update(
     dt: number,
     getBlock: (x: number, y: number, z: number) => number,
@@ -155,11 +195,20 @@ export class ProjectileSystem {
     playerPos: THREE.Vector3,
     playerWidth: number,
     playerHeight: number,
-    onPotionSplash?: (pos: THREE.Vector3, fromPlayer: boolean, damage: number) => void
+    onPotionSplash?: (pos: THREE.Vector3, fromPlayer: boolean, damage: number) => void,
+    onEnderEyeComplete?: (pos: THREE.Vector3, shattered: boolean) => void,
+    onEnderEyeUpdate?: (pos: THREE.Vector3) => void
   ) {
     const toRemove: number[] = [];
 
     for (const [id, proj] of this.projectiles) {
+      if (proj.lifetime <= dt) {
+        if (proj.type === 'eye_of_ender' && onEnderEyeComplete) {
+          const shattered = Math.random() < 0.33;
+          onEnderEyeComplete(proj.position, shattered);
+        }
+      }
+
       proj.lifetime -= dt;
       if (proj.lifetime <= 0) {
         toRemove.push(id);
@@ -168,9 +217,20 @@ export class ProjectileSystem {
 
       if (proj.inGround) continue;
 
-      // Apply gravity
+      // Apply gravity / Ender Eye movement
       if (proj.type === 'arrow' || proj.type === 'potion') {
         proj.velocity.y += ARROW_GRAVITY * dt;
+      } else if (proj.type === 'eye_of_ender') {
+        if (proj.lifetime > 1.5) {
+          // Slow down vertical rise to level off
+          proj.velocity.y = Math.max(0, proj.velocity.y - dt * 3.0);
+          if (onEnderEyeUpdate) {
+            onEnderEyeUpdate(proj.position);
+          }
+        } else {
+          // Hover phase: stop moving
+          proj.velocity.set(0, 0, 0);
+        }
       }
 
       // Move
@@ -180,24 +240,26 @@ export class ProjectileSystem {
       // Block collision check
       const steps = Math.ceil(proj.velocity.length() * dt * 2);
       let hitBlock = false;
-      for (let s = 0; s <= steps; s++) {
-        const t = s / steps;
-        const checkPos = new THREE.Vector3().lerpVectors(prevPos, newPos, t);
-        const bx = Math.floor(checkPos.x);
-        const by = Math.floor(checkPos.y);
-        const bz = Math.floor(checkPos.z);
-        const block = getBlock(bx, by, bz);
-        if (block !== 0 && !BlockRegistry.isFluid(block)) {
-          proj.position.copy(checkPos);
-          if (proj.type === 'potion') {
-            if (onPotionSplash) {
-              onPotionSplash(proj.position, proj.fromPlayer, proj.damage);
+      if (proj.type !== 'eye_of_ender') {
+        for (let s = 0; s <= steps; s++) {
+          const t = s / steps;
+          const checkPos = new THREE.Vector3().lerpVectors(prevPos, newPos, t);
+          const bx = Math.floor(checkPos.x);
+          const by = Math.floor(checkPos.y);
+          const bz = Math.floor(checkPos.z);
+          const block = getBlock(bx, by, bz);
+          if (block !== 0 && !BlockRegistry.isFluid(block)) {
+            proj.position.copy(checkPos);
+            if (proj.type === 'potion') {
+              if (onPotionSplash) {
+                onPotionSplash(proj.position, proj.fromPlayer, proj.damage);
+              }
+            } else {
+              proj.inGround = true;
             }
-          } else {
-            proj.inGround = true;
+            hitBlock = true;
+            break;
           }
-          hitBlock = true;
-          break;
         }
       }
 
@@ -211,7 +273,7 @@ export class ProjectileSystem {
       }
 
       // Player collision (arrows/potions from mobs)
-      if (!proj.fromPlayer) {
+      if (!proj.fromPlayer && proj.type !== 'eye_of_ender') {
         const distToPlayer = proj.position.distanceTo(playerPos);
         if (distToPlayer < playerWidth + 0.3 &&
             proj.position.y > playerPos.y &&
@@ -231,7 +293,7 @@ export class ProjectileSystem {
       }
 
       // Mob collision (arrows/potions from player or other mobs)
-      if (proj.fromPlayer) {
+      if (proj.fromPlayer && proj.type !== 'eye_of_ender') {
         let hit = false;
         for (const mob of getMobs()) {
           const dist = proj.position.distanceTo(mob.position);

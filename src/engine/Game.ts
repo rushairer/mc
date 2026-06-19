@@ -829,12 +829,20 @@ export class Game {
     const pz = Math.floor(this.player.position.z);
     const feetBlock = this.chunks.getBlock(px, py, pz) & 0x3FF;
     const headBlockPortal = this.chunks.getBlock(px, py + 1, pz) & 0x3FF;
-    const inPortal = feetBlock === 90 || headBlockPortal === 90;
+    const belowBlock = this.chunks.getBlock(px, py - 1, pz) & 0x3FF;
+    const inNetherPortal = this.chunks.currentDimension !== Dimension.End
+      && (feetBlock === 90 || headBlockPortal === 90);
+    const inEndPortal = this.chunks.currentDimension !== Dimension.End
+      && (feetBlock === END_PORTAL_ID || belowBlock === END_PORTAL_ID);
 
     if (this.portalCooldown > 0) {
       this.portalCooldown -= dt;
       this.portalTimer = 0;
-    } else if (inPortal) {
+    } else if (inEndPortal) {
+      this.teleportToEnd();
+      this.portalTimer = 0;
+      this.portalCooldown = 4.0;
+    } else if (inNetherPortal) {
       const PORTAL_DELAY = this.gameMode === 'creative' ? 0.5 : 3.0;
       this.portalTimer += dt;
       if (this.portalTimer >= PORTAL_DELAY) {
@@ -2271,6 +2279,7 @@ export class Game {
 
   private teleportDimension() {
     const currentDim = this.chunks.currentDimension;
+    if (currentDim === Dimension.End) return;
     const targetDim = currentDim === Dimension.Overworld ? Dimension.Nether : Dimension.Overworld;
 
     // 1. Scaled coordinates
@@ -2303,6 +2312,21 @@ export class Game {
     this.player.resolveStuck(this.chunks);
 
     // Play portal teleport sound
+    this.sound.playPickup();
+    this.notifyState();
+  }
+
+  private teleportToEnd() {
+    this.chunks.unloadAllMeshes();
+    this.mobs.dispose();
+
+    this.chunks.currentDimension = Dimension.End;
+    this.player.position.set(0.5, 65.2, 0.5);
+    this.player.velocity.set(0, 0, 0);
+
+    this.chunks.update(this.player.position.x, this.player.position.z);
+    this.player.resolveStuck(this.chunks);
+
     this.sound.playPickup();
     this.notifyState();
   }
@@ -2389,6 +2413,15 @@ export class Game {
         dimension: 1,
       });
     }
+    for (const [, chunk] of this.chunks.endChunks) {
+      chunkData.push({
+        cx: chunk.cx,
+        cz: chunk.cz,
+        data: new Uint16Array(chunk.data),
+        metadata: chunk.serializeMetadata(),
+        dimension: 2,
+      });
+    }
 
     const saveData: SaveData = {
       player: {
@@ -2443,7 +2476,7 @@ export class Game {
         this.perspectiveMode = data.player.perspectiveMode;
       }
       if (data.player.currentDimension !== undefined) {
-        this.chunks.currentDimension = data.player.currentDimension;
+        this.chunks.currentDimension = this.chunks.normalizeDimension(data.player.currentDimension);
       } else {
         this.chunks.currentDimension = Dimension.Overworld;
       }
@@ -2469,6 +2502,7 @@ export class Game {
       if (data.chunks) {
         this.chunks.overworldChunks.clear();
         this.chunks.netherChunks.clear();
+        this.chunks.endChunks.clear();
         for (const chunk of data.chunks) {
           this.chunks.restoreChunk(chunk.cx, chunk.cz, chunk.data, chunk.metadata, chunk.dimension ?? 0);
         }

@@ -6,17 +6,147 @@ import { Chunk } from '../world/Chunk';
 export enum Dimension {
   Overworld = 0,
   Nether = 1,
+  End = 2,
 }
 
 export class DimensionGenerator {
   private netherNoise: SimplexNoise;
   private netherNoise2: SimplexNoise;
   private lavaNoise: SimplexNoise;
+  private endNoise: SimplexNoise;
+  private endIslandNoise: SimplexNoise;
 
   constructor(seed: number) {
     this.netherNoise = new SimplexNoise(seed + 1000);
     this.netherNoise2 = new SimplexNoise(seed + 2000);
     this.lavaNoise = new SimplexNoise(seed + 3000);
+    this.endNoise = new SimplexNoise(seed + 4000);
+    this.endIslandNoise = new SimplexNoise(seed + 5000);
+  }
+
+  generateEndChunk(chunk: Chunk) {
+    const cx = chunk.cx;
+    const cz = chunk.cz;
+    const worldX = cx * CHUNK_SIZE;
+    const worldZ = cz * CHUNK_SIZE;
+
+    const END_STONE = 121;
+    const OBSIDIAN = 49;
+    const BEDROCK = 7;
+    const FIRE = 51;
+    const GLASS = 20;
+    const ISLAND_CENTER_Y = 64;
+
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+      for (let z = 0; z < CHUNK_SIZE; z++) {
+        const wx = worldX + x;
+        const wz = worldZ + z;
+        const distance = Math.sqrt(wx * wx + wz * wz);
+        const columnNoise = this.endNoise.fbm2D(wx * 0.035, wz * 0.035, 4, 2.0, 0.5);
+        const ridgeNoise = this.endNoise.noise2D(wx * 0.09, wz * 0.09);
+
+        let topY = -1;
+        let bottomY = -1;
+
+        if (distance < 128) {
+          const falloff = Math.max(0, 1 - distance / 128);
+          const thickness = Math.max(2, Math.floor(10 + falloff * 18 + columnNoise * 4));
+          topY = Math.floor(ISLAND_CENTER_Y + falloff * 9 + columnNoise * 5);
+          bottomY = Math.floor(topY - thickness * (0.55 + falloff * 0.7));
+        } else {
+          const islandNoise = this.endIslandNoise.fbm2D(wx * 0.008, wz * 0.008, 3, 2.0, 0.45);
+          const localNoise = this.endNoise.fbm2D(wx * 0.03, wz * 0.03, 3, 2.0, 0.5);
+          if (islandNoise > 0.58) {
+            const islandStrength = Math.min(1, (islandNoise - 0.58) / 0.22);
+            const thickness = Math.max(2, Math.floor(4 + islandStrength * 10 + localNoise * 3));
+            topY = Math.floor(58 + islandStrength * 10 + localNoise * 5);
+            bottomY = topY - thickness;
+          }
+        }
+
+        for (let y = 0; y < WORLD_HEIGHT; y++) {
+          let blockId = 0;
+          if (topY >= 0 && y >= bottomY && y <= topY) {
+            const undersideTaper = (y - bottomY) / Math.max(1, topY - bottomY);
+            const keep = undersideTaper > 0.18 || ridgeNoise > -0.35;
+            blockId = keep ? END_STONE : 0;
+          }
+          chunk.setBlock(x, y, z, blockId);
+        }
+      }
+    }
+
+    this.generateEndSpawnPlatform(chunk, OBSIDIAN);
+    this.generateEndPillars(chunk, OBSIDIAN, BEDROCK, FIRE, GLASS);
+
+    chunk.dirty = true;
+  }
+
+  private generateEndSpawnPlatform(chunk: Chunk, obsidianId: number) {
+    const worldX = chunk.cx * CHUNK_SIZE;
+    const worldZ = chunk.cz * CHUNK_SIZE;
+    const platformY = 64;
+
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+      for (let z = 0; z < CHUNK_SIZE; z++) {
+        const wx = worldX + x;
+        const wz = worldZ + z;
+        if (wx >= -2 && wx <= 2 && wz >= -2 && wz <= 2) {
+          chunk.setBlock(x, platformY, z, obsidianId);
+          for (let y = platformY + 1; y <= platformY + 8; y++) {
+            chunk.setBlock(x, y, z, 0);
+          }
+        }
+      }
+    }
+  }
+
+  private generateEndPillars(chunk: Chunk, obsidianId: number, bedrockId: number, fireId: number, glassId: number) {
+    const pillars = [
+      { x: 38, z: 0, radius: 3, height: 34 },
+      { x: -34, z: 16, radius: 3, height: 39 },
+      { x: 12, z: -42, radius: 2, height: 31 },
+      { x: -48, z: -28, radius: 4, height: 45 },
+      { x: 55, z: 34, radius: 3, height: 42 },
+      { x: -5, z: 58, radius: 2, height: 36 },
+      { x: 72, z: -18, radius: 4, height: 49 },
+      { x: -70, z: 46, radius: 3, height: 44 },
+    ];
+
+    const worldX = chunk.cx * CHUNK_SIZE;
+    const worldZ = chunk.cz * CHUNK_SIZE;
+
+    for (const pillar of pillars) {
+      for (let x = 0; x < CHUNK_SIZE; x++) {
+        for (let z = 0; z < CHUNK_SIZE; z++) {
+          const wx = worldX + x;
+          const wz = worldZ + z;
+          const dx = wx - pillar.x;
+          const dz = wz - pillar.z;
+          if (dx * dx + dz * dz > pillar.radius * pillar.radius) continue;
+
+          const baseY = 62;
+          for (let y = baseY; y < baseY + pillar.height && y < WORLD_HEIGHT; y++) {
+            chunk.setBlock(x, y, z, obsidianId);
+          }
+        }
+      }
+
+      const topY = 62 + pillar.height;
+      this.setIfInChunk(chunk, pillar.x, topY, pillar.z, bedrockId);
+      this.setIfInChunk(chunk, pillar.x, topY + 1, pillar.z, fireId);
+      this.setIfInChunk(chunk, pillar.x, topY + 2, pillar.z, glassId);
+    }
+  }
+
+  private setIfInChunk(chunk: Chunk, wx: number, y: number, wz: number, blockId: number) {
+    if (y < 0 || y >= WORLD_HEIGHT) return;
+    const minX = chunk.cx * CHUNK_SIZE;
+    const minZ = chunk.cz * CHUNK_SIZE;
+    const lx = wx - minX;
+    const lz = wz - minZ;
+    if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) return;
+    chunk.setBlock(lx, y, lz, blockId);
   }
 
   generateNetherChunk(chunk: Chunk) {

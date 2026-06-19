@@ -10,10 +10,13 @@ import { Dimension, DimensionGenerator } from './DimensionGenerator';
 export class ChunkManager {
   overworldChunks: Map<string, Chunk> = new Map();
   netherChunks: Map<string, Chunk> = new Map();
+  endChunks: Map<string, Chunk> = new Map();
   currentDimension: Dimension = Dimension.Overworld;
 
   get chunks(): Map<string, Chunk> {
-    return this.currentDimension === Dimension.Overworld ? this.overworldChunks : this.netherChunks;
+    if (this.currentDimension === Dimension.Nether) return this.netherChunks;
+    if (this.currentDimension === Dimension.End) return this.endChunks;
+    return this.overworldChunks;
   }
 
   private worldGen: WorldGen;
@@ -177,7 +180,8 @@ export class ChunkManager {
 
   restoreChunk(cx: number, cz: number, data: Uint16Array, metadata?: SerializedBlockMetadata[], dimension: number = 0) {
     const key = ChunkManager.key(cx, cz);
-    const targetMap = dimension === 1 ? this.netherChunks : this.overworldChunks;
+    const targetDimension = this.normalizeDimension(dimension);
+    const targetMap = this.getChunkMapForDimension(targetDimension);
     let chunk = targetMap.get(key);
     if (!chunk) {
       chunk = new Chunk(cx, cz);
@@ -199,7 +203,7 @@ export class ChunkManager {
     chunk.restoreMetadata(metadata);
     this.repairLegacyDoorBlocks(chunk);
 
-    if (this.currentDimension === dimension) {
+    if (this.currentDimension === targetDimension) {
       this.computeChunkLight(chunk);
       this.rebuildChunkMesh(chunk);
     } else {
@@ -281,8 +285,10 @@ export class ChunkManager {
     const chunk = new Chunk(cx, cz);
     if (this.currentDimension === Dimension.Overworld) {
       this.worldGen.generateChunk(chunk);
-    } else {
+    } else if (this.currentDimension === Dimension.Nether) {
       this.dimensionGen.generateNetherChunk(chunk);
+    } else {
+      this.dimensionGen.generateEndChunk(chunk);
     }
     this.chunks.set(ChunkManager.key(cx, cz), chunk);
     this.computeChunkLight(chunk);
@@ -396,6 +402,19 @@ export class ChunkManager {
 
   getWorldGen(): WorldGen {
     return this.worldGen;
+  }
+
+  getChunkMapForDimension(dimension: number): Map<string, Chunk> {
+    const normalized = this.normalizeDimension(dimension);
+    if (normalized === Dimension.Nether) return this.netherChunks;
+    if (normalized === Dimension.End) return this.endChunks;
+    return this.overworldChunks;
+  }
+
+  normalizeDimension(dimension: number): Dimension {
+    if (dimension === Dimension.Nether) return Dimension.Nether;
+    if (dimension === Dimension.End) return Dimension.End;
+    return Dimension.Overworld;
   }
 
   getLoadedChunkCount(): number {

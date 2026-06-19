@@ -19,6 +19,46 @@ interface InventoryUIProps {
 
 const SLOT_SIZE = 48;
 
+let cachedCreativeItems: number[] | null = null;
+
+function getCreativeItems(): number[] {
+  if (cachedCreativeItems) return cachedCreativeItems;
+
+  const blocksList = BlockRegistry.all()
+    .filter(b => {
+      if (b.id === 0 || BlockRegistry.isFluid(b.id) || b.name.includes('double_') || b.name === 'moving_piston') {
+        return false;
+      }
+      // Exclude facing/rotation/state variations.
+      // If it's a packed ID (has metadata), check if it's identical in function to the base ID block.
+      const baseId = b.baseId ?? (b.id & 0x3FF);
+      if (b.metadata !== undefined && b.metadata > 0 && b.id !== baseId) {
+        const baseBlock = BlockRegistry.get(baseId);
+        if (baseBlock) {
+          if (baseBlock.name === b.name ||
+              b.name.includes('facing') ||
+              baseBlock.name.includes('door') ||
+              baseBlock.name.includes('stairs') ||
+              baseBlock.name.includes('piston') ||
+              baseBlock.name.includes('repeater') ||
+              baseBlock.name.includes('lever') ||
+              baseBlock.name.includes('furnace')) {
+            return false;
+          }
+        }
+      }
+      return true;
+    })
+    .map(b => b.id);
+
+  const itemsList = ItemRegistry.all()
+    .filter(item => item.id !== 0)
+    .map(item => item.id);
+
+  cachedCreativeItems = Array.from(new Set([...blocksList, ...itemsList]));
+  return cachedCreativeItems;
+}
+
 export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle, gameMode = 'survival', onDropItem }) => {
   const { t, getLocalizedItemName, getLocalizedDisplayName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
@@ -35,40 +75,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
   } | null>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
 
-  const creativeItems = React.useMemo(() => {
-    const blocksList = BlockRegistry.all()
-      .filter(b => {
-        if (b.id === 0 || BlockRegistry.isFluid(b.id) || b.name.includes('double_') || b.name === 'moving_piston') {
-          return false;
-        }
-        // Exclude facing/rotation/state variations.
-        // If it's a packed ID (has metadata), check if it's identical in function to the base ID block.
-        const baseId = b.baseId ?? (b.id & 0x3FF);
-        if (b.metadata !== undefined && b.metadata > 0 && b.id !== baseId) {
-          const baseBlock = BlockRegistry.get(baseId);
-          if (baseBlock) {
-            if (baseBlock.name === b.name ||
-                b.name.includes('facing') ||
-                baseBlock.name.includes('door') ||
-                baseBlock.name.includes('stairs') ||
-                baseBlock.name.includes('piston') ||
-                baseBlock.name.includes('repeater') ||
-                baseBlock.name.includes('lever') ||
-                baseBlock.name.includes('furnace')) {
-              return false;
-            }
-          }
-        }
-        return true;
-      })
-      .map(b => b.id);
-
-    const itemsList = ItemRegistry.all()
-      .filter(item => item.id !== 0)
-      .map(item => item.id);
-
-    return Array.from(new Set([...blocksList, ...itemsList]));
-  }, []);
+  const creativeItems = React.useMemo(() => getCreativeItems(), []);
 
   const filteredCreativeItems = React.useMemo(() => {
     const query = creativeSearch.trim().toLowerCase();
@@ -87,6 +94,19 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
       ].some((value) => value.toLowerCase().includes(query));
     });
   }, [creativeItems, creativeSearch, getLocalizedItemName]);
+
+  const [visibleCount, setVisibleCount] = useState(60);
+
+  useEffect(() => {
+    setVisibleCount(60);
+  }, [creativeSearch]);
+
+  const handleCatalogScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (target.scrollHeight - target.scrollTop <= target.clientHeight + 40) {
+      setVisibleCount(prev => Math.min(prev + 60, filteredCreativeItems.length));
+    }
+  }, [filteredCreativeItems.length]);
 
   const handleCatalogClick = (itemId: number) => {
     const maxStack = ItemRegistry.getMaxStackSize(itemId);
@@ -619,19 +639,22 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
                 outline: 'none',
               }}
             />
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(6, 48px)',
-              gap: '2px',
-              maxHeight: '330px',
-              overflowY: 'auto',
-              paddingRight: '4px',
-              background: 'rgba(20,20,20,0.5)',
-              border: '2px solid #444',
-              borderRadius: '4px',
-              padding: '4px',
-            }}>
-              {filteredCreativeItems.map((id) => {
+            <div
+              onScroll={handleCatalogScroll}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(6, 48px)',
+                gap: '2px',
+                maxHeight: '330px',
+                overflowY: 'auto',
+                paddingRight: '4px',
+                background: 'rgba(20,20,20,0.5)',
+                border: '2px solid #444',
+                borderRadius: '4px',
+                padding: '4px',
+              }}
+            >
+              {filteredCreativeItems.slice(0, visibleCount).map((id) => {
                 const itemDef = ItemRegistry.get(id);
                 const itemName = itemDef ? getLocalizedItemName(id, itemDef.displayName) : String(id);
                 return (

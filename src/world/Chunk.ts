@@ -402,6 +402,45 @@ export class Chunk {
             continue;
           }
 
+          // Lily Pad
+          if (def.name === 'waterlily') {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            const bounds = { minX: 0, maxX: 1, minY: 0, maxY: 0.015, minZ: 0, maxZ: 1 };
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness);
+            continue;
+          }
+
+          // Vines
+          if (def.name === 'vine') {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            
+            let attached = false;
+            if (BlockRegistry.isSolid(getNeighborBlock(worldX + x, y, worldZ + z - 1))) {
+              this.addCuboid(target, x, y, z, id, atlas, { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 0.015 }, {}, undefined, false, lightBrightness);
+              attached = true;
+            }
+            if (BlockRegistry.isSolid(getNeighborBlock(worldX + x, y, worldZ + z + 1))) {
+              this.addCuboid(target, x, y, z, id, atlas, { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0.985, maxZ: 1 }, {}, undefined, false, lightBrightness);
+              attached = true;
+            }
+            if (BlockRegistry.isSolid(getNeighborBlock(worldX + x - 1, y, worldZ + z))) {
+              this.addCuboid(target, x, y, z, id, atlas, { minX: 0, maxX: 0.015, minY: 0, maxY: 1, minZ: 0, maxZ: 1 }, {}, undefined, false, lightBrightness);
+              attached = true;
+            }
+            if (BlockRegistry.isSolid(getNeighborBlock(worldX + x + 1, y, worldZ + z))) {
+              this.addCuboid(target, x, y, z, id, atlas, { minX: 0.985, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 1 }, {}, undefined, false, lightBrightness);
+              attached = true;
+            }
+            if (!attached) {
+              this.addPlant(target, x, y, z, id, atlas, lightBrightness);
+            }
+            continue;
+          }
+
           // Flowers & plants - cross-shaped rendering for transparent non-solid blocks.
           // Fluids are also transparent/non-solid, but they must render as culled voxel
           // surfaces; treating water as a plant fills oceans with crossed internal planes.

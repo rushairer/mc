@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 
-export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'fireball';
+export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'fireball' | 'potion';
 
 export interface Projectile {
   id: number;
@@ -11,7 +11,7 @@ export interface Projectile {
   damage: number;
   fromPlayer: boolean;
   lifetime: number;
-  mesh: THREE.Mesh;
+  mesh: THREE.Mesh | THREE.Group;
   inGround: boolean;
 }
 
@@ -27,6 +27,34 @@ export class ProjectileSystem {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+  }
+
+  createPotionMesh(color: string = '#8a2be2'): THREE.Mesh {
+    const geo = new THREE.BoxGeometry(0.25, 0.35, 0.25);
+    const mat = new THREE.MeshLambertMaterial({ color: color });
+    return new THREE.Mesh(geo, mat);
+  }
+
+  shootPotion(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage: number = 2) {
+    const mesh = this.createPotionMesh();
+    const vel = direction.clone().normalize().multiplyScalar(15);
+    vel.y += 2.5; // Throw arch
+
+    const potion: Projectile = {
+      id: this.nextId++,
+      type: 'potion',
+      position: origin.clone(),
+      velocity: vel,
+      damage,
+      fromPlayer,
+      lifetime: 0,
+      mesh,
+      inGround: false
+    };
+
+    this.projectiles.set(potion.id, potion);
+    this.scene.add(mesh);
+    mesh.position.copy(potion.position);
   }
 
   shootArrow(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage: number = ARROW_DAMAGE) {
@@ -91,7 +119,8 @@ export class ProjectileSystem {
     getMobs: () => { id: number; position: THREE.Vector3; width: number; height: number }[],
     playerPos: THREE.Vector3,
     playerWidth: number,
-    playerHeight: number
+    playerHeight: number,
+    onPotionSplash?: (pos: THREE.Vector3, fromPlayer: boolean, damage: number) => void
   ) {
     const toRemove: number[] = [];
 
@@ -105,7 +134,7 @@ export class ProjectileSystem {
       if (proj.inGround) continue;
 
       // Apply gravity
-      if (proj.type === 'arrow') {
+      if (proj.type === 'arrow' || proj.type === 'potion') {
         proj.velocity.y += ARROW_GRAVITY * dt;
       }
 
@@ -125,44 +154,70 @@ export class ProjectileSystem {
         const block = getBlock(bx, by, bz);
         if (block !== 0 && !BlockRegistry.isFluid(block)) {
           proj.position.copy(checkPos);
-          proj.inGround = true;
+          if (proj.type === 'potion') {
+            if (onPotionSplash) {
+              onPotionSplash(proj.position, proj.fromPlayer, proj.damage);
+            }
+          } else {
+            proj.inGround = true;
+          }
           hitBlock = true;
           break;
         }
+      }
+
+      if (hitBlock && proj.type === 'potion') {
+        toRemove.push(id);
+        continue;
       }
 
       if (!hitBlock) {
         proj.position.copy(newPos);
       }
 
-      // Player collision (arrows from mobs)
+      // Player collision (arrows/potions from mobs)
       if (!proj.fromPlayer) {
         const distToPlayer = proj.position.distanceTo(playerPos);
         if (distToPlayer < playerWidth + 0.3 &&
             proj.position.y > playerPos.y &&
             proj.position.y < playerPos.y + playerHeight) {
-          const kb = proj.velocity.clone().normalize().multiplyScalar(2);
-          kb.y = 1;
-          hitPlayer(proj.damage, kb);
+          if (proj.type === 'potion') {
+            if (onPotionSplash) {
+              onPotionSplash(proj.position, proj.fromPlayer, proj.damage);
+            }
+          } else {
+            const kb = proj.velocity.clone().normalize().multiplyScalar(2);
+            kb.y = 1;
+            hitPlayer(proj.damage, kb);
+          }
           toRemove.push(id);
           continue;
         }
       }
 
-      // Mob collision (arrows from player)
+      // Mob collision (arrows/potions from player or other mobs)
       if (proj.fromPlayer) {
+        let hit = false;
         for (const mob of getMobs()) {
           const dist = proj.position.distanceTo(mob.position);
           if (dist < mob.width + 0.3 &&
               proj.position.y > mob.position.y &&
               proj.position.y < mob.position.y + mob.height) {
-            const kb = proj.velocity.clone().normalize().multiplyScalar(2);
-            kb.y = 1;
-            hitMob(mob.id, proj.damage, kb);
+            if (proj.type === 'potion') {
+              if (onPotionSplash) {
+                onPotionSplash(proj.position, proj.fromPlayer, proj.damage);
+              }
+            } else {
+              const kb = proj.velocity.clone().normalize().multiplyScalar(2);
+              kb.y = 1;
+              hitMob(mob.id, proj.damage, kb);
+            }
             toRemove.push(id);
+            hit = true;
             break;
           }
         }
+        if (hit) continue;
       }
 
       // Update mesh
@@ -188,7 +243,13 @@ export class ProjectileSystem {
       const proj = this.projectiles.get(id);
       if (proj) {
         this.scene.remove(proj.mesh);
-        proj.mesh.geometry.dispose();
+        if (proj.mesh instanceof THREE.Mesh) {
+          proj.mesh.geometry.dispose();
+        } else {
+          proj.mesh.traverse(child => {
+            if (child instanceof THREE.Mesh) child.geometry.dispose();
+          });
+        }
         this.projectiles.delete(id);
       }
     }
@@ -205,7 +266,13 @@ export class ProjectileSystem {
   dispose() {
     for (const proj of this.projectiles.values()) {
       this.scene.remove(proj.mesh);
-      proj.mesh.geometry.dispose();
+      if (proj.mesh instanceof THREE.Mesh) {
+        proj.mesh.geometry.dispose();
+      } else {
+        proj.mesh.traverse(child => {
+          if (child instanceof THREE.Mesh) child.geometry.dispose();
+        });
+      }
     }
     this.projectiles.clear();
   }

@@ -1759,6 +1759,191 @@ export class TextureAtlas {
       ctx.fill();
     });
 
+    // ─── Biome specific blocks (mycelium, mushroom blocks, red sand, clay colors, plants) ───
+
+    // mycelium top
+    this.drawTile('mycelium_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#7a676a'; // purple-gray mycelium color
+      ctx.fillRect(x, y, s, s);
+      // add purple and gray speckles
+      for (let i = 0; i < 40; i++) {
+        const px = x + Math.random() * s;
+        const py = y + Math.random() * s;
+        ctx.fillStyle = Math.random() > 0.5 ? '#967b8a' : '#5c4e51';
+        ctx.fillRect(px | 0, py | 0, 1, 1);
+      }
+    });
+
+    // mycelium side
+    this.drawTile('mycelium_side', (ctx, x, y, s) => {
+      // dirt background
+      ctx.fillStyle = '#8B6914';
+      ctx.fillRect(x, y, s, s);
+      // speckles
+      for (let i = 0; i < 20; i++) {
+        const px = x + Math.random() * s;
+        const py = y + Math.random() * s;
+        ctx.fillStyle = '#6e5110';
+        ctx.fillRect(px | 0, py | 0, 1, 1);
+      }
+      // mycelium top border (similar to grass side)
+      ctx.fillStyle = '#7a676a';
+      ctx.fillRect(x, y, s, 3);
+      for (let i = 0; i < s; i += 2) {
+        const h = 1 + (i % 3);
+        ctx.fillRect(x + i, y + 3, 1, h);
+      }
+    });
+
+    // brown mushroom plant
+    this.drawTile('brown_mushroom', (ctx, x, y, s) => {
+      // stem
+      ctx.fillStyle = '#dcd4b4';
+      ctx.fillRect(x + 7, y + 6, 2, 10);
+      // cap
+      ctx.fillStyle = '#8e7055';
+      ctx.fillRect(x + 4, y + 2, 8, 4);
+      ctx.fillStyle = '#5c4735';
+      ctx.fillRect(x + 5, y + 1, 6, 1);
+    });
+
+    // red mushroom plant
+    this.drawTile('red_mushroom', (ctx, x, y, s) => {
+      // stem
+      ctx.fillStyle = '#f0ebe0';
+      ctx.fillRect(x + 7, y + 6, 2, 10);
+      // cap
+      ctx.fillStyle = '#cd2a2a';
+      ctx.fillRect(x + 4, y + 2, 8, 4);
+      ctx.fillStyle = '#a01a1a';
+      ctx.fillRect(x + 5, y + 1, 6, 1);
+      // white spots
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x + 5, y + 3, 1, 1);
+      ctx.fillRect(x + 9, y + 4, 1, 1);
+      ctx.fillRect(x + 7, y + 2, 1, 1);
+    });
+
+    // brown mushroom block cap
+    this.drawTile('brown_mushroom_block', (ctx, x, y, s) => {
+      ctx.fillStyle = '#8e7055';
+      ctx.fillRect(x, y, s, s);
+      // spots
+      ctx.fillStyle = '#bfa58f';
+      for (let i = 0; i < 4; i++) {
+        const px = x + ((i * 7) % s);
+        const py = y + ((i * 11) % s);
+        ctx.fillRect(px, py, 2, 2);
+      }
+    });
+
+    // red mushroom block cap
+    this.drawTile('red_mushroom_block', (ctx, x, y, s) => {
+      ctx.fillStyle = '#cd2a2a';
+      ctx.fillRect(x, y, s, s);
+      // white spots
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 5; i++) {
+        const px = x + ((i * 6 + 2) % s);
+        const py = y + ((i * 9 + 4) % s);
+        ctx.fillRect(px, py, 2, 2);
+      }
+    });
+
+    // red sand
+    this.drawTile('red_sand', (ctx, x, y, s) => {
+      ctx.fillStyle = '#c06b38';
+      ctx.fillRect(x, y, s, s);
+      // grain
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+      for (let i = 0; i < 25; i++) {
+        const px = x + Math.random() * s;
+        const py = y + Math.random() * s;
+        ctx.fillRect(px | 0, py | 0, 1 + (i % 2), 1);
+      }
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      for (let i = 0; i < 25; i++) {
+        const px = x + Math.random() * s;
+        const py = y + Math.random() * s;
+        ctx.fillRect(px | 0, py | 0, 1 + (i % 2), 1);
+      }
+    });
+
+    // waterlily
+    this.drawTile('waterlily', (ctx, x, y, s) => {
+      ctx.fillStyle = '#1f4e1f';
+      ctx.fillRect(x + 1, y + 1, s - 2, s - 2);
+      // draw split in the lily pad
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.fillRect(x + 7, y + 1, 2, 8);
+      // veins
+      ctx.strokeStyle = '#2d6a2d';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 3, y + 3); ctx.lineTo(x + 8, y + 8);
+      ctx.moveTo(x + 13, y + 3); ctx.lineTo(x + 8, y + 8);
+      ctx.moveTo(x + 8, y + 13); ctx.lineTo(x + 8, y + 8);
+      ctx.stroke();
+    });
+
+    // vine
+    this.drawTile('vine', (ctx, x, y, s) => {
+      ctx.fillStyle = '#2d6d1d';
+      // draw vine strands
+      ctx.fillRect(x + 2, y, 1, s);
+      ctx.fillRect(x + 6, y, 1, s);
+      ctx.fillRect(x + 10, y, 1, s);
+      ctx.fillRect(x + 13, y, 1, s);
+      // leaves coming off strands
+      for (let i = 0; i < s; i += 3) {
+        ctx.fillRect(x + 1, y + i, 2, 1);
+        ctx.fillRect(x + 5, y + i + 1, 2, 1);
+        ctx.fillRect(x + 9, y + i + 2, 2, 1);
+        ctx.fillRect(x + 12, y + i, 2, 1);
+      }
+    });
+
+    // Hardened clay (Terracotta) variations
+    const CLAY_COLORS: Record<string, string> = {
+      'hardened_clay': '#985e46',
+      'white_hardened_clay': '#d1b1a1',
+      'orange_hardened_clay': '#a1532f',
+      'magenta_hardened_clay': '#95586c',
+      'light_blue_hardened_clay': '#716c89',
+      'yellow_hardened_clay': '#ba8523',
+      'lime_hardened_clay': '#677535',
+      'pink_hardened_clay': '#a15453',
+      'gray_hardened_clay': '#392f2c',
+      'light_gray_hardened_clay': '#876a61',
+      'cyan_hardened_clay': '#565c5e',
+      'purple_hardened_clay': '#764656',
+      'blue_hardened_clay': '#4a3a4e',
+      'brown_hardened_clay': '#4d3324',
+      'green_hardened_clay': '#49531d',
+      'red_hardened_clay': '#8f3d2f',
+      'black_hardened_clay': '#251715',
+    };
+
+    for (const [key, color] of Object.entries(CLAY_COLORS)) {
+      this.drawTile(key, (ctx, x, y, s) => {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, s, s);
+        // Add subtle clay grain
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+        for (let i = 0; i < 20; i++) {
+          const px = x + Math.random() * s;
+          const py = y + Math.random() * s;
+          ctx.fillRect(px | 0, py | 0, 1 + (i % 2), 1);
+        }
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+        for (let i = 0; i < 20; i++) {
+          const px = x + Math.random() * s;
+          const py = y + Math.random() * s;
+          ctx.fillRect(px | 0, py | 0, 1 + (i % 2), 1);
+        }
+      });
+    }
+
     // ─── Procedural Fallbacks for All Blocks & Items ───
     const hashColor = (str: string) => {
       let hash = 0;

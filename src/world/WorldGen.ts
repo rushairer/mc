@@ -10,6 +10,11 @@ export enum BiomeType {
   Forest = 3,
   Snow = 4,
   Ocean = 5,
+  Swamp = 6,
+  Jungle = 7,
+  River = 8,
+  MushroomIsland = 9,
+  Badlands = 10,
 }
 
 export interface BiomeConfig {
@@ -28,13 +33,30 @@ const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
   [BiomeType.Forest]:    { baseHeight: 100, amplitude: 16, treeChance: 0.03,  surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
   [BiomeType.Snow]:      { baseHeight: 102, amplitude: 20, treeChance: 0.008, surfaceBlock: 80, underBlock: 3, stoneDepth: 3 },
   [BiomeType.Ocean]:     { baseHeight: 74, amplitude: 10, treeChance: 0,     surfaceBlock: 12, underBlock: 3, stoneDepth: 3 },
+  [BiomeType.Swamp]:     { baseHeight: 62, amplitude: 3,  treeChance: 0.02,  surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
+  [BiomeType.Jungle]:    { baseHeight: 98, amplitude: 18, treeChance: 0.08,  surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
+  [BiomeType.River]:     { baseHeight: 60, amplitude: 2,  treeChance: 0,     surfaceBlock: 12, underBlock: 12, stoneDepth: 3 },
+  [BiomeType.MushroomIsland]: { baseHeight: 75, amplitude: 10, treeChance: 0.02, surfaceBlock: 110, underBlock: 3, stoneDepth: 3 },
+  [BiomeType.Badlands]:  { baseHeight: 96, amplitude: 15, treeChance: 0,     surfaceBlock: (1 << 10) | 12, underBlock: 172, stoneDepth: 15 },
 };
+
+function getBadlandsBlockId(y: number): number {
+  const layer = y % 14;
+  if (layer === 0 || layer === 1) return (1 << 10) | 172; // Orange hardened clay
+  if (layer === 3 || layer === 4) return (4 << 10) | 172; // Yellow hardened clay
+  if (layer === 6) return (0 << 10) | 172; // White hardened clay
+  if (layer === 8 || layer === 9) return (14 << 10) | 172; // Red hardened clay
+  if (layer === 11 || layer === 12) return (12 << 10) | 172; // Brown hardened clay
+  return 172; // standard terracotta
+}
 
 export class WorldGen {
   private noise: SimplexNoise;
   private temperatureNoise: SimplexNoise;
   private humidityNoise: SimplexNoise;
   private caveNoise: SimplexNoise;
+  private riverNoise: SimplexNoise;
+  private mushroomNoise: SimplexNoise;
   private treeSeed: number;
   seed: number;
 
@@ -44,16 +66,43 @@ export class WorldGen {
     this.temperatureNoise = new SimplexNoise(seed + 100);
     this.humidityNoise = new SimplexNoise(seed + 200);
     this.caveNoise = new SimplexNoise(seed + 300);
+    this.riverNoise = new SimplexNoise(seed + 400);
+    this.mushroomNoise = new SimplexNoise(seed + 500);
     this.treeSeed = seed;
   }
 
   getBiome(wx: number, wz: number): BiomeType {
+    // 1. Check for Mushroom Island first (very rare, isolated in ocean)
+    const mNoise = this.mushroomNoise.noise2D(wx * 0.002, wz * 0.002);
+    if (mNoise > 0.82) {
+      return BiomeType.MushroomIsland;
+    }
+
+    // 2. Check for River (winding channels cutting through land)
+    const rNoise = this.riverNoise.noise2D(wx * 0.004, wz * 0.004);
+    if (Math.abs(rNoise) < 0.018) {
+      return BiomeType.River;
+    }
+
     const temp = this.temperatureNoise.fbm2D(wx * 0.005, wz * 0.005, 3);
     const humid = this.humidityNoise.fbm2D(wx * 0.005, wz * 0.005, 3);
 
     if (temp < -0.3) return BiomeType.Snow;
+    
+    // Badlands (Mesa): Hot & Dry
+    if (temp > 0.4 && humid < -0.15) return BiomeType.Badlands;
+    
+    // Desert: Hot & Dry (lower temperature threshold than Badlands)
     if (temp > 0.35 && humid < 0.1) return BiomeType.Desert;
-    if (humid > 0.3 && temp > -0.1) return BiomeType.Forest;
+
+    // Jungle: Hot & Wet
+    if (temp > 0.3 && humid > 0.35) return BiomeType.Jungle;
+
+    // Swamp: Warm & Wet (lower temperature than Jungle)
+    if (temp > 0.0 && humid > 0.3) return BiomeType.Swamp;
+
+    // Forest: Wet
+    if (humid > 0.25 && temp > -0.1) return BiomeType.Forest;
 
     // Check if below sea level = ocean
     const baseHeight = 64 + this.noise.fbm2D(wx * 0.008, wz * 0.008, 4) * 30;
@@ -68,7 +117,14 @@ export class WorldGen {
     const cfg = BIOME_CONFIGS[biome];
 
     const n = this.noise.fbm2D(wx * 0.01, wz * 0.01, 6, 2.0, 0.45);
-    const height = cfg.baseHeight + n * cfg.amplitude;
+    let height = cfg.baseHeight + n * cfg.amplitude;
+
+    // Smooth river carving transition
+    const rNoise = this.riverNoise.noise2D(wx * 0.004, wz * 0.004);
+    if (Math.abs(rNoise) < 0.035 && biome !== BiomeType.MushroomIsland && biome !== BiomeType.Ocean) {
+      const t = 1 - Math.abs(rNoise) / 0.035;
+      height = height * (1 - t) + (60 + n * 2) * t;
+    }
 
     return Math.floor(Math.max(1, Math.min(WORLD_HEIGHT - 2, height)));
   }
@@ -97,11 +153,25 @@ export class WorldGen {
           } else if (y < height - cfg.stoneDepth) {
             blockId = 1; // stone
           } else if (y < height) {
-            blockId = cfg.underBlock; // dirt/sand/snow under surface
+            if (biome === BiomeType.Badlands) {
+              blockId = getBadlandsBlockId(y);
+            } else {
+              blockId = cfg.underBlock; // dirt/sand/snow under surface
+            }
           } else if (y === height) {
             blockId = cfg.surfaceBlock; // grass/sand/etc surface
           } else if (y <= SEA_LEVEL && y > height) {
             blockId = 9; // water (still)
+          }
+
+          // Swamp underwater clay generation
+          if (biome === BiomeType.Swamp && y < SEA_LEVEL && y >= height - 2) {
+            if (blockId === 3 || blockId === 2) {
+              const clayNoise = this.noise.noise2D(wx * 0.05, wz * 0.05);
+              if (clayNoise > 0.1) {
+                blockId = 82; // clay
+              }
+            }
           }
 
           chunk.setBlock(x, y, z, blockId);
@@ -283,8 +353,135 @@ export class WorldGen {
       this.placeSpruceTree(chunk, x, y, z);
     } else if (biome === BiomeType.Forest && rand > 0.5) {
       this.placeBirchTree(chunk, x, y, z);
+    } else if (biome === BiomeType.Jungle) {
+      this.placeJungleTree(chunk, x, y, z);
+    } else if (biome === BiomeType.Swamp) {
+      this.placeSwampOakTree(chunk, x, y, z);
+    } else if (biome === BiomeType.MushroomIsland) {
+      this.placeGiantMushroom(chunk, x, y, z);
     } else {
       this.placeOakTree(chunk, x, y, z);
+    }
+  }
+
+  private placeJungleTree(chunk: Chunk, x: number, y: number, z: number) {
+    const rand = this.pseudoRandom(x, y, z);
+    const trunkHeight = 7 + Math.floor(rand * 6);
+    const logId = (3 << 10) | 17;    // jungle log
+    const leafId = (3 << 10) | 18;   // jungle leaves
+    const vineId = 106;              // vines
+
+    // Place trunk
+    for (let h = 0; h < trunkHeight; h++) {
+      const ly = y + h;
+      if (ly >= WORLD_HEIGHT) break;
+      chunk.setBlock(x, ly, z, logId);
+
+      // Place vines on sides of log (randomly)
+      if (h > 1 && h < trunkHeight - 2) {
+        const vRand = this.pseudoRandom(x * 5, ly, z * 7);
+        if (vRand < 0.25 && x > 0) chunk.setBlock(x - 1, ly, z, vineId);
+        if (vRand >= 0.25 && vRand < 0.5 && x < CHUNK_SIZE - 1) chunk.setBlock(x + 1, ly, z, vineId);
+        if (vRand >= 0.5 && vRand < 0.75 && z > 0) chunk.setBlock(x, ly, z - 1, vineId);
+        if (vRand >= 0.75 && z < CHUNK_SIZE - 1) chunk.setBlock(x, ly, z + 1, vineId);
+      }
+    }
+
+    // Large bushy canopy
+    const leafStart = y + trunkHeight - 3;
+    const leafEnd = y + trunkHeight + 2;
+
+    for (let ly = leafStart; ly <= leafEnd; ly++) {
+      const distFromTop = leafEnd - ly;
+      const r = distFromTop <= 1 ? 1 : (distFromTop === 2 ? 2 : 3);
+      for (let lx = -r; lx <= r; lx++) {
+        for (let lz = -r; lz <= r; lz++) {
+          if (lx === 0 && lz === 0 && ly < y + trunkHeight) continue;
+          if (Math.abs(lx) === r && Math.abs(lz) === r && r > 1) {
+            if (this.pseudoRandom(x + lx, ly, z + lz) > 0.4) continue;
+          }
+          const bx = x + lx;
+          const bz = z + lz;
+          if (bx >= 0 && bx < CHUNK_SIZE && bz >= 0 && bz < CHUNK_SIZE && ly < WORLD_HEIGHT) {
+            if (chunk.getBlock(bx, ly, bz) === 0) {
+              chunk.setBlock(bx, ly, bz, leafId);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private placeSwampOakTree(chunk: Chunk, x: number, y: number, z: number) {
+    this.placeOakTree(chunk, x, y, z);
+
+    const leafId = 18;
+    const vineId = 106;
+
+    const leafStart = y + 2;
+    const leafEnd = y + 7;
+    for (let ly = leafStart; ly <= leafEnd; ly++) {
+      for (let lx = -3; lx <= 3; lx++) {
+        for (let lz = -3; lz <= 3; lz++) {
+          const bx = x + lx;
+          const bz = z + lz;
+          if (bx >= 0 && bx < CHUNK_SIZE && bz >= 0 && bz < CHUNK_SIZE && ly < WORLD_HEIGHT) {
+            if (chunk.getBlock(bx, ly, bz) === leafId) {
+              if (ly > y + 1 && chunk.getBlock(bx, ly - 1, bz) === 0 && this.pseudoRandom(bx, ly, bz) < 0.18) {
+                chunk.setBlock(bx, ly - 1, bz, vineId);
+                if (ly > y + 2 && chunk.getBlock(bx, ly - 2, bz) === 0 && this.pseudoRandom(bx + 1, ly, bz) < 0.5) {
+                  chunk.setBlock(bx, ly - 2, bz, vineId);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private placeGiantMushroom(chunk: Chunk, x: number, y: number, z: number) {
+    const rand = this.pseudoRandom(x, y, z);
+    const isRed = rand > 0.5;
+    const capId = isRed ? 100 : 99;
+    const stemId = (10 << 10) | capId; // stem metadata 10
+
+    const height = 5 + Math.floor(rand * 3);
+
+    for (let h = 0; h < height; h++) {
+      if (y + h < WORLD_HEIGHT) {
+        chunk.setBlock(x, y + h, z, stemId);
+      }
+    }
+
+    const cy = y + height;
+    if (cy >= WORLD_HEIGHT - 3) return;
+
+    if (isRed) {
+      for (let lx = -1; lx <= 1; lx++) {
+        for (let lz = -1; lz <= 1; lz++) {
+          chunk.setBlock(x + lx, cy, z + lz, capId);
+        }
+      }
+      for (let h = 1; h <= 2; h++) {
+        const sideY = cy - h;
+        for (let lx = -2; lx <= 2; lx++) {
+          for (let lz = -2; lz <= 2; lz++) {
+            const isBorderX = Math.abs(lx) === 2;
+            const isBorderZ = Math.abs(lz) === 2;
+            if ((isBorderX && Math.abs(lz) <= 1) || (isBorderZ && Math.abs(lx) <= 1)) {
+              chunk.setBlock(x + lx, sideY, z + lz, capId);
+            }
+          }
+        }
+      }
+    } else {
+      for (let lx = -2; lx <= 2; lx++) {
+        for (let lz = -2; lz <= 2; lz++) {
+          if (Math.abs(lx) === 2 && Math.abs(lz) === 2) continue;
+          chunk.setBlock(x + lx, cy, z + lz, capId);
+        }
+      }
     }
   }
 
@@ -380,34 +577,97 @@ export class WorldGen {
         const wx = worldX + x;
         const wz = worldZ + z;
         const biome = this.getBiome(wx, wz);
-        if (biome === BiomeType.Desert || biome === BiomeType.Ocean) continue;
 
         const rand = this.pseudoRandom(wx * 31, 99, wz * 17);
+
+        // 1. Swamp Lily Pads (placed on water surfaces, regardless of the land grass check)
+        if (biome === BiomeType.Swamp && rand < 0.18) {
+          let surfaceWaterY = -1;
+          for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
+            const id = chunk.getBlock(x, y, z) & 0x3FF;
+            if (id === 9) { // water
+              surfaceWaterY = y;
+              break;
+            }
+          }
+          if (surfaceWaterY !== -1 && surfaceWaterY < WORLD_HEIGHT - 1) {
+            const above = chunk.getBlock(x, surfaceWaterY + 1, z);
+            if (above === 0) {
+              chunk.setBlock(x, surfaceWaterY + 1, z, 111); // lily pad
+            }
+          }
+        }
+
+        if (biome === BiomeType.Badlands || biome === BiomeType.Ocean) continue;
+
         if (rand > 0.08) continue;
 
-        // Find surface
+        // Find surface (supporting Grass, Snow, Mycelium, Sand, Clay)
         let surfaceY = -1;
         for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
           const id = chunk.getBlock(x, y, z);
-          if (id === 2 || id === 27) { // grass or snow
+          const baseId = id & 0x3FF;
+          if (id === 2 || id === 27 || id === 110 || baseId === 12 || baseId === 172) {
             surfaceY = y;
             break;
           }
         }
-        if (surfaceY < 10) continue;
+        if (surfaceY < 10 || surfaceY >= WORLD_HEIGHT - 3) continue;
 
         const aboveBlock = chunk.getBlock(x, surfaceY + 1, z);
         if (aboveBlock !== 0) continue;
 
         const decorRand = this.pseudoRandom(wx * 43, surfaceY, wz * 59);
 
-        if (biome === BiomeType.Forest) {
+        if (biome === BiomeType.MushroomIsland) {
+          if (decorRand < 0.35) chunk.setBlock(x, surfaceY + 1, z, 39); // brown mushroom
+          else if (decorRand < 0.7) chunk.setBlock(x, surfaceY + 1, z, 40); // red mushroom
+        } else if (biome === BiomeType.Jungle) {
+          if (decorRand < 0.3) chunk.setBlock(x, surfaceY + 1, z, (2 << 10) | 31); // fern
+          else if (decorRand < 0.7) chunk.setBlock(x, surfaceY + 1, z, (1 << 10) | 31); // tall grass
+          else if (decorRand < 0.75) chunk.setBlock(x, surfaceY + 1, z, 103); // melon block
+        } else if (biome === BiomeType.Swamp) {
+          if (decorRand < 0.2) chunk.setBlock(x, surfaceY + 1, z, (1 << 10) | 38); // blue orchid
+          else if (decorRand < 0.6) chunk.setBlock(x, surfaceY + 1, z, (1 << 10) | 31); // tall grass
+          else if (decorRand < 0.7) chunk.setBlock(x, surfaceY + 1, z, (2 << 10) | 31); // fern
+        } else if (biome === BiomeType.Desert) {
+          if (decorRand < 0.15) {
+            const cactusHeight = 1 + Math.floor(decorRand * 20) % 3;
+            for (let h = 1; h <= cactusHeight; h++) {
+              if (surfaceY + h < WORLD_HEIGHT) {
+                chunk.setBlock(x, surfaceY + h, z, 81); // cactus
+              }
+            }
+          }
+        } else if (biome === BiomeType.River) {
+          let nextToWater = false;
+          const checkDirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+          for (const [dx, dz] of checkDirs) {
+            const nx = x + dx;
+            const nz = z + dz;
+            if (nx >= 0 && nx < CHUNK_SIZE && nz >= 0 && nz < CHUNK_SIZE) {
+              const nId = chunk.getBlock(nx, surfaceY, nz) & 0x3FF;
+              if (nId === 8 || nId === 9) {
+                nextToWater = true;
+                break;
+              }
+            }
+          }
+          if (nextToWater && decorRand < 0.35) {
+            const reedsHeight = 2 + Math.floor(decorRand * 10) % 2;
+            for (let h = 1; h <= reedsHeight; h++) {
+              if (surfaceY + h < WORLD_HEIGHT) {
+                chunk.setBlock(x, surfaceY + h, z, 83); // reeds
+              }
+            }
+          }
+        } else if (biome === BiomeType.Forest) {
           if (decorRand < 0.3) chunk.setBlock(x, surfaceY + 1, z, 38); // poppy
           else if (decorRand < 0.5) chunk.setBlock(x, surfaceY + 1, z, 37); // dandelion
           else if (decorRand < 0.6) chunk.setBlock(x, surfaceY + 1, z, (2 << 10) | 31); // fern
           else chunk.setBlock(x, surfaceY + 1, z, (1 << 10) | 31); // tall grass
         } else if (biome === BiomeType.Snow) {
-          // Snow biome: less variety
+          // Snow biome
         } else {
           // Plains
           if (decorRand < 0.2) chunk.setBlock(x, surfaceY + 1, z, 37); // dandelion

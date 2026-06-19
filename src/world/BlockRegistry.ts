@@ -7,6 +7,7 @@ const blocksByOfficialId: Map<string, BlockDef> = new Map();
 // ─── Texture Custom Overrides for Multi-face Blocks ───
 const TEXTURE_OVERRIDES: Record<string, { textureKey: string; textureTop?: string; textureBottom?: string }> = {
   'grass': { textureKey: 'dirt', textureTop: 'grass_top', textureBottom: 'dirt' },
+  'mycelium': { textureKey: 'mycelium_side', textureTop: 'mycelium_top', textureBottom: 'dirt' },
   'log': { textureKey: 'oak_log_side', textureTop: 'oak_log_top', textureBottom: 'oak_log_top' },
   'log2': { textureKey: 'acacia_log_side', textureTop: 'acacia_log_top', textureBottom: 'acacia_log_top' },
   'oak_wood': { textureKey: 'oak_log_side', textureTop: 'oak_log_top', textureBottom: 'oak_log_top' },
@@ -60,15 +61,32 @@ for (const b of rawBlocks) {
     const normalized = normalizeName(name);
     let key = normalized;
 
-    // Preserve variant-specific textures that the atlas already draws.
+    // Logs (special multi-face blocks)
+    if (normalized.includes('spruce') && normalized.includes('log')) {
+      return { textureKey: 'spruce_log_side', textureTop: 'spruce_log_top', textureBottom: 'spruce_log_top' };
+    }
+    if (normalized.includes('birch') && normalized.includes('log')) {
+      return { textureKey: 'birch_log_side', textureTop: 'birch_log_top', textureBottom: 'birch_log_top' };
+    }
+    if (normalized.includes('acacia') && normalized.includes('log')) {
+      return { textureKey: 'acacia_log_side', textureTop: 'acacia_log_top', textureBottom: 'acacia_log_top' };
+    }
+    if (normalized.includes('jungle') && normalized.includes('log')) {
+      return { textureKey: 'jungle_log_side', textureTop: 'jungle_log_top', textureBottom: 'jungle_log_top' };
+    }
+
+    // Planks
     if (normalized.includes('spruce') && normalized.includes('planks')) key = 'spruce_planks';
     else if (normalized.includes('birch') && normalized.includes('planks')) key = 'birch_planks';
     else if (normalized.includes('acacia') && normalized.includes('planks')) key = 'acacia_planks';
+    else if (normalized.includes('jungle') && normalized.includes('planks')) key = 'jungle_planks';
     else if (normalized.includes('planks')) key = 'oak_planks';
 
+    // Leaves
     if (normalized.includes('spruce') && normalized.includes('leaves')) key = 'spruce_leaves';
     else if (normalized.includes('birch') && normalized.includes('leaves')) key = 'birch_leaves';
     else if (normalized.includes('acacia') && normalized.includes('leaves')) key = 'acacia_leaves';
+    else if (normalized.includes('jungle') && normalized.includes('leaves')) key = 'jungle_leaves';
     else if (normalized.includes('leaves')) key = 'oak_leaves';
     
     // Check specific texture overrides

@@ -4,6 +4,7 @@ import { CHUNK_SIZE, RENDER_DISTANCE } from '../constants';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { VillageSystem, type VillagerProfession } from './VillageSystem';
 import type { WorldGen } from '../world/WorldGen';
+import { BiomeType } from '../world/WorldGen';
 
 const MAX_MOBS = 40;
 const SPAWN_INTERVAL = 2.0; // seconds between spawn attempts
@@ -23,36 +24,144 @@ export class MobSystem {
   update(
     dt: number,
     playerPos: THREE.Vector3,
-    isNight: boolean,
-    getBlock: (x: number, y: number, z: number) => number,
-    hurtPlayer: (damage: number, knockback: THREE.Vector3, attacker?: Mob) => void,
+    isNight?: boolean,
+    getBlock?: (x: number, y: number, z: number) => number,
+    hurtPlayer?: (damage: number, knockback: THREE.Vector3, attacker?: Mob) => void,
     isSolidBlock?: (x: number, y: number, z: number) => boolean,
     gameMode: 'survival' | 'creative' = 'survival',
     onMobDeath?: (mob: Mob) => void,
-    onMobShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, type: 'arrow' | 'fireball') => void,
+    onMobShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, type: 'arrow' | 'fireball' | 'potion') => void,
     dimension = 0,
-    worldGen?: WorldGen
+    worldGen?: WorldGen,
+    playerHeldItem = 0,
+    onMobBreed?: (type: MobType, pos: THREE.Vector3) => void,
+    playerLookDir?: THREE.Vector3
   ) {
-    // Update existing mobs
+    if (!getBlock || !hurtPlayer) return;
+    // Target updates for Golems, Wolves, Creeper escape
     for (const [id, mob] of this.mobs) {
-      mob.update(dt, playerPos, getBlock, hurtPlayer, isSolidBlock, gameMode, onMobShoot);
+      if (mob.def.type === 'iron_golem') {
+        if (mob.isAngry) {
+          mob.targetPlayer = true;
+          mob.targetMob = null;
+        } else {
+          mob.targetPlayer = false;
+          let nearestHostile: Mob | null = null;
+          let minDist = 16;
+          for (const other of this.mobs.values()) {
+            if (other.def.hostile && other.health > 0) {
+              const dist = mob.position.distanceTo(other.position);
+              if (dist < minDist) {
+                minDist = dist;
+                nearestHostile = other;
+              }
+            }
+          }
+          mob.targetMob = nearestHostile;
+        }
+      } else if (mob.def.type === 'wolf' && mob.isTamed && !mob.isSitting) {
+        let nearestHostile: Mob | null = null;
+        let minDist = 12;
+        for (const other of this.mobs.values()) {
+          if (other.def.hostile && other.health > 0) {
+            const dist = playerPos.distanceTo(other.position);
+            if (dist < minDist) {
+              minDist = dist;
+              nearestHostile = other;
+            }
+          }
+        }
+        mob.targetMob = nearestHostile;
+
+        const distToPlayer = mob.position.distanceTo(playerPos);
+        if (distToPlayer > 12) {
+          mob.position.copy(playerPos).add(new THREE.Vector3((Math.random() - 0.5) * 2, 0.05, (Math.random() - 0.5) * 2));
+          mob.velocity.set(0, 0, 0);
+        }
+      } else if (mob.def.type === 'cat' && mob.isTamed && !mob.isSitting) {
+        const distToPlayer = mob.position.distanceTo(playerPos);
+        if (distToPlayer > 12) {
+          mob.position.copy(playerPos).add(new THREE.Vector3((Math.random() - 0.5) * 2, 0.05, (Math.random() - 0.5) * 2));
+          mob.velocity.set(0, 0, 0);
+        }
+      } else if (mob.def.type === 'creeper') {
+        let nearestCat: Mob | null = null;
+        let minDist = 10;
+        for (const other of this.mobs.values()) {
+          if (other.def.type === 'cat' && other.health > 0) {
+            const dist = mob.position.distanceTo(other.position);
+            if (dist < minDist) {
+              minDist = dist;
+              nearestCat = other;
+            }
+          }
+        }
+        mob.runAwayFrom = nearestCat ? nearestCat.position : null;
+      }
+
+      mob.update(dt, playerPos, getBlock, hurtPlayer, isSolidBlock, gameMode, (origin, dir, type) => {
+        if (onMobShoot) onMobShoot(origin, dir, type);
+      }, playerHeldItem, playerLookDir);
 
       if (mob.isDead()) {
         if (onMobDeath) {
           onMobDeath(mob);
         }
-        this.removeMob(id);
+        this.mobs.delete(id);
+      }
+    }
+
+    // Breeding mates update
+    const breedableTypes = new Set(['cow', 'pig', 'sheep', 'chicken']);
+    const loveMobs = Array.from(this.mobs.values()).filter(m => breedableTypes.has(m.def.type) && m.loveTimer > 0);
+
+    for (let i = 0; i < loveMobs.length; i++) {
+      const mobA = loveMobs[i];
+      for (let j = i + 1; j < loveMobs.length; j++) {
+        const mobB = loveMobs[j];
+        if (mobA.def.type !== mobB.def.type) continue;
+
+        const dist = mobA.position.distanceTo(mobB.position);
+        if (dist < 2.0) {
+          // Mate!
+          mobA.loveTimer = 0;
+          mobB.loveTimer = 0;
+          mobA.breedCooldown = 300;
+          mobB.breedCooldown = 300;
+
+          const midPos = new THREE.Vector3()
+            .addVectors(mobA.position, mobB.position)
+            .multiplyScalar(0.5);
+
+          // Spawn baby
+          const baby = this.spawnMob(mobA.def.type, midPos.x, midPos.y, midPos.z);
+          baby.isBaby = true;
+          baby.babyAge = 60; // speeded up growth to 60 seconds
+
+          if (onMobBreed) {
+            onMobBreed(mobA.def.type, midPos);
+          }
+        } else if (dist < 8.0) {
+          // Attract towards each other
+          const dirA = new THREE.Vector3().subVectors(mobB.position, mobA.position).normalize();
+          mobA.velocity.x = dirA.x * mobA.def.speed * 0.7;
+          mobA.velocity.z = dirA.z * mobA.def.speed * 0.7;
+
+          const dirB = dirA.clone().negate();
+          mobB.velocity.x = dirB.x * mobB.def.speed * 0.7;
+          mobB.velocity.z = dirB.z * mobB.def.speed * 0.7;
+        }
       }
     }
 
     // Spawn new mobs
     this.spawnTimer += dt;
-    if (this.spawnTimer >= SPAWN_INTERVAL && this.mobs.size < MAX_MOBS) {
+    if (this.spawnTimer >= SPAWN_INTERVAL && this.mobs.size < MAX_MOBS && getBlock) {
       this.spawnTimer = 0;
-      this.trySpawn(playerPos, isNight, getBlock, dimension);
+      this.trySpawn(playerPos, isNight ?? false, getBlock, dimension, worldGen);
     }
 
-    if (dimension === 0 && worldGen) {
+    if (dimension === 0 && worldGen && getBlock) {
       this.ensureVillageMobs(playerPos, worldGen, getBlock);
     }
   }
@@ -61,7 +170,8 @@ export class MobSystem {
     playerPos: THREE.Vector3,
     isNight: boolean,
     getBlock: (x: number, y: number, z: number) => number,
-    dimension: number
+    dimension: number,
+    worldGen?: WorldGen
   ) {
     // Random position around player
     const angle = Math.random() * Math.PI * 2;
@@ -119,13 +229,27 @@ export class MobSystem {
         }
       }
 
+      const biome = worldGen ? worldGen.getBiome(wx, wz) : null;
+
       if (lightLevel >= 7 && !isNight) {
         // Daytime: passive mobs
         const passiveTypes: MobType[] = ['cow', 'pig', 'sheep', 'chicken'];
+        if (biome === BiomeType.Jungle) {
+          passiveTypes.push('cat');
+        } else if (biome === BiomeType.Forest) {
+          passiveTypes.push('wolf');
+        } else if (biome === BiomeType.Plains || biome === BiomeType.Badlands) {
+          passiveTypes.push('horse');
+        }
         mobType = passiveTypes[Math.floor(Math.random() * passiveTypes.length)];
       } else if (isNight || lightLevel < 7) {
         // Nighttime or dark: hostile mobs
-        const hostileTypes: MobType[] = ['zombie', 'skeleton', 'creeper', 'spider'];
+        const hostileTypes: MobType[] = ['zombie', 'skeleton', 'creeper', 'spider', 'enderman'];
+        if (biome === BiomeType.Swamp) {
+          hostileTypes.push('witch', 'witch');
+        } else {
+          hostileTypes.push('witch');
+        }
         mobType = hostileTypes[Math.floor(Math.random() * hostileTypes.length)];
       } else {
         return;

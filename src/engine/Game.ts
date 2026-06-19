@@ -118,6 +118,7 @@ export class Game {
   private portalCooldown = 0;
   openUI: UIType = 'none';
   gameMode: 'survival' | 'creative' = 'survival';
+  riddenMob: Mob | null = null;
   private autoSaveTimer = 0;
   private breakProgress = 0;
   private breakingBlockPos: THREE.Vector3 | null = null;
@@ -744,6 +745,60 @@ export class Game {
       }
     }
 
+    // Riding Horse controls
+    if (this.riddenMob) {
+      const forward = this.chatOpen ? false : this.input.isKeyDown('w');
+      const back = this.chatOpen ? false : this.input.isKeyDown('s');
+      const left = this.chatOpen ? false : this.input.isKeyDown('a');
+      const right = this.chatOpen ? false : this.input.isKeyDown('d');
+      const jump = this.chatOpen ? false : this.input.isKeyDown(' ');
+      
+      const yaw = this.player.yaw;
+      let moveX = 0;
+      let moveZ = 0;
+      
+      if (forward) {
+        moveX += Math.sin(yaw);
+        moveZ += Math.cos(yaw);
+      }
+      if (back) {
+        moveX -= Math.sin(yaw);
+        moveZ -= Math.cos(yaw);
+      }
+      if (left) {
+        moveX += Math.sin(yaw + Math.PI / 2);
+        moveZ += Math.cos(yaw + Math.PI / 2);
+      }
+      if (right) {
+        moveX -= Math.sin(yaw + Math.PI / 2);
+        moveZ -= Math.cos(yaw + Math.PI / 2);
+      }
+      
+      const dir = new THREE.Vector3(moveX, 0, moveZ);
+      if (dir.lengthSq() > 0) {
+        dir.normalize();
+        this.riddenMob.velocity.x = dir.x * this.riddenMob.speed * 1.5;
+        this.riddenMob.velocity.z = dir.z * this.riddenMob.speed * 1.5;
+        this.riddenMob.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+      } else {
+        this.riddenMob.velocity.x = 0;
+        this.riddenMob.velocity.z = 0;
+      }
+      
+      if (jump && this.riddenMob.onGround) {
+        this.riddenMob.velocity.y = 9.5;
+        this.riddenMob.onGround = false;
+      }
+      
+      // Dismount with Shift key
+      const dismount = this.chatOpen ? false : this.input.isKeyDown('shift');
+      if (dismount) {
+        this.riddenMob.isRidden = false;
+        this.riddenMob = null;
+        this.player.position.x += 1.2;
+      }
+    }
+
     // Player update
     this.player.speedMultiplier = this.potionEffects.getSpeedMultiplier();
     const mouseDelta = this.input.consumeMouseDelta();
@@ -758,6 +813,12 @@ export class Game {
       sprint: this.chatOpen ? false : (this.input.isKeyDown('control') || this.input.isKeyDown('shift')),
       fly: false,
     }, this.chunks);
+
+    if (this.riddenMob) {
+      this.player.position.copy(this.riddenMob.position);
+      this.player.position.y += this.riddenMob.height * 0.75;
+      this.player.velocity.set(0, 0, 0);
+    }
 
     // Portal teleportation check
     const px = Math.floor(this.player.position.x);
@@ -784,6 +845,10 @@ export class Game {
 
     // Mob system
     const isNight = this.isNight();
+    const heldItem = this.inventory.getSlot(this.player.selectedSlot)?.id || 0;
+    const playerLookDir = new THREE.Vector3();
+    this.renderer.camera.getWorldDirection(playerLookDir);
+
     this.mobs.update(dt, this.player.position, isNight,
       (x, y, z) => this.chunks.getBlock(x, y, z),
       (damage, knockback, attacker) => {
@@ -802,12 +867,20 @@ export class Game {
       (origin, direction, type) => {
         if (type === 'fireball') {
           this.projectiles.shootFireball(origin, direction, false, 4);
+        } else if (type === 'potion') {
+          this.projectiles.shootPotion(origin, direction, false, 2);
         } else {
           this.projectiles.shootArrow(origin, direction, false, 4);
         }
       },
       this.chunks.currentDimension,
-      this.chunks.getWorldGen()
+      this.chunks.getWorldGen(),
+      heldItem,
+      (type, pos) => {
+        this.particles.spawnBlockBreak(pos.x, pos.y + 0.5, pos.z, 0xff5555, 20);
+        this.sound.playXP();
+      },
+      playerLookDir
     );
 
     // Check creeper explosions
@@ -846,7 +919,10 @@ export class Game {
         id: m.id, position: m.position, width: m.width, height: m.height
       })),
       this.player.position,
-      0.6, 1.8
+      0.6, 1.8,
+      (pos, fromPlayer, damage) => {
+        this.handlePotionSplash(pos, fromPlayer, damage);
+      }
     );
 
     // Update dropped items
@@ -1209,11 +1285,116 @@ export class Game {
 
     // ─── Right click: place block / interact ───
     if (!this.chatOpen && this.input.isMouseDown(2) && this.placeCooldown <= 0) {
-      const targetMob = this.mobs.getMobInRay(this.player.eyePosition, this.player.forward, 4.5, ['villager']);
-      if (targetMob?.def.type === 'villager') {
-        this.openTradingUI(targetMob.villagerProfession);
-        this.placeCooldown = 0.5;
-        return;
+      const targetMob = this.mobs.getMobInRay(this.player.eyePosition, this.player.forward, 4.5);
+      if (targetMob) {
+        const slot = this.inventory.getSlot(this.player.selectedSlot);
+        const heldItemId = slot?.id ?? 0;
+
+        if (targetMob.def.type === 'villager') {
+          this.openTradingUI(targetMob.villagerProfession);
+          this.placeCooldown = 0.5;
+          return;
+        }
+
+        // Breeding animals
+        if (targetMob.isAttractedBy(heldItemId)) {
+          if (targetMob.isBaby) {
+            targetMob.babyAge = Math.max(0, targetMob.babyAge - 6.0); // 10% faster
+            this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0x55ff55, 12);
+            this.sound.playEat();
+            if (this.gameMode !== 'creative') {
+              this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+            }
+            this.placeCooldown = 0.25;
+            return;
+          } else if (targetMob.loveTimer === 0 && targetMob.breedCooldown === 0) {
+            targetMob.loveTimer = 30.0;
+            this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0xff5555, 15);
+            this.sound.playEat();
+            if (this.gameMode !== 'creative') {
+              this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+            }
+            this.placeCooldown = 0.25;
+            return;
+          }
+        }
+
+        // Wolf interaction
+        if (targetMob.def.type === 'wolf') {
+          if (!targetMob.isTamed && heldItemId === 352) { // Bone
+            this.sound.playEat();
+            if (this.gameMode !== 'creative') {
+              this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+            }
+            if (Math.random() < 0.33) {
+              targetMob.isTamed = true;
+              targetMob.isSitting = true;
+              targetMob.health = 20; // Tamed max health is 20
+              this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0xff5555, 15);
+            } else {
+              this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0x555555, 8);
+            }
+            this.placeCooldown = 0.25;
+            return;
+          } else if (targetMob.isTamed) {
+            if (heldItemId === 352 && targetMob.health < 20) {
+              targetMob.health = Math.min(20, targetMob.health + 4);
+              this.sound.playEat();
+              if (this.gameMode !== 'creative') {
+                this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+              }
+              this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0x55ff55, 8);
+            } else {
+              targetMob.isSitting = !targetMob.isSitting;
+              this.sound.playLever();
+            }
+            this.placeCooldown = 0.25;
+            return;
+          }
+        }
+
+        // Cat interaction
+        if (targetMob.def.type === 'cat') {
+          if (!targetMob.isTamed && heldItemId === 349) { // Raw Fish
+            this.sound.playEat();
+            if (this.gameMode !== 'creative') {
+              this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+            }
+            if (Math.random() < 0.33) {
+              targetMob.isTamed = true;
+              targetMob.isSitting = true;
+              this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0xff5555, 15);
+            } else {
+              this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0x555555, 8);
+            }
+            this.placeCooldown = 0.25;
+            return;
+          } else if (targetMob.isTamed) {
+            if (heldItemId === 349 && targetMob.health < targetMob.def.health) {
+              targetMob.health = Math.min(targetMob.def.health, targetMob.health + 4);
+              this.sound.playEat();
+              if (this.gameMode !== 'creative') {
+                this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+              }
+              this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0x55ff55, 8);
+            } else {
+              targetMob.isSitting = !targetMob.isSitting;
+              this.sound.playLever();
+            }
+            this.placeCooldown = 0.25;
+            return;
+          }
+        }
+
+        // Horse riding
+        if (targetMob.def.type === 'horse') {
+          this.riddenMob = targetMob;
+          targetMob.isRidden = true;
+          targetMob.isSitting = false;
+          this.sound.playLever(); // mount sound
+          this.placeCooldown = 0.5;
+          return;
+        }
       }
 
       if (this.targetBlock) {
@@ -1727,6 +1908,44 @@ export class Game {
     }
   }
 
+  private handlePotionSplash(pos: THREE.Vector3, fromPlayer: boolean, damage: number) {
+    this.particles.spawnBlockBreak(pos.x, pos.y, pos.z, 0x8a2be2, 35);
+    this.sound.playBlockBreak();
+
+    const splashRadius = 3.5;
+    const distToPlayer = this.player.position.distanceTo(pos);
+    if (distToPlayer <= splashRadius && this.gameMode !== 'creative') {
+      const isPoison = Math.random() > 0.5;
+      if (isPoison) {
+        this.potionEffects.apply({ id: 'poison', level: 1, duration: 6 }, (amount) => {
+          this.damagePlayer(amount, 'magic');
+        });
+      } else {
+        const kb = new THREE.Vector3().subVectors(this.player.position, pos).normalize().multiplyScalar(2);
+        kb.y = 1;
+        this.damagePlayer(6, 'magic', kb);
+      }
+    }
+
+    for (const mob of this.mobs.mobs.values()) {
+      const distToMob = mob.position.distanceTo(pos);
+      if (distToMob <= splashRadius) {
+        const kb = new THREE.Vector3().subVectors(mob.position, pos).normalize().multiplyScalar(2);
+        kb.y = 1;
+        mob.takeDamage(damage + 4, kb);
+
+        if (mob.def.type !== 'zombie' && mob.def.type !== 'skeleton' && mob.def.type !== 'zombie_pigman' && mob.def.type !== 'wither_skeleton') {
+          setTimeout(() => {
+            if (this.mobs.mobs.has(mob.id) && mob.health > 0) mob.takeDamage(2);
+          }, 1500);
+          setTimeout(() => {
+            if (this.mobs.mobs.has(mob.id) && mob.health > 0) mob.takeDamage(2);
+          }, 3000);
+        }
+      }
+    }
+  }
+
   private handleCreeperExplosion(mob: Mob) {
     this.createExplosion(mob.position.x, mob.position.y + 0.5, mob.position.z, 3, mob);
   }
@@ -1891,7 +2110,7 @@ export class Game {
     }
   }
 
-  damagePlayer(amount: number, type: 'mob' | 'fall' | 'drown' | 'starve' | 'wither', knockback?: THREE.Vector3) {
+  damagePlayer(amount: number, type: 'mob' | 'fall' | 'drown' | 'starve' | 'wither' | 'magic', knockback?: THREE.Vector3) {
     if (this.gameMode === 'creative') return;
 
     let finalDamage = amount;

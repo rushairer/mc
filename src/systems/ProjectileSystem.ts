@@ -240,19 +240,22 @@ export class ProjectileSystem {
 
     // Remove dead projectiles
     for (const id of toRemove) {
-      const proj = this.projectiles.get(id);
-      if (proj) {
-        this.scene.remove(proj.mesh);
-        if (proj.mesh instanceof THREE.Mesh) {
-          proj.mesh.geometry.dispose();
-        } else {
-          proj.mesh.traverse(child => {
-            if (child instanceof THREE.Mesh) child.geometry.dispose();
-          });
-        }
-        this.projectiles.delete(id);
-      }
+      this.removeProjectile(id);
     }
+  }
+
+  removeProjectile(id: number) {
+    const proj = this.projectiles.get(id);
+    if (!proj) return;
+    this.scene.remove(proj.mesh);
+    if (proj.mesh instanceof THREE.Mesh) {
+      proj.mesh.geometry.dispose();
+    } else {
+      proj.mesh.traverse(child => {
+        if (child instanceof THREE.Mesh) child.geometry.dispose();
+      });
+    }
+    this.projectiles.delete(id);
   }
 
   private createArrowMesh(): THREE.Mesh {

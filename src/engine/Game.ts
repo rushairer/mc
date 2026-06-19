@@ -27,6 +27,7 @@ import { EnchantSystem } from '../systems/EnchantSystem';
 import { PotionEffectSystem } from '../systems/PotionEffect';
 import { HopperSystem } from '../systems/HopperSystem';
 import { VillageSystem, type TradeOffer, type VillagerProfession } from '../systems/VillageSystem';
+import { EnderDragonSystem } from '../systems/EnderDragonSystem';
 import { CHUNK_SIZE } from '../constants';
 import type { Enchantment } from '../systems/EnchantSystem';
 import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '../types';
@@ -77,6 +78,9 @@ export interface GameState {
   activePotionEffects: ActivePotionEffect[];
   portalProgress: number;
   currentDimension: number;
+  bossName: string | null;
+  bossHealth: number;
+  bossMaxHealth: number;
 }
 
 export type GameStateListener = (state: GameState) => void;
@@ -105,6 +109,7 @@ export class Game {
   private xp: XPSystem;
   private potionEffects: PotionEffectSystem;
   private hoppers: HopperSystem;
+  private enderDragon: EnderDragonSystem;
   private commands: CommandSystem;
   private clock: THREE.Clock;
   running = false;
@@ -168,6 +173,7 @@ export class Game {
     this.projectiles = new ProjectileSystem(this.renderer.scene);
     this.xp = new XPSystem(this.renderer.scene);
     this.potionEffects = new PotionEffectSystem();
+    this.enderDragon = new EnderDragonSystem(this.renderer.scene);
     this.commands = new CommandSystem({
       getPlayerPosition: () => ({
         x: this.player.position.x,
@@ -721,6 +727,14 @@ export class Game {
         () => {}, // no mob attacks while UI open
         (x, y, z) => this.chunks.isSolidBlock(x, y, z)
       );
+      this.enderDragon.update(
+        dt,
+        this.chunks.currentDimension,
+        this.player.position,
+        (x, y, z) => this.chunks.getBlock(x, y, z),
+        () => {},
+        () => {}
+      );
       this.renderer.render();
       this.notifyState();
       return;
@@ -832,13 +846,20 @@ export class Game {
     const belowBlock = this.chunks.getBlock(px, py - 1, pz) & 0x3FF;
     const inNetherPortal = this.chunks.currentDimension !== Dimension.End
       && (feetBlock === 90 || headBlockPortal === 90);
-    const inEndPortal = this.chunks.currentDimension !== Dimension.End
-      && (feetBlock === END_PORTAL_ID || belowBlock === END_PORTAL_ID);
+    const touchingEndPortal = feetBlock === END_PORTAL_ID || belowBlock === END_PORTAL_ID;
+    const enteringEndPortal = this.chunks.currentDimension !== Dimension.End && touchingEndPortal;
+    const exitingEndPortal = this.chunks.currentDimension === Dimension.End
+      && this.enderDragon.getState().defeated
+      && touchingEndPortal;
 
     if (this.portalCooldown > 0) {
       this.portalCooldown -= dt;
       this.portalTimer = 0;
-    } else if (inEndPortal) {
+    } else if (exitingEndPortal) {
+      this.teleportFromEndToOverworld();
+      this.portalTimer = 0;
+      this.portalCooldown = 4.0;
+    } else if (enteringEndPortal) {
       this.teleportToEnd();
       this.portalTimer = 0;
       this.portalCooldown = 4.0;
@@ -895,6 +916,15 @@ export class Game {
       playerLookDir
     );
 
+    this.enderDragon.update(
+      dt,
+      this.chunks.currentDimension,
+      this.player.position,
+      (x, y, z) => this.chunks.getBlock(x, y, z),
+      (damage, knockback) => this.damagePlayer(damage, 'mob', knockback),
+      (dragon) => this.handleEnderDragonDeath(dragon.position)
+    );
+
     // Check creeper explosions
     for (const [id, mob] of this.mobs.mobs) {
       if (mob.def.type === 'creeper' && mob.fuseTimer >= 1.5) {
@@ -936,6 +966,7 @@ export class Game {
         this.handlePotionSplash(pos, fromPlayer, damage);
       }
     );
+    this.handleDragonProjectileHits();
 
     // Update dropped items
     this.droppedItems.update(
@@ -1179,6 +1210,23 @@ export class Game {
             mobHit.mob.position.x,
             mobHit.mob.position.y + mobHit.mob.def.height * 0.5,
             mobHit.mob.position.z
+          );
+        }
+      } else if (this.chunks.currentDimension === Dimension.End && this.enderDragon.attack(
+        this.player.eyePosition,
+        dir,
+        attackDamage,
+        8.5
+      )) {
+        this.swordSwingTimer = 0.4;
+        this.sound.playMobHurt();
+        const dragon = this.enderDragon.dragon;
+        if (dragon) {
+          this.particles.spawnDamageParticles(
+            dragon.position.x,
+            dragon.position.y + 1.5,
+            dragon.position.z,
+            12
           );
         }
       } else if (this.targetBlock) {
@@ -1939,6 +1987,52 @@ export class Game {
     }
   }
 
+  private handleDragonProjectileHits() {
+    if (this.chunks.currentDimension !== Dimension.End) return;
+    for (const [id, projectile] of this.projectiles.projectiles) {
+      if (!projectile.fromPlayer || projectile.inGround) continue;
+      const hit = this.enderDragon.hitByProjectile(projectile.position, projectile.damage, projectile.velocity);
+      if (!hit) continue;
+      this.particles.spawnDamageParticles(projectile.position.x, projectile.position.y, projectile.position.z, 10);
+      this.sound.playMobHurt();
+      this.projectiles.removeProjectile(id);
+    }
+  }
+
+  private handleEnderDragonDeath(position: THREE.Vector3) {
+    this.sound.playExplosion();
+    this.particles.spawnBlockBreak(position.x, position.y, position.z, 0x8a2be2, 80);
+    this.xp.spawnXP(120, position.clone().add(new THREE.Vector3(0, 2, 0)));
+    this.createEndReturnPortal();
+    this.notifyState();
+  }
+
+  private createEndReturnPortal() {
+    const centerX = 0;
+    const centerY = 65;
+    const centerZ = 8;
+
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        const dist = Math.max(Math.abs(dx), Math.abs(dz));
+        const x = centerX + dx;
+        const z = centerZ + dz;
+        if (dist === 2) {
+          this.chunks.setBlock(x, centerY, z, 7);
+        } else {
+          this.chunks.setBlock(x, centerY, z, END_PORTAL_ID);
+          this.chunks.setBlock(x, centerY - 1, z, 7);
+          for (let y = centerY + 1; y <= centerY + 3; y++) {
+            this.chunks.setBlock(x, y, z, 0);
+          }
+        }
+      }
+    }
+
+    // Dragon egg placeholder above the exit portal.
+    this.chunks.setBlock(centerX, centerY + 1, centerZ, 122);
+  }
+
   private handlePotionSplash(pos: THREE.Vector3, fromPlayer: boolean, damage: number) {
     this.particles.spawnBlockBreak(pos.x, pos.y, pos.z, 0x8a2be2, 35);
     this.sound.playBlockBreak();
@@ -2227,6 +2321,7 @@ export class Game {
     );
     const isUnderwater = (headBlock & 0x3FF) === 8 || (headBlock & 0x3FF) === 9;
     const xpState = this.xp.getState();
+    const dragonState = this.enderDragon.getState();
 
     const state: GameState = {
       fps: this.currentFps,
@@ -2266,6 +2361,9 @@ export class Game {
       activePotionEffects: this.potionEffects.getEffects(),
       portalProgress: Math.min(1.0, this.portalTimer / (this.gameMode === 'creative' ? 0.5 : 3.0)),
       currentDimension: this.chunks.currentDimension,
+      bossName: dragonState.active ? 'Ender Dragon' : null,
+      bossHealth: dragonState.health,
+      bossMaxHealth: dragonState.maxHealth,
     };
 
     for (const listener of this.stateListeners) {
@@ -2322,6 +2420,24 @@ export class Game {
 
     this.chunks.currentDimension = Dimension.End;
     this.player.position.set(0.5, 65.2, 0.5);
+    this.player.velocity.set(0, 0, 0);
+
+    this.chunks.update(this.player.position.x, this.player.position.z);
+    this.player.resolveStuck(this.chunks);
+
+    this.sound.playPickup();
+    this.notifyState();
+  }
+
+  private teleportFromEndToOverworld() {
+    this.chunks.unloadAllMeshes();
+    this.mobs.dispose();
+
+    this.chunks.currentDimension = Dimension.Overworld;
+    const spawnX = 8;
+    const spawnZ = 8;
+    const spawnY = this.chunks.getWorldGen().getTerrainHeight(spawnX, spawnZ) + 3;
+    this.player.position.set(spawnX + 0.5, spawnY, spawnZ + 0.5);
     this.player.velocity.set(0, 0, 0);
 
     this.chunks.update(this.player.position.x, this.player.position.z);
@@ -2448,6 +2564,8 @@ export class Game {
       seed: this.seed,
       chunks: chunkData,
       mobs: this.mobs.serialize(this.chunks.currentDimension),
+      endDragonDefeated: this.enderDragon.getState().defeated,
+      endDragonHealth: this.enderDragon.getHealthForSave(),
       timestamp: Date.now(),
     };
 
@@ -2486,6 +2604,7 @@ export class Game {
         data.player.xpTotal ?? 0
       );
       this.potionEffects.setEffects(data.player.activePotionEffects);
+      this.enderDragon.restore(data.endDragonDefeated ?? false, data.endDragonHealth);
 
       if (data.inventory) {
         this.inventory.fromJSON(data.inventory.slots);
@@ -3302,6 +3421,7 @@ export class Game {
       this.saveGame();
     }
     this.mobs.dispose();
+    this.enderDragon.dispose();
     this.particles.dispose();
     this.xp.dispose();
     this.weather.dispose();

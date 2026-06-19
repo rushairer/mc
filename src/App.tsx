@@ -56,6 +56,9 @@ const initialGameState: GameState = {
   activePotionEffects: [],
   portalProgress: 0,
   currentDimension: 0,
+  bossName: null,
+  bossHealth: 0,
+  bossMaxHealth: 0,
 };
 
 export const App: React.FC = () => {

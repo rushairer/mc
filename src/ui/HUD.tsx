@@ -211,6 +211,41 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
       pointerEvents: 'none',
       fontFamily: '"Courier New", monospace',
     }}>
+      {state.bossName && state.bossMaxHealth > 0 && (
+        <div style={{
+          position: 'fixed',
+          top: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '520px',
+          maxWidth: 'calc(100vw - 48px)',
+          textAlign: 'center',
+        }}>
+          <div style={{
+            color: '#f4d8ff',
+            fontSize: '15px',
+            fontWeight: 'bold',
+            textShadow: '2px 2px 0 #000',
+            marginBottom: '4px',
+          }}>
+            {state.bossName}
+          </div>
+          <div style={{
+            height: '14px',
+            border: '2px solid #120012',
+            background: '#1b061e',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 0 rgba(0,0,0,0.5)',
+          }}>
+            <div style={{
+              width: `${Math.max(0, Math.min(1, state.bossHealth / state.bossMaxHealth)) * 100}%`,
+              height: '100%',
+              background: 'linear-gradient(180deg, #ff83ff 0%, #b116d3 45%, #5d0075 100%)',
+              boxShadow: '0 0 8px rgba(221, 70, 255, 0.75)',
+            }} />
+          </div>
+        </div>
+      )}
+
       {state.activePotionEffects.length > 0 && (
         <div style={{
           position: 'absolute',

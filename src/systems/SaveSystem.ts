@@ -45,6 +45,8 @@ export interface SaveData {
   seed: number;
   chunks: { cx: number; cz: number; data: Uint16Array; metadata?: SerializedBlockMetadata[]; dimension?: number }[];
   mobs?: SerializedMob[];
+  endDragonDefeated?: boolean;
+  endDragonHealth?: number;
   timestamp: number;
 }
 

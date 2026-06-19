@@ -33,6 +33,9 @@ import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '
 
 const HONEY_BOTTLE_ID = 454;
 const GLASS_BOTTLE_ID = 374;
+const ENDER_EYE_ID = 381;
+const END_PORTAL_ID = 119;
+const END_PORTAL_FRAME_ID = 120;
 
 export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause';
 
@@ -1430,6 +1433,20 @@ export class Game {
           }
         }
 
+        if ((targetId & 0x3FF) === END_PORTAL_FRAME_ID && heldItemId === ENDER_EYE_ID) {
+          const activated = this.useEnderEyeOnPortalFrame(blockPos.x, blockPos.y, blockPos.z);
+          if (activated) {
+            this.sound.playBlockPlace();
+            if (this.gameMode !== 'creative') {
+              this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+            }
+          } else {
+            this.sound.playLever();
+          }
+          this.placeCooldown = 0.25;
+          return;
+        }
+
         // Right-click furnace
         if (targetName.includes('furnace')) {
           this.openFurnaceUI(blockPos.x, blockPos.y, blockPos.z);
@@ -2467,6 +2484,59 @@ export class Game {
     } catch (e) {
       console.warn('Load failed:', e);
     }
+  }
+
+  private useEnderEyeOnPortalFrame(x: number, y: number, z: number): boolean {
+    const currentId = this.chunks.getBlock(x, y, z);
+    const currentMeta = (currentId >> 10) & 0xF;
+
+    if ((currentId & 0x3FF) !== END_PORTAL_FRAME_ID || currentMeta >= 4) {
+      return false;
+    }
+
+    this.chunks.setBlock(x, y, z, ((currentMeta + 4) << 10) | END_PORTAL_FRAME_ID);
+    this.tryActivateEndPortalNear(x, y, z);
+    return true;
+  }
+
+  private tryActivateEndPortalNear(x: number, y: number, z: number): boolean {
+    for (let centerX = x - 2; centerX <= x + 2; centerX++) {
+      for (let centerZ = z - 2; centerZ <= z + 2; centerZ++) {
+        if (!this.isCompleteEndPortalFrame(centerX, y, centerZ)) continue;
+
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dz = -1; dz <= 1; dz++) {
+            this.chunks.setBlock(centerX + dx, y, centerZ + dz, END_PORTAL_ID);
+          }
+        }
+        this.particles.spawnBlockBreak(centerX + 0.5, y + 0.25, centerZ + 0.5, 0x402060, 32);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private isCompleteEndPortalFrame(centerX: number, y: number, centerZ: number): boolean {
+    let frameCount = 0;
+
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        const onFrame = (Math.abs(dx) === 2 && Math.abs(dz) <= 1) || (Math.abs(dz) === 2 && Math.abs(dx) <= 1);
+        const inside = Math.abs(dx) <= 1 && Math.abs(dz) <= 1;
+        const blockId = this.chunks.getBlock(centerX + dx, y, centerZ + dz);
+        const baseId = blockId & 0x3FF;
+        const meta = (blockId >> 10) & 0xF;
+
+        if (onFrame) {
+          if (baseId !== END_PORTAL_FRAME_ID || meta < 4) return false;
+          frameCount++;
+        } else if (inside && baseId !== 0 && baseId !== END_PORTAL_ID) {
+          return false;
+        }
+      }
+    }
+
+    return frameCount === 12;
   }
 
   private setPlacedBlockMetadata(x: number, y: number, z: number, blockId: number, facing: BlockFacing) {

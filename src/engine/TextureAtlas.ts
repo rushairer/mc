@@ -1075,6 +1075,24 @@ export class TextureAtlas {
       }
     });
 
+    this.drawTile('end_portal_frame', (ctx, x, y, s) => {
+      ctx.fillStyle = '#6f8062';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#9dad89';
+      ctx.fillRect(x + 2, y + 2, s - 4, s - 4);
+      ctx.fillStyle = '#526047';
+      ctx.fillRect(x + 1, y + 1, s - 2, 2);
+      ctx.fillRect(x + 1, y + s - 3, s - 2, 2);
+      ctx.fillRect(x + 1, y + 1, 2, s - 2);
+      ctx.fillRect(x + s - 3, y + 1, 2, s - 2);
+      ctx.fillStyle = '#133f38';
+      ctx.fillRect(x + 5, y + 5, 6, 6);
+      ctx.fillStyle = '#45c8a3';
+      ctx.fillRect(x + 6, y + 6, 4, 4);
+      ctx.fillStyle = '#d8ffd0';
+      ctx.fillRect(x + 7, y + 7, 2, 1);
+    });
+
     // netherrack
     this.drawTile('netherrack', (ctx, x, y, s) => {
       ctx.fillStyle = '#501414';

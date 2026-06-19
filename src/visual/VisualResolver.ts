@@ -99,6 +99,8 @@ export const VisualResolver = {
 
     if (base === 8 || base === 9 || name.includes('water')) return 'block:water';
     if (base === 10 || base === 11 || name.includes('lava')) return 'block:lava';
+    if (base === 119 || name === 'end_portal') return 'block:portal';
+    if (base === 120 || name === 'end_portal_frame') return 'block:end_portal_frame';
     if (base === 90 || name === 'portal') return 'block:portal';
 
     if (name.includes('planks')) {

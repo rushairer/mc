@@ -46,6 +46,14 @@ const DEAD_BUSH = 32;
 const TALL_GRASS = (1 << 10) | 31;
 const FERN = (2 << 10) | 31;
 const BLUE_ORCHID = (1 << 10) | 38;
+const STONE_BRICKS = 98;
+const MOSSY_STONE_BRICKS = (1 << 10) | 98;
+const CRACKED_STONE_BRICKS = (2 << 10) | 98;
+const CHISELED_STONE_BRICKS = (3 << 10) | 98;
+const IRON_BARS = 101;
+const TORCH = 50;
+const END_PORTAL = 119;
+const END_PORTAL_FRAME = 120;
 
 const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
   [BiomeType.Plains]:    { baseHeight: 98, amplitude: 12, treeChance: 0.005, surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
@@ -250,7 +258,115 @@ export class WorldGen {
     // Phase 6: Villages
     VillageSystem.generateChunk(this, chunk);
 
+    // Phase 7: Stronghold portal rooms
+    this.generateStrongholds(chunk, worldX, worldZ);
+
     chunk.dirty = true;
+  }
+
+  private generateStrongholds(chunk: Chunk, worldX: number, worldZ: number) {
+    const cx = chunk.cx;
+    const cz = chunk.cz;
+    const spacing = 24;
+    const offsetX = Math.floor(this.pseudoRandom(this.seed, 19, 7) * spacing);
+    const offsetZ = Math.floor(this.pseudoRandom(this.seed, 31, 11) * spacing);
+
+    if (this.positiveMod(cx - offsetX, spacing) !== 0 || this.positiveMod(cz - offsetZ, spacing) !== 0) {
+      return;
+    }
+
+    const distanceFromSpawnChunks = Math.sqrt(cx * cx + cz * cz);
+    if (distanceFromSpawnChunks < 8) return;
+
+    const roomY = 26 + Math.floor(this.pseudoRandom(cx, this.seed, cz) * 22);
+    this.placeStrongholdPortalRoom(chunk, worldX, worldZ, roomY);
+  }
+
+  private placeStrongholdPortalRoom(chunk: Chunk, worldX: number, worldZ: number, floorY: number) {
+    const minX = 2;
+    const maxX = 13;
+    const minZ = 2;
+    const maxZ = 13;
+    const maxY = floorY + 7;
+
+    for (let x = minX; x <= maxX; x++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        for (let y = floorY; y <= maxY; y++) {
+          const boundary = x === minX || x === maxX || z === minZ || z === maxZ || y === floorY || y === maxY;
+          if (boundary) {
+            chunk.setBlock(x, y, z, this.getStrongholdBrick(worldX + x, y, worldZ + z));
+          } else {
+            chunk.setBlock(x, y, z, 0);
+          }
+        }
+      }
+    }
+
+    // A short stair-like entrance notch gives caves a chance to connect into the room.
+    for (let z = minZ; z <= minZ + 3; z++) {
+      for (let x = 6; x <= 9; x++) {
+        chunk.setBlock(x, floorY + 1, z, 0);
+        chunk.setBlock(x, floorY + 2, z, 0);
+        chunk.setBlock(x, floorY + 3, z, 0);
+      }
+    }
+
+    // Portal dais.
+    for (let x = 4; x <= 12; x++) {
+      for (let z = 4; z <= 12; z++) {
+        const edge = x === 4 || x === 12 || z === 4 || z === 12;
+        chunk.setBlock(x, floorY + 1, z, edge ? STONE_BRICKS : 0);
+      }
+    }
+
+    // Horizontal End portal frame ring around a 3x3 center.
+    const centerX = 8;
+    const centerZ = 8;
+    const portalY = floorY + 2;
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        const onFrame = (Math.abs(dx) === 2 && Math.abs(dz) <= 1) || (Math.abs(dz) === 2 && Math.abs(dx) <= 1);
+        const inside = Math.abs(dx) <= 1 && Math.abs(dz) <= 1;
+        const x = centerX + dx;
+        const z = centerZ + dz;
+
+        if (onFrame) {
+          const baseMeta = this.getEndPortalFrameMeta(dx, dz);
+          const hasEye = this.pseudoRandom(worldX + x, portalY, worldZ + z) < 0.12;
+          chunk.setBlock(x, portalY, z, ((hasEye ? baseMeta + 4 : baseMeta) << 10) | END_PORTAL_FRAME);
+        } else if (inside) {
+          chunk.setBlock(x, portalY, z, 0);
+        }
+      }
+    }
+
+    // Iron-bar window hints and torches make generated rooms recognizable underground.
+    for (const [x, z] of [[minX, 7], [minX, 8], [maxX, 7], [maxX, 8], [7, maxZ], [8, maxZ]]) {
+      chunk.setBlock(x, floorY + 3, z, IRON_BARS);
+      chunk.setBlock(x, floorY + 4, z, IRON_BARS);
+    }
+    for (const [x, y, z] of [[5, floorY + 3, 5], [11, floorY + 3, 5], [5, floorY + 3, 11], [11, floorY + 3, 11]]) {
+      chunk.setBlock(x, y, z, TORCH);
+    }
+  }
+
+  private getStrongholdBrick(wx: number, y: number, wz: number): number {
+    const rand = this.pseudoRandom(wx, y + 917, wz);
+    if (rand < 0.08) return CRACKED_STONE_BRICKS;
+    if (rand < 0.18) return MOSSY_STONE_BRICKS;
+    if (rand > 0.97) return CHISELED_STONE_BRICKS;
+    return STONE_BRICKS;
+  }
+
+  private getEndPortalFrameMeta(dx: number, dz: number): number {
+    if (dz === -2) return 0; // north side faces south
+    if (dx === 2) return 1;  // east side faces west
+    if (dz === 2) return 2;  // south side faces north
+    return 3;                // west side faces east
+  }
+
+  private positiveMod(value: number, mod: number): number {
+    return ((value % mod) + mod) % mod;
   }
 
   private getSurfaceBlockForColumn(

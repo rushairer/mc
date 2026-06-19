@@ -55,6 +55,10 @@ const COBBLESTONE = 4;
 const MOSSY_COBBLESTONE = 48;
 const MOB_SPAWNER = 52;
 const CHEST = 54;
+const PLANKS = 5;
+const WEB = 30;
+const RAIL = 66;
+const FENCE = 85;
 const IRON_BARS = 101;
 const TORCH = 50;
 const END_PORTAL = 119;
@@ -266,10 +270,215 @@ export class WorldGen {
     // Phase 7: Dungeons
     this.generateDungeons(chunk, worldX, worldZ);
 
-    // Phase 8: Stronghold portal rooms
+    // Phase 8: Abandoned mineshafts
+    this.generateMineshafts(chunk, worldX, worldZ);
+
+    // Phase 9: Stronghold portal rooms
     this.generateStrongholds(chunk, worldX, worldZ);
 
     chunk.dirty = true;
+  }
+
+  private generateMineshafts(chunk: Chunk, worldX: number, worldZ: number) {
+    const cx = chunk.cx;
+    const cz = chunk.cz;
+    const spacing = 5;
+    const offsetX = Math.floor(this.pseudoRandom(this.seed, 509, 127) * spacing);
+    const offsetZ = Math.floor(this.pseudoRandom(this.seed, 619, 191) * spacing);
+
+    if (this.positiveMod(cx - offsetX, spacing) !== 0 || this.positiveMod(cz - offsetZ, spacing) !== 0) {
+      return;
+    }
+
+    const distanceFromSpawnChunks = Math.sqrt(cx * cx + cz * cz);
+    if (distanceFromSpawnChunks < 2) return;
+
+    const floorY = 18 + Math.floor(this.pseudoRandom(cx * 31, this.seed + 809, cz * 37) * 28);
+    if (floorY < 8 || floorY > WORLD_HEIGHT - 8) return;
+
+    this.placeMineshaft(chunk, worldX, worldZ, floorY);
+  }
+
+  private placeMineshaft(chunk: Chunk, worldX: number, worldZ: number, floorY: number) {
+    const eastWest = this.pseudoRandom(worldX, floorY + 907, worldZ) < 0.5;
+    const center = 8;
+
+    if (eastWest) {
+      this.carveMineshaftCorridor(chunk, worldX, worldZ, 1, 14, center, center, floorY, 'east_west', true);
+      this.carveMineshaftCorridor(chunk, worldX, worldZ, center, center, 2, 13, floorY, 'north_south', false);
+      if (this.pseudoRandom(worldX, floorY + 991, worldZ) < 0.65) {
+        this.carveMineshaftCorridor(chunk, worldX, worldZ, 3, 12, 4, 4, floorY, 'east_west', false);
+      }
+    } else {
+      this.carveMineshaftCorridor(chunk, worldX, worldZ, center, center, 1, 14, floorY, 'north_south', true);
+      this.carveMineshaftCorridor(chunk, worldX, worldZ, 2, 13, center, center, floorY, 'east_west', false);
+      if (this.pseudoRandom(worldX, floorY + 991, worldZ) < 0.65) {
+        this.carveMineshaftCorridor(chunk, worldX, worldZ, 11, 11, 3, 12, floorY, 'north_south', false);
+      }
+    }
+
+    const chestRoll = this.pseudoRandom(worldX + 17, floorY + 1061, worldZ - 17);
+    if (chestRoll < 0.78) {
+      const chestX = eastWest ? 11 : 5;
+      const chestZ = eastWest ? 6 : 11;
+      chunk.setBlock(chestX, floorY + 1, chestZ, CHEST);
+      chunk.setBlockMeta(chestX, floorY + 1, chestZ, {
+        containerType: 'chest',
+        inventory: this.createMineshaftLoot(worldX + chestX, floorY + 1, worldZ + chestZ),
+      }, true);
+    }
+  }
+
+  private carveMineshaftCorridor(
+    chunk: Chunk,
+    worldX: number,
+    worldZ: number,
+    minX: number,
+    maxX: number,
+    minZ: number,
+    maxZ: number,
+    floorY: number,
+    axis: 'east_west' | 'north_south',
+    main: boolean
+  ) {
+    const width = 3;
+    const halfWidth = Math.floor(width / 2);
+    const corridorMinX = axis === 'east_west' ? minX : minX - halfWidth;
+    const corridorMaxX = axis === 'east_west' ? maxX : maxX + halfWidth;
+    const corridorMinZ = axis === 'north_south' ? minZ : minZ - halfWidth;
+    const corridorMaxZ = axis === 'north_south' ? maxZ : maxZ + halfWidth;
+
+    for (let x = corridorMinX; x <= corridorMaxX; x++) {
+      for (let z = corridorMinZ; z <= corridorMaxZ; z++) {
+        if (!this.isInsideChunk(x, z)) continue;
+
+        chunk.setBlock(x, floorY, z, PLANKS);
+        for (let y = floorY + 1; y <= floorY + 3; y++) {
+          chunk.setBlock(x, y, z, 0);
+        }
+        chunk.setBlock(x, floorY + 4, z, this.pseudoRandom(worldX + x, floorY + 1123, worldZ + z) < 0.35 ? PLANKS : 0);
+
+        const decorRand = this.pseudoRandom(worldX + x * 13, floorY + 1187, worldZ + z * 17);
+        if (yIsRailLine(axis, x, z, minX, minZ) && (main || decorRand < 0.55)) {
+          chunk.setBlock(x, floorY + 1, z, RAIL);
+        } else if (decorRand < 0.08) {
+          chunk.setBlock(x, floorY + 2, z, WEB);
+        } else if (decorRand < 0.11) {
+          chunk.setBlock(x, floorY + 3, z, WEB);
+        }
+      }
+    }
+
+    const supportEvery = 4;
+    const start = axis === 'east_west' ? minX : minZ;
+    const end = axis === 'east_west' ? maxX : maxZ;
+    for (let step = start + 1; step <= end; step += supportEvery) {
+      if (axis === 'east_west') {
+        this.placeMineshaftSupport(chunk, axis, step, floorY, minZ - halfWidth, minZ + halfWidth);
+      } else {
+        this.placeMineshaftSupport(chunk, axis, step, floorY, minX - halfWidth, minX + halfWidth);
+      }
+    }
+
+    const torchPos = axis === 'east_west'
+      ? [Math.min(maxX, minX + 6), floorY + 2, corridorMinZ]
+      : [corridorMinX, floorY + 2, Math.min(maxZ, minZ + 6)];
+    const [tx, ty, tz] = torchPos;
+    if (this.isInsideChunk(tx, tz)) {
+      chunk.setBlock(tx, ty, tz, TORCH);
+    }
+
+    function yIsRailLine(lineAxis: 'east_west' | 'north_south', x: number, z: number, lineX: number, lineZ: number): boolean {
+      return lineAxis === 'east_west' ? z === lineZ : x === lineX;
+    }
+  }
+
+  private placeMineshaftSupport(
+    chunk: Chunk,
+    axis: 'east_west' | 'north_south',
+    step: number,
+    floorY: number,
+    crossStart: number,
+    crossEnd: number
+  ) {
+    if (axis === 'east_west') {
+      const x = step;
+      if (x < 0 || x >= CHUNK_SIZE) return;
+      for (const z of [crossStart, crossEnd]) {
+        if (!this.isInsideChunk(x, z)) continue;
+        chunk.setBlock(x, floorY + 1, z, FENCE);
+        chunk.setBlock(x, floorY + 2, z, FENCE);
+        chunk.setBlock(x, floorY + 3, z, FENCE);
+      }
+      for (let z = crossStart; z <= crossEnd; z++) {
+        if (this.isInsideChunk(x, z)) {
+          chunk.setBlock(x, floorY + 4, z, PLANKS);
+        }
+      }
+    } else {
+      const z = step;
+      if (z < 0 || z >= CHUNK_SIZE) return;
+      for (const x of [crossStart, crossEnd]) {
+        if (!this.isInsideChunk(x, z)) continue;
+        chunk.setBlock(x, floorY + 1, z, FENCE);
+        chunk.setBlock(x, floorY + 2, z, FENCE);
+        chunk.setBlock(x, floorY + 3, z, FENCE);
+      }
+      for (let x = crossStart; x <= crossEnd; x++) {
+        if (this.isInsideChunk(x, z)) {
+          chunk.setBlock(x, floorY + 4, z, PLANKS);
+        }
+      }
+    }
+  }
+
+  private createMineshaftLoot(wx: number, y: number, wz: number): (ItemStack | null)[] {
+    const inventory: (ItemStack | null)[] = new Array(27).fill(null);
+    const lootTable: Array<{ id: number; min: number; max: number; weight: number }> = [
+      { id: 66, min: 4, max: 8, weight: 18 },    // rail
+      { id: 263, min: 2, max: 6, weight: 14 },   // coal
+      { id: 265, min: 1, max: 4, weight: 12 },   // iron ingot
+      { id: 266, min: 1, max: 3, weight: 6 },    // gold ingot
+      { id: 331, min: 2, max: 6, weight: 8 },    // redstone
+      { id: (4 << 10) | 351, min: 3, max: 8, weight: 7 }, // lapis lazuli
+      { id: 287, min: 1, max: 5, weight: 10 },   // string
+      { id: 297, min: 1, max: 3, weight: 8 },    // bread
+      { id: 328, min: 1, max: 1, weight: 4 },    // minecart
+      { id: 361, min: 2, max: 4, weight: 4 },    // pumpkin seeds
+      { id: 362, min: 2, max: 4, weight: 4 },    // melon seeds
+      { id: 264, min: 1, max: 2, weight: 2 },    // diamond
+    ];
+
+    const totalWeight = lootTable.reduce((sum, entry) => sum + entry.weight, 0);
+    const rolls = 4 + Math.floor(this.pseudoRandom(wx, y + 1, wz) * 4);
+
+    for (let roll = 0; roll < rolls; roll++) {
+      let slot = Math.floor(this.pseudoRandom(wx + roll * 41, y + 2, wz - roll * 23) * inventory.length);
+      for (let attempts = 0; attempts < inventory.length && inventory[slot]; attempts++) {
+        slot = (slot + 1) % inventory.length;
+      }
+      if (inventory[slot]) continue;
+
+      let pick = this.pseudoRandom(wx - roll * 13, y + 3, wz + roll * 31) * totalWeight;
+      let selected = lootTable[0];
+      for (const entry of lootTable) {
+        pick -= entry.weight;
+        if (pick <= 0) {
+          selected = entry;
+          break;
+        }
+      }
+
+      const countRange = selected.max - selected.min + 1;
+      const count = selected.min + Math.floor(this.pseudoRandom(wx + roll * 7, y + 4, wz + roll * 11) * countRange);
+      inventory[slot] = { id: selected.id, count };
+    }
+
+    return inventory;
+  }
+
+  private isInsideChunk(x: number, z: number): boolean {
+    return x >= 0 && x < CHUNK_SIZE && z >= 0 && z < CHUNK_SIZE;
   }
 
   private generateDungeons(chunk: Chunk, worldX: number, worldZ: number) {

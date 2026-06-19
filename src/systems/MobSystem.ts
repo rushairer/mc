@@ -21,6 +21,7 @@ export class MobSystem {
   private spawnTimer = 0;
   private spawnedVillages: Set<string> = new Set();
   private spawnedEndCities: Set<string> = new Set();
+  private spawnedIllagerStructures: Set<string> = new Set();
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -172,6 +173,7 @@ export class MobSystem {
 
     if (dimension === 0 && worldGen && getBlock) {
       this.ensureVillageMobs(playerPos, worldGen, getBlock);
+      this.ensureIllagerStructureMobs(playerPos, worldGen, getBlock);
     }
 
     if (dimension === 2 && endGenerator && getBlock) {
@@ -490,6 +492,33 @@ export class MobSystem {
     this.mobs.clear();
     this.spawnedVillages.clear();
     this.spawnedEndCities.clear();
+    this.spawnedIllagerStructures.clear();
+  }
+
+  private ensureIllagerStructureMobs(
+    playerPos: THREE.Vector3,
+    worldGen: WorldGen,
+    getBlock: (x: number, y: number, z: number) => number
+  ) {
+    const spawns = worldGen.getNearbyIllagerStructureSpawns(playerPos.x, playerPos.z, 96);
+    for (const spawn of spawns) {
+      if (this.spawnedIllagerStructures.has(spawn.id)) continue;
+
+      const offsets = spawn.type === 'woodland_mansion'
+        ? [[-3, 0, -3], [3, 0, 3], [0, 5, 2]]
+        : [[-2, 0, -2], [2, 4, 2], [0, 12, 0]];
+
+      for (const [dx, dy, dz] of offsets) {
+        const x = Math.floor(spawn.x + dx);
+        const y = Math.floor(spawn.y + dy);
+        const z = Math.floor(spawn.z + dz);
+        if (getBlock(x, y, z) !== 0 || getBlock(x, y + 1, z) !== 0) continue;
+        if (getBlock(x, y - 1, z) === 0) continue;
+        this.spawnMob('pillager', x + 0.5, y, z + 0.5);
+      }
+
+      this.spawnedIllagerStructures.add(spawn.id);
+    }
   }
 
   private ensureEndCityMobs(

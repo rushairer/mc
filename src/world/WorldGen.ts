@@ -87,6 +87,26 @@ const GOLD_BLOCK = 41;
 const PRISMARINE_BRICKS = BlockRegistry.getByName('prismarine_bricks')?.id ?? PRISMARINE;
 const DARK_PRISMARINE = BlockRegistry.getByName('dark_prismarine')?.id ?? PRISMARINE;
 const WET_SPONGE = BlockRegistry.getByName('wet_sponge')?.id ?? 19;
+const DARK_OAK_LOG = BlockRegistry.getByName('dark_oak_log')?.id ?? ((1 << 10) | 162);
+const DARK_OAK_PLANKS = BlockRegistry.getByName('dark_oak_planks')?.id ?? ((5 << 10) | 5);
+const DARK_OAK_STAIRS = BlockRegistry.getByName('dark_oak_stairs')?.id ?? 164;
+const DARK_OAK_FENCE = BlockRegistry.getByName('dark_oak_fence')?.id ?? 191;
+const BOOKSHELF = 47;
+const LADDER = 65;
+const GLASS_PANE = 102;
+const WHITE_WOOL = BlockRegistry.getByName('white_wool')?.id ?? 35;
+const RED_WOOL = BlockRegistry.getByName('red_wool')?.id ?? ((14 << 10) | 35);
+const HAY_BLOCK = 170;
+const DARK_OAK_DOOR = BlockRegistry.getByName('dark_oak_door')?.id ?? 197;
+const DARK_OAK_TRAPDOOR = BlockRegistry.getByName('dark_oak_trapdoor')?.id ?? 96;
+
+export interface IllagerStructureSpawn {
+  id: string;
+  type: 'woodland_mansion' | 'pillager_outpost';
+  x: number;
+  y: number;
+  z: number;
+}
 
 const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
   [BiomeType.Plains]:    { baseHeight: 98, amplitude: 12, treeChance: 0.005, surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
@@ -337,6 +357,61 @@ export class WorldGen {
       BiomeType.Swamp,
       (surfaceY) => this.placeWitchHut(chunk, worldX, worldZ, surfaceY)
     );
+    this.generateBiomeStructure(
+      chunk,
+      worldX,
+      worldZ,
+      41,
+      3631,
+      BiomeType.Forest,
+      (surfaceY) => this.placeWoodlandMansion(chunk, worldX, worldZ, surfaceY)
+    );
+    this.generatePillagerOutpost(chunk, worldX, worldZ);
+  }
+
+  getNearbyIllagerStructureSpawns(wx: number, wz: number, radius: number): IllagerStructureSpawn[] {
+    const minCx = Math.floor((wx - radius) / CHUNK_SIZE);
+    const maxCx = Math.floor((wx + radius) / CHUNK_SIZE);
+    const minCz = Math.floor((wz - radius) / CHUNK_SIZE);
+    const maxCz = Math.floor((wz + radius) / CHUNK_SIZE);
+    const spawns: IllagerStructureSpawn[] = [];
+
+    for (let cx = minCx; cx <= maxCx; cx++) {
+      for (let cz = minCz; cz <= maxCz; cz++) {
+        const worldX = cx * CHUNK_SIZE;
+        const worldZ = cz * CHUNK_SIZE;
+        const centerX = worldX + 8;
+        const centerZ = worldZ + 8;
+
+        if (this.isChunkStructureCandidate(cx, cz, 41, 3631) && this.getBiome(centerX, centerZ) === BiomeType.Forest) {
+          const surfaceY = this.getTerrainHeight(centerX, centerZ);
+          if (
+            surfaceY >= SEA_LEVEL - 2 &&
+            surfaceY <= WORLD_HEIGHT - 16 &&
+            Math.sqrt(cx * cx + cz * cz) >= 3 &&
+            this.isStructureFootprintStable(worldX, worldZ, surfaceY, BiomeType.Forest)
+          ) {
+            spawns.push({ id: `mansion:${cx},${cz}`, type: 'woodland_mansion', x: centerX, y: surfaceY + 2, z: centerZ });
+          }
+        }
+
+        if (this.isPillagerOutpostCandidate(cx, cz)) {
+          const biome = this.getBiome(centerX, centerZ);
+          const surfaceY = this.getTerrainHeight(centerX, centerZ);
+          if (
+            this.isPillagerOutpostBiome(biome) &&
+            surfaceY >= SEA_LEVEL - 2 &&
+            surfaceY <= WORLD_HEIGHT - 18 &&
+            Math.sqrt(cx * cx + cz * cz) >= 5 &&
+            this.isStructureFootprintStable(worldX, worldZ, surfaceY, biome)
+          ) {
+            spawns.push({ id: `outpost:${cx},${cz}`, type: 'pillager_outpost', x: centerX, y: surfaceY + 2, z: centerZ });
+          }
+        }
+      }
+    }
+
+    return spawns;
   }
 
   private generateBiomeStructure(
@@ -350,12 +425,8 @@ export class WorldGen {
   ) {
     const cx = chunk.cx;
     const cz = chunk.cz;
-    const offsetX = Math.floor(this.pseudoRandom(this.seed, salt, 17) * spacing);
-    const offsetZ = Math.floor(this.pseudoRandom(this.seed, salt, 31) * spacing);
 
-    if (this.positiveMod(cx - offsetX, spacing) !== 0 || this.positiveMod(cz - offsetZ, spacing) !== 0) {
-      return;
-    }
+    if (!this.isChunkStructureCandidate(cx, cz, spacing, salt)) return;
 
     const distanceFromSpawnChunks = Math.sqrt(cx * cx + cz * cz);
     if (distanceFromSpawnChunks < 3) return;
@@ -369,6 +440,38 @@ export class WorldGen {
     if (!this.isStructureFootprintStable(worldX, worldZ, surfaceY, biome)) return;
 
     place(surfaceY);
+  }
+
+  private isChunkStructureCandidate(cx: number, cz: number, spacing: number, salt: number): boolean {
+    const offsetX = Math.floor(this.pseudoRandom(this.seed, salt, 17) * spacing);
+    const offsetZ = Math.floor(this.pseudoRandom(this.seed, salt, 31) * spacing);
+    return this.positiveMod(cx - offsetX, spacing) === 0 && this.positiveMod(cz - offsetZ, spacing) === 0;
+  }
+
+  private generatePillagerOutpost(chunk: Chunk, worldX: number, worldZ: number) {
+    if (!this.isPillagerOutpostCandidate(chunk.cx, chunk.cz)) return;
+
+    const distanceFromSpawnChunks = Math.sqrt(chunk.cx * chunk.cx + chunk.cz * chunk.cz);
+    if (distanceFromSpawnChunks < 5) return;
+
+    const centerX = worldX + 8;
+    const centerZ = worldZ + 8;
+    const biome = this.getBiome(centerX, centerZ);
+    if (!this.isPillagerOutpostBiome(biome)) return;
+
+    const surfaceY = this.getTerrainHeight(centerX, centerZ);
+    if (surfaceY < SEA_LEVEL - 2 || surfaceY > WORLD_HEIGHT - 18) return;
+    if (!this.isStructureFootprintStable(worldX, worldZ, surfaceY, biome)) return;
+
+    this.placePillagerOutpost(chunk, worldX, worldZ, surfaceY);
+  }
+
+  private isPillagerOutpostCandidate(cx: number, cz: number): boolean {
+    return this.isChunkStructureCandidate(cx, cz, 31, 4019);
+  }
+
+  private isPillagerOutpostBiome(biome: BiomeType): boolean {
+    return biome === BiomeType.Plains || biome === BiomeType.Desert || biome === BiomeType.Badlands || biome === BiomeType.Snow;
   }
 
   private isStructureFootprintStable(worldX: number, worldZ: number, surfaceY: number, biome: BiomeType): boolean {
@@ -573,6 +676,135 @@ export class WorldGen {
     chunk.setBlock(5, floorY + 3, 10, TORCH);
   }
 
+  private placeWoodlandMansion(chunk: Chunk, worldX: number, worldZ: number, surfaceY: number) {
+    const floorY = surfaceY + 1;
+    this.clearStructureVolume(chunk, 1, 14, floorY, floorY + 13, 1, 14);
+
+    for (let x = 1; x <= 14; x++) {
+      for (let z = 1; z <= 14; z++) {
+        for (let y = floorY; y <= floorY + 10; y++) {
+          const outerWall = x === 1 || x === 14 || z === 1 || z === 14;
+          const storyFloor = y === floorY || y === floorY + 5;
+          const roof = y === floorY + 10;
+          const interiorWall = (x === 7 || x === 8 || z === 7 || z === 8) && y > floorY && y < floorY + 10;
+          const doorway = (z === 1 || z === 7 || z === 8) && x >= 6 && x <= 9 && (y === floorY + 1 || y === floorY + 2);
+          const window = outerWall && y === floorY + 3 && (x === 4 || x === 11 || z === 4 || z === 11);
+
+          if (storyFloor) {
+            chunk.setBlock(x, y, z, DARK_OAK_PLANKS);
+          } else if (roof) {
+            chunk.setBlock(x, y, z, outerWall ? DARK_OAK_STAIRS : DARK_OAK_PLANKS);
+          } else if ((outerWall || interiorWall) && !doorway) {
+            chunk.setBlock(x, y, z, window ? GLASS_PANE : this.getMansionWallBlock(worldX + x, y, worldZ + z));
+          } else {
+            chunk.setBlock(x, y, z, 0);
+          }
+        }
+      }
+    }
+
+    for (let y = floorY + 1; y <= floorY + 10; y++) {
+      for (const [x, z] of [[1, 1], [14, 1], [1, 14], [14, 14]] as const) {
+        chunk.setBlock(x, y, z, DARK_OAK_LOG);
+      }
+    }
+
+    for (let y = floorY + 1; y <= floorY + 9; y++) {
+      chunk.setBlock(13, y, 7, LADDER);
+    }
+
+    for (const [x, z] of [[3, 3], [12, 3], [3, 12], [12, 12], [6, 6], [9, 9]] as const) {
+      chunk.setBlock(x, floorY + 4, z, TORCH);
+      chunk.setBlock(x, floorY + 9, z, TORCH);
+    }
+
+    for (let z = 3; z <= 5; z++) {
+      chunk.setBlock(3, floorY + 1, z, BOOKSHELF);
+      chunk.setBlock(3, floorY + 6, z, BOOKSHELF);
+      chunk.setBlock(12, floorY + 1, z + 6, BOOKSHELF);
+    }
+    for (let x = 5; x <= 10; x++) {
+      chunk.setBlock(x, floorY + 1, 12, RED_WOOL);
+      chunk.setBlock(x, floorY + 6, 3, WHITE_WOOL);
+    }
+
+    chunk.setBlock(8, floorY + 1, 1, DARK_OAK_DOOR);
+    chunk.setBlock(4, floorY + 1, 4, CHEST);
+    chunk.setBlockMeta(4, floorY + 1, 4, {
+      containerType: 'chest',
+      inventory: this.createWoodlandMansionLoot(worldX + 4, floorY + 1, worldZ + 4),
+    }, true);
+    chunk.setBlock(11, floorY + 6, 11, CHEST);
+    chunk.setBlockMeta(11, floorY + 6, 11, {
+      containerType: 'chest',
+      inventory: this.createWoodlandMansionLoot(worldX + 11, floorY + 6, worldZ + 11),
+    }, true);
+  }
+
+  private placePillagerOutpost(chunk: Chunk, worldX: number, worldZ: number, surfaceY: number) {
+    const floorY = surfaceY + 1;
+    this.clearStructureVolume(chunk, 2, 13, floorY, floorY + 17, 2, 13);
+
+    for (const [x, z] of [[5, 5], [10, 5], [5, 10], [10, 10]] as const) {
+      for (let y = surfaceY + 1; y <= floorY + 13; y++) {
+        chunk.setBlock(x, y, z, DARK_OAK_LOG);
+      }
+    }
+
+    for (let level = 0; level <= 3; level++) {
+      const y = floorY + level * 4;
+      for (let x = 4; x <= 11; x++) {
+        for (let z = 4; z <= 11; z++) {
+          const edge = x === 4 || x === 11 || z === 4 || z === 11;
+          chunk.setBlock(x, y, z, DARK_OAK_PLANKS);
+          if (edge && level < 3) {
+            chunk.setBlock(x, y + 1, z, DARK_OAK_FENCE);
+          }
+        }
+      }
+      for (let z = 6; z <= 9; z++) {
+        chunk.setBlock(4, y + 1, z, 0);
+      }
+    }
+
+    for (let y = floorY + 1; y <= floorY + 12; y++) {
+      chunk.setBlock(9, y, 6, LADDER);
+    }
+
+    for (let x = 3; x <= 12; x++) {
+      for (let z = 3; z <= 12; z++) {
+        const border = x === 3 || x === 12 || z === 3 || z === 12;
+        chunk.setBlock(x, floorY + 14, z, border ? DARK_OAK_STAIRS : DARK_OAK_PLANKS);
+      }
+    }
+
+    chunk.setBlock(7, floorY + 13, 7, CHEST);
+    chunk.setBlockMeta(7, floorY + 13, 7, {
+      containerType: 'chest',
+      inventory: this.createPillagerOutpostLoot(worldX + 7, floorY + 13, worldZ + 7),
+    }, true);
+
+    for (const [x, z] of [[2, 3], [13, 3], [2, 12], [13, 12]] as const) {
+      chunk.setBlock(x, floorY, z, HAY_BLOCK);
+      chunk.setBlock(x, floorY + 1, z, HAY_BLOCK);
+    }
+    for (let z = 2; z <= 5; z++) {
+      chunk.setBlock(7, floorY, z, DARK_OAK_PLANKS);
+      chunk.setBlock(8, floorY, z, DARK_OAK_PLANKS);
+    }
+    chunk.setBlock(8, floorY + 13, 4, TORCH);
+    chunk.setBlock(8, floorY + 13, 11, TORCH);
+    chunk.setBlock(4, floorY + 13, 8, TORCH);
+    chunk.setBlock(11, floorY + 13, 8, TORCH);
+  }
+
+  private getMansionWallBlock(wx: number, y: number, wz: number): number {
+    const rand = this.pseudoRandom(wx, y + 3719, wz);
+    if (rand < 0.16) return DARK_OAK_LOG;
+    if (rand < 0.28) return DARK_OAK_TRAPDOOR;
+    return DARK_OAK_PLANKS;
+  }
+
   private clearStructureVolume(chunk: Chunk, minX: number, maxX: number, minY: number, maxY: number, minZ: number, maxZ: number) {
     for (let x = minX; x <= maxX; x++) {
       for (let z = minZ; z <= maxZ; z++) {
@@ -635,6 +867,32 @@ export class WorldGen {
       { id: 388, min: 1, max: 2, weight: 3 },
       { id: 260, min: 1, max: 2, weight: 5 },
     ], 3, 5);
+  }
+
+  private createWoodlandMansionLoot(wx: number, y: number, wz: number): (ItemStack | null)[] {
+    return this.createWeightedLoot(wx, y, wz, [
+      { id: 264, min: 1, max: 2, weight: 4 },
+      { id: 266, min: 2, max: 6, weight: 10 },
+      { id: 388, min: 1, max: 4, weight: 8 },
+      { id: 265, min: 2, max: 8, weight: 12 },
+      { id: 297, min: 1, max: 4, weight: 10 },
+      { id: 339, min: 2, max: 7, weight: 8 },
+      { id: 340, min: 1, max: 2, weight: 5 },
+      { id: 3478, min: 1, max: 1, weight: 1 },
+    ], 4, 7);
+  }
+
+  private createPillagerOutpostLoot(wx: number, y: number, wz: number): (ItemStack | null)[] {
+    return this.createWeightedLoot(wx, y, wz, [
+      { id: 262, min: 3, max: 10, weight: 18 },
+      { id: 4094, min: 1, max: 1, weight: 5 },
+      { id: 265, min: 2, max: 6, weight: 12 },
+      { id: 296, min: 3, max: 8, weight: 12 },
+      { id: 297, min: 1, max: 4, weight: 10 },
+      { id: 388, min: 1, max: 3, weight: 5 },
+      { id: 421, min: 1, max: 1, weight: 2 },
+      { id: 329, min: 1, max: 1, weight: 1 },
+    ], 4, 7);
   }
 
   private createWeightedLoot(

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 import type { VillagerProfession } from '../systems/VillageSystem';
 
-export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker';
+export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker' | 'pillager';
 
 export interface MobDef {
   type: MobType;
@@ -41,6 +41,7 @@ const MOB_DEFS: Record<MobType, MobDef> = {
   cat:      { type: 'cat',      health: 10, speed: 2.2, damage: 0, hostile: false, width: 0.5, height: 0.7, bodyColor: 0xdba15a, headColor: 0xdba15a, eyeColor: 0x00FF00, xpDrop: 3, drops: [{ id: 287, count: 1, chance: 0.5 }] },
   horse:    { type: 'horse',    health: 24, speed: 3.2, damage: 0, hostile: false, width: 1.3, height: 1.6, bodyColor: 0x825a3c, headColor: 0x825a3c, eyeColor: 0x000000, xpDrop: 2, drops: [{ id: 334, count: 1, chance: 0.5 }] },
   shulker:  { type: 'shulker',  health: 20, speed: 0.0, damage: 4, hostile: true, width: 0.9, height: 1.0, bodyColor: 0x9461a8, headColor: 0xb083c1, eyeColor: 0x111111, xpDrop: 5, drops: [{ id: 450, count: 1, chance: 0.5 }] },
+  pillager: { type: 'pillager', health: 24, speed: 2.4, damage: 3, hostile: true, width: 0.6, height: 1.95, bodyColor: 0x4d5560, headColor: 0x9f8f7d, eyeColor: 0x235f86, xpDrop: 5, drops: [{ id: 262, count: 2, chance: 0.55 }, { id: 4094, count: 1, chance: 0.08 }, { id: 388, count: 1, chance: 0.08 }] },
 };
 
 const MOB_MAX_AIR = 15.0;
@@ -150,11 +151,12 @@ export class Mob {
     const bodyColor = this.def.bodyColor;
     const headColor = this.def.headColor ?? bodyColor;
 
-    if (type === 'zombie' || type === 'skeleton' || type === 'zombie_pigman' || type === 'wither_skeleton') {
+    if (type === 'zombie' || type === 'skeleton' || type === 'zombie_pigman' || type === 'wither_skeleton' || type === 'pillager') {
       // Humanoid
       const isZombie = type === 'zombie';
       const isPigman = type === 'zombie_pigman';
       const isWither = type === 'wither_skeleton';
+      const isPillager = type === 'pillager';
 
       let skinColor = 0xC8C8C8;
       let clothesColor = 0xC8C8C8;
@@ -168,6 +170,9 @@ export class Mob {
       } else if (isWither) {
         skinColor = 0x242424; // dark charcoal
         clothesColor = 0x242424;
+      } else if (isPillager) {
+        skinColor = 0x9f8f7d;
+        clothesColor = 0x4d5560;
       }
 
       const scaleY = isWither ? 1.33 : 1.0;
@@ -199,12 +204,31 @@ export class Mob {
 
       // Eyes
       const eyeGeo = new THREE.BoxGeometry(0.06 * scaleXZ, 0.03 * scaleY, 0.02);
-      const eyeMat = new THREE.MeshLambertMaterial({ color: isWither ? 0xFF0000 : (isZombie ? 0x000000 : 0x333333) });
+      const eyeMat = new THREE.MeshLambertMaterial({ color: isWither ? 0xFF0000 : (isPillager ? 0x235f86 : (isZombie ? 0x000000 : 0x333333)) });
       const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
       const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
       eyeL.position.set(-0.1 * scaleXZ, 1.55 * scaleY, 0.201 * scaleXZ);
       eyeR.position.set(0.1 * scaleXZ, 1.55 * scaleY, 0.201 * scaleXZ);
       group.add(eyeL, eyeR);
+
+      if (isPillager) {
+        const browGeo = new THREE.BoxGeometry(0.12, 0.035, 0.025);
+        const browMat = new THREE.MeshLambertMaterial({ color: 0x3c352d });
+        const browL = new THREE.Mesh(browGeo, browMat);
+        browL.position.set(-0.1, 1.64 * scaleY, 0.207 * scaleXZ);
+        browL.rotation.z = -0.25;
+        const browR = new THREE.Mesh(browGeo, browMat);
+        browR.position.set(0.1, 1.64 * scaleY, 0.207 * scaleXZ);
+        browR.rotation.z = 0.25;
+        group.add(browL, browR);
+
+        const crossbowMat = new THREE.MeshLambertMaterial({ color: 0x6b3f1d });
+        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.08, 0.08), crossbowMat);
+        stock.position.set(0, 1.08 * scaleY, 0.42 * scaleXZ);
+        const bow = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.36, 0.06), crossbowMat);
+        bow.position.set(0, 1.08 * scaleY, 0.48 * scaleXZ);
+        group.add(stock, bow);
+      }
 
       // Legs
       const legGeo = new THREE.BoxGeometry(0.2 * scaleXZ, 0.75 * scaleY, 0.2 * scaleXZ);
@@ -1003,8 +1027,8 @@ export class Mob {
             this.attackCooldown = 1.0;
           }
         }
-      } else if (this.def.type === 'skeleton' && onShoot) {
-        // Skeleton: shoot arrows at player within 16 blocks
+      } else if ((this.def.type === 'skeleton' || this.def.type === 'pillager') && onShoot) {
+        // Skeletons and pillagers shoot arrows at player within 16 blocks.
         this.shootTimer = Math.max(0, this.shootTimer - dt);
         if (distToPlayer < 16 && this.shootTimer <= 0) {
           const dir = new THREE.Vector3().subVectors(playerPos, this.position);
@@ -1013,7 +1037,7 @@ export class Mob {
           const origin = this.position.clone();
           origin.y += this.height * 0.75;
           onShoot(origin, dir, 'arrow');
-          this.shootTimer = 2.0; // 2 second cooldown
+          this.shootTimer = this.def.type === 'pillager' ? 2.4 : 2.0;
         }
         // Melee fallback
         if (distToPlayer < 1.8 && this.attackCooldown <= 0) {

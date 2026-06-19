@@ -1,6 +1,7 @@
 import { SimplexNoise } from './SimplexNoise';
 import { CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL } from '../constants';
 import { Chunk } from './Chunk';
+import { BlockRegistry } from './BlockRegistry';
 import { VillageSystem } from '../systems/VillageSystem';
 import type { ItemStack } from '../types';
 
@@ -80,6 +81,12 @@ const CAULDRON = 118;
 const CRAFTING_TABLE = 58;
 const END_PORTAL = 119;
 const END_PORTAL_FRAME = 120;
+const PRISMARINE = 168;
+const SEA_LANTERN = 169;
+const GOLD_BLOCK = 41;
+const PRISMARINE_BRICKS = BlockRegistry.getByName('prismarine_bricks')?.id ?? PRISMARINE;
+const DARK_PRISMARINE = BlockRegistry.getByName('dark_prismarine')?.id ?? PRISMARINE;
+const WET_SPONGE = BlockRegistry.getByName('wet_sponge')?.id ?? 19;
 
 const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
   [BiomeType.Plains]:    { baseHeight: 98, amplitude: 12, treeChance: 0.005, surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
@@ -293,7 +300,10 @@ export class WorldGen {
     // Phase 9: Abandoned mineshafts
     this.generateMineshafts(chunk, worldX, worldZ);
 
-    // Phase 10: Stronghold portal rooms
+    // Phase 10: Ocean monuments
+    this.generateOceanMonuments(chunk, worldX, worldZ);
+
+    // Phase 11: Stronghold portal rooms
     this.generateStrongholds(chunk, worldX, worldZ);
 
     chunk.dirty = true;
@@ -661,6 +671,139 @@ export class WorldGen {
     }
 
     return inventory;
+  }
+
+  private generateOceanMonuments(chunk: Chunk, worldX: number, worldZ: number) {
+    const cx = chunk.cx;
+    const cz = chunk.cz;
+    const spacing = 29;
+    const offsetX = Math.floor(this.pseudoRandom(this.seed, 2711, 73) * spacing);
+    const offsetZ = Math.floor(this.pseudoRandom(this.seed, 3181, 97) * spacing);
+
+    if (this.positiveMod(cx - offsetX, spacing) !== 0 || this.positiveMod(cz - offsetZ, spacing) !== 0) {
+      return;
+    }
+
+    const distanceFromSpawnChunks = Math.sqrt(cx * cx + cz * cz);
+    if (distanceFromSpawnChunks < 8) return;
+
+    const centerX = worldX + 8;
+    const centerZ = worldZ + 8;
+    if (this.getBiome(centerX, centerZ) !== BiomeType.Ocean) return;
+    if (!this.isOceanMonumentFootprint(worldX, worldZ)) return;
+
+    const seafloorY = this.getTerrainHeight(centerX, centerZ);
+    const floorY = Math.max(seafloorY + 1, SEA_LEVEL - 20);
+    if (floorY < 8 || floorY > SEA_LEVEL - 8) return;
+
+    this.placeOceanMonument(chunk, worldX, worldZ, floorY);
+  }
+
+  private isOceanMonumentFootprint(worldX: number, worldZ: number): boolean {
+    for (let x = 3; x <= 13; x += 5) {
+      for (let z = 3; z <= 13; z += 5) {
+        const wx = worldX + x;
+        const wz = worldZ + z;
+        if (this.getBiome(wx, wz) !== BiomeType.Ocean) return false;
+        if (this.getTerrainHeight(wx, wz) > SEA_LEVEL - 8) return false;
+      }
+    }
+    return true;
+  }
+
+  private placeOceanMonument(chunk: Chunk, worldX: number, worldZ: number, floorY: number) {
+    const minX = 1;
+    const maxX = 14;
+    const minZ = 1;
+    const maxZ = 14;
+    const maxY = floorY + 10;
+
+    for (let x = minX; x <= maxX; x++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        for (let y = floorY; y <= maxY; y++) {
+          const shell = x === minX || x === maxX || z === minZ || z === maxZ || y === floorY || y === maxY;
+          const cornerPillar = (x === minX + 1 || x === maxX - 1) && (z === minZ + 1 || z === maxZ - 1);
+          const midRib = (x === 7 || x === 8 || z === 7 || z === 8) && (y === floorY || y === maxY);
+
+          if (shell || cornerPillar || midRib) {
+            chunk.setBlock(x, y, z, this.getMonumentBlock(worldX + x, y, worldZ + z));
+          } else {
+            chunk.setBlock(x, y, z, WATER);
+          }
+        }
+      }
+    }
+
+    // A central gold chamber gives the simplified monument its recognizable reward core.
+    for (let x = 6; x <= 9; x++) {
+      for (let z = 6; z <= 9; z++) {
+        for (let y = floorY + 2; y <= floorY + 5; y++) {
+          const wall = x === 6 || x === 9 || z === 6 || z === 9 || y === floorY + 2 || y === floorY + 5;
+          chunk.setBlock(x, y, z, wall ? DARK_PRISMARINE : WATER);
+        }
+      }
+    }
+    chunk.setBlock(7, floorY + 3, 7, GOLD_BLOCK);
+    chunk.setBlock(8, floorY + 3, 7, GOLD_BLOCK);
+    chunk.setBlock(7, floorY + 3, 8, GOLD_BLOCK);
+    chunk.setBlock(8, floorY + 3, 8, GOLD_BLOCK);
+
+    // Entrance arch and side corridors are left flooded like vanilla ocean monuments.
+    for (let y = floorY + 1; y <= floorY + 4; y++) {
+      chunk.setBlock(7, y, minZ, WATER);
+      chunk.setBlock(8, y, minZ, WATER);
+      chunk.setBlock(7, y, minZ + 1, WATER);
+      chunk.setBlock(8, y, minZ + 1, WATER);
+      chunk.setBlock(minX, y, 7, WATER);
+      chunk.setBlock(minX, y, 8, WATER);
+      chunk.setBlock(maxX, y, 7, WATER);
+      chunk.setBlock(maxX, y, 8, WATER);
+    }
+
+    for (const [x, y, z] of [
+      [3, floorY + 6, 3],
+      [12, floorY + 6, 3],
+      [3, floorY + 6, 12],
+      [12, floorY + 6, 12],
+      [7, floorY + 8, 7],
+      [8, floorY + 8, 8],
+    ] as const) {
+      chunk.setBlock(x, y, z, SEA_LANTERN);
+    }
+
+    for (let x = 3; x <= 5; x++) {
+      for (let z = 10; z <= 12; z++) {
+        if (this.pseudoRandom(worldX + x, floorY + 421, worldZ + z) < 0.65) {
+          chunk.setBlock(x, floorY + 7, z, WET_SPONGE);
+        }
+      }
+    }
+
+    chunk.setBlock(12, floorY + 2, 12, CHEST);
+    chunk.setBlockMeta(12, floorY + 2, 12, {
+      containerType: 'chest',
+      inventory: this.createOceanMonumentLoot(worldX + 12, floorY + 2, worldZ + 12),
+    }, true);
+  }
+
+  private getMonumentBlock(wx: number, y: number, wz: number): number {
+    const rand = this.pseudoRandom(wx, y + 3491, wz);
+    if (rand < 0.18) return PRISMARINE_BRICKS;
+    if (rand < 0.3) return DARK_PRISMARINE;
+    return PRISMARINE;
+  }
+
+  private createOceanMonumentLoot(wx: number, y: number, wz: number): (ItemStack | null)[] {
+    return this.createWeightedLoot(wx, y, wz, [
+      { id: 409, min: 2, max: 6, weight: 18 },
+      { id: 410, min: 1, max: 4, weight: 12 },
+      { id: 168, min: 4, max: 12, weight: 14 },
+      { id: 169, min: 1, max: 3, weight: 6 },
+      { id: 19, min: 1, max: 2, weight: 6 },
+      { id: 266, min: 2, max: 5, weight: 8 },
+      { id: 388, min: 1, max: 3, weight: 4 },
+      { id: 264, min: 1, max: 2, weight: 2 },
+    ], 4, 7);
   }
 
   private generateMineshafts(chunk: Chunk, worldX: number, worldZ: number) {

@@ -441,6 +441,20 @@ export class Chunk {
             continue;
           }
 
+          // Rails
+          if (BlockRegistry.isRail(id)) {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            const bounds: CuboidBounds = {
+              minX: 0, maxX: 1,
+              minY: 0, maxY: 0.05,
+              minZ: 0, maxZ: 1
+            };
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness);
+            continue;
+          }
+
           // Flowers & plants - cross-shaped rendering for transparent non-solid blocks.
           // Fluids are also transparent/non-solid, but they must render as culled voxel
           // surfaces; treating water as a plant fills oceans with crossed internal planes.

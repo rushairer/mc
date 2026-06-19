@@ -2143,6 +2143,103 @@ export class TextureAtlas {
     this.aliasTile('icon:block:planks', 'oak_planks_icon');
     this.aliasTile('icon:block:leaves', 'oak_leaves_icon');
 
+    // Rails
+    this.drawTile('rail', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#5c4033';
+      for (let i = 2; i < s; i += 4) {
+        ctx.fillRect(x + 2, y + i, s - 4, 2);
+      }
+      ctx.fillStyle = '#aaaaaa';
+      ctx.fillRect(x + 3, y, 2, s);
+      ctx.fillRect(x + s - 5, y, 2, s);
+    });
+
+    this.drawTile('golden_rail', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#5c4033';
+      for (let i = 2; i < s; i += 4) {
+        ctx.fillRect(x + 2, y + i, s - 4, 2);
+      }
+      ctx.fillStyle = '#ffd700';
+      ctx.fillRect(x + 3, y, 2, s);
+      ctx.fillRect(x + s - 5, y, 2, s);
+      ctx.fillStyle = '#ff3333';
+      ctx.fillRect(x + s / 2 - 1, y, 2, s);
+    });
+
+    this.drawTile('detector_rail', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#5c4033';
+      for (let i = 2; i < s; i += 4) {
+        ctx.fillRect(x + 2, y + i, s - 4, 2);
+      }
+      ctx.fillStyle = '#aaaaaa';
+      ctx.fillRect(x + 3, y, 2, s);
+      ctx.fillRect(x + s - 5, y, 2, s);
+      ctx.fillStyle = '#555555';
+      ctx.fillRect(x + 5, y + 5, s - 10, s - 10);
+      ctx.fillStyle = '#ff0000';
+      ctx.fillRect(x + s / 2 - 1, y + s / 2 - 1, 2, 2);
+    });
+
+    this.drawTile('activator_rail', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#5c4033';
+      for (let i = 2; i < s; i += 4) {
+        ctx.fillRect(x + 2, y + i, s - 4, 2);
+      }
+      ctx.fillStyle = '#aaaaaa';
+      ctx.fillRect(x + 3, y, 2, s);
+      ctx.fillRect(x + s - 5, y, 2, s);
+      ctx.fillStyle = '#ff4444';
+      ctx.fillRect(x + s / 2 - 1, y + 2, 2, s - 4);
+    });
+
+    // Vehicles
+    this.drawTile('boat', (ctx, x, y, s) => {
+      ctx.fillStyle = '#8B5A2B';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#5C3317';
+      ctx.fillRect(x, y, s, 2);
+      ctx.fillRect(x, y, 2, s);
+      ctx.fillRect(x, y + s - 2, s, 2);
+      ctx.fillRect(x + s - 2, y, 2, s);
+    });
+
+    this.drawTile('minecart', (ctx, x, y, s) => {
+      ctx.fillStyle = '#cccccc';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#777777';
+      ctx.fillRect(x, y, s, 2);
+      ctx.fillRect(x, y, 2, s);
+      ctx.fillRect(x, y + s - 2, s, 2);
+      ctx.fillRect(x + s - 2, y, 2, s);
+    });
+
+    // Boat/Minecart Aliases
+    this.aliasTile('oak_boat', 'boat');
+    this.aliasTile('spruce_boat', 'boat');
+    this.aliasTile('birch_boat', 'boat');
+    this.aliasTile('jungle_boat', 'boat');
+    this.aliasTile('acacia_boat', 'boat');
+    this.aliasTile('dark_oak_boat', 'boat');
+    this.aliasTile('cherry_boat', 'boat');
+    this.aliasTile('mangrove_boat', 'boat');
+    this.aliasTile('oak_chest_boat', 'boat');
+    this.aliasTile('spruce_chest_boat', 'boat');
+    this.aliasTile('birch_chest_boat', 'boat');
+    this.aliasTile('jungle_chest_boat', 'boat');
+    this.aliasTile('acacia_chest_boat', 'boat');
+    this.aliasTile('dark_oak_chest_boat', 'boat');
+    this.aliasTile('cherry_chest_boat', 'boat');
+    this.aliasTile('mangrove_chest_boat', 'boat');
+    this.aliasTile('chest_minecart', 'minecart');
+    this.aliasTile('furnace_minecart', 'minecart');
+    this.aliasTile('tnt_minecart', 'minecart');
+    this.aliasTile('hopper_minecart', 'minecart');
+    this.aliasTile('command_block_minecart', 'minecart');
+
     for (const block of BlockRegistry.all()) {
       const iconKey = VisualResolver.getBlockIconKey(block.id);
       const resolvedLegacy = this.resolveKey(iconKey);

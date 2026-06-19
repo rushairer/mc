@@ -248,5 +248,10 @@ export const BlockRegistry = {
     const baseId = id & 0x3FF;
     // wooden door, iron door, oak/spruce/birch trapdoors, etc.
     return baseId === 64 || baseId === 71 || baseId === 96 || baseId === 167 || baseId === 193 || baseId === 194 || baseId === 195 || baseId === 196 || baseId === 197;
+  },
+
+  isRail(id: number): boolean {
+    const baseId = id & 0x3FF;
+    return baseId === 66 || baseId === 27 || baseId === 28 || baseId === 157;
   }
 };

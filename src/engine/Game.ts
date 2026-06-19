@@ -22,6 +22,7 @@ import { CommandSystem } from '../systems/CommandSystem';
 import { VisualResolver } from '../visual/VisualResolver';
 import { Dimension, DimensionGenerator } from '../world/DimensionGenerator';
 import { DroppedItemSystem } from '../systems/DroppedItemSystem';
+import { VehicleSystem, Vehicle } from '../systems/VehicleSystem';
 import { XPSystem } from '../systems/XPSystem';
 import { EnchantSystem } from '../systems/EnchantSystem';
 import { PotionEffectSystem } from '../systems/PotionEffect';
@@ -110,6 +111,8 @@ export class Game {
   private potionEffects: PotionEffectSystem;
   private hoppers: HopperSystem;
   private enderDragon: EnderDragonSystem;
+  vehicles: VehicleSystem;
+  riddenVehicle: Vehicle | null = null;
   private commands: CommandSystem;
   private clock: THREE.Clock;
   running = false;
@@ -165,6 +168,7 @@ export class Game {
     this.inventory = new Inventory();
     this.survival = new SurvivalSystem();
     this.mobs = new MobSystem(this.renderer.scene);
+    this.vehicles = new VehicleSystem(this.renderer.scene);
     this.particles = new ParticleSystem(this.renderer.scene);
     this.fluids = new FluidSystem();
     this.sound = new SoundSystem();
@@ -816,6 +820,16 @@ export class Game {
       }
     }
 
+    if (this.riddenVehicle) {
+      const dismount = this.chatOpen ? false : this.input.isKeyDown('shift');
+      if (dismount) {
+        this.riddenVehicle.isRidden = false;
+        this.riddenVehicle = null;
+        this.player.position.x += 1.2;
+        this.placeCooldown = 0.5;
+      }
+    }
+
     // Player update
     this.player.speedMultiplier = this.potionEffects.getSpeedMultiplier();
     if (this.potionEffects.has('levitation') && !this.player.flying && !this.riddenMob) {
@@ -838,6 +852,12 @@ export class Game {
     if (this.riddenMob) {
       this.player.position.copy(this.riddenMob.position);
       this.player.position.y += this.riddenMob.height * 0.75;
+      this.player.velocity.set(0, 0, 0);
+    }
+
+    if (this.riddenVehicle) {
+      this.player.position.copy(this.riddenVehicle.position);
+      this.player.position.y += 0.55;
       this.player.velocity.set(0, 0, 0);
     }
 
@@ -953,6 +973,20 @@ export class Game {
         this.tntFuses.splice(i, 1);
       }
     }
+
+    // Update vehicles
+    const vehicleKeys = {
+      w: this.chatOpen ? false : this.input.isKeyDown('w'),
+      s: this.chatOpen ? false : this.input.isKeyDown('s'),
+      a: this.chatOpen ? false : this.input.isKeyDown('a'),
+      d: this.chatOpen ? false : this.input.isKeyDown('d'),
+    };
+    this.vehicles.update(
+      dt,
+      (x, y, z) => this.chunks.getBlock(x, y, z),
+      (x, y, z) => this.chunks.isSolidBlock(x, y, z),
+      vehicleKeys
+    );
 
     // Update projectiles
     this.projectiles.update(
@@ -1214,8 +1248,34 @@ export class Game {
           this.swordSwingTimer = 0.9; // bow cooldown
         }
       } else {
-      // First: try to attack mob
-      const dir = this.player.forward;
+        // First: try to attack vehicle
+        const targetVehicle = this.vehicles.getVehicleInRay(this.player.eyePosition, this.player.forward, 4.5);
+        if (targetVehicle) {
+          this.swordSwingTimer = 0.4;
+          this.sound.playBlockBreak();
+          
+          let itemId = 328;
+          if (targetVehicle.type === 'boat') {
+            const boatDef = ItemRegistry.getByName('oak_boat') || ItemRegistry.getByName('boat');
+            itemId = boatDef?.id ?? 333;
+          } else {
+            const cartDef = ItemRegistry.getByName('minecart');
+            itemId = cartDef?.id ?? 328;
+          }
+          
+          const dropPos = targetVehicle.position.clone().add(new THREE.Vector3(0, 0.2, 0));
+          const velocity = new THREE.Vector3((Math.random() - 0.5) * 1.0, 1.5, (Math.random() - 0.5) * 1.0);
+          this.droppedItems.spawnItem(itemId, 1, dropPos, velocity, 0.5);
+          
+          if (this.riddenVehicle === targetVehicle) {
+            this.riddenVehicle = null;
+          }
+          this.vehicles.removeVehicle(targetVehicle.id);
+          return;
+        }
+
+        // First: try to attack mob
+        const dir = this.player.forward;
       const mobHit = this.mobs.playerAttackMob(
         this.player.eyePosition,
         dir,
@@ -1367,6 +1427,16 @@ export class Game {
 
     // ─── Right click: place block / interact ───
     if (!this.chatOpen && this.input.isMouseDown(2) && this.placeCooldown <= 0) {
+      // Vehicle mount/ride check
+      const targetVehicle = this.vehicles.getVehicleInRay(this.player.eyePosition, this.player.forward, 4.5);
+      if (targetVehicle && !this.riddenVehicle && !this.riddenMob) {
+        this.riddenVehicle = targetVehicle;
+        targetVehicle.isRidden = true;
+        this.sound.playLever(); // mount sound
+        this.placeCooldown = 0.5;
+        return;
+      }
+
       const targetMob = this.mobs.getMobInRay(this.player.eyePosition, this.player.forward, 4.5);
       if (targetMob) {
         const slot = this.inventory.getSlot(this.player.selectedSlot);
@@ -1490,8 +1560,34 @@ export class Game {
         const targetDef = BlockRegistry.get(targetId);
         const targetName = targetDef?.name ?? '';
 
-        const slot = this.inventory.getSlot(this.player.selectedSlot);
-        const heldItemId = slot?.id ?? 0;
+        const heldItemDef = ItemRegistry.get(heldItemId);
+        const isBoatItem = heldItemDef && heldItemDef.name.includes('boat');
+        const isMinecartItem = heldItemDef && heldItemDef.name.includes('minecart');
+
+        if (isBoatItem) {
+          const placePos = blockPos.clone().add(faceNormal).add(new THREE.Vector3(0.5, 0.2, 0.5));
+          this.vehicles.spawnVehicle('boat', placePos);
+          this.sound.playBlockPlace();
+          if (this.gameMode !== 'creative') {
+            this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+          }
+          this.placeCooldown = 0.5;
+          return;
+        }
+
+        if (isMinecartItem) {
+          const isTargetRail = BlockRegistry.isRail(targetId);
+          if (isTargetRail) {
+            const placePos = blockPos.clone().add(new THREE.Vector3(0.5, 0.05, 0.5));
+            this.vehicles.spawnVehicle('minecart', placePos);
+            this.sound.playBlockPlace();
+            if (this.gameMode !== 'creative') {
+              this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+            }
+            this.placeCooldown = 0.5;
+            return;
+          }
+        }
 
         if (heldItemId === 259) { // Flint and Steel
           const placePos = blockPos.clone().add(faceNormal);
@@ -2420,6 +2516,8 @@ export class Game {
     // 2. Safely unload old dimension meshes
     this.chunks.unloadAllMeshes();
     this.mobs.dispose();
+    this.riddenVehicle = null;
+    this.vehicles.dispose();
 
     // 3. Switch active dimension
     this.chunks.currentDimension = targetDim;
@@ -2443,6 +2541,8 @@ export class Game {
   private teleportToEnd() {
     this.chunks.unloadAllMeshes();
     this.mobs.dispose();
+    this.riddenVehicle = null;
+    this.vehicles.dispose();
 
     this.chunks.currentDimension = Dimension.End;
     this.player.position.set(0.5, 65.2, 0.5);
@@ -2458,6 +2558,8 @@ export class Game {
   private teleportFromEndToOverworld() {
     this.chunks.unloadAllMeshes();
     this.mobs.dispose();
+    this.riddenVehicle = null;
+    this.vehicles.dispose();
 
     this.chunks.currentDimension = Dimension.Overworld;
     const spawnX = 8;
@@ -3531,6 +3633,7 @@ export class Game {
       this.saveGame();
     }
     this.mobs.dispose();
+    this.vehicles.dispose();
     this.enderDragon.dispose();
     this.particles.dispose();
     this.xp.dispose();

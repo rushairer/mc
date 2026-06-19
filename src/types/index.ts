@@ -3,6 +3,7 @@ import type { ActivePotionEffect, PotionEffectData } from '../systems/PotionEffe
 
 export interface BlockDef {
   id: number;
+  officialId?: string;
   name: string;
   textureKey: string;           // single texture for all faces
   textureTop?: string;          // override for top face

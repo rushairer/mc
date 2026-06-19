@@ -1432,7 +1432,7 @@ export class TextureAtlas {
       wood: '#8B4513', stone: '#777777', iron: '#E8E8E8', gold: '#FFD700', diamond: '#5DECF5'
     };
 
-    const drawTool = (key: string, type: 'sword'|'pickaxe'|'shovel'|'axe', material: string) => {
+    const drawTool = (key: string, type: 'sword'|'pickaxe'|'shovel'|'axe'|'hoe'|'spear', material: string) => {
       this.drawTile(key, (ctx, x, y, s) => {
         ctx.clearRect(x, y, s, s);
         const color = matColors[material] ?? '#FFF';
@@ -1446,7 +1446,7 @@ export class TextureAtlas {
         ctx.stroke();
 
         ctx.fillStyle = color;
-        if (type === 'sword') {
+      if (type === 'sword' || type === 'spear') {
           // Sword blade
           ctx.beginPath();
           ctx.moveTo(x + s/2 - 1, y + s/2 + 1);
@@ -1458,7 +1458,7 @@ export class TextureAtlas {
           // guard
           ctx.fillStyle = '#333';
           ctx.fillRect(x + 4, y + s - 7, 3, 3);
-        } else if (type === 'pickaxe') {
+      } else if (type === 'pickaxe' || type === 'hoe') {
           // Pickaxe head
           ctx.beginPath();
           ctx.moveTo(x + s/2 - 5, y + 3);

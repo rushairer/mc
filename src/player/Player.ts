@@ -669,6 +669,7 @@ export class Player {
       else if (name.includes('diamond')) color = 0x5DECF5;
       else if (name.includes('apple')) color = 0xEE2222;
       else if (name.includes('bread')) color = 0xD2B48C;
+      else if (name.includes('honey')) color = 0xE8A300;
       else if (name.includes('beef') || name.includes('porkchop') || name.includes('mutton') || name.includes('chicken') || name.includes('steak') || name.includes('meat') || name.includes('flesh')) color = 0xA04040;
       else if (name.includes('redstone')) color = 0xFF0000;
       else if (name.includes('arrow')) color = 0xE0E0E0;

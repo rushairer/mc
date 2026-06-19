@@ -43,8 +43,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
         }
         // Exclude facing/rotation/state variations.
         // If it's a packed ID (has metadata), check if it's identical in function to the base ID block.
-        const baseId = b.id & 0x3FF;
-        if (b.id !== baseId) {
+        const baseId = b.baseId ?? (b.id & 0x3FF);
+        if (b.metadata !== undefined && b.metadata > 0 && b.id !== baseId) {
           const baseBlock = BlockRegistry.get(baseId);
           if (baseBlock) {
             if (baseBlock.name === b.name ||
@@ -64,7 +64,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
       .map(b => b.id);
 
     const itemsList = ItemRegistry.all()
-      .filter(item => item.id !== 0 && !item.name.includes('spawn_egg'))
+      .filter(item => item.id !== 0)
       .map(item => item.id);
 
     return Array.from(new Set([...blocksList, ...itemsList]));

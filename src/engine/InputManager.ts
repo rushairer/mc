@@ -5,6 +5,7 @@ export class InputManager {
   mouseDeltaY = 0;
   scrollDelta = 0;
   locked = false;
+  hasEverLocked = false;
 
   constructor(private canvas: HTMLCanvasElement) {
     document.addEventListener('keydown', this.onKeyDown);
@@ -18,7 +19,16 @@ export class InputManager {
   }
 
   requestLock() {
-    this.canvas.requestPointerLock();
+    try {
+      const request = this.canvas.requestPointerLock();
+      if (request && typeof request.catch === 'function') {
+        request.catch(() => {
+          // Browsers may reject pointer lock outside direct trusted gestures.
+        });
+      }
+    } catch {
+      // Some embedded browsers disallow pointer lock entirely.
+    }
   }
 
   isKeyDown(key: string): boolean {
@@ -83,6 +93,7 @@ export class InputManager {
 
   private onLockChange = () => {
     this.locked = document.pointerLockElement === this.canvas;
+    if (this.locked) this.hasEverLocked = true;
   };
 
   dispose() {

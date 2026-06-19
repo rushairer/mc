@@ -10,6 +10,10 @@ const pack = (baseId, metadata = 0) => (metadata << 10) | baseId;
 const normalize = (name) => name.toLowerCase().replace(/^minecraft:/, '').replace(/\s+/g, '_');
 const baseId = (id) => id & 0x3FF;
 const metadata = (id) => id >> 10;
+const runtimeId = (item) => typeof item.id === 'number' ? item.id : item.runtimeId;
+const officialId = (item) => typeof item.id === 'string' ? item.id : (item.officialId ?? `minecraft:${item.name}`);
+const blockRuntimeId = (block) => typeof block.id === 'number' ? block.id : block.runtimeId;
+const blockOfficialId = (block) => typeof block.id === 'string' ? block.id : (block.officialId ?? `minecraft:${block.name}`);
 
 const placeOverrides = new Map([
   [295, 59],
@@ -93,23 +97,28 @@ function blockIconKey(id, name) {
 const blockStates = [];
 const blockById = new Map();
 for (const block of blocks) {
+  const blockId = blockRuntimeId(block);
+  if (typeof blockId !== 'number') throw new Error(`Block ${block.id} is missing runtimeId`);
+  const official = blockOfficialId(block);
   const baseRecord = {
-    id: block.id,
-    baseId: block.id,
+    id: blockId,
+    baseId: blockId,
     metadata: 0,
     name: normalize(block.name),
     displayName: block.displayName,
+    officialId: official,
   };
   blockStates.push(baseRecord);
   blockById.set(baseRecord.id, baseRecord);
 
   for (const variation of block.variations ?? []) {
     const record = {
-      id: pack(block.id, variation.metadata),
-      baseId: block.id,
+      id: pack(blockId, variation.metadata),
+      baseId: blockId,
       metadata: variation.metadata,
       name: normalize(variation.displayName),
       displayName: variation.displayName,
+      officialId: `${official}#${variation.metadata}`,
     };
     blockStates.push(record);
     blockById.set(record.id, record);
@@ -118,23 +127,29 @@ for (const block of blocks) {
 
 const expandedItems = [];
 for (const item of items) {
+  const itemRuntimeId = runtimeId(item);
+  if (typeof itemRuntimeId !== 'number') throw new Error(`Item ${item.id} is missing runtimeId`);
+  const itemOfficialId = officialId(item);
+
   if (item.variations?.length) {
     for (const variation of item.variations) {
       expandedItems.push({
-        id: pack(item.id, variation.metadata),
-        baseId: item.id,
+        id: pack(itemRuntimeId, variation.metadata),
+        baseId: itemRuntimeId,
         metadata: variation.metadata,
         name: normalize(variation.displayName),
         displayName: variation.displayName,
+        officialId: `${itemOfficialId}#${variation.metadata}`,
       });
     }
   } else {
     expandedItems.push({
-      id: item.id,
-      baseId: item.id,
+      id: itemRuntimeId,
+      baseId: itemRuntimeId,
       metadata: 0,
       name: normalize(item.name),
       displayName: item.displayName,
+      officialId: itemOfficialId,
     });
   }
 }
@@ -153,10 +168,12 @@ for (const block of blockStates) {
 
 const itemVisuals = {};
 for (const item of expandedItems) {
-  const placeBlockId = placeOverrides.get(item.id) ?? (item.baseId > 0 && item.baseId < 256 ? item.id : undefined);
+  const directBlock = blockById.get(item.id);
+  const placeBlockId = placeOverrides.get(item.id) ?? (directBlock ? item.id : undefined);
   const placedBlock = placeBlockId === undefined ? undefined : blockById.get(placeBlockId);
   itemVisuals[item.id] = {
     name: item.name,
+    officialId: item.officialId,
     displayName: item.displayName,
     source: 'generated',
     kind: placeBlockId !== undefined ? 'block' : item.name.includes('sword') || item.name.includes('pickaxe') || item.name.includes('shovel') || item.name.includes('axe') ? 'tool' : 'sprite',

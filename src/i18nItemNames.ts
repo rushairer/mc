@@ -128,6 +128,7 @@ const ZH_CN_EXACT: Dict = {
   'Baked Potato': '烤马铃薯',
   'Golden Carrot': '金胡萝卜',
   'Pumpkin Pie': '南瓜派',
+  'Honey Bottle': '蜂蜜瓶',
   Shield: '盾牌',
   Elytra: '鞘翅',
 };
@@ -208,7 +209,7 @@ const ZH_CN_WORDS: Dict = {
   fence: '栅栏', fermented: '发酵', fire: '火焰', firework: '烟花', fish: '鱼', flint: '燧石',
   flower: '花', frame: '框', furnace: '熔炉', gate: '门', ghast: '恶魂', glass: '玻璃',
   glazed: '带釉', glistering: '闪烁', glowstone: '荧石', gold: '金', golden: '金', gray: '灰色',
-  green: '绿色', gunpowder: '火药', helmet: '头盔', heavy: '重质', hoe: '锄', horse: '马',
+  green: '绿色', gunpowder: '火药', helmet: '头盔', heavy: '重质', hoe: '锄', honey: '蜂蜜', horse: '马',
   ingot: '锭', iron: '铁', item: '物品', jungle: '丛林', lapis: '青金石', lazuli: '',
   leather: '皮革', leggings: '护腿', light: '淡', lime: '黄绿色', lingering: '滞留型',
   log: '原木', magenta: '品红色', magma: '岩浆', melon: '西瓜', minecart: '矿车',

@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "generate:visual-map": "node scripts/generate-visual-map.mjs",
     "generate:assets": "node scripts/generate-procedural-assets.mjs",
-    "audit:items": "node scripts/audit-items-world.mjs"
+    "audit:items": "node scripts/audit-items-world.mjs",
+    "audit:vanilla": "node scripts/audit-vanilla-coverage.mjs"
   },
   "dependencies": {
     "react": "^18.2.0",

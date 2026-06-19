@@ -193,6 +193,7 @@ export const App: React.FC = () => {
 
   const handleLaunchWorld = useCallback(async () => {
     setLoadingWorld(true);
+    setMenuState('none');
     // Yield a frame for React to render the loading screen
     await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -225,6 +226,7 @@ export const App: React.FC = () => {
   }, [selectedMode, selectedSlot]);
 
   const handleResumeGame = useCallback(() => {
+    setMenuState('none');
     if (gameRef.current) {
       gameRef.current.resumeGame();
     }

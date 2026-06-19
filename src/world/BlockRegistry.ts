@@ -2,6 +2,7 @@ import type { BlockDef } from '../types';
 import rawBlocks from '../items/data/blocks.json';
 
 const blocks: Map<number, BlockDef> = new Map();
+const blocksByOfficialId: Map<string, BlockDef> = new Map();
 
 // ─── Texture Custom Overrides for Multi-face Blocks ───
 const TEXTURE_OVERRIDES: Record<string, { textureKey: string; textureTop?: string; textureBottom?: string }> = {
@@ -21,9 +22,24 @@ const TEXTURE_OVERRIDES: Record<string, { textureKey: string; textureTop?: strin
 };
 
 const normalizeName = (name: string) => name.toLowerCase().replace(/ /g, '_');
+const getRuntimeId = (block: { id: number | string; runtimeId?: number }) => {
+  if (typeof block.id === 'number') return block.id;
+  if (typeof block.runtimeId === 'number') return block.runtimeId;
+  throw new Error(`Block ${block.id} is missing runtimeId`);
+};
+const getOfficialId = (block: { id: number | string; name: string; officialId?: string }) =>
+  typeof block.id === 'string' ? block.id : (block.officialId ?? `minecraft:${block.name}`);
+
+const registerBlock = (block: BlockDef) => {
+  blocks.set(block.id, block);
+  if (block.officialId) blocksByOfficialId.set(block.officialId, block);
+};
 
 // ─── Initialize Registry from JSON ───
 for (const b of rawBlocks) {
+  const runtimeId = getRuntimeId(b);
+  const officialId = getOfficialId(b);
+
   // Determine if transparent, solid, etc.
   const isTransparent = b.transparent || b.boundingBox === 'empty' || b.name === 'torch' || b.name === 'redstone_wire' || b.name.includes('sapling') || b.name.includes('flower') || b.name.includes('glass');
   const isSolid = b.boundingBox === 'block' && b.name !== 'water' && b.name !== 'lava' && b.name !== 'flowing_water' && b.name !== 'flowing_lava';
@@ -69,8 +85,9 @@ for (const b of rawBlocks) {
   if (b.variations && b.variations.length > 0) {
     // Also register base block under its base ID (without metadata)
     const tex = getTextureProperties(b.name);
-    blocks.set(b.id, {
-      id: b.id,
+    registerBlock({
+      id: runtimeId,
+      officialId,
       name: b.name,
       textureKey: tex.textureKey,
       textureTop: tex.textureTop,
@@ -80,17 +97,18 @@ for (const b of rawBlocks) {
       hardness: b.hardness ?? 1.0,
       toolCategory,
       luminance: emitLight,
-      baseId: b.id,
+      baseId: runtimeId,
       metadata: 0,
       displayName: b.displayName,
     });
 
     for (const v of b.variations) {
-      const packedId = (v.metadata << 10) | b.id;
+      const packedId = (v.metadata << 10) | runtimeId;
       const vName = normalizeName(v.displayName);
       const tex = getTextureProperties(vName);
-      blocks.set(packedId, {
+      registerBlock({
         id: packedId,
+        officialId: `${officialId}#${v.metadata}`,
         name: vName,
         textureKey: tex.textureKey,
         textureTop: tex.textureTop,
@@ -100,7 +118,7 @@ for (const b of rawBlocks) {
         hardness: b.hardness ?? 1.0,
         toolCategory,
         luminance: emitLight,
-        baseId: b.id,
+        baseId: runtimeId,
         metadata: v.metadata,
         displayName: v.displayName,
       });
@@ -108,8 +126,9 @@ for (const b of rawBlocks) {
   } else {
     // Standard register
     const tex = getTextureProperties(b.name);
-    blocks.set(b.id, {
-      id: b.id,
+    registerBlock({
+      id: runtimeId,
+      officialId,
       name: b.name,
       textureKey: tex.textureKey,
       textureTop: tex.textureTop,
@@ -119,7 +138,7 @@ for (const b of rawBlocks) {
       hardness: b.hardness ?? 1.0,
       toolCategory,
       luminance: emitLight,
-      baseId: b.id,
+      baseId: runtimeId,
       metadata: 0,
       displayName: b.displayName,
     });
@@ -130,6 +149,7 @@ for (const b of rawBlocks) {
 if (!blocks.has(0)) {
   blocks.set(0, {
     id: 0,
+    officialId: 'minecraft:air',
     name: 'air',
     textureKey: 'stone',
     transparent: true,
@@ -170,8 +190,12 @@ export const BlockRegistry = {
 
   getByName(name: string): BlockDef | undefined {
     // Exact or normalized name match
+    const normalized = name.startsWith('minecraft:') ? name : `minecraft:${name}`;
+    const byOfficialId = blocksByOfficialId.get(normalized);
+    if (byOfficialId) return byOfficialId;
+
     for (const b of blocks.values()) {
-      if (b.name === name || b.name === `minecraft:${name}`) return b;
+      if (b.name === name || b.officialId === name || b.officialId === normalized) return b;
     }
     return undefined;
   },

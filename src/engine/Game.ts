@@ -31,6 +31,9 @@ import { CHUNK_SIZE } from '../constants';
 import type { Enchantment } from '../systems/EnchantSystem';
 import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '../types';
 
+const HONEY_BOTTLE_ID = 454;
+const GLASS_BOTTLE_ID = 374;
+
 export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause';
 
 export interface GameState {
@@ -699,7 +702,7 @@ export class Game {
     }
 
     // If pointer lock is lost and no UI is open, open pause menu (only if not in lock cooldown and chat is closed)
-    if (!this.input.locked && this.openUI === 'none' && this.lockCooldown <= 0 && !this.chatOpen) {
+    if (this.input.hasEverLocked && !this.input.locked && this.openUI === 'none' && this.lockCooldown <= 0 && !this.chatOpen) {
       this.openUI = 'pause';
       this.notifyState();
       this.renderer.render();
@@ -1416,7 +1419,8 @@ export class Game {
     const foodSlotStack = this.inventory.getSlot(this.player.selectedSlot);
     const isHoldingFood = foodSlotStack && ItemRegistry.isFood(foodSlotStack.id);
     const isGoldenApple = foodSlotStack && (foodSlotStack.id & 0x3FF) === 322;
-    const canEat = isHoldingFood && (this.player.hunger < 20 || isGoldenApple);
+    const isHoneyBottle = foodSlotStack?.id === HONEY_BOTTLE_ID;
+    const canEat = isHoldingFood && (this.player.hunger < 20 || isGoldenApple || isHoneyBottle);
 
     const targetBlockId = this.targetBlock ? this.chunks.getBlock(this.targetBlock.blockPos.x, this.targetBlock.blockPos.y, this.targetBlock.blockPos.z) : 0;
     const targetDef = targetBlockId ? BlockRegistry.get(targetBlockId) : null;
@@ -1473,6 +1477,7 @@ export class Game {
         if (baseFoodId === 260) foodColor = 0xFF0000;
         else if (baseFoodId === 363 || baseFoodId === 364) foodColor = 0xA04040;
         else if (baseFoodId === 322) foodColor = 0xFFD700; // Gold particles!
+        else if (foodSlotStack.id === HONEY_BOTTLE_ID) foodColor = 0xE8A300;
 
         const front = this.player.eyePosition.clone().add(this.player.forward.multiplyScalar(0.4));
         this.particles.spawnBlockBreak(front.x, front.y, front.z, foodColor);
@@ -1503,9 +1508,22 @@ export class Game {
             }
           }
 
+          if (foodSlotStack.id === HONEY_BOTTLE_ID) {
+            this.potionEffects.remove('poison');
+          }
+
           this.sound.playBurp();
           if (this.gameMode !== 'creative') {
-            this.inventory.removeFromSlot(this.player.selectedSlot);
+            if (foodSlotStack.id === HONEY_BOTTLE_ID) {
+              if (foodSlotStack.count <= 1) {
+                this.inventory.setSlot(this.player.selectedSlot, { id: GLASS_BOTTLE_ID, count: 1 });
+              } else {
+                this.inventory.removeFromSlot(this.player.selectedSlot);
+                this.inventory.addItem(GLASS_BOTTLE_ID, 1);
+              }
+            } else {
+              this.inventory.removeFromSlot(this.player.selectedSlot);
+            }
           }
           this.notifyState();
         }

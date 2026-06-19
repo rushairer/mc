@@ -95,6 +95,11 @@ export class PotionEffectSystem {
     return this.effects.some((effect) => effect.id === id);
   }
 
+  remove(id: PotionEffectId) {
+    this.effects = this.effects.filter((effect) => effect.id !== id);
+    this.tickTimers[id] = 0;
+  }
+
   getEffects(): ActivePotionEffect[] {
     return this.effects.map((effect) => ({ ...effect }));
   }

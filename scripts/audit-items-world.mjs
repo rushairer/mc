@@ -6,26 +6,36 @@ const visualMap = JSON.parse(fs.readFileSync('src/items/data/visual-map.json', '
 
 const normalize = (name) => name.toLowerCase().replace(/ /g, '_').replace(/^minecraft:/, '');
 const pack = (baseId, metadata = 0) => (metadata << 10) | baseId;
+const runtimeId = (item) => typeof item.id === 'number' ? item.id : item.runtimeId;
+const officialId = (item) => typeof item.id === 'string' ? item.id : (item.officialId ?? `minecraft:${item.name}`);
+const blockRuntimeId = (block) => typeof block.id === 'number' ? block.id : block.runtimeId;
+const blockOfficialId = (block) => typeof block.id === 'string' ? block.id : (block.officialId ?? `minecraft:${block.name}`);
 
 const expandedItems = [];
 for (const item of items) {
+  const itemRuntimeId = runtimeId(item);
+  if (typeof itemRuntimeId !== 'number') throw new Error(`Item ${item.id} is missing runtimeId`);
+  const itemOfficialId = officialId(item);
+
   if (item.variations?.length) {
     for (const variation of item.variations) {
       expandedItems.push({
-        id: pack(item.id, variation.metadata),
-        baseId: item.id,
+        id: pack(itemRuntimeId, variation.metadata),
+        baseId: itemRuntimeId,
         metadata: variation.metadata,
         name: normalize(variation.displayName),
         displayName: variation.displayName,
+        officialId: `${itemOfficialId}#${variation.metadata}`,
       });
     }
   } else {
     expandedItems.push({
-      id: item.id,
-      baseId: item.id,
+      id: itemRuntimeId,
+      baseId: itemRuntimeId,
       metadata: 0,
       name: normalize(item.name),
       displayName: item.displayName,
+      officialId: itemOfficialId,
     });
   }
 }
@@ -33,12 +43,16 @@ for (const item of items) {
 const expandedBlocks = [];
 const blockByName = new Map();
 for (const block of blocks) {
+  const blockId = blockRuntimeId(block);
+  if (typeof blockId !== 'number') throw new Error(`Block ${block.id} is missing runtimeId`);
+  const official = blockOfficialId(block);
   const baseRecord = {
-    id: block.id,
-    baseId: block.id,
+    id: blockId,
+    baseId: blockId,
     metadata: 0,
     name: normalize(block.name),
     displayName: block.displayName,
+    officialId: official,
     stackSize: block.stackSize ?? 64,
     boundingBox: block.boundingBox,
   };
@@ -47,11 +61,12 @@ for (const block of blocks) {
 
   for (const variation of block.variations ?? []) {
     const record = {
-      id: pack(block.id, variation.metadata),
-      baseId: block.id,
+      id: pack(blockId, variation.metadata),
+      baseId: blockId,
       metadata: variation.metadata,
       name: normalize(variation.displayName),
       displayName: variation.displayName,
+      officialId: `${official}#${variation.metadata}`,
       stackSize: block.stackSize ?? 64,
       boundingBox: block.boundingBox,
     };
@@ -98,7 +113,7 @@ const placeOverrides = new Map([
 const placeableItems = expandedItems
   .map((item) => ({
     item,
-    blockId: placeOverrides.get(item.id) ?? (item.baseId > 0 && item.baseId < 256 ? item.id : undefined),
+    blockId: placeOverrides.get(item.id) ?? (expandedBlocks.some((block) => block.id === item.id) ? item.id : undefined),
   }))
   .filter((entry) => entry.blockId !== undefined);
 

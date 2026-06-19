@@ -2,15 +2,16 @@ import { BlockRegistry } from '../world/BlockRegistry';
 import rawItems from './data/items.json';
 
 export interface ItemDef {
-  id: number; // packed ID: (metadata << 10) | baseId
+  id: number; // internal runtime ID: legacy packed ID or generated bridge ID
+  officialId: string; // vanilla resource location, e.g. minecraft:honey_bottle
   baseId: number;
   metadata: number;
   name: string;
   displayName: string;
   maxStackSize: number;
   category: 'block' | 'tool' | 'food' | 'material' | 'armor';
-  toolType?: 'pickaxe' | 'axe' | 'shovel' | 'sword';
-  toolMaterial?: 'wood' | 'stone' | 'iron' | 'gold' | 'diamond';
+  toolType?: 'pickaxe' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'spear';
+  toolMaterial?: 'wood' | 'stone' | 'iron' | 'gold' | 'diamond' | 'copper' | 'netherite';
   durability?: number;
   damage?: number;
   miningSpeed?: number;
@@ -26,8 +27,10 @@ const TOOL_STATS = {
   wood:    { durability: 59,   miningSpeed: 2, damage: 1 },
   stone:   { durability: 131,  miningSpeed: 4, damage: 2 },
   iron:    { durability: 250,  miningSpeed: 6, damage: 3 },
+  copper:  { durability: 191,  miningSpeed: 5, damage: 2 },
   gold:    { durability: 32,   miningSpeed: 12, damage: 1 },
   diamond: { durability: 1561, miningSpeed: 8, damage: 4 },
+  netherite: { durability: 2031, miningSpeed: 9, damage: 5 },
 } as const;
 
 // ─── Armor Material Stats ───
@@ -36,7 +39,10 @@ const ARMOR_STATS = {
   gold:    { helmet: 2, chestplate: 5, leggings: 3, boots: 1 },
   chainmail:{ helmet: 2, chestplate: 5, leggings: 4, boots: 1 },
   iron:    { helmet: 2, chestplate: 6, leggings: 5, boots: 2 },
+  copper:  { helmet: 2, chestplate: 5, leggings: 4, boots: 1 },
   diamond: { helmet: 3, chestplate: 8, leggings: 6, boots: 3 },
+  netherite: { helmet: 3, chestplate: 8, leggings: 6, boots: 3 },
+  turtle:  { helmet: 2, chestplate: 0, leggings: 0, boots: 0 },
 } as const;
 
 // ─── Food Restore Info ───
@@ -54,13 +60,29 @@ const FOOD_STATS: Record<string, { hunger: number; saturation: number }> = {
   'raw_mutton': { hunger: 2, saturation: 1.2 },
   'cooked_fish': { hunger: 5, saturation: 6.0 },
   'raw_fish': { hunger: 2, saturation: 0.4 },
+  'cod': { hunger: 2, saturation: 0.4 },
+  'cooked_cod': { hunger: 5, saturation: 6.0 },
+  'salmon': { hunger: 2, saturation: 0.4 },
+  'cooked_salmon': { hunger: 6, saturation: 9.6 },
+  'tropical_fish': { hunger: 1, saturation: 0.2 },
+  'pufferfish': { hunger: 1, saturation: 0.2 },
   'cookie': { hunger: 2, saturation: 0.4 },
   'melon': { hunger: 2, saturation: 1.2 },
+  'melon_slice': { hunger: 2, saturation: 1.2 },
   'carrot': { hunger: 3, saturation: 3.6 },
   'potato': { hunger: 1, saturation: 0.6 },
   'baked_potato': { hunger: 5, saturation: 6.0 },
+  'beetroot': { hunger: 1, saturation: 1.2 },
+  'beetroot_soup': { hunger: 6, saturation: 7.2 },
+  'chorus_fruit': { hunger: 4, saturation: 2.4 },
+  'dried_kelp': { hunger: 1, saturation: 0.6 },
+  'glow_berries': { hunger: 2, saturation: 0.4 },
+  'sweet_berries': { hunger: 2, saturation: 0.4 },
+  'suspicious_stew': { hunger: 6, saturation: 7.2 },
   'pumpkin_pie': { hunger: 8, saturation: 4.8 },
+  'golden_carrot': { hunger: 6, saturation: 14.4 },
   'golden_apple': { hunger: 4, saturation: 9.6 },
+  'honey_bottle': { hunger: 6, saturation: 1.2 },
 };
 
 // ─── Block Drop Mappings (Packed IDs) ───
@@ -110,13 +132,24 @@ const ITEM_PLACE_BLOCK_OVERRIDES: Record<number, number> = {
 };
 
 const items: Map<number, ItemDef> = new Map();
+const itemsByOfficialId: Map<string, ItemDef> = new Map();
+
+const getRuntimeId = (item: { id: number | string; runtimeId?: number }) => {
+  if (typeof item.id === 'number') return item.id;
+  if (typeof item.runtimeId === 'number') return item.runtimeId;
+  throw new Error(`Item ${item.id} is missing runtimeId`);
+};
+
+const getOfficialId = (item: { id: number | string; name: string; officialId?: string }) =>
+  typeof item.id === 'string' ? item.id : (item.officialId ?? `minecraft:${item.name}`);
 
 // ─── Initialize Registry from JSON ───
 for (const item of rawItems) {
-  const baseId = item.id;
+  const baseId = getRuntimeId(item);
+  const officialId = getOfficialId(item);
   const isBlock = baseId < 256;
 
-  const registerItem = (id: number, meta: number, name: string, displayName: string) => {
+  const registerItem = (id: number, meta: number, name: string, displayName: string, itemOfficialId: string) => {
     // Determine category
     let category: ItemDef['category'] = isBlock ? 'block' : 'material';
     let toolType: ItemDef['toolType'] = undefined;
@@ -130,27 +163,31 @@ for (const item of rawItems) {
     let armorDefense: number | undefined = undefined;
 
     // Check if Tool
-    if (name.endsWith('_pickaxe') || name.endsWith('_shovel') || name.endsWith('_axe') || name.endsWith('_sword')) {
+    if (name.endsWith('_pickaxe') || name.endsWith('_shovel') || name.endsWith('_axe') || name.endsWith('_sword') || name.endsWith('_hoe') || name.endsWith('_spear')) {
       category = 'tool';
       if (name.endsWith('_pickaxe')) toolType = 'pickaxe';
       else if (name.endsWith('_shovel')) toolType = 'shovel';
       else if (name.endsWith('_axe')) toolType = 'axe';
       else if (name.endsWith('_sword')) toolType = 'sword';
+      else if (name.endsWith('_hoe')) toolType = 'hoe';
+      else if (name.endsWith('_spear')) toolType = 'spear';
 
       // Material
       if (name.startsWith('wooden_') || name.startsWith('wood_')) toolMaterial = 'wood';
       else if (name.startsWith('stone_')) toolMaterial = 'stone';
       else if (name.startsWith('iron_')) toolMaterial = 'iron';
+      else if (name.startsWith('copper_')) toolMaterial = 'copper';
       else if (name.startsWith('golden_') || name.startsWith('gold_')) toolMaterial = 'gold';
       else if (name.startsWith('diamond_')) toolMaterial = 'diamond';
+      else if (name.startsWith('netherite_')) toolMaterial = 'netherite';
 
       if (toolMaterial) {
         const stats = TOOL_STATS[toolMaterial];
         durability = stats.durability;
         miningSpeed = stats.miningSpeed;
-        damage = toolType === 'sword' ? stats.damage + 3 : (toolType === 'axe' ? stats.damage + 2 : stats.damage);
+        damage = toolType === 'sword' || toolType === 'spear' ? stats.damage + 3 : (toolType === 'axe' ? stats.damage + 2 : stats.damage);
       }
-    } else if (name === 'bow') {
+    } else if (name === 'bow' || name === 'crossbow' || name === 'trident' || name === 'mace' || name === 'brush') {
       category = 'tool';
       toolType = 'sword'; // classified under sword for swing/damage checks in player
       durability = 384;
@@ -168,13 +205,16 @@ for (const item of rawItems) {
       else if (name.startsWith('golden_') || name.startsWith('gold_')) materialKey = 'gold';
       else if (name.startsWith('chainmail_')) materialKey = 'chainmail';
       else if (name.startsWith('iron_')) materialKey = 'iron';
+      else if (name.startsWith('copper_')) materialKey = 'copper';
       else if (name.startsWith('diamond_')) materialKey = 'diamond';
+      else if (name.startsWith('netherite_')) materialKey = 'netherite';
+      else if (name.startsWith('turtle_')) materialKey = 'turtle';
 
       if (materialKey && armorSlot) {
         armorDefense = ARMOR_STATS[materialKey][armorSlot];
         // Approximate durability
         const baseDurabilities = { helmet: 55, chestplate: 80, leggings: 75, boots: 65 };
-        const multipliers = { leather: 3, gold: 7, chainmail: 12, iron: 15, diamond: 33 };
+        const multipliers = { leather: 3, gold: 7, chainmail: 12, iron: 15, copper: 10, diamond: 33, netherite: 37, turtle: 11 };
         durability = baseDurabilities[armorSlot] * multipliers[materialKey] / 5;
       }
     } else {
@@ -189,8 +229,9 @@ for (const item of rawItems) {
       }
     }
 
-    items.set(id, {
+    const itemDef = {
       id,
+      officialId: itemOfficialId,
       baseId,
       metadata: meta,
       name,
@@ -207,7 +248,9 @@ for (const item of rawItems) {
       armorSlot,
       armorDefense,
       placeBlockId: ITEM_PLACE_BLOCK_OVERRIDES[id] ?? (isBlock ? id : undefined),
-    });
+    };
+    items.set(id, itemDef);
+    itemsByOfficialId.set(itemOfficialId, itemDef);
   };
 
   // Register variations
@@ -215,10 +258,10 @@ for (const item of rawItems) {
     for (const v of item.variations) {
       const packedId = (v.metadata << 10) | baseId;
       const vName = v.displayName.toLowerCase().replace(/ /g, '_');
-      registerItem(packedId, v.metadata, vName, v.displayName);
+      registerItem(packedId, v.metadata, vName, v.displayName, `${officialId}#${v.metadata}`);
     }
   } else {
-    registerItem(baseId, 0, item.name, item.displayName);
+    registerItem(baseId, 0, item.name, item.displayName, officialId);
   }
 }
 
@@ -228,13 +271,31 @@ export const ItemRegistry = {
     const it = items.get(id);
     if (it) return it;
 
-    // Fallback: block-as-item
+    // Fallback: block-as-item. Modern vanilla blocks use runtime IDs above the
+    // legacy 0-255 range, so ask BlockRegistry directly before old base-ID math.
+    const directBlock = BlockRegistry.get(id);
+    if (directBlock && directBlock.id === id && id !== 0) {
+      return {
+        id,
+        officialId: directBlock.officialId ?? `minecraft:${directBlock.name}`,
+        baseId: directBlock.baseId ?? directBlock.id,
+        metadata: directBlock.metadata ?? 0,
+        name: directBlock.name,
+        displayName: directBlock.displayName ?? directBlock.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        maxStackSize: 64,
+        category: 'block',
+        placeBlockId: id,
+      };
+    }
+
+    // Fallback: legacy packed block-as-item
     const baseId = id & 0x3FF;
     if (baseId < 256) {
       const block = BlockRegistry.get(id);
       if (!block) return undefined;
       return {
         id,
+        officialId: `minecraft:${block.name}`,
         baseId: block.baseId ?? (block.id & 0x3FF),
         metadata: block.metadata ?? (block.id >> 10),
         name: block.name,
@@ -253,6 +314,9 @@ export const ItemRegistry = {
   getPlaceBlockId(id: number): number | undefined {
     const item = this.get(id);
     if (item?.placeBlockId !== undefined) return item.placeBlockId;
+
+    const directBlock = BlockRegistry.get(id);
+    if (directBlock && directBlock.id === id && id !== 0) return id;
 
     const baseId = id & 0x3FF;
     if (baseId >= 1 && baseId < 256) return id;
@@ -319,8 +383,12 @@ export const ItemRegistry = {
 
   getByName(name: string): ItemDef | undefined {
     // Exact or normalized name match
+    const normalized = name.startsWith('minecraft:') ? name : `minecraft:${name}`;
+    const byOfficialId = itemsByOfficialId.get(normalized);
+    if (byOfficialId) return byOfficialId;
+
     for (const item of items.values()) {
-      if (item.name === name || item.name === `minecraft:${name}`) return item;
+      if (item.name === name || item.officialId === name || item.officialId === normalized) return item;
     }
     return undefined;
   },

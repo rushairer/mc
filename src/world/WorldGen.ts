@@ -2,6 +2,7 @@ import { SimplexNoise } from './SimplexNoise';
 import { CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL } from '../constants';
 import { Chunk } from './Chunk';
 import { VillageSystem } from '../systems/VillageSystem';
+import type { ItemStack } from '../types';
 
 export enum BiomeType {
   Plains = 0,
@@ -50,6 +51,10 @@ const STONE_BRICKS = 98;
 const MOSSY_STONE_BRICKS = (1 << 10) | 98;
 const CRACKED_STONE_BRICKS = (2 << 10) | 98;
 const CHISELED_STONE_BRICKS = (3 << 10) | 98;
+const COBBLESTONE = 4;
+const MOSSY_COBBLESTONE = 48;
+const MOB_SPAWNER = 52;
+const CHEST = 54;
 const IRON_BARS = 101;
 const TORCH = 50;
 const END_PORTAL = 119;
@@ -258,10 +263,150 @@ export class WorldGen {
     // Phase 6: Villages
     VillageSystem.generateChunk(this, chunk);
 
-    // Phase 7: Stronghold portal rooms
+    // Phase 7: Dungeons
+    this.generateDungeons(chunk, worldX, worldZ);
+
+    // Phase 8: Stronghold portal rooms
     this.generateStrongholds(chunk, worldX, worldZ);
 
     chunk.dirty = true;
+  }
+
+  private generateDungeons(chunk: Chunk, worldX: number, worldZ: number) {
+    const cx = chunk.cx;
+    const cz = chunk.cz;
+    const spacing = 6;
+    const offsetX = Math.floor(this.pseudoRandom(this.seed, 157, 43) * spacing);
+    const offsetZ = Math.floor(this.pseudoRandom(this.seed, 211, 89) * spacing);
+
+    if (this.positiveMod(cx - offsetX, spacing) !== 0 || this.positiveMod(cz - offsetZ, spacing) !== 0) {
+      return;
+    }
+
+    const distanceFromSpawnChunks = Math.sqrt(cx * cx + cz * cz);
+    if (distanceFromSpawnChunks < 2) return;
+
+    const floorY = 14 + Math.floor(this.pseudoRandom(cx * 17, this.seed + 503, cz * 23) * 34);
+    if (floorY < 8 || floorY > WORLD_HEIGHT - 8) return;
+
+    this.placeDungeonRoom(chunk, worldX, worldZ, floorY);
+  }
+
+  private placeDungeonRoom(chunk: Chunk, worldX: number, worldZ: number, floorY: number) {
+    const minX = 3;
+    const maxX = 12;
+    const minZ = 3;
+    const maxZ = 12;
+    const ceilingY = floorY + 4;
+
+    for (let x = minX; x <= maxX; x++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        for (let y = floorY; y <= ceilingY; y++) {
+          const boundary = x === minX || x === maxX || z === minZ || z === maxZ || y === floorY || y === ceilingY;
+          if (boundary) {
+            chunk.setBlock(x, y, z, this.getDungeonStone(worldX + x, y, worldZ + z));
+          } else {
+            chunk.setBlock(x, y, z, 0);
+          }
+        }
+      }
+    }
+
+    const centerX = 8;
+    const centerZ = 8;
+    chunk.setBlock(centerX, floorY + 1, centerZ, MOB_SPAWNER);
+    chunk.setBlockMeta(centerX, floorY + 1, centerZ, {
+      spawnerMobType: this.getDungeonSpawnerType(worldX + centerX, floorY, worldZ + centerZ),
+    }, true);
+
+    // Four low openings make the room discoverable from nearby cave systems.
+    for (const [x, z, dx, dz] of [
+      [centerX, minZ, 0, -1],
+      [centerX, maxZ, 0, 1],
+      [minX, centerZ, -1, 0],
+      [maxX, centerZ, 1, 0],
+    ] as const) {
+      for (let y = floorY + 1; y <= floorY + 2; y++) {
+        chunk.setBlock(x, y, z, 0);
+        chunk.setBlock(x + dx, y, z + dz, 0);
+      }
+    }
+
+    const chestPositions = [
+      [minX + 1, floorY + 1, minZ + 1],
+      [maxX - 1, floorY + 1, maxZ - 1],
+    ] as const;
+    const chestCount = this.pseudoRandom(worldX, floorY + 71, worldZ) < 0.55 ? 2 : 1;
+    for (let i = 0; i < chestCount; i++) {
+      const [x, y, z] = chestPositions[i];
+      chunk.setBlock(x, y, z, CHEST);
+      chunk.setBlockMeta(x, y, z, {
+        containerType: 'chest',
+        inventory: this.createDungeonLoot(worldX + x, y, worldZ + z),
+      }, true);
+    }
+
+    for (const [x, y, z] of [[minX + 1, floorY + 2, centerZ], [maxX - 1, floorY + 2, centerZ]]) {
+      chunk.setBlock(x, y, z, TORCH);
+    }
+  }
+
+  private getDungeonStone(wx: number, y: number, wz: number): number {
+    const rand = this.pseudoRandom(wx, y + 1301, wz);
+    return rand < 0.48 ? MOSSY_COBBLESTONE : COBBLESTONE;
+  }
+
+  private getDungeonSpawnerType(wx: number, y: number, wz: number): 'zombie' | 'skeleton' | 'spider' {
+    const rand = this.pseudoRandom(wx, y + 1609, wz);
+    if (rand < 0.5) return 'zombie';
+    if (rand < 0.82) return 'skeleton';
+    return 'spider';
+  }
+
+  private createDungeonLoot(wx: number, y: number, wz: number): (ItemStack | null)[] {
+    const inventory: (ItemStack | null)[] = new Array(27).fill(null);
+    const lootTable: Array<{ id: number; min: number; max: number; weight: number }> = [
+      { id: 297, min: 1, max: 2, weight: 16 },   // bread
+      { id: 296, min: 1, max: 4, weight: 18 },   // wheat
+      { id: 265, min: 1, max: 4, weight: 14 },   // iron ingot
+      { id: 266, min: 1, max: 3, weight: 8 },    // gold ingot
+      { id: 331, min: 1, max: 4, weight: 10 },   // redstone
+      { id: 352, min: 1, max: 6, weight: 14 },   // bone
+      { id: 289, min: 1, max: 4, weight: 12 },   // gunpowder
+      { id: 287, min: 1, max: 4, weight: 12 },   // string
+      { id: 325, min: 1, max: 1, weight: 5 },    // bucket
+      { id: 329, min: 1, max: 1, weight: 3 },    // saddle
+      { id: 421, min: 1, max: 1, weight: 2 },    // name tag
+      { id: 2256, min: 1, max: 1, weight: 1 },   // 13 disc
+      { id: 2257, min: 1, max: 1, weight: 1 },   // cat disc
+    ];
+
+    const totalWeight = lootTable.reduce((sum, entry) => sum + entry.weight, 0);
+    const rolls = 3 + Math.floor(this.pseudoRandom(wx, y + 1, wz) * 4);
+
+    for (let roll = 0; roll < rolls; roll++) {
+      let slot = Math.floor(this.pseudoRandom(wx + roll * 37, y + 2, wz - roll * 19) * inventory.length);
+      for (let attempts = 0; attempts < inventory.length && inventory[slot]; attempts++) {
+        slot = (slot + 1) % inventory.length;
+      }
+      if (inventory[slot]) continue;
+
+      let pick = this.pseudoRandom(wx - roll * 11, y + 3, wz + roll * 29) * totalWeight;
+      let selected = lootTable[0];
+      for (const entry of lootTable) {
+        pick -= entry.weight;
+        if (pick <= 0) {
+          selected = entry;
+          break;
+        }
+      }
+
+      const countRange = selected.max - selected.min + 1;
+      const count = selected.min + Math.floor(this.pseudoRandom(wx + roll * 5, y + 4, wz + roll * 7) * countRange);
+      inventory[slot] = { id: selected.id, count };
+    }
+
+    return inventory;
   }
 
   private generateStrongholds(chunk: Chunk, worldX: number, worldZ: number) {

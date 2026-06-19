@@ -26,6 +26,7 @@ export interface BlockMetadata {
   redstoneType?: 'wire' | 'torch' | 'repeater' | 'piston' | 'lever' | 'button' | 'comparator' | 'observer' | 'daylight_detector' | 'pressure_plate' | 'tripwire_hook' | 'tripwire';
   containerType?: 'chest' | 'hopper' | 'furnace' | 'brewing_stand';
   inventory?: (ItemStack | null)[];
+  spawnerMobType?: 'zombie' | 'skeleton' | 'spider';
   transferCooldown?: number; // for hoppers
   doorHalf?: 'lower' | 'upper';
   hinge?: 'left' | 'right';

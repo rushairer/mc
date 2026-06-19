@@ -11,7 +11,9 @@ import { EnchantUI } from './ui/EnchantUI';
 import { AnvilUI } from './ui/AnvilUI';
 import { BrewingUI } from './ui/BrewingUI';
 import { HopperUI } from './ui/HopperUI';
+import { TradingUI } from './ui/TradingUI';
 import type { Enchantment } from './systems/EnchantSystem';
+import type { TradeOffer } from './systems/VillageSystem';
 import type { ItemStack } from './types';
 import { SaveSystem } from './systems/SaveSystem';
 import { useI18n, translations } from './i18n';
@@ -37,6 +39,8 @@ const initialGameState: GameState = {
   hopperInventory: null,
   furnaceInventory: null,
   brewingInventory: null,
+  tradingOffers: null,
+  tradingProfession: null,
   heldItemId: 0,
   isNight: false,
   isUnderwater: false,
@@ -165,6 +169,10 @@ export const App: React.FC = () => {
 
   const handleSpendLevels = useCallback((cost: number) => {
     return gameRef.current?.spendLevels(cost) ?? false;
+  }, []);
+
+  const handleTrade = useCallback((offer: TradeOffer) => {
+    return gameRef.current?.performTrade(offer) ?? false;
   }, []);
 
   const handleSingleplayerClick = useCallback(() => {
@@ -486,6 +494,20 @@ export const App: React.FC = () => {
           inventory={gameState.inventory}
           brewingSlots={gameState.brewingInventory}
           onClose={handleCloseUI}
+          onInventoryChange={handleInventoryChange}
+          getItemIconStyle={getItemIconStyle}
+        />
+      )}
+
+      {/* Trading UI */}
+      {gameState.openUI === 'trading' && gameState.inventory && gameState.tradingOffers && gameState.tradingProfession && (
+        <TradingUI
+          inventory={gameState.inventory}
+          profession={gameState.tradingProfession}
+          offers={gameState.tradingOffers}
+          gameMode={gameState.gameMode}
+          onClose={handleCloseUI}
+          onTrade={handleTrade}
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
         />

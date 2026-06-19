@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { Mob, type MobType, MOB_DEFS } from '../entities/Mob';
 import { CHUNK_SIZE, RENDER_DISTANCE } from '../constants';
 import { BlockRegistry } from '../world/BlockRegistry';
+import { VillageSystem, type VillagerProfession } from './VillageSystem';
+import type { WorldGen } from '../world/WorldGen';
 
 const MAX_MOBS = 40;
 const SPAWN_INTERVAL = 2.0; // seconds between spawn attempts
@@ -12,6 +14,7 @@ export class MobSystem {
   mobs: Map<number, Mob> = new Map();
   private scene: THREE.Scene;
   private spawnTimer = 0;
+  private spawnedVillages: Set<string> = new Set();
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -27,7 +30,8 @@ export class MobSystem {
     gameMode: 'survival' | 'creative' = 'survival',
     onMobDeath?: (mob: Mob) => void,
     onMobShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, type: 'arrow' | 'fireball') => void,
-    dimension = 0
+    dimension = 0,
+    worldGen?: WorldGen
   ) {
     // Update existing mobs
     for (const [id, mob] of this.mobs) {
@@ -46,6 +50,10 @@ export class MobSystem {
     if (this.spawnTimer >= SPAWN_INTERVAL && this.mobs.size < MAX_MOBS) {
       this.spawnTimer = 0;
       this.trySpawn(playerPos, isNight, getBlock, dimension);
+    }
+
+    if (dimension === 0 && worldGen) {
+      this.ensureVillageMobs(playerPos, worldGen, getBlock);
     }
   }
 
@@ -133,11 +141,30 @@ export class MobSystem {
     }
   }
 
-  spawnMob(type: MobType, x: number, y: number, z: number, size?: number): Mob {
-    const mob = new Mob(type, x, y, z, size);
+  spawnMob(type: MobType, x: number, y: number, z: number, size?: number, profession?: VillagerProfession): Mob {
+    const mob = new Mob(type, x, y, z, size, profession);
     this.mobs.set(mob.id, mob);
     this.scene.add(mob.mesh);
     return mob;
+  }
+
+  private ensureVillageMobs(
+    playerPos: THREE.Vector3,
+    worldGen: WorldGen,
+    getBlock: (x: number, y: number, z: number) => number
+  ) {
+    const villages = VillageSystem.getNearbyVillages(worldGen, playerPos.x, playerPos.z, 96);
+    for (const village of villages) {
+      if (this.spawnedVillages.has(village.id)) continue;
+      for (const point of village.spawnPoints) {
+        const x = Math.floor(point.x);
+        const y = Math.floor(point.y);
+        const z = Math.floor(point.z);
+        if (getBlock(x, y, z) !== 0 || getBlock(x, y + 1, z) !== 0) continue;
+        this.spawnMob('villager', point.x, point.y, point.z, undefined, village.profession);
+      }
+      this.spawnedVillages.add(village.id);
+    }
   }
 
   removeMob(id: number) {
@@ -216,11 +243,45 @@ export class MobSystem {
     return result;
   }
 
+  getMobInRay(
+    origin: THREE.Vector3,
+    direction: THREE.Vector3,
+    reach: number,
+    types?: MobType[]
+  ): Mob | null {
+    const ray = new THREE.Raycaster(origin, direction, 0, reach);
+    const allowed = types ? new Set(types) : null;
+    let closestMob: Mob | null = null;
+    let closestDist = reach;
+
+    for (const mob of this.mobs.values()) {
+      if (allowed && !allowed.has(mob.def.type)) continue;
+
+      const hw = mob.width / 2;
+      const box = new THREE.Box3(
+        new THREE.Vector3(mob.position.x - hw, mob.position.y, mob.position.z - hw),
+        new THREE.Vector3(mob.position.x + hw, mob.position.y + mob.height, mob.position.z + hw)
+      );
+
+      const intersection = new THREE.Vector3();
+      if (ray.ray.intersectBox(box, intersection)) {
+        const dist = intersection.distanceTo(origin);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestMob = mob;
+        }
+      }
+    }
+
+    return closestMob;
+  }
+
   dispose() {
     for (const mob of this.mobs.values()) {
       this.scene.remove(mob.mesh);
       mob.dispose();
     }
     this.mobs.clear();
+    this.spawnedVillages.clear();
   }
 }

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
+import type { VillagerProfession } from '../systems/VillageSystem';
 
-export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton';
+export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager';
 
 export interface MobDef {
   type: MobType;
@@ -31,6 +32,7 @@ const MOB_DEFS: Record<MobType, MobDef> = {
   zombie_pigman:   { type: 'zombie_pigman',   health: 20, speed: 2.3, damage: 5, hostile: false, width: 0.6, height: 1.8, bodyColor: 0xEA899A, headColor: 0x5D8A62, eyeColor: 0x000000, xpDrop: 5,  drops: [{ id: 367, count: 1, chance: 0.5 }, { id: 371, count: 1, chance: 0.3 }, { id: 266, count: 1, chance: 0.05 }] },
   magma_cube:      { type: 'magma_cube',      health: 16, speed: 1.5, damage: 4, hostile: true,  width: 1.2, height: 1.2, bodyColor: 0x260d0d, headColor: 0xFF5500, eyeColor: 0xFF5500, xpDrop: 4,  drops: [{ id: 378, count: 1, chance: 0.25 }] },
   wither_skeleton: { type: 'wither_skeleton', health: 20, speed: 2.5, damage: 4, hostile: true,  width: 0.7, height: 2.4, bodyColor: 0x242424, headColor: 0x242424, eyeColor: 0xFF0000, xpDrop: 5,  drops: [{ id: 352, count: 1, chance: 0.8 }, { id: 263, count: 1, chance: 0.3 }, { id: 1421, count: 1, chance: 0.025 }] },
+  villager:        { type: 'villager',        health: 20, speed: 1.2, damage: 0, hostile: false, width: 0.6, height: 1.9, bodyColor: 0x8B5A2B, headColor: 0xC68642, eyeColor: 0x2B1608, xpDrop: 0,  drops: [] },
 };
 
 const MOB_MAX_AIR = 15.0;
@@ -58,6 +60,7 @@ export class Mob {
   size = 1; // For magma_cube size (1, 2, or 3)
   isAngry = false; // For zombie_pigman neutrality pack anger
   angerTimer = 0;
+  villagerProfession: VillagerProfession = 'farmer';
   private halfWidth: number;
   private air = MOB_MAX_AIR;
   private drownTimer = 0;
@@ -87,13 +90,14 @@ export class Mob {
     return this.def.speed;
   }
 
-  constructor(type: MobType, x: number, y: number, z: number, size = 3) {
+  constructor(type: MobType, x: number, y: number, z: number, size = 3, profession: VillagerProfession = 'farmer') {
     this.id = Mob.nextId++;
     this.def = MOB_DEFS[type];
     this.size = type === 'magma_cube' ? size : 1;
     this.position = new THREE.Vector3(x, y, z);
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.health = type === 'magma_cube' ? (size === 3 ? 16 : (size === 2 ? 4 : 1)) : this.def.health;
+    this.villagerProfession = profession;
     this.halfWidth = this.width / 2;
     this.mesh = this.createMesh();
     if (type === 'magma_cube') {
@@ -434,6 +438,63 @@ export class Mob {
       const legR = new THREE.Mesh(legGeo, legMat);
       legR.name = 'legR';
       legR.position.set(0.08, 0.125, 0);
+      group.add(legL, legR);
+    } else if (type === 'villager') {
+      // Villager: tall robe, large nose, folded arms.
+      const robeColors: Record<VillagerProfession, number> = {
+        farmer: 0x8B6F2A,
+        librarian: 0xB02020,
+        toolsmith: 0x3C5068,
+        cleric: 0x7A3FA0,
+      };
+      const robeColor = robeColors[this.villagerProfession] ?? 0x8B5A2B;
+
+      const bodyGeo = new THREE.BoxGeometry(0.52, 0.85, 0.34);
+      const bodyMat = new THREE.MeshLambertMaterial({ color: robeColor });
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.position.y = 0.86;
+      group.add(body);
+
+      const headGeo = new THREE.BoxGeometry(0.42, 0.42, 0.42);
+      const headMat = new THREE.MeshLambertMaterial({ color: 0xC68642 });
+      const head = new THREE.Mesh(headGeo, headMat);
+      head.position.set(0, 1.52, 0);
+      group.add(head);
+
+      const noseGeo = new THREE.BoxGeometry(0.11, 0.13, 0.16);
+      const noseMat = new THREE.MeshLambertMaterial({ color: 0xB8793D });
+      const nose = new THREE.Mesh(noseGeo, noseMat);
+      nose.position.set(0, 1.48, 0.28);
+      group.add(nose);
+
+      const eyeGeo = new THREE.BoxGeometry(0.055, 0.035, 0.02);
+      const eyeMat = new THREE.MeshLambertMaterial({ color: 0x1A0E05 });
+      const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+      const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+      eyeL.position.set(-0.1, 1.55, 0.215);
+      eyeR.position.set(0.1, 1.55, 0.215);
+      group.add(eyeL, eyeR);
+
+      const armGeo = new THREE.BoxGeometry(0.18, 0.5, 0.16);
+      const armMat = new THREE.MeshLambertMaterial({ color: 0xB8793D });
+      const armL = new THREE.Mesh(armGeo, armMat);
+      armL.position.set(-0.18, 0.98, 0.23);
+      armL.rotation.z = -Math.PI / 5;
+      armL.rotation.x = -Math.PI / 2;
+      const armR = new THREE.Mesh(armGeo, armMat);
+      armR.position.set(0.18, 0.98, 0.23);
+      armR.rotation.z = Math.PI / 5;
+      armR.rotation.x = -Math.PI / 2;
+      group.add(armL, armR);
+
+      const legGeo = new THREE.BoxGeometry(0.18, 0.55, 0.18);
+      const legMat = new THREE.MeshLambertMaterial({ color: 0x3A2A1D });
+      const legL = new THREE.Mesh(legGeo, legMat);
+      legL.name = 'legL';
+      legL.position.set(-0.1, 0.275, 0);
+      const legR = new THREE.Mesh(legGeo, legMat);
+      legR.name = 'legR';
+      legR.position.set(0.1, 0.275, 0);
       group.add(legL, legR);
     } else if (type === 'blaze') {
       // Blaze: head + orbiting rods

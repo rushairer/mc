@@ -1,6 +1,7 @@
 import { SimplexNoise } from './SimplexNoise';
 import { CHUNK_SIZE, WORLD_HEIGHT, SEA_LEVEL } from '../constants';
 import { Chunk } from './Chunk';
+import { VillageSystem } from '../systems/VillageSystem';
 
 export enum BiomeType {
   Plains = 0,
@@ -148,6 +149,9 @@ export class WorldGen {
 
     // Phase 5: Flowers and grass
     this.generateSurfaceDecor(chunk, worldX, worldZ);
+
+    // Phase 6: Villages
+    VillageSystem.generateChunk(this, chunk);
 
     chunk.dirty = true;
   }

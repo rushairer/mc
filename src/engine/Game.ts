@@ -26,11 +26,12 @@ import { XPSystem } from '../systems/XPSystem';
 import { EnchantSystem } from '../systems/EnchantSystem';
 import { PotionEffectSystem } from '../systems/PotionEffect';
 import { HopperSystem } from '../systems/HopperSystem';
+import { VillageSystem, type TradeOffer, type VillagerProfession } from '../systems/VillageSystem';
 import { CHUNK_SIZE } from '../constants';
 import type { Enchantment } from '../systems/EnchantSystem';
 import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '../types';
 
-export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'death' | 'menu' | 'pause';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause';
 
 export interface GameState {
   fps: number;
@@ -53,6 +54,8 @@ export interface GameState {
   hopperInventory: (ItemStack | null)[] | null;
   furnaceInventory: (ItemStack | null)[] | null;
   brewingInventory: (ItemStack | null)[] | null;
+  tradingOffers: TradeOffer[] | null;
+  tradingProfession: VillagerProfession | null;
   heldItemId: number;
   isNight: boolean;
   isUnderwater: boolean;
@@ -131,6 +134,7 @@ export class Game {
   private openHopperPos: THREE.Vector3 | null = null;
   private openFurnacePos: THREE.Vector3 | null = null;
   private openBrewingPos: THREE.Vector3 | null = null;
+  private tradingProfession: VillagerProfession | null = null;
   private lastLightRebuildTime = -1;
   private lightScanTimer = 0;
 
@@ -435,6 +439,22 @@ export class Game {
     document.exitPointerLock();
   }
 
+  openTradingUI(profession: VillagerProfession) {
+    this.tradingProfession = profession;
+    this.openUI = 'trading';
+    document.exitPointerLock();
+    this.notifyState();
+  }
+
+  performTrade(offer: TradeOffer): boolean {
+    const traded = VillageSystem.performTrade(this.inventory, offer, this.gameMode === 'creative');
+    if (traded) {
+      this.sound.playPickup();
+      this.notifyState();
+    }
+    return traded;
+  }
+
   enchantItem(item: ItemStack, cost: number, enchantment: Enchantment): ItemStack | null {
     if (this.gameMode !== 'creative' && !this.xp.spendLevels(cost)) {
       return null;
@@ -500,6 +520,8 @@ export class Game {
       this.openFurnacePos = null;
     } else if (this.openUI === 'brewing_stand') {
       this.openBrewingPos = null;
+    } else if (this.openUI === 'trading') {
+      this.tradingProfession = null;
     }
     this.openUI = 'none';
     this.input.requestLock();
@@ -781,7 +803,8 @@ export class Game {
           this.projectiles.shootArrow(origin, direction, false, 4);
         }
       },
-      this.chunks.currentDimension
+      this.chunks.currentDimension,
+      this.chunks.getWorldGen()
     );
 
     // Check creeper explosions
@@ -1183,6 +1206,13 @@ export class Game {
 
     // ─── Right click: place block / interact ───
     if (!this.chatOpen && this.input.isMouseDown(2) && this.placeCooldown <= 0) {
+      const targetMob = this.mobs.getMobInRay(this.player.eyePosition, this.player.forward, 4.5, ['villager']);
+      if (targetMob?.def.type === 'villager') {
+        this.openTradingUI(targetMob.villagerProfession);
+        this.placeCooldown = 0.5;
+        return;
+      }
+
       if (this.targetBlock) {
         const { blockPos, faceNormal } = this.targetBlock;
         const targetId = this.chunks.getBlock(blockPos.x, blockPos.y, blockPos.z);
@@ -1385,6 +1415,9 @@ export class Game {
     // ─── Food Eating ───
     const foodSlotStack = this.inventory.getSlot(this.player.selectedSlot);
     const isHoldingFood = foodSlotStack && ItemRegistry.isFood(foodSlotStack.id);
+    const isGoldenApple = foodSlotStack && (foodSlotStack.id & 0x3FF) === 322;
+    const canEat = isHoldingFood && (this.player.hunger < 20 || isGoldenApple);
+
     const targetBlockId = this.targetBlock ? this.chunks.getBlock(this.targetBlock.blockPos.x, this.targetBlock.blockPos.y, this.targetBlock.blockPos.z) : 0;
     const targetDef = targetBlockId ? BlockRegistry.get(targetBlockId) : null;
     const targetName = targetDef?.name ?? '';
@@ -1427,7 +1460,7 @@ export class Game {
         this.chewSoundTimer = 0;
         this.placeCooldown = 0.5;
       }
-    } else if (!this.chatOpen && this.input.isMouseDown(2) && isHoldingFood && !pointingAtInteractive && this.player.hunger < 20) {
+    } else if (!this.chatOpen && this.input.isMouseDown(2) && canEat && !pointingAtInteractive) {
       this.eatingTimer += dt;
       this.chewSoundTimer += dt;
 
@@ -1439,6 +1472,7 @@ export class Game {
         const baseFoodId = foodSlotStack.id & 0x3FF;
         if (baseFoodId === 260) foodColor = 0xFF0000;
         else if (baseFoodId === 363 || baseFoodId === 364) foodColor = 0xA04040;
+        else if (baseFoodId === 322) foodColor = 0xFFD700; // Gold particles!
 
         const front = this.player.eyePosition.clone().add(this.player.forward.multiplyScalar(0.4));
         this.particles.spawnBlockBreak(front.x, front.y, front.z, foodColor);
@@ -1449,8 +1483,31 @@ export class Game {
         if (foodDef) {
           this.player.hunger = Math.min(20, this.player.hunger + (foodDef.hungerRestore ?? 0));
           this.player.saturation = Math.min(this.player.hunger, this.player.saturation + (foodDef.saturationRestore ?? 0));
+
+          // Golden Apple / Enchanted Golden Apple status effects
+          const baseFoodId = foodSlotStack.id & 0x3FF;
+          if (baseFoodId === 322) {
+            const isEnchanted = (foodSlotStack.id >> 10) === 1;
+            if (isEnchanted) {
+              // Enchanted Golden Apple: Regeneration II (20s), Fire Resistance (5m)
+              this.potionEffects.apply({ id: 'regeneration', level: 2, duration: 20 }, (amount) => {
+                this.player.health = Math.min(20, this.player.health + amount);
+              });
+              this.potionEffects.apply({ id: 'fire_resistance', level: 1, duration: 300 }, () => {});
+              this.player.health = 20; // Instant full heal
+            } else {
+              // Regular Golden Apple: Regeneration I (5s)
+              this.potionEffects.apply({ id: 'regeneration', level: 1, duration: 5 }, (amount) => {
+                this.player.health = Math.min(20, this.player.health + amount);
+              });
+            }
+          }
+
           this.sound.playBurp();
-          this.inventory.removeFromSlot(this.player.selectedSlot);
+          if (this.gameMode !== 'creative') {
+            this.inventory.removeFromSlot(this.player.selectedSlot);
+          }
+          this.notifyState();
         }
         this.eatingTimer = 0;
         this.chewSoundTimer = 0;
@@ -1924,6 +1981,8 @@ export class Game {
       hopperInventory: this.getOpenHopperInventory(),
       furnaceInventory: this.getOpenFurnaceInventory(),
       brewingInventory: this.getOpenBrewingInventory(),
+      tradingOffers: this.tradingProfession ? VillageSystem.getOffers(this.tradingProfession) : null,
+      tradingProfession: this.tradingProfession,
       heldItemId: selectedSlot?.id ?? 0,
       isNight: this.isNight(),
       isUnderwater,

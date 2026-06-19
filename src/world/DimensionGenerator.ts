@@ -35,7 +35,7 @@ export class DimensionGenerator {
 
         // Terrain shape: 3D noise carving
         for (let y = 0; y < NETHER_HEIGHT; y++) {
-          let blockId = 1; // netherrack (using stone texture as placeholder)
+          let blockId = 87; // netherrack (ID 87)
 
           // Carve large caves
           const cave1 = this.netherNoise.fbm3D(wx * 0.02, y * 0.03, wz * 0.02, 4);
@@ -49,28 +49,48 @@ export class DimensionGenerator {
           if (y < 30) {
             const lavaLevel = this.lavaNoise.noise2D(wx * 0.03, wz * 0.03);
             if (y < 30 + lavaLevel * 5) {
-              if (blockId === 0) blockId = 14; // lava
+              if (blockId === 0) blockId = 11; // stationary lava (ID 11)
             }
           }
 
           // Bedrock ceiling and floor
           if (y === 0 || y >= NETHER_HEIGHT - 1) {
-            blockId = 1; // bedrock
+            blockId = 7; // bedrock (ID 7)
           }
 
           // Nether quartz ore
-          if (blockId === 1 && y > 10 && y < 117) {
+          if (blockId === 87 && y > 10 && y < 117) {
             const quartz = this.netherNoise.noise3D(wx * 0.1, y * 0.1, wz * 0.1);
             if (quartz > 0.7) {
-              blockId = 1; // quartz ore (using stone)
+              blockId = 153; // nether quartz ore (ID 153)
+            }
+          }
+
+          // Soul sand valleys/patches on top of netherrack floors (y around 30 to 45)
+          if (blockId === 87 && y >= 30 && y <= 45) {
+            const soulPatch = this.netherNoise.noise2D(wx * 0.05, wz * 0.05);
+            if (soulPatch > 0.45) {
+              blockId = 88; // soul sand (ID 88)
             }
           }
 
           // Glowstone clusters on ceiling
-          if (y > NETHER_HEIGHT - 10) {
+          if (blockId === 87 && y > NETHER_HEIGHT - 12 && y < NETHER_HEIGHT - 1) {
             const glow = this.netherNoise2.noise3D(wx * 0.08, y * 0.08, wz * 0.08);
             if (glow > 0.6) {
-              blockId = 30; // glowstone (using torch for now)
+              blockId = 89; // glowstone (ID 89)
+            }
+          }
+
+          // Nether Wart growing on Soul Sand
+          if (blockId === 0 && y > 0) {
+            const blockBelow = chunk.getBlock(x, y - 1, z) & 0x3FF;
+            if (blockBelow === 88) {
+              const wartNoise = this.netherNoise.noise3D(wx * 0.2, y * 0.2, wz * 0.2);
+              if (wartNoise > 0.6) {
+                const age = Math.floor((wartNoise - 0.6) * 10) % 4; // 0-3
+                blockId = (age << 10) | 115; // nether_wart (ID 115)
+              }
             }
           }
 
@@ -81,6 +101,47 @@ export class DimensionGenerator {
         for (let y = NETHER_HEIGHT; y < WORLD_HEIGHT; y++) {
           chunk.setBlock(x, y, z, 0);
         }
+      }
+    }
+
+    // Generate Nether Brick ruins ( pillars / archways )
+    const chunkHash = Math.abs(Math.sin(cx * 12.9898 + cz * 78.233) * 43758.5453) % 1.0;
+    if (chunkHash < 0.08) { // 8% chance per chunk
+      const rx = Math.floor(chunkHash * 100) % 12 + 2; // avoid edge boundaries [2, 13]
+      const rz = Math.floor(chunkHash * 1000) % 12 + 2;
+
+      // Find solid floor with air pocket
+      let floorY = -1;
+      for (let y = 35; y < 75; y++) {
+        const id = chunk.getBlock(rx, y, rz) & 0x3FF;
+        const idAbove = chunk.getBlock(rx, y + 1, rz) & 0x3FF;
+        if ((id === 87 || id === 88) && idAbove === 0) {
+          // Verify clear space above
+          let clear = true;
+          for (let h = 1; h <= 6; h++) {
+            if ((chunk.getBlock(rx, y + h, rz) & 0x3FF) !== 0) {
+              clear = false;
+              break;
+            }
+          }
+          if (clear) {
+            floorY = y;
+            break;
+          }
+        }
+      }
+
+      if (floorY !== -1) {
+        // Build Nether Brick ruins!
+        const pillarHeight = 4 + (Math.floor(chunkHash * 50) % 2);
+        for (let h = 1; h <= pillarHeight; h++) {
+          chunk.setBlock(rx, floorY + h, rz, 112); // nether_brick
+        }
+        chunk.setBlock(rx, floorY + pillarHeight + 1, rz, 112);
+        chunk.setBlock(rx - 1, floorY + pillarHeight + 1, rz, 112);
+        chunk.setBlock(rx + 1, floorY + pillarHeight + 1, rz, 112);
+        chunk.setBlock(rx - 1, floorY + pillarHeight, rz, 112);
+        chunk.setBlock(rx + 1, floorY + pillarHeight, rz, 112);
       }
     }
 

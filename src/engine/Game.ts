@@ -1132,6 +1132,23 @@ export class Game {
               }
             }
             this.chunks.setBlock(bp.x, bp.y, bp.z, 0);
+            
+            // If breaking the block under a Nether Wart (115), break the Nether Wart above it too
+            const aboveId = this.chunks.getBlock(bp.x, bp.y + 1, bp.z) & 0x3FF;
+            if (aboveId === 115) {
+              const dropId = ItemRegistry.getBlockDropItem(115) ?? 372;
+              this.chunks.setBlock(bp.x, bp.y + 1, bp.z, 0);
+              if (this.gameMode !== 'creative') {
+                const dropPos = new THREE.Vector3(bp.x + 0.5, bp.y + 1.5, bp.z + 0.5);
+                const velocity = new THREE.Vector3(
+                  (Math.random() - 0.5) * 1.5,
+                  1.5 + Math.random() * 1.5,
+                  (Math.random() - 0.5) * 1.5
+                );
+                this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
+              }
+            }
+
             this.redstone.unregister(bp.x, bp.y, bp.z);
             this.chunks.setBlockMeta(bp.x, bp.y, bp.z, null);
             this.redstone.observeBlockChange(bp.x, bp.y, bp.z);
@@ -1274,6 +1291,12 @@ export class Game {
               const isDoorItem = itemDef && itemDef.name.endsWith('door');
               const blockId = ItemRegistry.getPlaceBlockId(slot.id) ?? 0;
               if (blockId > 0) {
+                if (blockId === 115) {
+                  const blockBelow = this.chunks.getBlock(placePos.x, placePos.y - 1, placePos.z) & 0x3FF;
+                  if (blockBelow !== 88) {
+                    return; // Fail placement: Nether Wart can only be placed on Soul Sand
+                  }
+                }
                 let facing: BlockFacing = 'north';
                 if (faceNormal.x > 0) facing = 'east';
                 else if (faceNormal.x < 0) facing = 'west';

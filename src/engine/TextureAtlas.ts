@@ -1075,6 +1075,115 @@ export class TextureAtlas {
       }
     });
 
+    // netherrack
+    this.drawTile('netherrack', (ctx, x, y, s) => {
+      ctx.fillStyle = '#501414';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 30; i++) {
+        const px = x + Math.floor(Math.random() * s);
+        const py = y + Math.floor(Math.random() * s);
+        const size = Math.random() > 0.7 ? 2 : 1;
+        ctx.fillStyle = Math.random() > 0.5 ? '#300808' : '#702020';
+        ctx.fillRect(px, py, size, size);
+      }
+    });
+
+    // soul_sand
+    this.drawTile('soul_sand', (ctx, x, y, s) => {
+      ctx.fillStyle = '#44332c';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 4; i++) {
+        const px = x + Math.floor(Math.random() * (s - 4));
+        const py = y + Math.floor(Math.random() * (s - 4));
+        ctx.fillStyle = '#2b1e19';
+        ctx.fillRect(px, py, 1, 1);
+        ctx.fillRect(px + 2, py, 1, 1);
+        ctx.fillRect(px + 1, py + 2, 1, 1);
+      }
+      for (let i = 0; i < 20; i++) {
+        const px = x + Math.floor(Math.random() * s);
+        const py = y + Math.floor(Math.random() * s);
+        ctx.fillStyle = Math.random() > 0.5 ? '#2b1e19' : '#5a463d';
+        ctx.fillRect(px, py, 1, 1);
+      }
+    });
+
+    // glowstone
+    this.drawTile('glowstone', (ctx, x, y, s) => {
+      ctx.fillStyle = '#e4b75a';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#8d5b24';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+      for (let i = 0; i < 12; i++) {
+        const px = x + Math.floor(Math.random() * (s - 2)) + 1;
+        const py = y + Math.floor(Math.random() * (s - 2)) + 1;
+        ctx.fillStyle = '#fffa8d';
+        ctx.fillRect(px, py, 2, 2);
+      }
+    });
+
+    // nether_brick
+    this.drawTile('nether_brick', (ctx, x, y, s) => {
+      ctx.fillStyle = '#2c151b';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#15080c';
+      ctx.fillRect(x, y + s / 4, s, 1);
+      ctx.fillRect(x, y + s / 2, s, 1);
+      ctx.fillRect(x, y + 3 * s / 4, s, 1);
+      ctx.fillRect(x + s / 2, y, 1, s / 4);
+      ctx.fillRect(x + s / 4, y + s / 4, 1, s / 4);
+      ctx.fillRect(x + 3 * s / 4, y + s / 4, 1, s / 4);
+      ctx.fillRect(x + s / 2, y + s / 2, 1, s / 4);
+      ctx.fillRect(x + s / 4, y + 3 * s / 4, 1, s / 4);
+      ctx.fillRect(x + 3 * s / 4, y + 3 * s / 4, 1, s / 4);
+      for (let i = 0; i < 5; i++) {
+        const px = x + Math.floor(Math.random() * s);
+        const py = y + Math.floor(Math.random() * s);
+        ctx.fillStyle = '#42242c';
+        ctx.fillRect(px, py, 1, 1);
+      }
+    });
+
+    // nether_wart
+    this.drawTile('nether_wart', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#a01010';
+      ctx.fillRect(x + 2, y + s - 6, 2, 4);
+      ctx.fillStyle = '#500000';
+      ctx.fillRect(x + 2, y + s - 2, 2, 2);
+      ctx.fillStyle = '#a01010';
+      ctx.fillRect(x + 6, y + s - 8, 3, 5);
+      ctx.fillStyle = '#500000';
+      ctx.fillRect(x + 6, y + s - 3, 3, 3);
+      ctx.fillStyle = '#a01010';
+      ctx.fillRect(x + 11, y + s - 6, 2, 4);
+      ctx.fillStyle = '#500000';
+      ctx.fillRect(x + 11, y + s - 2, 2, 2);
+    });
+
+    // quartz_ore
+    this.drawTile('quartz_ore', (ctx, x, y, s) => {
+      ctx.fillStyle = '#501414';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 15; i++) {
+        const px = x + Math.floor(Math.random() * s);
+        const py = y + Math.floor(Math.random() * s);
+        ctx.fillStyle = '#300808';
+        ctx.fillRect(px, py, 1, 1);
+      }
+      ctx.fillStyle = '#eaeaea';
+      ctx.fillRect(x + 2, y + 2, 3, 2);
+      ctx.fillRect(x + 5, y + 4, 2, 3);
+      ctx.fillRect(x + 7, y + 7, 3, 2);
+      ctx.fillRect(x + 10, y + 9, 2, 3);
+      ctx.fillStyle = '#ffd8e8';
+      ctx.fillRect(x + 1, y + 3, 1, 1);
+      ctx.fillRect(x + 4, y + 3, 1, 1);
+      ctx.fillRect(x + 7, y + 6, 1, 1);
+      ctx.fillRect(x + 12, y + 10, 1, 1);
+    });
+
     // ─── Materials ───
     // stick
     this.drawTile('stick', (ctx, x, y, s) => {

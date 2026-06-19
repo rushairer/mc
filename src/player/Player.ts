@@ -119,8 +119,17 @@ export class Player {
         }
       } else {
         // Walking mode
-        this.velocity.x = moveDir.x * speed;
-        this.velocity.z = moveDir.z * speed;
+        let currentSpeed = speed;
+        const bx = Math.floor(this.position.x);
+        const by = Math.floor(this.position.y - 0.1);
+        const bz = Math.floor(this.position.z);
+        const standBlockId = chunks.getBlock(bx, by, bz) & 0x3FF;
+        if (standBlockId === 88) {
+          currentSpeed *= 0.4;
+        }
+        
+        this.velocity.x = moveDir.x * currentSpeed;
+        this.velocity.z = moveDir.z * currentSpeed;
 
         // Gravity
         this.velocity.y += GRAVITY * dt;

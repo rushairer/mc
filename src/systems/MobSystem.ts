@@ -6,6 +6,7 @@ import { VillageSystem, type VillagerProfession } from './VillageSystem';
 import type { WorldGen } from '../world/WorldGen';
 import { BiomeType } from '../world/WorldGen';
 import type { SerializedMob } from './SaveSystem';
+import type { EndGenerator } from '../world/EndGenerator';
 
 const MAX_MOBS = 40;
 const SPAWN_INTERVAL = 2.0; // seconds between spawn attempts
@@ -19,6 +20,7 @@ export class MobSystem {
   private scene: THREE.Scene;
   private spawnTimer = 0;
   private spawnedVillages: Set<string> = new Set();
+  private spawnedEndCities: Set<string> = new Set();
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -33,12 +35,13 @@ export class MobSystem {
     isSolidBlock?: (x: number, y: number, z: number) => boolean,
     gameMode: 'survival' | 'creative' = 'survival',
     onMobDeath?: (mob: Mob) => void,
-    onMobShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, type: 'arrow' | 'fireball' | 'potion') => void,
+    onMobShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, type: 'arrow' | 'fireball' | 'potion' | 'shulker_bullet') => void,
     dimension = 0,
     worldGen?: WorldGen,
     playerHeldItem = 0,
     onMobBreed?: (type: MobType, pos: THREE.Vector3) => void,
-    playerLookDir?: THREE.Vector3
+    playerLookDir?: THREE.Vector3,
+    endGenerator?: EndGenerator
   ) {
     if (!getBlock || !hurtPlayer) return;
     // Target updates for Golems, Wolves, Creeper escape
@@ -169,6 +172,10 @@ export class MobSystem {
 
     if (dimension === 0 && worldGen && getBlock) {
       this.ensureVillageMobs(playerPos, worldGen, getBlock);
+    }
+
+    if (dimension === 2 && endGenerator && getBlock) {
+      this.ensureEndCityMobs(playerPos, endGenerator, getBlock);
     }
   }
 
@@ -482,5 +489,33 @@ export class MobSystem {
     }
     this.mobs.clear();
     this.spawnedVillages.clear();
+    this.spawnedEndCities.clear();
+  }
+
+  private ensureEndCityMobs(
+    playerPos: THREE.Vector3,
+    endGenerator: EndGenerator,
+    getBlock: (x: number, y: number, z: number) => number
+  ) {
+    const spawns = endGenerator.getNearbyShulkerSpawns(playerPos.x, playerPos.z, 96);
+    for (const spawn of spawns) {
+      if (this.spawnedEndCities.has(spawn.id)) continue;
+
+      const x = Math.floor(spawn.x);
+      const y = Math.floor(spawn.y);
+      const z = Math.floor(spawn.z);
+      const existing = Array.from(this.mobs.values()).some((mob) =>
+        mob.def.type === 'shulker' && mob.position.distanceTo(new THREE.Vector3(spawn.x + 0.5, spawn.y, spawn.z + 0.5)) < 2.2
+      );
+      if (existing) {
+        this.spawnedEndCities.add(spawn.id);
+        continue;
+      }
+      if (getBlock(x, y, z) !== 0 || getBlock(x, y + 1, z) !== 0) continue;
+      if (getBlock(x, y - 1, z) === 0) continue;
+
+      this.spawnMob('shulker', spawn.x + 0.5, spawn.y, spawn.z + 0.5);
+      this.spawnedEndCities.add(spawn.id);
+    }
   }
 }

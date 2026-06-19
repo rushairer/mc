@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SimplexNoise } from '../world/SimplexNoise';
 import { CHUNK_SIZE, WORLD_HEIGHT } from '../constants';
 import { Chunk } from '../world/Chunk';
+import { EndGenerator } from './EndGenerator';
 
 export enum Dimension {
   Overworld = 0,
@@ -15,6 +16,7 @@ export class DimensionGenerator {
   private lavaNoise: SimplexNoise;
   private endNoise: SimplexNoise;
   private endIslandNoise: SimplexNoise;
+  readonly endGenerator: EndGenerator;
 
   constructor(seed: number) {
     this.netherNoise = new SimplexNoise(seed + 1000);
@@ -22,6 +24,7 @@ export class DimensionGenerator {
     this.lavaNoise = new SimplexNoise(seed + 3000);
     this.endNoise = new SimplexNoise(seed + 4000);
     this.endIslandNoise = new SimplexNoise(seed + 5000);
+    this.endGenerator = new EndGenerator(seed);
   }
 
   generateEndChunk(chunk: Chunk) {
@@ -78,6 +81,7 @@ export class DimensionGenerator {
 
     this.generateEndSpawnPlatform(chunk, OBSIDIAN);
     this.generateEndPillars(chunk, OBSIDIAN, BEDROCK, FIRE, GLASS);
+    this.endGenerator.decorateChunk(chunk);
 
     chunk.dirty = true;
   }

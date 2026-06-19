@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 import type { VillagerProfession } from '../systems/VillageSystem';
 
-export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse';
+export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker';
 
 export interface MobDef {
   type: MobType;
@@ -40,6 +40,7 @@ const MOB_DEFS: Record<MobType, MobDef> = {
   wolf:     { type: 'wolf',     health: 8,  speed: 2.0, damage: 4, hostile: false, width: 0.6, height: 0.85, bodyColor: 0xd7d3cc, headColor: 0xd7d3cc, eyeColor: 0x000000, xpDrop: 3, drops: [] },
   cat:      { type: 'cat',      health: 10, speed: 2.2, damage: 0, hostile: false, width: 0.5, height: 0.7, bodyColor: 0xdba15a, headColor: 0xdba15a, eyeColor: 0x00FF00, xpDrop: 3, drops: [{ id: 287, count: 1, chance: 0.5 }] },
   horse:    { type: 'horse',    health: 24, speed: 3.2, damage: 0, hostile: false, width: 1.3, height: 1.6, bodyColor: 0x825a3c, headColor: 0x825a3c, eyeColor: 0x000000, xpDrop: 2, drops: [{ id: 334, count: 1, chance: 0.5 }] },
+  shulker:  { type: 'shulker',  health: 20, speed: 0.0, damage: 4, hostile: true, width: 0.9, height: 1.0, bodyColor: 0x9461a8, headColor: 0xb083c1, eyeColor: 0x111111, xpDrop: 5, drops: [{ id: 450, count: 1, chance: 0.5 }] },
 };
 
 const MOB_MAX_AIR = 15.0;
@@ -818,6 +819,30 @@ export class Mob {
       legBR.name = 'legBR';
       legBR.position.set(0.25, 0.325, -0.4);
       group.add(legL, legR, legBL, legBR);
+    } else if (type === 'shulker') {
+      const shellMat = new THREE.MeshLambertMaterial({ color: bodyColor });
+      const innerMat = new THREE.MeshLambertMaterial({ color: headColor });
+
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.45, 0.9), shellMat);
+      base.position.y = 0.225;
+      group.add(base);
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.5, 0.62), innerMat);
+      body.position.y = 0.58;
+      group.add(body);
+
+      const lid = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.28, 0.95), shellMat);
+      lid.name = 'shulker_lid';
+      lid.position.y = 0.82;
+      group.add(lid);
+
+      const eyeGeo = new THREE.BoxGeometry(0.08, 0.08, 0.03);
+      const eyeMat = new THREE.MeshLambertMaterial({ color: this.def.eyeColor ?? 0x111111 });
+      const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+      const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+      eyeL.position.set(-0.16, 0.62, 0.33);
+      eyeR.position.set(0.16, 0.62, 0.33);
+      group.add(eyeL, eyeR);
     }
 
     return group;
@@ -830,7 +855,7 @@ export class Mob {
     hurtPlayer: (damage: number, knockback: THREE.Vector3, attacker?: Mob) => void,
     isSolidBlock?: (x: number, y: number, z: number) => boolean,
     gameMode: 'survival' | 'creative' = 'survival',
-    onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, type: 'arrow' | 'fireball' | 'potion') => void,
+    onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, type: 'arrow' | 'fireball' | 'potion' | 'shulker_bullet') => void,
     playerHeldItem = 0,
     playerLookDir?: THREE.Vector3
   ) {
@@ -1042,6 +1067,17 @@ export class Mob {
           hurtPlayer(2, knockback, this);
           this.attackCooldown = 1.5;
         }
+      } else if (this.def.type === 'shulker' && onShoot) {
+        this.shootTimer = Math.max(0, this.shootTimer - dt);
+        if (distToPlayer < 18 && this.shootTimer <= 0) {
+          const dir = new THREE.Vector3().subVectors(playerPos, this.position);
+          dir.y += 0.75;
+          dir.normalize();
+          const origin = this.position.clone();
+          origin.y += 0.75;
+          onShoot(origin, dir, 'shulker_bullet');
+          this.shootTimer = 3.5;
+        }
       } else {
         // Generic melee attack (zombie, pigman, spider, magma_cube, iron_golem, wolf)
         const range = this.def.type === 'magma_cube' ? (this.width / 2 + 1.0) : 1.8;
@@ -1119,6 +1155,13 @@ export class Mob {
           rod.position.z = Math.sin(angle) * radius;
           rod.rotation.y = time;
         }
+      }
+    }
+
+    if (this.def.type === 'shulker') {
+      const lid = this.mesh.getObjectByName('shulker_lid');
+      if (lid) {
+        lid.position.y = 0.82 + Math.max(0, Math.sin(Date.now() * 0.004)) * 0.12;
       }
     }
 
@@ -1213,6 +1256,17 @@ export class Mob {
 
     if (this.isRidden) {
       this.wanderTarget = null;
+      return;
+    }
+
+    if (this.def.type === 'shulker') {
+      this.velocity.x = 0;
+      this.velocity.z = 0;
+      this.wanderTarget = null;
+      if (distToPlayer < 24) {
+        const dir = new THREE.Vector3().subVectors(playerPos, this.position);
+        this.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+      }
       return;
     }
 

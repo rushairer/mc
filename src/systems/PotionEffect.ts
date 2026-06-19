@@ -1,4 +1,4 @@
-export type PotionEffectId = 'healing' | 'regeneration' | 'speed' | 'fire_resistance' | 'poison' | 'wither';
+export type PotionEffectId = 'healing' | 'regeneration' | 'speed' | 'fire_resistance' | 'poison' | 'wither' | 'levitation';
 
 export interface PotionEffectData {
   id: PotionEffectId;
@@ -17,6 +17,7 @@ const EFFECT_NAMES: Record<PotionEffectId, string> = {
   fire_resistance: 'Fire Resistance',
   poison: 'Poison',
   wither: 'Wither',
+  levitation: 'Levitation',
 };
 
 export const PotionEffects = {

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 
-export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'fireball' | 'potion';
+export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'fireball' | 'potion' | 'shulker_bullet';
 
 export interface Projectile {
   id: number;
@@ -101,6 +101,27 @@ export class ProjectileSystem {
     this.projectiles.set(fireball.id, fireball);
   }
 
+  shootShulkerBullet(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage: number = 4) {
+    const mesh = this.createShulkerBulletMesh();
+    const vel = direction.clone().normalize().multiplyScalar(9);
+
+    const bullet: Projectile = {
+      id: this.nextId++,
+      type: 'shulker_bullet',
+      position: origin.clone(),
+      velocity: vel,
+      damage,
+      fromPlayer,
+      lifetime: 12,
+      mesh,
+      inGround: false,
+    };
+
+    mesh.position.copy(origin);
+    this.scene.add(mesh);
+    this.projectiles.set(bullet.id, bullet);
+  }
+
   private createFireballMesh(): THREE.Mesh {
     const geo = new THREE.BoxGeometry(0.25, 0.25, 0.25);
     const mat = new THREE.MeshLambertMaterial({
@@ -111,10 +132,24 @@ export class ProjectileSystem {
     return mesh;
   }
 
+  private createShulkerBulletMesh(): THREE.Group {
+    const group = new THREE.Group();
+    const core = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.22, 0.22),
+      new THREE.MeshLambertMaterial({ color: 0xd8b7ff, emissive: 0x553377 })
+    );
+    const ring = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.08, 0.34),
+      new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x442266 })
+    );
+    group.add(core, ring);
+    return group;
+  }
+
   update(
     dt: number,
     getBlock: (x: number, y: number, z: number) => number,
-    hitPlayer: (damage: number, knockback: THREE.Vector3) => void,
+    hitPlayer: (damage: number, knockback: THREE.Vector3, type: ProjectileType) => void,
     hitMob: (mobId: number, damage: number, knockback: THREE.Vector3) => void,
     getMobs: () => { id: number; position: THREE.Vector3; width: number; height: number }[],
     playerPos: THREE.Vector3,
@@ -188,7 +223,7 @@ export class ProjectileSystem {
           } else {
             const kb = proj.velocity.clone().normalize().multiplyScalar(2);
             kb.y = 1;
-            hitPlayer(proj.damage, kb);
+            hitPlayer(proj.damage, kb, proj.type);
           }
           toRemove.push(id);
           continue;
@@ -222,6 +257,10 @@ export class ProjectileSystem {
 
       // Update mesh
       proj.mesh.position.copy(proj.position);
+      if (proj.type === 'shulker_bullet') {
+        proj.mesh.rotation.x += dt * 4;
+        proj.mesh.rotation.y += dt * 5;
+      }
       if (proj.velocity.length() > 0.1) {
         const dir = proj.velocity.clone().normalize();
         proj.mesh.lookAt(proj.position.clone().add(dir));

@@ -818,6 +818,10 @@ export class Game {
 
     // Player update
     this.player.speedMultiplier = this.potionEffects.getSpeedMultiplier();
+    if (this.potionEffects.has('levitation') && !this.player.flying && !this.riddenMob) {
+      this.player.velocity.y = Math.max(this.player.velocity.y, 3.8);
+      this.player.onGround = false;
+    }
     const mouseDelta = this.input.consumeMouseDelta();
     this.player.update(dt, {
       dx: this.chatOpen ? 0 : mouseDelta.dx,
@@ -901,6 +905,8 @@ export class Game {
           this.projectiles.shootFireball(origin, direction, false, 4);
         } else if (type === 'potion') {
           this.projectiles.shootPotion(origin, direction, false, 2);
+        } else if (type === 'shulker_bullet') {
+          this.projectiles.shootShulkerBullet(origin, direction, false, 4);
         } else {
           this.projectiles.shootArrow(origin, direction, false, 4);
         }
@@ -913,7 +919,8 @@ export class Game {
         this.xp.spawnXP(1 + Math.floor(Math.random() * 7), pos.clone().add(new THREE.Vector3(0, 0.5, 0)));
         this.sound.playXP();
       },
-      playerLookDir
+      playerLookDir,
+      this.chunks.dimensionGen.endGenerator
     );
 
     this.enderDragon.update(
@@ -947,7 +954,12 @@ export class Game {
     this.projectiles.update(
       dt,
       (x, y, z) => this.chunks.getBlock(x, y, z),
-      (damage, knockback) => this.damagePlayer(damage, 'mob', knockback),
+      (damage, knockback, type) => {
+        this.damagePlayer(damage, 'mob', knockback);
+        if (type === 'shulker_bullet') {
+          this.potionEffects.apply({ id: 'levitation', level: 1, duration: 8 }, () => {});
+        }
+      },
       (mobId, damage, knockback) => {
         const mob = this.mobs.mobs.get(mobId);
         if (mob) {

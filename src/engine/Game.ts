@@ -878,6 +878,7 @@ export class Game {
       heldItem,
       (type, pos) => {
         this.particles.spawnBlockBreak(pos.x, pos.y + 0.5, pos.z, 0xff5555, 20);
+        this.xp.spawnXP(1 + Math.floor(Math.random() * 7), pos.clone().add(new THREE.Vector3(0, 0.5, 0)));
         this.sound.playXP();
       },
       playerLookDir
@@ -1296,8 +1297,13 @@ export class Game {
           return;
         }
 
-        // Breeding animals
-        if (targetMob.isAttractedBy(heldItemId)) {
+        const shouldFeedForBreeding =
+          targetMob.isAttractedBy(heldItemId) &&
+          !(targetMob.def.type === 'wolf' && targetMob.isTamed && targetMob.health < 20) &&
+          !(targetMob.def.type === 'cat' && targetMob.isTamed && targetMob.health < targetMob.def.health);
+
+        // Breeding animals and speeding up baby growth
+        if (shouldFeedForBreeding) {
           if (targetMob.isBaby) {
             targetMob.babyAge = Math.max(0, targetMob.babyAge - 6.0); // 10% faster
             this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0x55ff55, 12);
@@ -1307,7 +1313,7 @@ export class Game {
             }
             this.placeCooldown = 0.25;
             return;
-          } else if (targetMob.loveTimer === 0 && targetMob.breedCooldown === 0) {
+          } else if (targetMob.canEnterLoveMode(heldItemId)) {
             targetMob.loveTimer = 30.0;
             this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0xff5555, 15);
             this.sound.playEat();
@@ -2391,6 +2397,7 @@ export class Game {
       },
       seed: this.seed,
       chunks: chunkData,
+      mobs: this.mobs.serialize(this.chunks.currentDimension),
       timestamp: Date.now(),
     };
 
@@ -2452,6 +2459,7 @@ export class Game {
 
       this.restoreRedstoneFromLoadedChunks();
       this.chunks.update(this.player.position.x, this.player.position.z);
+      this.mobs.restore(data.mobs, this.chunks.currentDimension);
       this.player.resolveStuck(this.chunks);
 
       console.log('Game loaded from save');

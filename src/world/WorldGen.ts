@@ -26,6 +26,27 @@ export interface BiomeConfig {
   stoneDepth: number;
 }
 
+const STONE = 1;
+const GRASS = 2;
+const DIRT = 3;
+const WATER = 9;
+const SAND = 12;
+const RED_SAND = (1 << 10) | 12;
+const GRAVEL = 13;
+const CLAY = 82;
+const REEDS = 83;
+const CACTUS = 81;
+const MELON = 103;
+const VINES = 106;
+const MYCELIUM = 110;
+const LILY_PAD = 111;
+const COCOA = 127;
+const TERRACOTTA = 172;
+const DEAD_BUSH = 32;
+const TALL_GRASS = (1 << 10) | 31;
+const FERN = (2 << 10) | 31;
+const BLUE_ORCHID = (1 << 10) | 38;
+
 const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
   [BiomeType.Plains]:    { baseHeight: 98, amplitude: 12, treeChance: 0.005, surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
   [BiomeType.Desert]:    { baseHeight: 97, amplitude: 6,  treeChance: 0,     surfaceBlock: 12, underBlock: 12, stoneDepth: 3 },
@@ -37,7 +58,7 @@ const BIOME_CONFIGS: Record<BiomeType, BiomeConfig> = {
   [BiomeType.Jungle]:    { baseHeight: 98, amplitude: 18, treeChance: 0.08,  surfaceBlock: 2, underBlock: 3, stoneDepth: 3 },
   [BiomeType.River]:     { baseHeight: 60, amplitude: 2,  treeChance: 0,     surfaceBlock: 12, underBlock: 12, stoneDepth: 3 },
   [BiomeType.MushroomIsland]: { baseHeight: 75, amplitude: 10, treeChance: 0.02, surfaceBlock: 110, underBlock: 3, stoneDepth: 3 },
-  [BiomeType.Badlands]:  { baseHeight: 96, amplitude: 15, treeChance: 0,     surfaceBlock: (1 << 10) | 12, underBlock: 172, stoneDepth: 15 },
+  [BiomeType.Badlands]:  { baseHeight: 96, amplitude: 15, treeChance: 0,     surfaceBlock: RED_SAND, underBlock: 172, stoneDepth: 15 },
 };
 
 function getBadlandsBlockId(y: number): number {
@@ -72,13 +93,17 @@ export class WorldGen {
   }
 
   getBiome(wx: number, wz: number): BiomeType {
-    // 1. Check for Mushroom Island first (very rare, isolated in ocean)
+    const continent = 64 + this.noise.fbm2D(wx * 0.008, wz * 0.008, 4) * 30;
+
+    // Rare island patches in deep ocean become mushroom fields instead of random inland spots.
     const mNoise = this.mushroomNoise.noise2D(wx * 0.002, wz * 0.002);
-    if (mNoise > 0.82) {
+    if (continent < SEA_LEVEL - 4 && mNoise > 0.78) {
       return BiomeType.MushroomIsland;
     }
 
-    // 2. Check for River (winding channels cutting through land)
+    if (continent < SEA_LEVEL - 2) return BiomeType.Ocean;
+
+    // Winding channels cut through land, but not through oceans or mushroom islands.
     const rNoise = this.riverNoise.noise2D(wx * 0.004, wz * 0.004);
     if (Math.abs(rNoise) < 0.018) {
       return BiomeType.River;
@@ -103,10 +128,6 @@ export class WorldGen {
 
     // Forest: Wet
     if (humid > 0.25 && temp > -0.1) return BiomeType.Forest;
-
-    // Check if below sea level = ocean
-    const baseHeight = 64 + this.noise.fbm2D(wx * 0.008, wz * 0.008, 4) * 30;
-    if (baseHeight < SEA_LEVEL - 2) return BiomeType.Ocean;
 
     if (temp > 0.1) return BiomeType.Mountains;
     return BiomeType.Plains;
@@ -148,28 +169,34 @@ export class WorldGen {
         for (let y = 0; y < WORLD_HEIGHT; y++) {
           let blockId = 0;
 
+          const riverNoise = this.riverNoise.noise2D(wx * 0.004, wz * 0.004);
+          const riverBank = Math.abs(riverNoise) < 0.03 && biome !== BiomeType.Ocean && biome !== BiomeType.MushroomIsland;
+          const shore = height <= SEA_LEVEL + 1 && height >= SEA_LEVEL - 3;
+          const surfaceBlock = this.getSurfaceBlockForColumn(biome, height, y, riverBank, shore);
+          const underBlock = this.getUnderBlockForColumn(biome, riverBank, shore, wx, wz);
+
           if (y === 0) {
             blockId = 7; // bedrock
           } else if (y < height - cfg.stoneDepth) {
-            blockId = 1; // stone
+            blockId = STONE; // stone
           } else if (y < height) {
             if (biome === BiomeType.Badlands) {
               blockId = getBadlandsBlockId(y);
             } else {
-              blockId = cfg.underBlock; // dirt/sand/snow under surface
+              blockId = underBlock; // dirt/sand/snow under surface
             }
           } else if (y === height) {
-            blockId = cfg.surfaceBlock; // grass/sand/etc surface
+            blockId = surfaceBlock; // grass/sand/etc surface
           } else if (y <= SEA_LEVEL && y > height) {
-            blockId = 9; // water (still)
+            blockId = WATER; // water (still)
           }
 
           // Swamp underwater clay generation
           if (biome === BiomeType.Swamp && y < SEA_LEVEL && y >= height - 2) {
-            if (blockId === 3 || blockId === 2) {
+            if (blockId === DIRT || blockId === GRASS) {
               const clayNoise = this.noise.noise2D(wx * 0.05, wz * 0.05);
               if (clayNoise > 0.1) {
-                blockId = 82; // clay
+                blockId = CLAY; // clay
               }
             }
           }
@@ -224,6 +251,35 @@ export class WorldGen {
     VillageSystem.generateChunk(this, chunk);
 
     chunk.dirty = true;
+  }
+
+  private getSurfaceBlockForColumn(
+    biome: BiomeType,
+    height: number,
+    y: number,
+    riverBank: boolean,
+    shore: boolean
+  ): number {
+    if (biome === BiomeType.Badlands) {
+      return height <= SEA_LEVEL + 2 ? RED_SAND : getBadlandsBlockId(y);
+    }
+    if (biome === BiomeType.MushroomIsland) return MYCELIUM;
+    if (riverBank) return y < SEA_LEVEL - 1 ? GRAVEL : SAND;
+    if (shore && biome !== BiomeType.Swamp) return SAND;
+    return BIOME_CONFIGS[biome].surfaceBlock;
+  }
+
+  private getUnderBlockForColumn(
+    biome: BiomeType,
+    riverBank: boolean,
+    shore: boolean,
+    wx: number,
+    wz: number
+  ): number {
+    if (biome === BiomeType.Badlands) return TERRACOTTA;
+    if (riverBank) return this.noise.noise2D(wx * 0.08, wz * 0.08) > 0.2 ? CLAY : SAND;
+    if (shore && biome !== BiomeType.Swamp) return SAND;
+    return BIOME_CONFIGS[biome].underBlock;
   }
 
   private generateOres(chunk: Chunk, worldX: number, worldZ: number) {
@@ -369,7 +425,6 @@ export class WorldGen {
     const trunkHeight = 7 + Math.floor(rand * 6);
     const logId = (3 << 10) | 17;    // jungle log
     const leafId = (3 << 10) | 18;   // jungle leaves
-    const vineId = 106;              // vines
 
     // Place trunk
     for (let h = 0; h < trunkHeight; h++) {
@@ -380,10 +435,14 @@ export class WorldGen {
       // Place vines on sides of log (randomly)
       if (h > 1 && h < trunkHeight - 2) {
         const vRand = this.pseudoRandom(x * 5, ly, z * 7);
-        if (vRand < 0.25 && x > 0) chunk.setBlock(x - 1, ly, z, vineId);
-        if (vRand >= 0.25 && vRand < 0.5 && x < CHUNK_SIZE - 1) chunk.setBlock(x + 1, ly, z, vineId);
-        if (vRand >= 0.5 && vRand < 0.75 && z > 0) chunk.setBlock(x, ly, z - 1, vineId);
-        if (vRand >= 0.75 && z < CHUNK_SIZE - 1) chunk.setBlock(x, ly, z + 1, vineId);
+        if (vRand < 0.18 && x > 0) chunk.setBlock(x - 1, ly, z, COCOA);
+        else if (vRand < 0.36 && x < CHUNK_SIZE - 1) chunk.setBlock(x + 1, ly, z, COCOA);
+        else if (vRand < 0.52 && z > 0) chunk.setBlock(x, ly, z - 1, COCOA);
+        else if (vRand < 0.68 && z < CHUNK_SIZE - 1) chunk.setBlock(x, ly, z + 1, COCOA);
+        else if (vRand < 0.76 && x > 0) chunk.setBlock(x - 1, ly, z, VINES);
+        else if (vRand < 0.84 && x < CHUNK_SIZE - 1) chunk.setBlock(x + 1, ly, z, VINES);
+        else if (vRand < 0.92 && z > 0) chunk.setBlock(x, ly, z - 1, VINES);
+        else if (z < CHUNK_SIZE - 1) chunk.setBlock(x, ly, z + 1, VINES);
       }
     }
 
@@ -416,7 +475,6 @@ export class WorldGen {
     this.placeOakTree(chunk, x, y, z);
 
     const leafId = 18;
-    const vineId = 106;
 
     const leafStart = y + 2;
     const leafEnd = y + 7;
@@ -428,9 +486,9 @@ export class WorldGen {
           if (bx >= 0 && bx < CHUNK_SIZE && bz >= 0 && bz < CHUNK_SIZE && ly < WORLD_HEIGHT) {
             if (chunk.getBlock(bx, ly, bz) === leafId) {
               if (ly > y + 1 && chunk.getBlock(bx, ly - 1, bz) === 0 && this.pseudoRandom(bx, ly, bz) < 0.18) {
-                chunk.setBlock(bx, ly - 1, bz, vineId);
+                chunk.setBlock(bx, ly - 1, bz, VINES);
                 if (ly > y + 2 && chunk.getBlock(bx, ly - 2, bz) === 0 && this.pseudoRandom(bx + 1, ly, bz) < 0.5) {
-                  chunk.setBlock(bx, ly - 2, bz, vineId);
+                  chunk.setBlock(bx, ly - 2, bz, VINES);
                 }
               }
             }
@@ -593,14 +651,18 @@ export class WorldGen {
           if (surfaceWaterY !== -1 && surfaceWaterY < WORLD_HEIGHT - 1) {
             const above = chunk.getBlock(x, surfaceWaterY + 1, z);
             if (above === 0) {
-              chunk.setBlock(x, surfaceWaterY + 1, z, 111); // lily pad
+              chunk.setBlock(x, surfaceWaterY + 1, z, LILY_PAD); // lily pad
             }
           }
         }
 
-        if (biome === BiomeType.Badlands || biome === BiomeType.Ocean) continue;
+        if (biome === BiomeType.Ocean) continue;
 
-        if (rand > 0.08) continue;
+        const decorChance = biome === BiomeType.Jungle ? 0.11
+          : biome === BiomeType.Swamp ? 0.1
+          : biome === BiomeType.Badlands ? 0.06
+          : 0.08;
+        if (rand > decorChance) continue;
 
         // Find surface (supporting Grass, Snow, Mycelium, Sand, Clay)
         let surfaceY = -1;
@@ -623,21 +685,33 @@ export class WorldGen {
           if (decorRand < 0.35) chunk.setBlock(x, surfaceY + 1, z, 39); // brown mushroom
           else if (decorRand < 0.7) chunk.setBlock(x, surfaceY + 1, z, 40); // red mushroom
         } else if (biome === BiomeType.Jungle) {
-          if (decorRand < 0.3) chunk.setBlock(x, surfaceY + 1, z, (2 << 10) | 31); // fern
-          else if (decorRand < 0.7) chunk.setBlock(x, surfaceY + 1, z, (1 << 10) | 31); // tall grass
-          else if (decorRand < 0.75) chunk.setBlock(x, surfaceY + 1, z, 103); // melon block
+          if (decorRand < 0.32) chunk.setBlock(x, surfaceY + 1, z, FERN); // fern
+          else if (decorRand < 0.72) chunk.setBlock(x, surfaceY + 1, z, TALL_GRASS); // tall grass
+          else if (decorRand < 0.82) chunk.setBlock(x, surfaceY + 1, z, MELON); // melon block
         } else if (biome === BiomeType.Swamp) {
-          if (decorRand < 0.2) chunk.setBlock(x, surfaceY + 1, z, (1 << 10) | 38); // blue orchid
-          else if (decorRand < 0.6) chunk.setBlock(x, surfaceY + 1, z, (1 << 10) | 31); // tall grass
-          else if (decorRand < 0.7) chunk.setBlock(x, surfaceY + 1, z, (2 << 10) | 31); // fern
+          if (decorRand < 0.24) chunk.setBlock(x, surfaceY + 1, z, BLUE_ORCHID); // blue orchid
+          else if (decorRand < 0.62) chunk.setBlock(x, surfaceY + 1, z, TALL_GRASS); // tall grass
+          else if (decorRand < 0.76) chunk.setBlock(x, surfaceY + 1, z, FERN); // fern
+        } else if (biome === BiomeType.Badlands) {
+          if (decorRand < 0.55) chunk.setBlock(x, surfaceY + 1, z, DEAD_BUSH);
+          else if (decorRand < 0.68) {
+            const cactusHeight = 1 + Math.floor(this.pseudoRandom(wx, surfaceY + 11, wz) * 3);
+            for (let h = 1; h <= cactusHeight; h++) {
+              if (surfaceY + h < WORLD_HEIGHT) {
+                chunk.setBlock(x, surfaceY + h, z, CACTUS);
+              }
+            }
+          }
         } else if (biome === BiomeType.Desert) {
           if (decorRand < 0.15) {
             const cactusHeight = 1 + Math.floor(decorRand * 20) % 3;
             for (let h = 1; h <= cactusHeight; h++) {
               if (surfaceY + h < WORLD_HEIGHT) {
-                chunk.setBlock(x, surfaceY + h, z, 81); // cactus
+                chunk.setBlock(x, surfaceY + h, z, CACTUS); // cactus
               }
             }
+          } else if (decorRand < 0.35) {
+            chunk.setBlock(x, surfaceY + 1, z, DEAD_BUSH);
           }
         } else if (biome === BiomeType.River) {
           let nextToWater = false;
@@ -657,7 +731,7 @@ export class WorldGen {
             const reedsHeight = 2 + Math.floor(decorRand * 10) % 2;
             for (let h = 1; h <= reedsHeight; h++) {
               if (surfaceY + h < WORLD_HEIGHT) {
-                chunk.setBlock(x, surfaceY + h, z, 83); // reeds
+                chunk.setBlock(x, surfaceY + h, z, REEDS); // reeds
               }
             }
           }

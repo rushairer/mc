@@ -5,11 +5,14 @@ import { BlockRegistry } from '../world/BlockRegistry';
 import { VillageSystem, type VillagerProfession } from './VillageSystem';
 import type { WorldGen } from '../world/WorldGen';
 import { BiomeType } from '../world/WorldGen';
+import type { SerializedMob } from './SaveSystem';
 
 const MAX_MOBS = 40;
 const SPAWN_INTERVAL = 2.0; // seconds between spawn attempts
 const SPAWN_RANGE = 24;     // blocks from player to attempt spawning
 const DESPAWN_RANGE = 80;
+const BREEDABLE_TYPES = new Set<MobType>(['cow', 'pig', 'sheep', 'chicken', 'horse', 'wolf', 'cat']);
+const BABY_GROW_SECONDS = 240;
 
 export class MobSystem {
   mobs: Map<number, Mob> = new Map();
@@ -112,14 +115,13 @@ export class MobSystem {
     }
 
     // Breeding mates update
-    const breedableTypes = new Set(['cow', 'pig', 'sheep', 'chicken']);
-    const loveMobs = Array.from(this.mobs.values()).filter(m => breedableTypes.has(m.def.type) && m.loveTimer > 0);
+    const loveMobs = Array.from(this.mobs.values()).filter(m => this.canBreed(m));
 
     for (let i = 0; i < loveMobs.length; i++) {
       const mobA = loveMobs[i];
       for (let j = i + 1; j < loveMobs.length; j++) {
         const mobB = loveMobs[j];
-        if (mobA.def.type !== mobB.def.type) continue;
+        if (!this.canBreedTogether(mobA, mobB)) continue;
 
         const dist = mobA.position.distanceTo(mobB.position);
         if (dist < 2.0) {
@@ -136,7 +138,11 @@ export class MobSystem {
           // Spawn baby
           const baby = this.spawnMob(mobA.def.type, midPos.x, midPos.y, midPos.z);
           baby.isBaby = true;
-          baby.babyAge = 60; // speeded up growth to 60 seconds
+          baby.babyAge = BABY_GROW_SECONDS;
+          if ((mobA.def.type === 'wolf' || mobA.def.type === 'cat') && mobA.isTamed && mobB.isTamed) {
+            baby.isTamed = true;
+            baby.isSitting = false;
+          }
 
           if (onMobBreed) {
             onMobBreed(mobA.def.type, midPos);
@@ -164,6 +170,20 @@ export class MobSystem {
     if (dimension === 0 && worldGen && getBlock) {
       this.ensureVillageMobs(playerPos, worldGen, getBlock);
     }
+  }
+
+  private canBreed(mob: Mob): boolean {
+    if (!BREEDABLE_TYPES.has(mob.def.type)) return false;
+    if (mob.health <= 0 || mob.isBaby || mob.loveTimer <= 0 || mob.breedCooldown > 0) return false;
+    if ((mob.def.type === 'wolf' || mob.def.type === 'cat') && !mob.isTamed) return false;
+    return true;
+  }
+
+  private canBreedTogether(mobA: Mob, mobB: Mob): boolean {
+    if (mobA.def.type !== mobB.def.type) return false;
+    if (!this.canBreed(mobA) || !this.canBreed(mobB)) return false;
+    if ((mobA.def.type === 'wolf' || mobA.def.type === 'cat') && (!mobA.isTamed || !mobB.isTamed)) return false;
+    return true;
   }
 
   private trySpawn(
@@ -270,6 +290,61 @@ export class MobSystem {
     this.mobs.set(mob.id, mob);
     this.scene.add(mob.mesh);
     return mob;
+  }
+
+  serialize(dimension: number): SerializedMob[] {
+    return Array.from(this.mobs.values())
+      .filter(mob => mob.health > 0)
+      .map(mob => ({
+        type: mob.def.type,
+        x: mob.position.x,
+        y: mob.position.y,
+        z: mob.position.z,
+        health: mob.health,
+        size: mob.def.type === 'magma_cube' ? mob.size : undefined,
+        dimension,
+        villagerProfession: mob.def.type === 'villager' ? mob.villagerProfession : undefined,
+        isBaby: mob.isBaby,
+        babyAge: mob.babyAge,
+        loveTimer: mob.loveTimer,
+        breedCooldown: mob.breedCooldown,
+        isTamed: mob.isTamed,
+        isSitting: mob.isSitting,
+        isAngry: mob.isAngry,
+        angerTimer: mob.angerTimer,
+      }));
+  }
+
+  restore(savedMobs: SerializedMob[] | undefined, dimension: number) {
+    this.dispose();
+    if (!savedMobs) return;
+
+    for (const saved of savedMobs) {
+      if (saved.dimension !== undefined && saved.dimension !== dimension) continue;
+      if (!MOB_DEFS[saved.type]) continue;
+
+      const profession = this.isVillagerProfession(saved.villagerProfession)
+        ? saved.villagerProfession
+        : undefined;
+      const mob = this.spawnMob(saved.type, saved.x, saved.y, saved.z, saved.size, profession);
+      mob.isBaby = !!saved.isBaby;
+      mob.babyAge = Math.max(0, saved.babyAge ?? 0);
+      mob.loveTimer = Math.max(0, saved.loveTimer ?? 0);
+      mob.breedCooldown = Math.max(0, saved.breedCooldown ?? 0);
+      mob.isTamed = !!saved.isTamed;
+      mob.isSitting = !!saved.isSitting;
+      mob.isAngry = !!saved.isAngry;
+      mob.angerTimer = Math.max(0, saved.angerTimer ?? 0);
+      mob.isRidden = false;
+      mob.targetMob = null;
+      const maxHealth = mob.def.type === 'wolf' && mob.isTamed ? 20 : mob.health;
+      mob.health = Math.max(0, Math.min(saved.health, maxHealth));
+      mob.mesh.position.copy(mob.position);
+    }
+  }
+
+  private isVillagerProfession(value: unknown): value is VillagerProfession {
+    return value === 'farmer' || value === 'librarian' || value === 'toolsmith' || value === 'cleric';
   }
 
   private ensureVillageMobs(

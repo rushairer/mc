@@ -1,5 +1,6 @@
 import type { SerializedBlockMetadata } from '../types';
 import type { ActivePotionEffect, ItemStack } from '../types';
+import type { MobType } from '../entities/Mob';
 
 const DB_NAME = 'minecraft_clone_save';
 const DB_VERSION = 1;
@@ -43,7 +44,27 @@ export interface SaveData {
   };
   seed: number;
   chunks: { cx: number; cz: number; data: Uint16Array; metadata?: SerializedBlockMetadata[]; dimension?: number }[];
+  mobs?: SerializedMob[];
   timestamp: number;
+}
+
+export interface SerializedMob {
+  type: MobType;
+  x: number;
+  y: number;
+  z: number;
+  health: number;
+  size?: number;
+  dimension?: number;
+  villagerProfession?: string;
+  isBaby?: boolean;
+  babyAge?: number;
+  loveTimer?: number;
+  breedCooldown?: number;
+  isTamed?: boolean;
+  isSitting?: boolean;
+  isAngry?: boolean;
+  angerTimer?: number;
 }
 
 export const SaveSystem = {

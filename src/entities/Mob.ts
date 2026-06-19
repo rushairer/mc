@@ -46,6 +46,18 @@ const MOB_MAX_AIR = 15.0;
 const MOB_DROWN_INTERVAL = 1.5;
 const WATER_LOOKAHEAD = 0.9;
 const WATER_ESCAPE_RADIUS = 6;
+const WHEAT = 296;
+const WHEAT_SEEDS = 295;
+const PUMPKIN_SEEDS = 361;
+const MELON_SEEDS = 362;
+const BEETROOT_SEEDS = 458;
+const CARROT = 391;
+const POTATO = 392;
+const BEETROOT = 434;
+const GOLDEN_APPLE = 322;
+const GOLDEN_CARROT = 396;
+const RAW_FISH = 349;
+const WOLF_FOODS = new Set([319, 320, 363, 364, 365, 366, 411, 412, 423, 424]);
 
 export class Mob {
   id: number;
@@ -1145,15 +1157,28 @@ export class Mob {
   isAttractedBy(itemId: number): boolean {
     const type = this.def.type;
     if (type === 'cow' || type === 'sheep') {
-      return itemId === 296; // wheat
+      return itemId === WHEAT;
     }
     if (type === 'pig') {
-      return itemId === 391 || itemId === 392; // carrot, potato
+      return itemId === CARROT || itemId === POTATO || itemId === BEETROOT;
     }
     if (type === 'chicken') {
-      return itemId === 295 || itemId === 361 || itemId === 362 || itemId === 458; // seeds
+      return itemId === WHEAT_SEEDS || itemId === PUMPKIN_SEEDS || itemId === MELON_SEEDS || itemId === BEETROOT_SEEDS;
+    }
+    if (type === 'horse') {
+      return itemId === GOLDEN_APPLE || itemId === GOLDEN_CARROT;
+    }
+    if (type === 'wolf') {
+      return this.isTamed && WOLF_FOODS.has(itemId);
+    }
+    if (type === 'cat') {
+      return this.isTamed && itemId === RAW_FISH;
     }
     return false;
+  }
+
+  canEnterLoveMode(itemId: number): boolean {
+    return this.isAttractedBy(itemId) && !this.isBaby && this.loveTimer <= 0 && this.breedCooldown <= 0;
   }
 
   private updateAI(
@@ -1242,6 +1267,9 @@ export class Mob {
         targetPos = playerPos;
         targetSpeed = this.def.speed * 0.95;
       }
+    } else if (!this.def.hostile && this.isAttractedBy(playerHeldItem) && distToPlayer < 9) {
+      targetPos = playerPos;
+      targetSpeed = this.def.speed * (this.isBaby ? 1.15 : 0.9);
     }
 
     if (targetPos) {

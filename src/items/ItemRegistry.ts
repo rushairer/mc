@@ -189,10 +189,10 @@ for (const item of rawItems) {
         miningSpeed = stats.miningSpeed;
         damage = toolType === 'sword' || toolType === 'spear' ? stats.damage + 3 : (toolType === 'axe' ? stats.damage + 2 : stats.damage);
       }
-    } else if (name === 'bow' || name === 'crossbow' || name === 'trident' || name === 'mace' || name === 'brush') {
+    } else if (name === 'bow' || name === 'crossbow' || name === 'trident' || name === 'mace' || name === 'brush' || name === 'fishing_rod') {
       category = 'tool';
-      toolType = 'sword'; // classified under sword for swing/damage checks in player
-      durability = 384;
+      toolType = 'sword'; // generic usable-tool bucket for durability and basic interaction checks
+      durability = item.maxDurability ?? (name === 'fishing_rod' ? 64 : 384);
       damage = 1;
     } else if (name.endsWith('_helmet') || name.endsWith('_chestplate') || name.endsWith('_leggings') || name.endsWith('_boots')) {
       category = 'armor';

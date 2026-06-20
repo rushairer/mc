@@ -46,6 +46,11 @@ const ENDER_EYE_ID = 381;
 const ENDER_PEARL_ID = 368;
 const SNOWBALL_ID = 332;
 const EGG_ID = 344;
+const FISHING_ROD_ID = 346;
+const RAW_FISH_ID = 349;
+const RAW_SALMON_ID = (1 << 10) | 349;
+const CLOWNFISH_ID = (2 << 10) | 349;
+const PUFFERFISH_ID = (3 << 10) | 349;
 const END_PORTAL_ID = 119;
 const END_PORTAL_FRAME_ID = 120;
 const FILLED_MAP_ID = 358;
@@ -63,6 +68,15 @@ const WORLD_SPAWN_X = 8;
 const WORLD_SPAWN_Z = 8;
 
 export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause' | 'end_poem' | 'sign_edit' | 'advancements' | 'map' | 'book';
+
+type FishingBobberState = {
+  mesh: THREE.Mesh;
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  phase: 'flying' | 'waiting' | 'hooked';
+  waitTimer: number;
+  hookedTimer: number;
+};
 
 export interface GameState {
   fps: number;
@@ -183,6 +197,7 @@ export class Game {
   private isShieldBlocking = false;
   private bowChargeTimer = 0;
   private bowChargeActive = false;
+  private fishingBobber: FishingBobberState | null = null;
   private eatingTimer = 0;
   private chewSoundTimer = 0;
   private stepTimer = 0;
@@ -822,6 +837,7 @@ export class Game {
     this.damageFlashTimer = Math.max(0, this.damageFlashTimer - dt);
     this.swordSwingTimer = Math.max(0, this.swordSwingTimer - dt);
     this.lockCooldown = Math.max(0, this.lockCooldown - dt);
+    this.updateFishingBobber(dt);
 
     // Game time (day/night cycle)
     if (this.gamerules.getRule('doDaylightCycle')) {
@@ -2087,6 +2103,10 @@ export class Game {
         return;
       }
 
+      if (this.tryUseFishingRod(heldItemId)) {
+        return;
+      }
+
       if (this.tryThrowHeldProjectile(heldItemId)) {
         return;
       }
@@ -2491,6 +2511,144 @@ export class Game {
       this.particles.spawnDamageParticles(projectile.position.x, projectile.position.y, projectile.position.z, 10);
       this.sound.playMobHurt();
       this.projectiles.removeProjectile(id);
+    }
+  }
+
+  private tryUseFishingRod(heldItemId: number): boolean {
+    if (heldItemId !== FISHING_ROD_ID) return false;
+
+    if (this.fishingBobber) {
+      this.reelFishingRod();
+    } else {
+      this.castFishingRod();
+    }
+
+    this.placeCooldown = 0.35;
+    this.notifyState();
+    return true;
+  }
+
+  private castFishingRod() {
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12, 8, 8),
+      new THREE.MeshLambertMaterial({ color: 0xfff2e5, emissive: 0x220000 })
+    );
+    const origin = this.player.eyePosition.clone().add(this.player.forward.clone().multiplyScalar(0.45));
+    const velocity = this.player.forward.clone().multiplyScalar(14);
+    velocity.y += 2.2;
+
+    this.fishingBobber = {
+      mesh,
+      position: origin.clone(),
+      velocity,
+      phase: 'flying',
+      waitTimer: 0,
+      hookedTimer: 0,
+    };
+
+    mesh.position.copy(origin);
+    this.renderer.scene.add(mesh);
+    this.sound.playLever();
+    if (this.gameMode !== 'creative') {
+      const broke = this.inventory.damageTool(this.player.selectedSlot);
+      if (broke) {
+        this.clearFishingBobber();
+      }
+    }
+  }
+
+  private reelFishingRod() {
+    const bobber = this.fishingBobber;
+    if (!bobber) return;
+
+    if (bobber.phase === 'hooked') {
+      const lootId = this.rollFishingLoot();
+      const dropPos = this.player.eyePosition.clone().add(this.player.forward.clone().multiplyScalar(0.5));
+      const velocity = new THREE.Vector3().subVectors(this.player.eyePosition, bobber.position).normalize().multiplyScalar(6);
+      velocity.y = 3.5;
+      this.droppedItems.spawnItem(lootId, 1, dropPos, velocity, 0.1);
+      this.xp.spawnXP(1 + Math.floor(Math.random() * 6), bobber.position.clone());
+      this.particles.spawnXP(bobber.position.x, bobber.position.y, bobber.position.z, 8);
+      this.sound.playPickup();
+    } else {
+      this.sound.playLever();
+    }
+
+    this.clearFishingBobber();
+  }
+
+  private updateFishingBobber(dt: number) {
+    const bobber = this.fishingBobber;
+    if (!bobber) return;
+
+    if (bobber.phase === 'flying') {
+      bobber.velocity.y += -12 * dt;
+      const next = bobber.position.clone().addScaledVector(bobber.velocity, dt);
+      const bx = Math.floor(next.x);
+      const by = Math.floor(next.y);
+      const bz = Math.floor(next.z);
+      const block = this.chunks.getBlock(bx, by, bz) & 0x3FF;
+
+      if (block === 8 || block === 9) {
+        bobber.position.set(next.x, by + 0.85, next.z);
+        bobber.velocity.set(0, 0, 0);
+        bobber.phase = 'waiting';
+        bobber.waitTimer = 4 + Math.random() * 10;
+      } else if (this.chunks.isSolidBlock(bx, by, bz)) {
+        bobber.position.copy(next);
+        bobber.velocity.set(0, 0, 0);
+        bobber.phase = 'waiting';
+        bobber.waitTimer = Infinity;
+      } else {
+        bobber.position.copy(next);
+      }
+    } else if (bobber.phase === 'waiting' && Number.isFinite(bobber.waitTimer)) {
+      bobber.waitTimer -= dt;
+      bobber.position.y += Math.sin(Date.now() * 0.006) * 0.0015;
+      if (bobber.waitTimer <= 0) {
+        bobber.phase = 'hooked';
+        bobber.hookedTimer = 2.0;
+        this.disposeFishingBobberMaterial(bobber.mesh);
+        bobber.mesh.material = new THREE.MeshLambertMaterial({ color: 0xff3333, emissive: 0x440000 });
+        this.particles.spawnBlockBreak(bobber.position.x, bobber.position.y, bobber.position.z, 0x66ccff, 18);
+        this.sound.playXP();
+      }
+    } else if (bobber.phase === 'hooked') {
+      bobber.hookedTimer -= dt;
+      bobber.position.y += Math.sin(Date.now() * 0.02) * 0.006;
+      if (bobber.hookedTimer <= 0) {
+        bobber.phase = 'waiting';
+        bobber.waitTimer = 4 + Math.random() * 8;
+        this.disposeFishingBobberMaterial(bobber.mesh);
+        bobber.mesh.material = new THREE.MeshLambertMaterial({ color: 0xfff2e5, emissive: 0x220000 });
+      }
+    }
+
+    bobber.mesh.position.copy(bobber.position);
+  }
+
+  private rollFishingLoot(): number {
+    const roll = Math.random();
+    if (roll < 0.70) return RAW_FISH_ID;
+    if (roll < 0.88) return RAW_SALMON_ID;
+    if (roll < 0.96) return CLOWNFISH_ID;
+    return PUFFERFISH_ID;
+  }
+
+  private clearFishingBobber() {
+    if (!this.fishingBobber) return;
+    const mesh = this.fishingBobber.mesh;
+    this.renderer.scene.remove(mesh);
+    mesh.geometry.dispose();
+    this.disposeFishingBobberMaterial(mesh);
+    this.fishingBobber = null;
+  }
+
+  private disposeFishingBobberMaterial(mesh: THREE.Mesh) {
+    if (Array.isArray(mesh.material)) {
+      mesh.material.forEach((mat) => mat.dispose());
+    } else {
+      mesh.material.dispose();
     }
   }
 
@@ -4517,6 +4675,7 @@ export class Game {
     if (this.openUI !== 'menu') {
       this.saveGame();
     }
+    this.clearFishingBobber();
     this.mobs.dispose();
     this.vehicles.dispose();
     this.enderDragon.dispose();

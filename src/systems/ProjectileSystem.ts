@@ -30,6 +30,16 @@ export class ProjectileSystem {
     this.scene = scene;
   }
 
+  private addProjectileMesh(mesh: THREE.Object3D) {
+    mesh.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+    this.scene.add(mesh);
+  }
+
   createPotionMesh(color: string = '#8a2be2'): THREE.Mesh {
     const geo = new THREE.BoxGeometry(0.25, 0.35, 0.25);
     const mat = new THREE.MeshLambertMaterial({ color: color });
@@ -54,7 +64,7 @@ export class ProjectileSystem {
     };
 
     this.projectiles.set(potion.id, potion);
-    this.scene.add(mesh);
+    this.addProjectileMesh(mesh);
     mesh.position.copy(potion.position);
   }
 
@@ -77,7 +87,7 @@ export class ProjectileSystem {
     };
 
     mesh.position.copy(origin);
-    this.scene.add(mesh);
+    this.addProjectileMesh(mesh);
     this.projectiles.set(arrow.id, arrow);
   }
 
@@ -98,7 +108,7 @@ export class ProjectileSystem {
     };
 
     mesh.position.copy(origin);
-    this.scene.add(mesh);
+    this.addProjectileMesh(mesh);
     this.projectiles.set(fireball.id, fireball);
   }
 
@@ -119,7 +129,7 @@ export class ProjectileSystem {
     };
 
     mesh.position.copy(origin);
-    this.scene.add(mesh);
+    this.addProjectileMesh(mesh);
     this.projectiles.set(skull.id, skull);
   }
 
@@ -140,7 +150,7 @@ export class ProjectileSystem {
     };
 
     mesh.position.copy(origin);
-    this.scene.add(mesh);
+    this.addProjectileMesh(mesh);
     this.projectiles.set(bullet.id, bullet);
   }
 
@@ -170,7 +180,7 @@ export class ProjectileSystem {
     };
 
     mesh.position.copy(origin);
-    this.scene.add(mesh);
+    this.addProjectileMesh(mesh);
     this.projectiles.set(eye.id, eye);
   }
 

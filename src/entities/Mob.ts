@@ -106,6 +106,9 @@ export class Mob {
   flopTimer = 0;
   laserCharge = 0;
   summonTimer = 0;
+  deathTimer?: number;
+  deathSoundPlayed?: boolean;
+  swingTimer = 0;
 
   static nextId = 1;
 
@@ -145,6 +148,12 @@ export class Mob {
     this.villagerProfession = profession;
     this.halfWidth = this.width / 2;
     this.mesh = this.createMesh();
+    this.mesh.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
     if (type === 'magma_cube') {
       this.mesh.scale.setScalar(size / 3);
     }
@@ -251,9 +260,11 @@ export class Mob {
       const armGeo = new THREE.BoxGeometry(0.2 * scaleXZ, 0.6 * scaleY, 0.2 * scaleXZ);
       const armMat = new THREE.MeshLambertMaterial({ color: skinColor });
       const armL = new THREE.Mesh(armGeo, armMat);
+      armL.name = 'armL';
       armL.position.set(-0.34 * scaleXZ, 1.05 * scaleY, 0.2 * scaleXZ);
       armL.rotation.x = -Math.PI / 2; // Point forward
       const armR = new THREE.Mesh(armGeo, armMat);
+      armR.name = 'armR';
       armR.position.set(0.34 * scaleXZ, 1.05 * scaleY, 0.2 * scaleXZ);
       armR.rotation.x = -Math.PI / 2;
       group.add(armL, armR);
@@ -624,8 +635,10 @@ export class Mob {
       const armGeo = new THREE.BoxGeometry(0.08, 1.4, 0.08);
       const armMat = new THREE.MeshLambertMaterial({ color: 0x161616 });
       const armL = new THREE.Mesh(armGeo, armMat);
+      armL.name = 'armL';
       armL.position.set(-0.19, 1.5, 0);
       const armR = new THREE.Mesh(armGeo, armMat);
+      armR.name = 'armR';
       armR.position.set(0.19, 1.5, 0);
       group.add(armL, armR);
 
@@ -713,8 +726,10 @@ export class Mob {
       const armGeo = new THREE.BoxGeometry(0.25, 1.4, 0.25);
       const armMat = new THREE.MeshLambertMaterial({ color: 0xd6cfca });
       const armL = new THREE.Mesh(armGeo, armMat);
+      armL.name = 'armL';
       armL.position.set(-0.725, 1.4, 0);
       const armR = new THREE.Mesh(armGeo, armMat);
+      armR.name = 'armR';
       armR.position.set(0.725, 1.4, 0);
       group.add(armL, armR);
 
@@ -731,11 +746,13 @@ export class Mob {
       const bodyGeo = new THREE.BoxGeometry(0.45, 0.45, 0.7);
       const bodyMat = new THREE.MeshLambertMaterial({ color: 0xd7d3cc });
       const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.name = 'body';
       body.position.y = 0.45;
       group.add(body);
 
       const headGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
       const head = new THREE.Mesh(headGeo, bodyMat);
+      head.name = 'head';
       head.position.set(0, 0.65, 0.35);
       group.add(head);
 
@@ -776,11 +793,13 @@ export class Mob {
       const bodyGeo = new THREE.BoxGeometry(0.3, 0.3, 0.5);
       const bodyMat = new THREE.MeshLambertMaterial({ color: 0xdba15a });
       const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.name = 'body';
       body.position.y = 0.35;
       group.add(body);
 
       const headGeo = new THREE.BoxGeometry(0.24, 0.2, 0.22);
       const head = new THREE.Mesh(headGeo, bodyMat);
+      head.name = 'head';
       head.position.set(0, 0.5, 0.25);
       group.add(head);
 
@@ -1003,6 +1022,47 @@ export class Mob {
     playerHeldItem = 0,
     playerLookDir?: THREE.Vector3
   ) {
+    if (this.health <= 0) {
+      if (this.deathTimer === undefined) {
+        this.deathTimer = 0.8;
+        this.deathSoundPlayed = false;
+      }
+      this.deathTimer = Math.max(0, this.deathTimer - dt);
+
+      // Stop horizontal movement, let gravity work if not on ground
+      this.velocity.x = 0;
+      this.velocity.z = 0;
+      if (!this.onGround) {
+        this.velocity.y += -28 * dt;
+        this.moveWithCollision(dt, getBlock, isSolidBlock);
+      } else {
+        this.velocity.y = 0;
+      }
+      this.mesh.position.copy(this.position);
+
+      // Roll sideways (90 degrees / PI/2) over 0.6 seconds
+      const progress = Math.min(1.0, (0.8 - this.deathTimer) / 0.6);
+      this.mesh.rotation.z = progress * (Math.PI / 2);
+
+      // Fade out and red flash
+      const dTimer = this.deathTimer ?? 0.8;
+      this.mesh.traverse(child => {
+        if (child instanceof THREE.Mesh) {
+          if (child.material) {
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach(mat => {
+              mat.transparent = true;
+              mat.opacity = Math.max(0, dTimer / 0.8);
+              if ('emissive' in mat) {
+                mat.emissive.setHex(0xff3333);
+              }
+            });
+          }
+        }
+      });
+      return;
+    }
+
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
     this.despawnTimer += dt;
@@ -1156,6 +1216,7 @@ export class Mob {
             knockback.y = 3;
             hurtPlayer(this.damage, knockback, this);
             this.attackCooldown = 1.0;
+            this.swingTimer = 0.4;
           }
         }
       } else if ((this.def.type === 'skeleton' || this.def.type === 'pillager') && onShoot) {
@@ -1169,6 +1230,7 @@ export class Mob {
           origin.y += this.height * 0.75;
           onShoot(origin, dir, 'arrow');
           this.shootTimer = this.def.type === 'pillager' ? 2.4 : 2.0;
+          this.swingTimer = 0.4;
         }
         // Melee fallback
         if (distToPlayer < 1.8 && this.attackCooldown <= 0) {
@@ -1179,6 +1241,7 @@ export class Mob {
           knockback.y = 3;
           hurtPlayer(this.damage, knockback, this);
           this.attackCooldown = 1.0;
+          this.swingTimer = 0.4;
         }
       } else if (this.def.type === 'blaze' && onShoot) {
         // Blaze: shoot fireballs at player within 16 blocks
@@ -1199,6 +1262,7 @@ export class Mob {
           knockback.y = 3;
           hurtPlayer(this.damage, knockback, this);
           this.attackCooldown = 1.0;
+          this.swingTimer = 0.4;
         }
       } else if (this.def.type === 'witch' && onShoot) {
         // Witch: throw splash potions within 12 blocks
@@ -1211,6 +1275,7 @@ export class Mob {
           origin.y += this.height * 0.75;
           onShoot(origin, dir, 'potion');
           this.shootTimer = 3.0;
+          this.swingTimer = 0.4;
         }
         // Melee fallback
         if (distToPlayer < 1.8 && this.attackCooldown <= 0) {
@@ -1221,6 +1286,7 @@ export class Mob {
           knockback.y = 1;
           hurtPlayer(2, knockback, this);
           this.attackCooldown = 1.5;
+          this.swingTimer = 0.4;
         }
       } else if (this.def.type === 'shulker' && onShoot) {
         this.shootTimer = Math.max(0, this.shootTimer - dt);
@@ -1241,6 +1307,7 @@ export class Mob {
           origin.y += 1.2; // Head height
           onShoot(origin, dir, 'wither_skull');
           this.shootTimer = 2.0;
+          this.swingTimer = 0.4;
         }
       } else if (this.def.type === 'guardian') {
         if (distToPlayer < 16) {
@@ -1275,6 +1342,7 @@ export class Mob {
           knockback.y = 3;
           hurtPlayer(this.damage, knockback, this);
           this.attackCooldown = 1.0;
+          this.swingTimer = 0.4;
         }
       }
     }
@@ -1297,6 +1365,7 @@ export class Mob {
 
         this.targetMob.takeDamage(this.damage, knockback);
         this.attackCooldown = 1.0;
+        this.swingTimer = 0.4;
       }
     }
 
@@ -1310,24 +1379,104 @@ export class Mob {
       this.mesh.rotation.y = angle;
     }
 
+    // 1. Hurt flinch rotation (tilt mesh when hurt)
+    if (this.hurtTimer > 0) {
+      const flinchAngle = Math.sin((this.hurtTimer / 0.3) * Math.PI) * 0.15;
+      this.mesh.rotation.z = flinchAngle;
+      this.mesh.rotation.x = flinchAngle * 0.5;
+    } else {
+      this.mesh.rotation.z = 0;
+      this.mesh.rotation.x = 0;
+    }
+
+    // 2. Golem/Humanoid Arm Swing Animation
+    const armL = this.mesh.getObjectByName('armL');
+    const armR = this.mesh.getObjectByName('armR');
+    if (armL && armR) {
+      if (this.swingTimer > 0) {
+        const swing = Math.sin((this.swingTimer / 0.4) * Math.PI) * (Math.PI / 3);
+        if (this.def.type === 'iron_golem') {
+          armL.rotation.x = -swing;
+          armR.rotation.x = -swing;
+        } else {
+          // Humanoid (Zombie, Skeleton, Pigman, Wither Skeleton, Pillager)
+          armL.rotation.x = -Math.PI / 2 - swing;
+          armR.rotation.x = -Math.PI / 2 - swing;
+        }
+      } else {
+        if (this.def.type === 'iron_golem') {
+          armL.rotation.x = 0;
+          armR.rotation.x = 0;
+        } else {
+          // Humanoids default to pointing forward (Zombie etc. swing)
+          armL.rotation.x = -Math.PI / 2;
+          armR.rotation.x = -Math.PI / 2;
+        }
+      }
+    }
+
+    // 3. Sitting pose (wolf & cat)
+    const body = this.mesh.getObjectByName('body');
+    const head = this.mesh.getObjectByName('head');
+    const legL = this.mesh.getObjectByName('legL');
+    const legR = this.mesh.getObjectByName('legR');
+    const legBL = this.mesh.getObjectByName('legBL');
+    const legBR = this.mesh.getObjectByName('legBR');
+
+    if (this.def.type === 'wolf' || this.def.type === 'cat') {
+      if (this.isSitting) {
+        if (body) body.position.y = this.def.type === 'wolf' ? 0.3 : 0.23;
+        if (head) head.position.y = this.def.type === 'wolf' ? 0.5 : 0.38;
+        if (legL) legL.rotation.x = -0.3;
+        if (legR) legR.rotation.x = -0.3;
+        if (legBL) legBL.rotation.x = -Math.PI / 2.5;
+        if (legBR) legBR.rotation.x = -Math.PI / 2.5;
+      } else {
+        if (body) body.position.y = this.def.type === 'wolf' ? 0.45 : 0.35;
+        if (head) head.position.y = this.def.type === 'wolf' ? 0.65 : 0.5;
+      }
+    }
+
+    // 4. Head tilt when tamed and idle (wolf / cat)
+    if ((this.def.type === 'wolf' || this.def.type === 'cat') && this.isTamed && !this.isAngry && horizontalSpeed < 0.1) {
+      if (head) {
+        head.rotation.z = Math.sin(Date.now() * 0.002) * 0.08;
+      }
+    } else {
+      if (head && (this.def.type === 'wolf' || this.def.type === 'cat')) {
+        head.rotation.z = 0;
+      }
+    }
+
+    // 5. Angry Enderman Shaking
+    if (this.def.type === 'enderman' && this.isAngry) {
+      if (head) {
+        head.position.x = (Math.random() - 0.5) * 0.04;
+        head.position.z = (Math.random() - 0.5) * 0.04;
+      }
+    } else {
+      if (head && this.def.type === 'enderman') {
+        head.position.x = 0;
+        head.position.z = 0;
+      }
+    }
+
     // Leg swing animation
     const time = Date.now() * 0.01 * this.def.speed;
     const isMoving = horizontalSpeed > 0.1;
     const swingAngle = isMoving ? Math.sin(time) * 0.6 : 0;
 
-    const legL = this.mesh.getObjectByName('legL');
-    const legR = this.mesh.getObjectByName('legR');
     const legFL = this.mesh.getObjectByName('legFL');
     const legFR = this.mesh.getObjectByName('legFR');
-    const legBL = this.mesh.getObjectByName('legBL');
-    const legBR = this.mesh.getObjectByName('legBR');
 
-    if (legL) legL.rotation.x = swingAngle;
-    if (legR) legR.rotation.x = -swingAngle;
-    if (legFL) legFL.rotation.x = swingAngle;
-    if (legFR) legFR.rotation.x = -swingAngle;
-    if (legBL) legBL.rotation.x = -swingAngle;
-    if (legBR) legBR.rotation.x = swingAngle;
+    if (!this.isSitting) {
+      if (legL) legL.rotation.x = swingAngle;
+      if (legR) legR.rotation.x = -swingAngle;
+      if (legFL) legFL.rotation.x = swingAngle;
+      if (legFR) legFR.rotation.x = -swingAngle;
+      if (legBL) legBL.rotation.x = -swingAngle;
+      if (legBR) legBR.rotation.x = swingAngle;
+    }
 
     // Blaze orbiting rods animation
     if (this.def.type === 'blaze') {
@@ -1889,12 +2038,17 @@ export class Mob {
   }
 
   takeDamage(amount: number, knockbackDir?: THREE.Vector3) {
+    if (this.health <= 0) return;
     this.health -= amount;
     this.hurtTimer = 0.3;
     if (knockbackDir) {
       this.velocity.x += knockbackDir.x;
       this.velocity.y += knockbackDir.y;
       this.velocity.z += knockbackDir.z;
+    }
+    if (this.health <= 0 && this.deathTimer === undefined) {
+      this.deathTimer = 0.8;
+      this.deathSoundPlayed = false;
     }
     if (this.def.type === 'enderman') {
       this.isAngry = true;
@@ -1908,7 +2062,7 @@ export class Mob {
   }
 
   isDead(): boolean {
-    return this.health <= 0;
+    return this.health <= 0 && (this.deathTimer !== undefined && this.deathTimer <= 0);
   }
 
   dispose() {

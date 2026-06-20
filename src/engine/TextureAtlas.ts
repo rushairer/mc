@@ -1981,27 +1981,80 @@ export class TextureAtlas {
 
     const drawFallbackBlock = (key: string, name: string) => {
       const colors = hashColor(name);
+      // Look up if this block is transparent in BlockRegistry
+      const blockDef = BlockRegistry.getByName(name.replace(/(_top|_bottom|_side)$/, ''));
+      const isTransparent = blockDef ? blockDef.transparent : false;
       
       this.drawTile(key, (ctx, x, y, s) => {
-        ctx.fillStyle = colors.hex;
-        ctx.fillRect(x, y, s, s);
-        
-        // Add pixel noise
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
-        for (let i = 0; i < 15; i++) {
-          const px = x + ((Math.sin(i * 123.45) * 50 + 50) % s | 0);
-          const py = y + ((Math.cos(i * 543.21) * 50 + 50) % s | 0);
-          ctx.fillRect(px, py, 2, 2);
-        }
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-        for (let i = 0; i < 15; i++) {
-          const px = x + ((Math.cos(i * 987.65) * 50 + 50) % s | 0);
-          const py = y + ((Math.sin(i * 234.56) * 50 + 50) % s | 0);
-          ctx.fillRect(px, py, 2, 2);
+        if (isTransparent) {
+          ctx.clearRect(x, y, s, s);
+        } else {
+          ctx.fillStyle = colors.hex;
+          ctx.fillRect(x, y, s, s);
+          
+          // Add pixel noise
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+          for (let i = 0; i < 15; i++) {
+            const px = x + ((Math.sin(i * 123.45) * 50 + 50) % s | 0);
+            const py = y + ((Math.cos(i * 543.21) * 50 + 50) % s | 0);
+            ctx.fillRect(px, py, 2, 2);
+          }
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+          for (let i = 0; i < 15; i++) {
+            const px = x + ((Math.cos(i * 987.65) * 50 + 50) % s | 0);
+            const py = y + ((Math.sin(i * 234.56) * 50 + 50) % s | 0);
+            ctx.fillRect(px, py, 2, 2);
+          }
         }
 
         // Draw patterns based on name
-        if (name.includes('wool')) {
+        if (name.includes('glass') || name.includes('pane')) {
+          ctx.clearRect(x, y, s, s);
+          ctx.fillStyle = `rgba(${colors.r}, ${colors.g}, ${colors.b}, 0.25)`;
+          ctx.fillRect(x, y, s, s);
+          ctx.strokeStyle = `rgba(${colors.r}, ${colors.g}, ${colors.b}, 0.7)`;
+          ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+          
+          // Diagonal highlights
+          ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+          ctx.beginPath();
+          ctx.moveTo(x + 2, y + 2);
+          ctx.lineTo(x + 6, y + 6);
+          ctx.moveTo(x + s - 6, y + s - 6);
+          ctx.lineTo(x + s - 2, y + s - 2);
+          ctx.stroke();
+        } else if (name.includes('leaves')) {
+          ctx.clearRect(x, y, s, s);
+          ctx.fillStyle = `rgb(${colors.r * 0.75 | 0}, ${colors.g * 0.9 | 0}, ${colors.b * 0.75 | 0})`;
+          ctx.fillRect(x, y, s, s);
+          // Draw leaf cutout pixels
+          ctx.fillStyle = `rgb(${colors.r * 0.9 | 0}, ${colors.g | 0}, ${colors.b * 0.9 | 0})`;
+          for (let i = 0; i < 30; i++) {
+            const lx = x + Math.random() * s | 0;
+            const ly = y + Math.random() * s | 0;
+            ctx.fillRect(lx, ly, 2, 2);
+          }
+          // Cutouts (clear rects)
+          ctx.fillStyle = 'rgba(0,0,0,0)';
+          for (let i = 0; i < 15; i++) {
+            const cx = x + Math.random() * s | 0;
+            const cy = y + Math.random() * s | 0;
+            ctx.clearRect(cx, cy, 1, 1);
+          }
+        } else if (name.includes('sapling') || name.includes('flower') || name.includes('rose') || name.includes('tulip') || name.includes('dandelion') || name.includes('orchid') || name.includes('allium') || name.includes('bluet') || name.includes('poppy') || name.includes('daisy') || name.includes('sunflower') || name.includes('lilac') || name.includes('peony') || name.includes('sprout') || name.includes('fern') || name.includes('shrub') || name.includes('grass')) {
+          ctx.clearRect(x, y, s, s);
+          // Draw stem
+          ctx.fillStyle = '#4a7023';
+          ctx.fillRect(x + 7, y + 6, 2, 10);
+          ctx.fillRect(x + 5, y + 9, 4, 1);
+          // Draw flower head/sapling leaves
+          ctx.fillStyle = colors.hex;
+          ctx.fillRect(x + 5, y + 3, 6, 3);
+          ctx.fillRect(x + 6, y + 2, 4, 5);
+          // Center of the flower
+          ctx.fillStyle = '#ffeb3b';
+          ctx.fillRect(x + 7, y + 4, 2, 2);
+        } else if (name.includes('wool')) {
           ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
           ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
         } else if (name.includes('ore')) {
@@ -2011,15 +2064,95 @@ export class TextureAtlas {
           ctx.fillRect(x + 4, y + 4, 3, 3);
           ctx.fillRect(x + 10, y + 6, 2, 2);
           ctx.fillRect(x + 5, y + 10, 2, 2);
-        } else if (name.includes('planks')) {
+        } else if (name.includes('planks') || name.includes('wood')) {
+          // Plank horizontal lines
           ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
           ctx.fillRect(x, y + 4, s, 1);
           ctx.fillRect(x, y + 8, s, 1);
           ctx.fillRect(x, y + 12, s, 1);
-        } else if (name.includes('log')) {
+          // Vertical joints
+          ctx.fillRect(x + 5, y, 1, 4);
+          ctx.fillRect(x + 11, y + 4, 1, 4);
+          ctx.fillRect(x + 3, y + 8, 1, 4);
+          ctx.fillRect(x + 9, y + 12, 1, 4);
+        } else if (name.includes('log') || name.includes('stem')) {
           ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
           ctx.fillRect(x + 4, y, 1, s);
           ctx.fillRect(x + 12, y, 1, s);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+          ctx.fillRect(x + 6, y, 2, s);
+          ctx.fillRect(x + 14, y, 2, s);
+        } else if (name.includes('concrete_powder')) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+          for (let i = 0; i < 30; i++) {
+            ctx.fillRect(x + (Math.random() * s | 0), y + (Math.random() * s | 0), 1, 1);
+          }
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+          for (let i = 0; i < 30; i++) {
+            ctx.fillRect(x + (Math.random() * s | 0), y + (Math.random() * s | 0), 1, 1);
+          }
+        } else if (name.includes('concrete')) {
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
+          ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+        } else if (name.includes('terracotta')) {
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+          ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+          ctx.fillRect(x + 1, y + 1, s - 2, 1);
+          ctx.fillRect(x + 1, y + 2, 1, s - 3);
+        } else if (name.includes('brick')) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+          ctx.fillRect(x, y + 3, s, 1);
+          ctx.fillRect(x, y + 7, s, 1);
+          ctx.fillRect(x, y + 11, s, 1);
+          ctx.fillRect(x, y + 15, s, 1);
+          ctx.fillRect(x + 4, y, 1, 3);
+          ctx.fillRect(x + 12, y, 1, 3);
+          ctx.fillRect(x + 8, y + 4, 1, 3);
+          ctx.fillRect(x + 16, y + 4, 1, 3);
+          ctx.fillRect(x + 4, y + 8, 1, 3);
+          ctx.fillRect(x + 12, y + 8, 1, 3);
+          ctx.fillRect(x + 8, y + 12, 1, 3);
+          ctx.fillRect(x + 16, y + 12, 1, 3);
+        } else if (name.includes('polished')) {
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+          ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+          ctx.strokeRect(x + 1.5, y + 1.5, s - 3, s - 3);
+        } else if (name.includes('pillar')) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+          ctx.fillRect(x + 3, y, 1, s);
+          ctx.fillRect(x + s - 4, y, 1, s);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+          ctx.fillRect(x + 4, y, 1, s);
+          ctx.fillRect(x + s - 3, y, 1, s);
+        } else if (name.includes('prismarine')) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+          ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+          for (let i = 2; i < s; i += 4) {
+            ctx.fillRect(x + i, y + i, 2, 2);
+          }
+        } else if (name.includes('copper')) {
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+          ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+          ctx.fillRect(x + 2, y + 2, 1, 1);
+          ctx.fillRect(x + s - 3, y + 2, 1, 1);
+          ctx.fillRect(x + 2, y + s - 3, 1, 1);
+          ctx.fillRect(x + s - 3, y + s - 3, 1, 1);
+        } else if (name.includes('amethyst')) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+          ctx.fillRect(x + 3, y + 3, 4, 4);
+          ctx.fillRect(x + 9, y + 9, 3, 3);
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+          ctx.fillRect(x + 6, y + 6, 2, 2);
+        } else if (name.includes('sandstone')) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+          ctx.fillRect(x, y + 4, s, 2);
+          ctx.fillRect(x, y + 11, s, 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+          ctx.fillRect(x, y + 6, s, 1);
+          ctx.fillRect(x, y + 13, s, 1);
         }
       });
     };

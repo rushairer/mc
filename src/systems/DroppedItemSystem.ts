@@ -35,6 +35,12 @@ export class DroppedItemSystem {
       this.createHeldItemMesh
     );
     this.items.set(item.id, item);
+    item.mesh.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
     this.scene.add(item.mesh);
     return item;
   }

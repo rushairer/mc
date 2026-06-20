@@ -44,7 +44,8 @@ export class Renderer {
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = false;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
 
     this.scene.fog = new THREE.Fog(0x87CEEB, this.fogNear, this.fogFar);
@@ -56,12 +57,38 @@ export class Renderer {
     // Sun directional light
     this.sunLight = new THREE.DirectionalLight(0xfff5e6, 0.8);
     this.sunLight.position.set(100, 200, 100);
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.mapSize.width = 1024;
+    this.sunLight.shadow.mapSize.height = 1024;
+    this.sunLight.shadow.camera.near = 0.5;
+    this.sunLight.shadow.camera.far = 400;
+    
+    const d = 60;
+    this.sunLight.shadow.camera.left = -d;
+    this.sunLight.shadow.camera.right = d;
+    this.sunLight.shadow.camera.top = d;
+    this.sunLight.shadow.camera.bottom = -d;
+    this.sunLight.shadow.bias = -0.0005;
+    
     this.scene.add(this.sunLight);
+    this.scene.add(this.sunLight.target);
 
     // Moon directional light (dim blue)
     this.moonLight = new THREE.DirectionalLight(0x8888ff, 0.0);
     this.moonLight.position.set(-100, 200, -100);
+    this.moonLight.castShadow = true;
+    this.moonLight.shadow.mapSize.width = 1024;
+    this.moonLight.shadow.mapSize.height = 1024;
+    this.moonLight.shadow.camera.near = 0.5;
+    this.moonLight.shadow.camera.far = 400;
+    this.moonLight.shadow.camera.left = -d;
+    this.moonLight.shadow.camera.right = d;
+    this.moonLight.shadow.camera.top = d;
+    this.moonLight.shadow.camera.bottom = -d;
+    this.moonLight.shadow.bias = -0.0005;
+    
     this.scene.add(this.moonLight);
+    this.scene.add(this.moonLight.target);
 
     // Torch point light pool (to illuminate entities near torches)
     for (let i = 0; i < 4; i++) {
@@ -454,22 +481,30 @@ export class Renderer {
     }
     this.ambientLight.intensity = ambientIntensity;
 
+    const camX = this.camera.position.x;
+    const camY = this.camera.position.y;
+    const camZ = this.camera.position.z;
+
     // Sun light
     this.sunLight.intensity = sunBrightness * 0.8;
     this.sunLight.position.set(
-      Math.cos(sunAngle) * 200,
-      Math.sin(sunAngle) * 200 + 50,
-      100
+      camX + Math.cos(sunAngle) * 150,
+      camY + Math.sin(sunAngle) * 150 + 50,
+      camZ + 100
     );
+    this.sunLight.target.position.set(camX, camY, camZ);
+    this.sunLight.target.updateMatrixWorld();
 
     // Moon light (active at night)
     const moonBrightness = Math.max(0, -sunY);
     this.moonLight.intensity = moonBrightness * 0.08;
     this.moonLight.position.set(
-      -Math.cos(sunAngle) * 200,
-      -Math.sin(sunAngle) * 200 + 50,
-      -100
+      camX - Math.cos(sunAngle) * 150,
+      camY - Math.sin(sunAngle) * 150 + 50,
+      camZ - 100
     );
+    this.moonLight.target.position.set(camX, camY, camZ);
+    this.moonLight.target.updateMatrixWorld();
 
     // Tint ambient during sunset/sunrise
     if (sunBrightness > 0 && sunBrightness < 0.4) {

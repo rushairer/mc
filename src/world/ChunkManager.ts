@@ -23,8 +23,8 @@ export class ChunkManager {
   dimensionGen: DimensionGenerator;
   private atlas: TextureAtlas;
   private scene: THREE.Scene;
-  private material: THREE.MeshBasicMaterial;
-  private transparentMaterial: THREE.MeshBasicMaterial;
+  private material: THREE.MeshLambertMaterial;
+  private transparentMaterial: THREE.MeshLambertMaterial;
   timeOfDay = 0.25;
   private clock = new THREE.Clock();
 
@@ -34,14 +34,14 @@ export class ChunkManager {
     this.worldGen = new WorldGen(seed);
     this.dimensionGen = new DimensionGenerator(seed);
 
-    this.material = new THREE.MeshBasicMaterial({
+    this.material = new THREE.MeshLambertMaterial({
       map: atlas.getTexture(),
       vertexColors: true,
       side: THREE.FrontSide,
       alphaTest: 0.1,
     });
 
-    this.transparentMaterial = new THREE.MeshBasicMaterial({
+    this.transparentMaterial = new THREE.MeshLambertMaterial({
       map: atlas.getTexture(),
       vertexColors: true,
       transparent: true,
@@ -449,6 +449,8 @@ export class ChunkManager {
       chunk.mesh.position.set(chunk.cx * CHUNK_SIZE, 0, chunk.cz * CHUNK_SIZE);
       chunk.mesh.matrixAutoUpdate = false;
       chunk.mesh.updateMatrix();
+      chunk.mesh.castShadow = true;
+      chunk.mesh.receiveShadow = true;
       this.scene.add(chunk.mesh);
     }
 
@@ -457,6 +459,8 @@ export class ChunkManager {
       chunk.transparentMesh.position.set(chunk.cx * CHUNK_SIZE, 0, chunk.cz * CHUNK_SIZE);
       chunk.transparentMesh.matrixAutoUpdate = false;
       chunk.transparentMesh.updateMatrix();
+      chunk.transparentMesh.receiveShadow = true;
+      chunk.transparentMesh.castShadow = false;
       this.scene.add(chunk.transparentMesh);
     }
   }

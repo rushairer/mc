@@ -978,8 +978,12 @@ export class Game {
       (dragon) => this.handleEnderDragonDeath(dragon.position)
     );
 
-    // Check creeper explosions, fuse sound, and play ambient mob sounds
+    // Check creeper explosions, fuse sound, play ambient mob sounds, and death sounds
     for (const [id, mob] of this.mobs.mobs) {
+      if (mob.health <= 0 && !mob.deathSoundPlayed) {
+        mob.deathSoundPlayed = true;
+        this.sound.playMobDeath();
+      }
       if (mob.def.type === 'creeper') {
         if (mob.fuseTimer >= 0 && mob.fuseTimer < dt) {
           this.sound.playCreeperFuse();
@@ -2157,7 +2161,6 @@ export class Game {
   };
 
   private handleMobDeath(mob: Mob) {
-    this.sound.playMobDeath();
     // Spawn death particles
     this.particles.spawnDeathParticles(
       mob.position.x,

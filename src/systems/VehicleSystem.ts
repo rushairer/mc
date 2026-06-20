@@ -50,6 +50,12 @@ export class VehicleSystem {
   spawnVehicle(type: VehicleType, position: THREE.Vector3): Vehicle {
     const mesh = type === 'boat' ? this.createBoatMesh() : this.createMinecartMesh();
     mesh.position.copy(position);
+    mesh.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
     this.scene.add(mesh);
 
     const vehicle = new Vehicle(this.nextId++, type, position, mesh);

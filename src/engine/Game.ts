@@ -51,6 +51,7 @@ const RAW_FISH_ID = 349;
 const RAW_SALMON_ID = (1 << 10) | 349;
 const CLOWNFISH_ID = (2 << 10) | 349;
 const PUFFERFISH_ID = (3 << 10) | 349;
+const TRIDENT_ID = 20275;
 const END_PORTAL_ID = 119;
 const END_PORTAL_FRAME_ID = 120;
 const FILLED_MAP_ID = 358;
@@ -2754,6 +2755,12 @@ export class Game {
       this.chunks.update(this.player.position.x, this.player.position.z);
       this.notifyState();
     }
+
+    if (type === 'trident' && fromPlayer) {
+      this.particles.spawnBlockBreak(pos.x, pos.y, pos.z, 0x9fb7c4, 14);
+      this.sound.playBlockPlace(42);
+      this.droppedItems.spawnItem(TRIDENT_ID, 1, pos.clone(), new THREE.Vector3(0, 0.2, 0), 0.4);
+    }
   }
 
   private handleCreeperExplosion(mob: Mob) {
@@ -3698,8 +3705,22 @@ export class Game {
   }
 
   private tryThrowHeldProjectile(heldItemId: number): boolean {
-    if (heldItemId !== SNOWBALL_ID && heldItemId !== EGG_ID && heldItemId !== ENDER_PEARL_ID) {
+    if (heldItemId !== SNOWBALL_ID && heldItemId !== EGG_ID && heldItemId !== ENDER_PEARL_ID && heldItemId !== TRIDENT_ID) {
       return false;
+    }
+
+    if (heldItemId === TRIDENT_ID) {
+      const origin = this.player.eyePosition.clone().add(this.player.forward.clone().multiplyScalar(0.45));
+      this.projectiles.shootTrident(origin, this.player.forward, true, 9);
+      this.sound.playLever();
+
+      if (this.gameMode !== 'creative') {
+        this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+      }
+
+      this.placeCooldown = 0.7;
+      this.notifyState();
+      return true;
     }
 
     const type = heldItemId === SNOWBALL_ID ? 'snowball' : heldItemId === EGG_ID ? 'egg' : 'ender_pearl';

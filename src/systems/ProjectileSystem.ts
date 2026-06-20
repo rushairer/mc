@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 
-export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'fireball' | 'potion' | 'shulker_bullet' | 'eye_of_ender' | 'wither_skull';
+export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'trident' | 'fireball' | 'potion' | 'shulker_bullet' | 'eye_of_ender' | 'wither_skull';
 
 export interface Projectile {
   id: number;
@@ -119,6 +119,28 @@ export class ProjectileSystem {
     mesh.position.copy(origin);
     this.addProjectileMesh(mesh);
     this.projectiles.set(arrow.id, arrow);
+  }
+
+  shootTrident(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage: number = 9) {
+    const mesh = this.createTridentMesh();
+    const vel = direction.clone().normalize().multiplyScalar(24);
+    vel.y += 0.4;
+
+    const trident: Projectile = {
+      id: this.nextId++,
+      type: 'trident',
+      position: origin.clone(),
+      velocity: vel,
+      damage,
+      fromPlayer,
+      lifetime: 20,
+      mesh,
+      inGround: false,
+    };
+
+    mesh.position.copy(origin);
+    this.addProjectileMesh(mesh);
+    this.projectiles.set(trident.id, trident);
   }
 
   shootFireball(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage: number = 4) {
@@ -265,6 +287,21 @@ export class ProjectileSystem {
     return new THREE.Mesh(geo, mat);
   }
 
+  private createTridentMesh(): THREE.Group {
+    const group = new THREE.Group();
+    const metal = new THREE.MeshLambertMaterial({ color: 0x9fb7c4 });
+    const darkMetal = new THREE.MeshLambertMaterial({ color: 0x5c7684 });
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.9), metal);
+    const centerProng = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.34), darkMetal);
+    const leftProng = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.28), darkMetal);
+    const rightProng = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.28), darkMetal);
+    centerProng.position.z = -0.6;
+    leftProng.position.set(-0.1, 0, -0.56);
+    rightProng.position.set(0.1, 0, -0.56);
+    group.add(shaft, centerProng, leftProng, rightProng);
+    return group;
+  }
+
   update(
     dt: number,
     getBlock: (x: number, y: number, z: number) => number,
@@ -298,7 +335,7 @@ export class ProjectileSystem {
       if (proj.inGround) continue;
 
       // Apply gravity / Ender Eye movement
-      if (proj.type === 'arrow' || proj.type === 'potion' || proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl') {
+      if (proj.type === 'arrow' || proj.type === 'potion' || proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident') {
         proj.velocity.y += ARROW_GRAVITY * dt;
       } else if (proj.type === 'eye_of_ender') {
         if (proj.lifetime > 1.5) {
@@ -334,7 +371,7 @@ export class ProjectileSystem {
               if (onPotionSplash) {
                 onPotionSplash(proj.position, proj.fromPlayer, proj.damage);
               }
-            } else if (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl') {
+            } else if (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident') {
               if (onProjectileImpact) {
                 onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
               }
@@ -347,7 +384,7 @@ export class ProjectileSystem {
         }
       }
 
-      if (hitBlock && (proj.type === 'potion' || proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl')) {
+      if (hitBlock && (proj.type === 'potion' || proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident')) {
         toRemove.push(id);
         continue;
       }
@@ -371,7 +408,7 @@ export class ProjectileSystem {
             kb.y = 1;
             hitPlayer(proj.damage, kb, proj.type);
           }
-          if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl')) {
+          if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident')) {
             onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
           }
           toRemove.push(id);
@@ -396,7 +433,7 @@ export class ProjectileSystem {
               kb.y = 1;
               hitMob(mob.id, proj.damage, kb, proj.type);
             }
-            if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl')) {
+            if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident')) {
               onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
             }
             toRemove.push(id);
@@ -412,6 +449,9 @@ export class ProjectileSystem {
       if (proj.type === 'shulker_bullet') {
         proj.mesh.rotation.x += dt * 4;
         proj.mesh.rotation.y += dt * 5;
+      }
+      if (proj.type === 'trident') {
+        proj.mesh.rotation.z += dt * 12;
       }
       if (proj.velocity.length() > 0.1) {
         const dir = proj.velocity.clone().normalize();

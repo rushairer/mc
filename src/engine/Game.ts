@@ -26,6 +26,8 @@ import { VehicleSystem, Vehicle } from '../systems/VehicleSystem';
 import { XPSystem } from '../systems/XPSystem';
 import { EnchantSystem } from '../systems/EnchantSystem';
 import { PotionEffectSystem } from '../systems/PotionEffect';
+import { GameRuleSystem } from '../systems/GameRuleSystem';
+import { AdvancementSystem } from '../systems/AdvancementSystem';
 import { HopperSystem } from '../systems/HopperSystem';
 import { VillageSystem, type TradeOffer, type VillagerProfession } from '../systems/VillageSystem';
 import { EnderDragonSystem } from '../systems/EnderDragonSystem';
@@ -41,7 +43,7 @@ const ENDER_EYE_ID = 381;
 const END_PORTAL_ID = 119;
 const END_PORTAL_FRAME_ID = 120;
 
-export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause' | 'end_poem' | 'sign_edit';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause' | 'end_poem' | 'sign_edit' | 'advancements';
 
 export interface GameState {
   fps: number;
@@ -85,6 +87,11 @@ export interface GameState {
   bossName: string | null;
   bossHealth: number;
   bossMaxHealth: number;
+  unlockedAdvancements?: string[];
+  gamerules?: {
+    difficulty: string;
+    rules: any;
+  };
 }
 
 export type GameStateListener = (state: GameState) => void;
@@ -121,6 +128,8 @@ export class Game {
   lookedAtSignText: string[] | null = null;
   private commands: CommandSystem;
   private clock: THREE.Clock;
+  gamerules!: GameRuleSystem;
+  advancements!: AdvancementSystem;
   running = false;
   private stateListeners: GameStateListener[] = [];
   private targetBlock: { blockPos: THREE.Vector3; faceNormal: THREE.Vector3 } | null = null;
@@ -203,6 +212,10 @@ export class Game {
       setTimeOfDay: (t) => { this.gameTime = t; },
       setWeather: (type) => { this.weather.setWeatherType(type); },
       getGameMode: () => this.gameMode,
+      setGameRule: (name, value) => { this.gamerules.setRule(name as any, value); this.syncGamerulesToSystems(); },
+      getGameRule: (name) => this.gamerules.getRule(name as any),
+      setDifficulty: (diff) => { this.gamerules.setDifficulty(diff as any); this.syncGamerulesToSystems(); },
+      getDifficulty: () => this.gamerules.getDifficulty(),
     });
 
     // Default hotbar (Starter Kit)
@@ -235,6 +248,10 @@ export class Game {
 
     this.fpArmGroup = this.createFpArm();
     this.renderer.camera.add(this.fpArmGroup);
+
+    this.gamerules = new GameRuleSystem();
+    this.advancements = new AdvancementSystem(this.sound);
+    this.syncGamerulesToSystems();
 
     this.running = true;
     this.animate();
@@ -489,6 +506,7 @@ export class Game {
 
     const enchanted = EnchantSystem.apply(item, enchantment);
     this.sound.playXP();
+    this.advancements.checkEnchant();
     this.notifyState();
     return enchanted;
   }
@@ -690,7 +708,9 @@ export class Game {
     this.lockCooldown = Math.max(0, this.lockCooldown - dt);
 
     // Game time (day/night cycle)
-    this.gameTime = (this.gameTime + dt / DAY_LENGTH) % 1;
+    if (this.gamerules.getRule('doDaylightCycle')) {
+      this.gameTime = (this.gameTime + dt / DAY_LENGTH) % 1;
+    }
     const lightningOpacity = this.weather.getLightningFlashOpacity();
     this.renderer.setDimension(this.chunks.currentDimension);
     this.renderer.setTimeOfDay(this.gameTime, lightningOpacity);
@@ -777,6 +797,20 @@ export class Game {
     if (!this.chatOpen && this.input.isKeyDown('e')) {
       this.openInventoryUI();
       this.input.keys.delete('e');
+      this.renderer.render();
+      this.notifyState();
+      return;
+    }
+
+    // L key → advancements
+    if (!this.chatOpen && this.input.isKeyDown('l')) {
+      if ((this.openUI as string) === 'advancements') {
+        this.closeUI();
+      } else if (this.openUI === 'none') {
+        this.openUI = 'advancements';
+        document.exitPointerLock();
+      }
+      this.input.keys.delete('l');
       this.renderer.render();
       this.notifyState();
       return;
@@ -1427,6 +1461,13 @@ export class Game {
           const blockId = this.chunks.getBlock(bp.x, bp.y, bp.z);
           const blockDef = BlockRegistry.get(blockId);
 
+          // Check advancements
+          if (blockDef) {
+            const heldSlot = this.inventory.getSlot(this.player.selectedSlot);
+            const heldItemDef = heldSlot ? ItemRegistry.get(heldSlot.id) : null;
+            this.advancements.checkBlockBreak(blockDef.name, heldItemDef?.name);
+          }
+
           // Spawn break particles
           if (blockDef) {
             const blockColor = this.getBlockParticleColor(blockId);
@@ -1791,6 +1832,7 @@ export class Game {
           // Bed: set spawn point
           this.bedSpawnPoint = new THREE.Vector3(blockPos.x + 0.5, blockPos.y + 1, blockPos.z + 0.5);
           this.sound.playBlockPlace(35); // Wool/fabric sound for bed
+          this.advancements.checkSleep();
           this.placeCooldown = 0.25;
         } else {
           // Place block
@@ -2066,8 +2108,8 @@ export class Game {
     // Mobs and drops updated earlier in tick
 
     this.survival.update(dt, this.player, this.gameMode, (x, y, z) => this.chunks.getBlock(x, y, z), (dmg, type) => {
-      this.damagePlayer(dmg, type);
-    });
+      this.damagePlayer(dmg, type as any);
+    }, this.gamerules.getDifficulty(), this.gamerules);
     this.potionEffects.update(
       dt,
       (amount) => { this.player.health = Math.min(20, this.player.health + amount); },
@@ -2089,37 +2131,40 @@ export class Game {
 
     // Death check
     if (this.player.health <= 0) {
-      // Drop inventory items at death location in 3D world
-      const deathPos = this.player.position.clone().add(new THREE.Vector3(0, 0.5, 0));
-      for (let i = 0; i < 36; i++) {
-        const slot = this.inventory.getSlot(i);
-        if (slot) {
-          const velocity = new THREE.Vector3(
-            (Math.random() - 0.5) * 4.0,
-            2.0 + Math.random() * 3.0,
-            (Math.random() - 0.5) * 4.0
-          );
-          this.droppedItems.spawnItem(slot.id, slot.count, deathPos, velocity, 1.0);
-          this.inventory.setSlot(i, null);
-        }
-      }
-      // Drop equipped armor as well
-      if (this.inventory.armor && Array.isArray(this.inventory.armor)) {
-        for (let i = 0; i < 4; i++) {
-          const armorItem = this.inventory.armor[i];
-          if (armorItem) {
+      const keepInv = this.gamerules.getRule('keepInventory');
+      if (!keepInv) {
+        // Drop inventory items at death location in 3D world
+        const deathPos = this.player.position.clone().add(new THREE.Vector3(0, 0.5, 0));
+        for (let i = 0; i < 36; i++) {
+          const slot = this.inventory.getSlot(i);
+          if (slot) {
             const velocity = new THREE.Vector3(
               (Math.random() - 0.5) * 4.0,
               2.0 + Math.random() * 3.0,
               (Math.random() - 0.5) * 4.0
             );
-            this.droppedItems.spawnItem(armorItem.id, armorItem.count, deathPos, velocity, 1.0);
-            this.inventory.armor[i] = null;
+            this.droppedItems.spawnItem(slot.id, slot.count, deathPos, velocity, 1.0);
+            this.inventory.setSlot(i, null);
           }
         }
+        // Drop equipped armor as well
+        if (this.inventory.armor && Array.isArray(this.inventory.armor)) {
+          for (let i = 0; i < 4; i++) {
+            const armorItem = this.inventory.armor[i];
+            if (armorItem) {
+              const velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 4.0,
+                2.0 + Math.random() * 3.0,
+                (Math.random() - 0.5) * 4.0
+              );
+              this.droppedItems.spawnItem(armorItem.id, armorItem.count, deathPos, velocity, 1.0);
+              this.inventory.armor[i] = null;
+            }
+          }
+        }
+        this.xp.reset();
       }
       this.openUI = 'death';
-      this.xp.reset();
       this.potionEffects.clear();
       document.exitPointerLock();
       this.notifyState();
@@ -2180,7 +2225,7 @@ export class Game {
     this.particles.update(dt);
 
     // Weather
-    this.weather.update(dt, this.player.position, this.isNight());
+    this.weather.update(dt, this.player.position, this.isNight(), this.gamerules.getRule('doWeatherCycle'));
 
     // Ambient sounds
     this.ambientTimer += dt;
@@ -2206,6 +2251,8 @@ export class Game {
   };
 
   private handleMobDeath(mob: Mob) {
+    this.advancements.checkMobKilled(mob.def.type);
+
     // Spawn death particles
     this.particles.spawnDeathParticles(
       mob.position.x,
@@ -2265,6 +2312,7 @@ export class Game {
     this.particles.spawnBlockBreak(position.x, position.y, position.z, 0x8a2be2, 80);
     this.xp.spawnXP(120, position.clone().add(new THREE.Vector3(0, 2, 0)));
     this.createEndReturnPortal();
+    this.advancements.checkEnderDragonDefeated();
     this.notifyState();
   }
 
@@ -2341,53 +2389,58 @@ export class Game {
     const cy = Math.floor(y);
     const cz = Math.floor(z);
 
-    // Destroy blocks in sphere
-    for (let dx = -radius; dx <= radius; dx++) {
-      for (let dy = -radius; dy <= radius; dy++) {
-        for (let dz = -radius; dz <= radius; dz++) {
-          if (dx * dx + dy * dy + dz * dz > radius * radius) continue;
-          const bx = cx + dx;
-          const by = cy + dy;
-          const bz = cz + dz;
-          const blockId = this.chunks.getBlock(bx, by, bz);
-          if (blockId === 0) continue;
-          const def = BlockRegistry.get(blockId);
-          if (!def) continue;
-          if (def.hardness >= 20) continue; // obsidian-level blocks survive
-          // Chain reaction: ignite nearby TNT
-          if (blockId === 21) {
-            this.igniteTNT(bx, by, bz);
-            continue;
-          }
-          const meta = this.chunks.getBlockMeta(bx, by, bz);
-          if (meta?.inventory) {
-            for (const slot of meta.inventory) {
-              if (slot && slot.count > 0) {
-                const dropPos = new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5);
+    const mobGriefing = this.gamerules.getRule('mobGriefing');
+    const shouldDestroyBlocks = mobGriefing || !source;
+
+    if (shouldDestroyBlocks) {
+      // Destroy blocks in sphere
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dz = -radius; dz <= radius; dz++) {
+            if (dx * dx + dy * dy + dz * dz > radius * radius) continue;
+            const bx = cx + dx;
+            const by = cy + dy;
+            const bz = cz + dz;
+            const blockId = this.chunks.getBlock(bx, by, bz);
+            if (blockId === 0) continue;
+            const def = BlockRegistry.get(blockId);
+            if (!def) continue;
+            if (def.hardness >= 20) continue; // obsidian-level blocks survive
+            // Chain reaction: ignite nearby TNT
+            if (blockId === 21) {
+              this.igniteTNT(bx, by, bz);
+              continue;
+            }
+            const meta = this.chunks.getBlockMeta(bx, by, bz);
+            if (meta?.inventory) {
+              for (const slot of meta.inventory) {
+                if (slot && slot.count > 0) {
+                  const dropPos = new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5);
+                  const velocity = new THREE.Vector3(
+                    (bx + 0.5 - x) * 2.5 + (Math.random() - 0.5) * 1.5,
+                    (by + 0.5 - y) * 2.5 + 2.0 + Math.random() * 2.0,
+                    (bz + 0.5 - z) * 2.5 + (Math.random() - 0.5) * 1.5
+                  );
+                  this.droppedItems.spawnItem(slot.id, slot.count, dropPos, velocity, 0.5);
+                }
+              }
+            }
+            if (this.gameMode !== 'creative') {
+              const dropId = ItemRegistry.getBlockDropItem(blockId);
+              if (dropId > 0 && Math.random() < 0.6) {
+                const dropPos = new THREE.Vector3(bx + 0.5, by + 0.3, bz + 0.5);
                 const velocity = new THREE.Vector3(
                   (bx + 0.5 - x) * 2.5 + (Math.random() - 0.5) * 1.5,
                   (by + 0.5 - y) * 2.5 + 2.0 + Math.random() * 2.0,
                   (bz + 0.5 - z) * 2.5 + (Math.random() - 0.5) * 1.5
                 );
-                this.droppedItems.spawnItem(slot.id, slot.count, dropPos, velocity, 0.5);
+                this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
               }
             }
+            this.chunks.setBlock(bx, by, bz, 0);
+            this.redstone.unregister(bx, by, bz);
+            this.chunks.setBlockMeta(bx, by, bz, null);
           }
-          if (this.gameMode !== 'creative') {
-            const dropId = ItemRegistry.getBlockDropItem(blockId);
-            if (dropId > 0 && Math.random() < 0.6) {
-              const dropPos = new THREE.Vector3(bx + 0.5, by + 0.3, bz + 0.5);
-              const velocity = new THREE.Vector3(
-                (bx + 0.5 - x) * 2.5 + (Math.random() - 0.5) * 1.5,
-                (by + 0.5 - y) * 2.5 + 2.0 + Math.random() * 2.0,
-                (bz + 0.5 - z) * 2.5 + (Math.random() - 0.5) * 1.5
-              );
-              this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
-            }
-          }
-          this.chunks.setBlock(bx, by, bz, 0);
-          this.redstone.unregister(bx, by, bz);
-          this.chunks.setBlockMeta(bx, by, bz, null);
         }
       }
     }
@@ -2496,7 +2549,7 @@ export class Game {
     }
   }
 
-  damagePlayer(amount: number, type: 'mob' | 'fall' | 'drown' | 'starve' | 'wither' | 'magic', knockback?: THREE.Vector3) {
+  damagePlayer(amount: number, type: 'mob' | 'fall' | 'drown' | 'starve' | 'wither' | 'magic' | 'fire' | 'lava', knockback?: THREE.Vector3) {
     if (this.gameMode === 'creative') return;
 
     let finalDamage = amount;
@@ -2512,6 +2565,11 @@ export class Game {
       if (defense > 0) {
         this.inventory.damageArmor(1);
       }
+    } else if (type === 'lava' || type === 'fire') {
+      const protectionReduction = this.inventory.armor.reduce((sum, item) => {
+        return sum + EnchantSystem.getProtectionReduction(EnchantSystem.getLevel(item, 'protection'));
+      }, 0);
+      finalDamage = Math.max(1, amount * (1 - Math.min(0.9, protectionReduction)));
     }
 
     this.player.health = Math.max(0, this.player.health - finalDamage);
@@ -2531,8 +2589,11 @@ export class Game {
 
     if (this.player.health <= 0) {
       this.openUI = 'death';
-      this.xp.reset();
-      this.potionEffects.clear();
+      const keepInv = this.gamerules.getRule('keepInventory');
+      if (!keepInv) {
+        this.xp.reset();
+        this.potionEffects.clear();
+      }
       document.exitPointerLock();
       this.notifyState();
       this.renderer.render();
@@ -2576,6 +2637,18 @@ export class Game {
   private notifyState() {
     this.player.updateArmorMesh(this.inventory.armor);
     this.updateFpArmArmor();
+
+    // Run advancements checks
+    if (this.advancements) {
+      this.advancements.checkInventory(this.inventory.slots, this.inventory.armor);
+      const brewInv = this.getOpenBrewingInventory();
+      if (brewInv) {
+        const hasBrewedPotion = brewInv.some(slot => slot && slot.id === 373 && slot.potion && slot.potion.kind !== 'water');
+        if (hasBrewedPotion) {
+          this.advancements.checkBrew();
+        }
+      }
+    }
 
     const biomeId = this.chunks.getBiomeAt(
       Math.floor(this.player.position.x),
@@ -2639,11 +2712,24 @@ export class Game {
       bossName: dragonState.active ? 'Ender Dragon' : (activeWither ? 'Wither' : null),
       bossHealth: dragonState.active ? dragonState.health : (activeWither ? activeWither.health : 0),
       bossMaxHealth: dragonState.active ? dragonState.maxHealth : (activeWither ? activeWither.def.health : 0),
+      unlockedAdvancements: this.advancements ? this.advancements.getUnlockedList() : [],
+      gamerules: this.gamerules ? {
+        difficulty: this.gamerules.getDifficulty(),
+        rules: this.gamerules.getRules(),
+      } : undefined,
     };
 
     for (const listener of this.stateListeners) {
       listener(state);
     }
+  }
+
+  private syncGamerulesToSystems() {
+    if (this.mobs) {
+      this.mobs.difficulty = this.gamerules.getDifficulty();
+      this.mobs.doMobSpawning = this.gamerules.getRule('doMobSpawning');
+    }
+    this.notifyState();
   }
 
   private isNight(): boolean {
@@ -2688,6 +2774,7 @@ export class Game {
 
     // Play portal teleport sound
     this.sound.playPickup();
+    this.advancements.checkDimensionChange(this.chunks.currentDimension);
     this.notifyState();
   }
 
@@ -2705,6 +2792,7 @@ export class Game {
     this.player.resolveStuck(this.chunks);
 
     this.sound.playPickup();
+    this.advancements.checkDimensionChange(2);
     this.notifyState();
   }
 
@@ -2847,6 +2935,8 @@ export class Game {
       mobs: this.mobs.serialize(this.chunks.currentDimension),
       endDragonDefeated: this.enderDragon.getState().defeated,
       endDragonHealth: this.enderDragon.getHealthForSave(),
+      gamerules: this.gamerules.toJSON(),
+      advancements: this.advancements.getUnlockedList(),
       timestamp: Date.now(),
     };
 
@@ -2886,6 +2976,19 @@ export class Game {
       );
       this.potionEffects.setEffects(data.player.activePotionEffects);
       this.enderDragon.restore(data.endDragonDefeated ?? false, data.endDragonHealth);
+
+      if ((data as any).gamerules) {
+        this.gamerules.fromJSON((data as any).gamerules);
+      } else {
+        this.gamerules.fromJSON(null);
+      }
+      this.syncGamerulesToSystems();
+
+      if ((data as any).advancements) {
+        this.advancements.load((data as any).advancements);
+      } else {
+        this.advancements.reset();
+      }
 
       if (data.inventory) {
         this.inventory.fromJSON(data.inventory.slots);

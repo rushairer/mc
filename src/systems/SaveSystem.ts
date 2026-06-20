@@ -47,6 +47,11 @@ export interface SaveData {
   mobs?: SerializedMob[];
   endDragonDefeated?: boolean;
   endDragonHealth?: number;
+  gamerules?: {
+    difficulty: 'peaceful' | 'easy' | 'normal' | 'hard';
+    rules: any;
+  };
+  advancements?: string[];
   timestamp: number;
 }
 

@@ -9,6 +9,10 @@ export interface CommandContext {
   setTimeOfDay: (t: number) => void;
   setWeather: (type: 'clear' | 'rain' | 'thunder') => void;
   getGameMode: () => 'survival' | 'creative';
+  setGameRule: (name: string, value: boolean) => void;
+  getGameRule: (name: string) => boolean;
+  setDifficulty: (diff: string) => void;
+  getDifficulty: () => string;
 }
 
 export interface CommandResult {
@@ -41,6 +45,8 @@ export class CommandSystem {
       case 'gamemode': case 'gm': return this.cmdGamemode(args);
       case 'time': return this.cmdTime(args);
       case 'weather': return this.cmdWeather(args);
+      case 'gamerule': return this.cmdGamerule(args);
+      case 'difficulty': return this.cmdDifficulty(args);
       case 'help': return this.cmdHelp();
       default:
         return { success: false, message: `Unknown command: ${cmd}` };
@@ -112,10 +118,53 @@ export class CommandSystem {
     return { success: true, message: `Weather set to ${type}` };
   }
 
+  private cmdGamerule(args: string[]): CommandResult {
+    if (args.length < 1) return { success: false, message: 'Usage: /gamerule <ruleName> [value]' };
+    const ruleName = args[0];
+    
+    // Check if rule is valid (list of allowed rules)
+    const validRules = ['keepInventory', 'doMobSpawning', 'doDaylightCycle', 'doWeatherCycle', 'fallDamage', 'fireDamage', 'mobGriefing'];
+    if (!validRules.includes(ruleName)) {
+      return { success: false, message: `Unknown gamerule: ${ruleName}. Valid rules: ${validRules.join(', ')}` };
+    }
+
+    if (args.length < 2) {
+      const val = this.ctx.getGameRule(ruleName);
+      return { success: true, message: `Gamerule ${ruleName} is currently: ${val}` };
+    }
+
+    const valStr = args[1].toLowerCase();
+    if (valStr !== 'true' && valStr !== 'false') {
+      return { success: false, message: 'Value must be true or false' };
+    }
+
+    const value = valStr === 'true';
+    this.ctx.setGameRule(ruleName, value);
+    return { success: true, message: `Gamerule ${ruleName} set to ${value}` };
+  }
+
+  private cmdDifficulty(args: string[]): CommandResult {
+    if (args.length < 1) return { success: false, message: 'Usage: /difficulty <peaceful|easy|normal|hard|0|1|2|3>' };
+    let diff = args[0].toLowerCase();
+    
+    // Support numeric difficulties
+    if (diff === '0') diff = 'peaceful';
+    else if (diff === '1') diff = 'easy';
+    else if (diff === '2') diff = 'normal';
+    else if (diff === '3') diff = 'hard';
+
+    if (diff !== 'peaceful' && diff !== 'easy' && diff !== 'normal' && diff !== 'hard') {
+      return { success: false, message: 'Invalid difficulty. Use peaceful, easy, normal, or hard' };
+    }
+
+    this.ctx.setDifficulty(diff);
+    return { success: true, message: `Difficulty set to ${diff}` };
+  }
+
   private cmdHelp(): CommandResult {
     return {
       success: true,
-      message: '/give <id> [count] | /tp <x> <y> <z> | /gamemode <survival|creative> | /time <day|night> | /weather <clear|rain|thunder>'
+      message: '/give <id> [count] | /tp <x> <y> <z> | /gamemode <survival|creative> | /time <day|night> | /weather <clear|rain|thunder> | /gamerule <rule> [true|false] | /difficulty <diff>'
     };
   }
 }

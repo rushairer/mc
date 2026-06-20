@@ -177,8 +177,8 @@
 | 5.3 | 聊天系统 | ✅ | `src/App.tsx`, `src/server/` |
 | 5.4 | 资源包系统（可替换纹理/模型/音效） | ⬜ | 重构 `TextureAtlas.ts`, `SoundSystem.ts` |
 | 5.5 | 数据包系统（JSON 驱动的方块/物品/配方） | ⬜ | 重构注册系统 |
-| 5.6 | 游戏规则系统（`/gamerule`、难度设置） | ⬜ | 新建 `GameRuleSystem.ts` |
-| 5.7 | 成就/进度系统 | ⬜ | 新建 `AdvancementSystem.ts` |
+| 5.6 | 游戏规则系统（`/gamerule`、难度设置） | ✅ | 新建 `GameRuleSystem.ts` |
+| 5.7 | 成就/进度系统 | ✅ | 新建 `AdvancementSystem.ts` |
 | 5.8 | 地图物品 + 书与笔 | ⬜ | `ItemRegistry.ts`, 新建 `MapSystem.ts` |
 
 **验收标准**:
@@ -224,6 +224,7 @@
 | 2026-06-20 | 阶段 4 | 4.1, 4.10, 4.12 阴影映射、生物动画（攻击/受击/死亡/坐/摇晃）与 200+ 方块 Fallback 纹理渲染优化 | 1ba7d89 |
 | 2026-06-20 | **阶段 4 完成** | 全部 12 个任务完成 | |
 | 2026-06-20 | 阶段 5 | 5.1 - 5.3 服务端架构、多人同步（玩家/区块/实体）及聊天系统 | |
+| 2026-06-20 | 阶段 5 | 5.6 - 5.7 游戏规则与成就系统：游戏难度、规则参数、L 键打开成就树、右上角 Toast 通知与 Web Audio 达成音效 | |
 
 ---
 
@@ -249,6 +250,9 @@
 | `src/systems/RedstoneSystem.ts` | 红石信号传播 |
 | `src/systems/FluidSystem.ts` | 流体模拟 |
 | `src/systems/SaveSystem.ts` | IndexedDB 存档 |
+| `src/systems/GameRuleSystem.ts` | 游戏难度与规则系统 |
+| `src/systems/AdvancementSystem.ts` | 成就进度达成判定系统 |
+| `src/ui/AdvancementsUI.tsx` | 成就树与进度面板 UI |
 | `src/systems/SoundSystem.ts` | Web Audio 合成音效 |
 | `src/ui/HUD.tsx` | 生命/饥饿/氧气/快捷栏 HUD |
 | `src/ui/InventoryUI.tsx` | 背包界面 |

@@ -13,6 +13,7 @@ import { BrewingUI } from './ui/BrewingUI';
 import { HopperUI } from './ui/HopperUI';
 import { TradingUI } from './ui/TradingUI';
 import { EndPoemUI } from './ui/EndPoemUI';
+import { AdvancementsUI } from './ui/AdvancementsUI';
 import { SignEditUI } from './ui/SignEditUI';
 import type { Enchantment } from './systems/EnchantSystem';
 import type { TradeOffer } from './systems/VillageSystem';
@@ -84,6 +85,25 @@ export const App: React.FC = () => {
   });
   const [serverUrl, setServerUrl] = useState('ws://localhost:8080');
   const [multiplayerUsername, setMultiplayerUsername] = useState(() => 'Player_' + Math.floor(Math.random() * 9000 + 1000));
+  const [advancementToast, setAdvancementToast] = useState<{ title: string; description: string; icon: number } | null>(null);
+
+  const setupGame = useCallback((game: Game) => {
+    game.onStateChange((state) => {
+      setGameState(state);
+    });
+
+    game.advancements.setOnUnlock((adv) => {
+      setAdvancementToast({
+        title: adv.title,
+        description: adv.description,
+        icon: adv.icon,
+      });
+      // Clear toast after 4 seconds
+      setTimeout(() => {
+        setAdvancementToast(null);
+      }, 4000);
+    });
+  }, []);
 
   const loadWorldSaves = useCallback(async () => {
     const slots = ['world_1', 'world_2', 'world_3'];
@@ -125,9 +145,7 @@ export const App: React.FC = () => {
     if (containerRef.current) {
       game = new Game(containerRef.current, undefined, 'world_1');
       gameRef.current = game;
-      game.onStateChange((state) => {
-        setGameState(state);
-      });
+      setupGame(game);
       setMenuState('welcome');
     }
 
@@ -220,9 +238,7 @@ export const App: React.FC = () => {
     if (containerRef.current) {
       const game = new Game(containerRef.current, selectedMode, selectedSlot);
       gameRef.current = game;
-      game.onStateChange((state) => {
-        setGameState(state);
-      });
+      setupGame(game);
       
       // Enforce a minimum display time for the load screen
       await new Promise((resolve) => setTimeout(resolve, 800));
@@ -251,9 +267,7 @@ export const App: React.FC = () => {
     if (containerRef.current) {
       const game = new Game(containerRef.current, 'survival', 'multiplayer');
       gameRef.current = game;
-      game.onStateChange((state) => {
-        setGameState(state);
-      });
+      setupGame(game);
       
       // Enforce a minimum display time for the load screen
       await new Promise((resolve) => setTimeout(resolve, 800));
@@ -315,6 +329,15 @@ export const App: React.FC = () => {
         @keyframes loadProgress {
           0% { width: 0%; }
           100% { width: 100%; }
+        }
+        @keyframes toastSlideIn {
+          0% { transform: translateX(120%); opacity: 0; }
+          8% { transform: translateX(0); opacity: 1; }
+          92% { transform: translateX(0); opacity: 1; }
+          100% { transform: translateX(120%); opacity: 0; }
+        }
+        .advancement-toast {
+          animation: toastSlideIn 4s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
         }
         .minecraft-btn {
           width: 320px;
@@ -561,6 +584,15 @@ export const App: React.FC = () => {
         />
       )}
 
+      {/* Advancements UI */}
+      {gameState.openUI === 'advancements' && (
+        <AdvancementsUI
+          unlockedList={gameState.unlockedAdvancements ?? []}
+          onClose={handleCloseUI}
+          getItemIconStyle={getItemIconStyle}
+        />
+      )}
+
       {/* Death UI */}
       {gameState.openUI === 'death' && (
         <div style={{
@@ -684,6 +716,43 @@ export const App: React.FC = () => {
               {t('gameSaved')}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Advancement Unlock Toast */}
+      {advancementToast && (
+        <div 
+          className="advancement-toast"
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            background: '#212121',
+            border: '2px solid #555555',
+            borderRadius: '4px',
+            padding: '10px 15px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            boxShadow: '0 4px 10px rgba(0,0,0,0.5)',
+            zIndex: 2000,
+            fontFamily: 'monospace',
+            boxSizing: 'border-box',
+          }}
+        >
+          {/* Icon */}
+          <div style={getItemIconStyle(advancementToast.icon, 32)} />
+          <div>
+            <div style={{ color: '#f8a800', fontWeight: 'bold', fontSize: '11px', textShadow: '1px 1px 0 #000' }}>
+              Advancement Made!
+            </div>
+            <div style={{ color: '#ffffff', fontSize: '13px', fontWeight: 'bold', marginTop: '2px', textShadow: '1px 1px 0 #000' }}>
+              {advancementToast.title}
+            </div>
+            <div style={{ color: '#aaaaaa', fontSize: '9px', marginTop: '2px' }}>
+              {advancementToast.description}
+            </div>
+          </div>
         </div>
       )}
 
@@ -928,9 +997,7 @@ export const App: React.FC = () => {
                                 if (containerRef.current) {
                                   const game = new Game(containerRef.current, undefined, slot);
                                   gameRef.current = game;
-                                  game.onStateChange((state) => {
-                                    setGameState(state);
-                                  });
+                                  setupGame(game);
                                   
                                   // Load and enforce minimum display time
                                   await Promise.all([

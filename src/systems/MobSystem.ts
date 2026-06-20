@@ -17,6 +17,8 @@ const BABY_GROW_SECONDS = 240;
 
 export class MobSystem {
   mobs: Map<number, Mob> = new Map();
+  public difficulty = 'normal';
+  public doMobSpawning = true;
   private scene: THREE.Scene;
   private spawnTimer = 0;
   private spawnedVillages: Set<string> = new Set();
@@ -45,6 +47,16 @@ export class MobSystem {
     endGenerator?: EndGenerator
   ) {
     if (!getBlock || !hurtPlayer) return;
+
+    // Peaceful difficulty check: clear hostile mobs
+    if (this.difficulty === 'peaceful') {
+      for (const [id, mob] of this.mobs) {
+        if (mob.def.hostile) {
+          this.removeMob(id);
+        }
+      }
+    }
+
     // Target updates for Golems, Wolves, Creeper escape
     for (const [id, mob] of this.mobs) {
       if (mob.def.type === 'pillager') {
@@ -173,10 +185,12 @@ export class MobSystem {
     }
 
     // Spawn new mobs
-    this.spawnTimer += dt;
-    if (this.spawnTimer >= SPAWN_INTERVAL && this.mobs.size < MAX_MOBS && getBlock) {
-      this.spawnTimer = 0;
-      this.trySpawn(playerPos, isNight ?? false, getBlock, dimension, worldGen);
+    if (this.doMobSpawning && this.difficulty !== 'peaceful') {
+      this.spawnTimer += dt;
+      if (this.spawnTimer >= SPAWN_INTERVAL && this.mobs.size < MAX_MOBS && getBlock) {
+        this.spawnTimer = 0;
+        this.trySpawn(playerPos, isNight ?? false, getBlock, dimension, worldGen);
+      }
     }
 
     if (dimension === 0 && worldGen && getBlock) {
@@ -306,6 +320,9 @@ export class MobSystem {
 
   spawnMob(type: MobType, x: number, y: number, z: number, size?: number, profession?: VillagerProfession): Mob {
     const mob = new Mob(type, x, y, z, size, profession);
+    if (this.difficulty === 'peaceful' && mob.def.hostile) {
+      return mob; // Return but don't add to map/scene so it gets discarded
+    }
     this.mobs.set(mob.id, mob);
     this.scene.add(mob.mesh);
     return mob;

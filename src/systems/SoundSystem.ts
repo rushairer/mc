@@ -239,6 +239,33 @@ export class SoundSystem {
     osc.stop(ctx.currentTime + 0.12);
   }
 
+  playAdvancement() {
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    
+    // Play C major arpeggio for achievement (C5 -> E5 -> G5 -> C6)
+    const playNote = (freq: number, start: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, start);
+      
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.15, start + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+      
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(start);
+      osc.stop(start + duration);
+    };
+    
+    playNote(523.25, now, 0.4);        // C5
+    playNote(659.25, now + 0.08, 0.4); // E5
+    playNote(783.99, now + 0.16, 0.4); // G5
+    playNote(1046.50, now + 0.24, 0.6); // C6
+  }
+
 
   playHurt() {
     const ctx = this.ensureCtx();

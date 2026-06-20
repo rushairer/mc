@@ -102,20 +102,22 @@ export class WeatherSystem {
     }
   }
 
-  update(dt: number, playerPos: THREE.Vector3, isNight: boolean) {
-    this.weatherTimer += dt;
+  update(dt: number, playerPos: THREE.Vector3, isNight: boolean, doWeatherCycle = true) {
+    if (doWeatherCycle) {
+      this.weatherTimer += dt;
 
-    // Change weather periodically
-    if (this.weatherTimer > this.weatherDuration) {
-      this.weatherTimer = 0;
-      this.weatherDuration = 60 + Math.random() * 180; // 1-5 minutes
-      const rand = Math.random();
-      if (rand < 0.4) {
-        this.currentWeather = 'clear';
-      } else if (rand < 0.75) {
-        this.currentWeather = 'rain';
-      } else {
-        this.currentWeather = 'thunder';
+      // Change weather periodically
+      if (this.weatherTimer > this.weatherDuration) {
+        this.weatherTimer = 0;
+        this.weatherDuration = 60 + Math.random() * 180; // 1-5 minutes
+        const rand = Math.random();
+        if (rand < 0.4) {
+          this.currentWeather = 'clear';
+        } else if (rand < 0.75) {
+          this.currentWeather = 'rain';
+        } else {
+          this.currentWeather = 'thunder';
+        }
       }
     }
 

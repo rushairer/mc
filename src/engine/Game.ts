@@ -34,7 +34,7 @@ import { MapSystem } from '../systems/MapSystem';
 import { HopperSystem } from '../systems/HopperSystem';
 import { VillageSystem, type TradeOffer, type VillagerProfession } from '../systems/VillageSystem';
 import { EnderDragonSystem } from '../systems/EnderDragonSystem';
-import { CHUNK_SIZE, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
+import { CHUNK_SIZE, PLAYER_HEIGHT, PLAYER_WIDTH, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
 import type { Enchantment } from '../systems/EnchantSystem';
 import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '../types';
 import { NetworkClient } from '../server/NetworkClient';
@@ -840,9 +840,9 @@ export class Game {
 
     // Underwater fog and background override
     const headBlock = this.chunks.getBlock(
-      Math.floor(this.player.position.x),
-      Math.floor(this.player.position.y + 1.62),
-      Math.floor(this.player.position.z)
+      Math.floor(this.player.eyePosition.x),
+      Math.floor(this.player.eyePosition.y),
+      Math.floor(this.player.eyePosition.z)
     );
     const isUnderwater = (headBlock & 0x3FF) === 8 || (headBlock & 0x3FF) === 9;
 
@@ -1033,7 +1033,8 @@ export class Game {
       left: this.chatOpen ? false : this.input.isKeyDown('a'),
       right: this.chatOpen ? false : this.input.isKeyDown('d'),
       jump: this.chatOpen ? false : this.input.isKeyDown(' '),
-      sprint: this.chatOpen ? false : (this.input.isKeyDown('control') || this.input.isKeyDown('shift')),
+      sprint: this.chatOpen ? false : this.input.isKeyDown('control'),
+      sneak: this.chatOpen || this.riddenMob || this.riddenVehicle ? false : this.input.isKeyDown('shift'),
       fly: false,
     }, this.chunks);
 
@@ -1223,7 +1224,7 @@ export class Game {
           id: m.id, position: m.position, width: m.width, height: m.height
         })),
         this.player.position,
-        0.6, 1.8,
+        PLAYER_WIDTH, this.player.height,
         (pos, fromPlayer, damage) => {
           this.handlePotionSplash(pos, fromPlayer, damage);
         },
@@ -1377,6 +1378,7 @@ export class Game {
       this.fpArmGroup.visible = false;
       this.player.mesh.visible = true;
       this.player.mesh.position.copy(this.player.position);
+      this.player.mesh.scale.y = this.player.isSneaking ? this.player.height / PLAYER_HEIGHT : 1;
       this.player.mesh.rotation.y = this.player.yaw + Math.PI;
 
       const head = this.player.mesh.getObjectByName('head');
@@ -2987,9 +2989,9 @@ export class Game {
       : 'empty';
 
     const headBlock = this.chunks.getBlock(
-      Math.floor(this.player.position.x),
-      Math.floor(this.player.position.y + 1.62),
-      Math.floor(this.player.position.z)
+      Math.floor(this.player.eyePosition.x),
+      Math.floor(this.player.eyePosition.y),
+      Math.floor(this.player.eyePosition.z)
     );
     const isUnderwater = (headBlock & 0x3FF) === 8 || (headBlock & 0x3FF) === 9;
     const xpState = this.xp.getState();
@@ -4264,8 +4266,8 @@ export class Game {
 
     // 2. Resolve Player-Mob collisions
     const player = this.player;
-    const hwP = 0.3; // PLAYER_WIDTH / 2
-    const playerHeight = 1.8; // PLAYER_HEIGHT
+    const hwP = PLAYER_WIDTH / 2;
+    const playerHeight = player.height;
 
     for (const mob of mobs) {
       const hwM = mob.width / 2;

@@ -103,9 +103,9 @@ export class SurvivalSystem {
 
     // ─── Drowning ───
     const headBlock = getBlock(
-      Math.floor(player.position.x),
-      Math.floor(player.position.y + 1.62), // player eye/head height
-      Math.floor(player.position.z)
+      Math.floor(player.eyePosition.x),
+      Math.floor(player.eyePosition.y),
+      Math.floor(player.eyePosition.z)
     );
     const isUnderwater = (headBlock & 0x3FF) === 8 || (headBlock & 0x3FF) === 9; // flowing or still water
 

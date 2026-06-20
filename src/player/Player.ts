@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import {
   GRAVITY, JUMP_VELOCITY, WALK_SPEED, SPRINT_SPEED,
-  PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_EYE_HEIGHT, MAX_REACH
+  PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_EYE_HEIGHT, PLAYER_SNEAK_HEIGHT,
+  PLAYER_SNEAK_EYE_HEIGHT, SNEAK_SPEED_MULTIPLIER, MAX_REACH
 } from '../constants';
 import { ChunkManager } from '../world/ChunkManager';
 import { BlockRegistry } from '../world/BlockRegistry';
@@ -20,6 +21,7 @@ export class Player {
   saturation = 20;
   oxygen = 15.0; // oxygen in seconds (15 seconds max)
   flying = false;
+  isSneaking = false;
   speedMultiplier = 1;
   mesh: THREE.Group;
 
@@ -43,9 +45,17 @@ export class Player {
   get eyePosition(): THREE.Vector3 {
     return new THREE.Vector3(
       this.position.x,
-      this.position.y + PLAYER_EYE_HEIGHT,
+      this.position.y + this.eyeHeight,
       this.position.z
     );
+  }
+
+  get height(): number {
+    return this.isSneaking ? PLAYER_SNEAK_HEIGHT : PLAYER_HEIGHT;
+  }
+
+  get eyeHeight(): number {
+    return this.isSneaking ? PLAYER_SNEAK_EYE_HEIGHT : PLAYER_EYE_HEIGHT;
   }
 
   get forward(): THREE.Vector3 {
@@ -55,7 +65,7 @@ export class Player {
     return dir.normalize();
   }
 
-  update(dt: number, input: { dx: number; dy: number; forward: boolean; back: boolean; left: boolean; right: boolean; jump: boolean; sprint: boolean; fly: boolean }, chunks: ChunkManager) {
+  update(dt: number, input: { dx: number; dy: number; forward: boolean; back: boolean; left: boolean; right: boolean; jump: boolean; sprint: boolean; sneak: boolean; fly: boolean }, chunks: ChunkManager) {
     // Update swing progress
     if (this.swingProgress > 0) {
       this.swingProgress += dt * 5.0; // swing takes 0.2s
@@ -85,7 +95,13 @@ export class Player {
     // Fly toggle
     if (input.fly) this.flying = !this.flying;
 
-    const speed = (input.sprint ? SPRINT_SPEED : WALK_SPEED) * this.speedMultiplier;
+    this.isSneaking = input.sneak && !this.flying;
+    if (!this.isSneaking && this.checkCollision(chunks)) {
+      this.isSneaking = true;
+    }
+    const wantsSprint = input.sprint && !this.isSneaking;
+    const sneakMultiplier = this.isSneaking ? SNEAK_SPEED_MULTIPLIER : 1;
+    const speed = (wantsSprint ? SPRINT_SPEED : WALK_SPEED) * this.speedMultiplier * sneakMultiplier;
 
     if (this.flying) {
       // Flying mode
@@ -160,13 +176,14 @@ export class Player {
 
   private moveWithCollision(dt: number, chunks: ChunkManager) {
     const hw = this.halfWidth;
+    const height = this.height;
 
     // Detect doors/trapdoors the player is already colliding with to ignore them during this physics step (allows walking out)
     const ignoredBlocks = new Set<string>();
     const minX = Math.floor(this.position.x - hw);
     const maxX = Math.floor(this.position.x + hw);
     const minY = Math.floor(this.position.y);
-    const maxY = Math.floor(this.position.y + PLAYER_HEIGHT);
+    const maxY = Math.floor(this.position.y + height);
     const minZ = Math.floor(this.position.z - hw);
     const maxZ = Math.floor(this.position.z + hw);
 
@@ -180,7 +197,7 @@ export class Player {
             if (chunks.isSolidBlock(bx, by, bz)) {
               if (
                 this.position.x + hw > bx && this.position.x - hw < bx + 1 &&
-                this.position.y + PLAYER_HEIGHT > by && this.position.y < by + 1 &&
+                this.position.y + height > by && this.position.y < by + 1 &&
                 this.position.z + hw > bz && this.position.z - hw < bz + 1
               ) {
                 ignoredBlocks.add(`${bx},${by},${bz}`);
@@ -192,9 +209,10 @@ export class Player {
     }
 
     // X axis
+    const prevX = this.position.x;
     this.position.x += this.velocity.x * dt;
-    if (this.checkCollision(chunks, ignoredBlocks)) {
-      this.position.x -= this.velocity.x * dt;
+    if (this.checkCollision(chunks, ignoredBlocks) || this.wouldSneakOffEdge(chunks)) {
+      this.position.x = prevX;
       this.velocity.x = 0;
     }
 
@@ -215,9 +233,10 @@ export class Player {
     }
 
     // Z axis
+    const prevZ = this.position.z;
     this.position.z += this.velocity.z * dt;
-    if (this.checkCollision(chunks, ignoredBlocks)) {
-      this.position.z -= this.velocity.z * dt;
+    if (this.checkCollision(chunks, ignoredBlocks) || this.wouldSneakOffEdge(chunks)) {
+      this.position.z = prevZ;
       this.velocity.z = 0;
     }
 
@@ -231,10 +250,11 @@ export class Player {
 
   public checkCollision(chunks: ChunkManager, ignoredBlocks?: Set<string>): boolean {
     const hw = this.halfWidth;
+    const height = this.height;
     const minX = Math.floor(this.position.x - hw);
     const maxX = Math.floor(this.position.x + hw);
     const minY = Math.floor(this.position.y);
-    const maxY = Math.floor(this.position.y + PLAYER_HEIGHT);
+    const maxY = Math.floor(this.position.y + height);
     const minZ = Math.floor(this.position.z - hw);
     const maxZ = Math.floor(this.position.z + hw);
 
@@ -251,7 +271,7 @@ export class Player {
           // AABB intersection
           if (
             this.position.x + hw > bx && this.position.x - hw < bx + 1 &&
-            this.position.y + PLAYER_HEIGHT > by && this.position.y < by + 1 &&
+            this.position.y + height > by && this.position.y < by + 1 &&
             this.position.z + hw > bz && this.position.z - hw < bz + 1
           ) {
             return true;
@@ -260,6 +280,21 @@ export class Player {
       }
     }
     return false;
+  }
+
+  private wouldSneakOffEdge(chunks: ChunkManager): boolean {
+    if (!this.isSneaking || !this.onGround || this.velocity.y > 0) return false;
+
+    const supportY = Math.floor(this.position.y - 0.08);
+    const inset = 0.03;
+    const samples: [number, number][] = [
+      [this.position.x - this.halfWidth + inset, this.position.z - this.halfWidth + inset],
+      [this.position.x + this.halfWidth - inset, this.position.z - this.halfWidth + inset],
+      [this.position.x - this.halfWidth + inset, this.position.z + this.halfWidth - inset],
+      [this.position.x + this.halfWidth - inset, this.position.z + this.halfWidth - inset],
+    ];
+
+    return !samples.some(([x, z]) => chunks.isSolidBlock(Math.floor(x), supportY, Math.floor(z)));
   }
 
   /**

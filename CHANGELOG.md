@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-20
+
+### Added
+- Add vanilla-style sneaking with Shift movement slowdown, lowered eye/collision height, third-person crouch posture, and edge protection while walking near block drops.
+
+### Changed
+- Reserve Ctrl for sprinting so Shift consistently controls sneak and dismount behavior.
+
 ## [0.4.0] - 2026-06-20
 
 ### Added

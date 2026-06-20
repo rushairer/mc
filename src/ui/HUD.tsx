@@ -374,6 +374,29 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
         </div>
       )}
 
+      {state.attackCooldownProgress < 0.99 && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          marginBottom: '6px',
+        }}>
+          <div style={{
+            width: '88px',
+            height: '6px',
+            border: '2px solid #1b160d',
+            background: '#17130c',
+            boxShadow: '0 2px 0 rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.12)',
+          }}>
+            <div style={{
+              width: `${Math.max(0, Math.min(1, state.attackCooldownProgress)) * 100}%`,
+              height: '100%',
+              background: 'linear-gradient(180deg, #f9f4df 0%, #d5c789 55%, #84713d 100%)',
+              boxShadow: state.attackCooldownProgress >= 0.9 ? '0 0 6px rgba(255,240,170,0.75)' : 'none',
+            }} />
+          </div>
+        </div>
+      )}
+
       {/* Item Name Pop-up */}
       {fadeName && (
         <div style={{

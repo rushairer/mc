@@ -62,6 +62,7 @@ const initialGameState: GameState = {
   portalProgress: 0,
   isBlocking: false,
   bowChargeProgress: 0,
+  attackCooldownProgress: 1,
   currentDimension: 0,
   bossName: null,
   bossHealth: 0,

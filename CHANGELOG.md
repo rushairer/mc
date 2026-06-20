@@ -6,6 +6,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-06-20
+
+### Added
+- Add weapon-aware melee attack cooldown with damage scaling, charged-hit critical gating, and HUD recovery feedback for close combat.
+
 ## [0.10.0] - 2026-06-20
 
 ### Added

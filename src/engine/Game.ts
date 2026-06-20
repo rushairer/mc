@@ -120,6 +120,7 @@ export interface GameState {
   portalProgress: number;
   isBlocking: boolean;
   bowChargeProgress: number;
+  attackCooldownProgress: number;
   lookedAtSignText?: string[] | null;
   currentDimension: number;
   bossName: string | null;
@@ -197,6 +198,8 @@ export class Game {
   private gameTime = 0.05; // 0=sunrise, 0.25=noon, 0.5=sunset, 0.75=midnight
   private damageFlashTimer = 0;
   private swordSwingTimer = 0;
+  private attackCooldownTimer = 0;
+  private attackCooldownDuration = 0.625;
   private isShieldBlocking = false;
   private bowChargeTimer = 0;
   private bowChargeActive = false;
@@ -835,10 +838,15 @@ export class Game {
       this.saveGame();
     }
 
+    const wasAttackCoolingDown = this.attackCooldownTimer > 0;
     this.breakCooldown = Math.max(0, this.breakCooldown - dt);
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
     this.damageFlashTimer = Math.max(0, this.damageFlashTimer - dt);
     this.swordSwingTimer = Math.max(0, this.swordSwingTimer - dt);
+    this.attackCooldownTimer = Math.max(0, this.attackCooldownTimer - dt);
+    if (wasAttackCoolingDown) {
+      this.notifyState();
+    }
     this.lockCooldown = Math.max(0, this.lockCooldown - dt);
     this.updateFishingBobber(dt);
 
@@ -1502,10 +1510,13 @@ export class Game {
     const baseAttackDamage = isHoldingTool
       ? (ItemRegistry.get(selectedItemId)?.damage ?? 1)
       : 1;
-    const attackDamage = baseAttackDamage + EnchantSystem.getSharpnessBonus(
+    const fullAttackDamage = baseAttackDamage + EnchantSystem.getSharpnessBonus(
       EnchantSystem.getLevel(selectedItemStack, 'sharpness')
     );
-    const isCriticalMelee = this.isCriticalMeleeAttack();
+    const attackCooldownDuration = this.getAttackCooldownDuration(selectedItemId);
+    const attackCooldownProgress = this.getAttackCooldownProgress();
+    const attackDamage = fullAttackDamage * this.getAttackCooldownDamageScale();
+    const isCriticalMelee = attackCooldownProgress >= 0.9 && this.isCriticalMeleeAttack();
     const meleeAttackDamage = isCriticalMelee ? attackDamage * 1.5 : attackDamage;
 
     if (!this.chatOpen && this.input.isMouseDown(0) && this.swordSwingTimer <= 0) {
@@ -1513,6 +1524,7 @@ export class Game {
         const targetVehicle = this.vehicles.getVehicleInRay(this.player.eyePosition, this.player.forward, 4.5);
         if (targetVehicle) {
           this.swordSwingTimer = 0.4;
+          this.startAttackCooldown(attackCooldownDuration);
           this.sound.playBlockBreak(5); // Planks/wood sound for vehicle destruction
           
           let itemId = 328;
@@ -1546,6 +1558,7 @@ export class Game {
 
       if (mobHit.hit) {
         this.swordSwingTimer = 0.4;
+        this.startAttackCooldown(attackCooldownDuration);
         this.sound.playMobHurt();
         // Spawn damage particles on mob
         if (mobHit.mob) {
@@ -1569,6 +1582,7 @@ export class Game {
         8.5
       )) {
         this.swordSwingTimer = 0.4;
+        this.startAttackCooldown(attackCooldownDuration);
         this.sound.playMobHurt();
         const dragon = this.enderDragon.dragon;
         if (dragon) {
@@ -2547,6 +2561,46 @@ export class Game {
     return !BlockRegistry.isFluid(feetBlock) && !BlockRegistry.isFluid(headBlock);
   }
 
+  private getAttackCooldownDuration(itemId: number): number {
+    const itemDef = ItemRegistry.get(itemId);
+    if (!itemDef || !ItemRegistry.isTool(itemId)) return 0.4;
+
+    switch (itemDef.toolType) {
+      case 'axe':
+        return 1.0;
+      case 'pickaxe':
+      case 'shovel':
+      case 'hoe':
+        return 0.8;
+      case 'spear':
+        return 0.9;
+      case 'sword':
+        return 0.625;
+      default:
+        return 0.625;
+    }
+  }
+
+  private getAttackCooldownProgress(): number {
+    if (this.attackCooldownDuration <= 0) return 1;
+    return THREE.MathUtils.clamp(
+      1 - this.attackCooldownTimer / this.attackCooldownDuration,
+      0,
+      1
+    );
+  }
+
+  private getAttackCooldownDamageScale(): number {
+    const progress = this.getAttackCooldownProgress();
+    return 0.2 + progress * progress * 0.8;
+  }
+
+  private startAttackCooldown(duration: number) {
+    this.attackCooldownDuration = Math.max(duration, 0.05);
+    this.attackCooldownTimer = this.attackCooldownDuration;
+    this.notifyState();
+  }
+
   private spawnCriticalHitParticles(x: number, y: number, z: number) {
     this.particles.spawnBlockBreak(x, y, z, 0xfff27a, 12);
     this.particles.spawnBlockBreak(x, y, z, 0xffffff, 6);
@@ -3318,6 +3372,7 @@ export class Game {
       portalProgress: Math.min(1.0, this.portalTimer / (this.gameMode === 'creative' ? 0.5 : 3.0)),
       isBlocking: this.isShieldBlocking,
       bowChargeProgress: this.bowChargeActive ? this.getBowPower(this.bowChargeTimer) : 0,
+      attackCooldownProgress: this.getAttackCooldownProgress(),
       lookedAtSignText: this.lookedAtSignText,
       currentDimension: this.chunks.currentDimension,
       bossName: dragonState.active ? 'Ender Dragon' : (activeWither ? 'Wither' : null),

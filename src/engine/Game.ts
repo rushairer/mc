@@ -19,7 +19,7 @@ import { ResourcePackSystem } from '../systems/ResourcePackSystem';
 import { DataPackSystem } from '../systems/DataPackSystem';
 import { SaveSystem, type SaveData } from '../systems/SaveSystem';
 import { RedstoneSystem, type RedstoneEntity } from '../systems/RedstoneSystem';
-import { ProjectileSystem } from '../systems/ProjectileSystem';
+import { ProjectileSystem, type ProjectileType } from '../systems/ProjectileSystem';
 import { CommandSystem } from '../systems/CommandSystem';
 import { VisualResolver } from '../visual/VisualResolver';
 import { Dimension, DimensionGenerator } from '../world/DimensionGenerator';
@@ -43,6 +43,9 @@ import { PacketType } from '../server/NetworkProtocol';
 const HONEY_BOTTLE_ID = 454;
 const GLASS_BOTTLE_ID = 374;
 const ENDER_EYE_ID = 381;
+const ENDER_PEARL_ID = 368;
+const SNOWBALL_ID = 332;
+const EGG_ID = 344;
 const END_PORTAL_ID = 119;
 const END_PORTAL_FRAME_ID = 120;
 const FILLED_MAP_ID = 358;
@@ -1211,10 +1214,11 @@ export class Game {
             });
           }
         },
-        (mobId, damage, knockback) => {
+        (mobId, damage, knockback, type) => {
           const mob = this.mobs.mobs.get(mobId);
           if (mob) {
-            mob.takeDamage(damage, knockback);
+            const projectileDamage = type === 'snowball' && mob.def.type === 'blaze' ? 3 : damage;
+            mob.takeDamage(projectileDamage, knockback);
             if (mob.def.type === 'zombie_pigman') {
               this.mobs.makePigmenAngry(mob.position, 32);
             }
@@ -1233,6 +1237,9 @@ export class Game {
         },
         (pos) => {
           this.handleEnderEyeUpdate(pos);
+        },
+        (type, pos, fromPlayer) => {
+          this.handleThrowableImpact(type, pos, fromPlayer);
         }
       );
       this.handleDragonProjectileHits();
@@ -2080,6 +2087,10 @@ export class Game {
         return;
       }
 
+      if (this.tryThrowHeldProjectile(heldItemId)) {
+        return;
+      }
+
       if (heldItemId === ENDER_EYE_ID && this.placeCooldown <= 0) {
         this.throwEnderEye();
       }
@@ -2553,6 +2564,37 @@ export class Game {
           }, 3000);
         }
       }
+    }
+  }
+
+  private handleThrowableImpact(type: ProjectileType, pos: THREE.Vector3, fromPlayer: boolean) {
+    if (type === 'snowball') {
+      this.particles.spawnBlockBreak(pos.x, pos.y, pos.z, 0xf4fbff, 12);
+      this.sound.playBlockBreak(80);
+      return;
+    }
+
+    if (type === 'egg') {
+      this.particles.spawnBlockBreak(pos.x, pos.y, pos.z, 0xf2ead6, 14);
+      this.sound.playBlockBreak(1);
+      if (fromPlayer && Math.random() < 0.125) {
+        const chick = this.mobs.spawnMob('chicken', pos.x, pos.y + 0.1, pos.z);
+        chick.isBaby = true;
+        chick.babyAge = 240;
+        chick.mesh.scale.setScalar(0.5);
+      }
+      return;
+    }
+
+    if (type === 'ender_pearl' && fromPlayer) {
+      this.particles.spawnBlockBreak(pos.x, pos.y, pos.z, 0x2aa884, 24);
+      this.sound.playBlockBreak(121);
+      this.player.position.copy(pos).add(new THREE.Vector3(0, 0.15, 0));
+      this.player.velocity.set(0, 0, 0);
+      this.player.resolveStuck(this.chunks);
+      this.damagePlayer(5, 'fall');
+      this.chunks.update(this.player.position.x, this.player.position.z);
+      this.notifyState();
     }
   }
 
@@ -3495,6 +3537,25 @@ export class Game {
     }
     this.placeCooldown = 0.5;
     this.notifyState();
+  }
+
+  private tryThrowHeldProjectile(heldItemId: number): boolean {
+    if (heldItemId !== SNOWBALL_ID && heldItemId !== EGG_ID && heldItemId !== ENDER_PEARL_ID) {
+      return false;
+    }
+
+    const type = heldItemId === SNOWBALL_ID ? 'snowball' : heldItemId === EGG_ID ? 'egg' : 'ender_pearl';
+    const origin = this.player.eyePosition.clone().add(this.player.forward.clone().multiplyScalar(0.35));
+    this.projectiles.shootThrowable(type, origin, this.player.forward, true);
+    this.sound.playLever();
+
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+
+    this.placeCooldown = type === 'ender_pearl' ? 0.8 : 0.35;
+    this.notifyState();
+    return true;
   }
 
   private handleEnderEyeDone(pos: THREE.Vector3, shattered: boolean) {

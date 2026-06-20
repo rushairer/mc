@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 
-export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'fireball' | 'potion' | 'shulker_bullet' | 'eye_of_ender' | 'wither_skull';
+export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'fireball' | 'potion' | 'shulker_bullet' | 'eye_of_ender' | 'wither_skull';
 
 export interface Projectile {
   id: number;
@@ -20,6 +20,8 @@ const ARROW_GRAVITY = -12;
 const ARROW_SPEED = 30;
 const ARROW_LIFETIME = 30; // seconds
 const ARROW_DAMAGE = 6; // base arrow damage
+const THROWABLE_SPEED = 16;
+const THROWABLE_LIFETIME = 8;
 
 export class ProjectileSystem {
   projectiles: Map<number, Projectile> = new Map();
@@ -66,6 +68,28 @@ export class ProjectileSystem {
     this.projectiles.set(potion.id, potion);
     this.addProjectileMesh(mesh);
     mesh.position.copy(potion.position);
+  }
+
+  shootThrowable(type: 'snowball' | 'egg' | 'ender_pearl', origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean) {
+    const mesh = this.createThrowableMesh(type);
+    const vel = direction.clone().normalize().multiplyScalar(THROWABLE_SPEED);
+    vel.y += 1.2;
+
+    const projectile: Projectile = {
+      id: this.nextId++,
+      type,
+      position: origin.clone(),
+      velocity: vel,
+      damage: 0,
+      fromPlayer,
+      lifetime: THROWABLE_LIFETIME,
+      mesh,
+      inGround: false,
+    };
+
+    this.projectiles.set(projectile.id, projectile);
+    this.addProjectileMesh(mesh);
+    mesh.position.copy(projectile.position);
   }
 
   shootArrow(
@@ -223,6 +247,18 @@ export class ProjectileSystem {
     return new THREE.Mesh(geo, mat);
   }
 
+  private createThrowableMesh(type: 'snowball' | 'egg' | 'ender_pearl'): THREE.Mesh {
+    const color = type === 'snowball'
+      ? 0xf4fbff
+      : type === 'egg'
+        ? 0xf2ead6
+        : 0x2aa884;
+    const emissive = type === 'ender_pearl' ? 0x073b35 : 0x000000;
+    const geo = new THREE.SphereGeometry(0.14, 8, 8);
+    const mat = new THREE.MeshLambertMaterial({ color, emissive });
+    return new THREE.Mesh(geo, mat);
+  }
+
   private createWitherSkullMesh(): THREE.Mesh {
     const geo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
     const mat = new THREE.MeshLambertMaterial({ color: 0x141414 });
@@ -233,14 +269,15 @@ export class ProjectileSystem {
     dt: number,
     getBlock: (x: number, y: number, z: number) => number,
     hitPlayer: (damage: number, knockback: THREE.Vector3, type: ProjectileType) => void,
-    hitMob: (mobId: number, damage: number, knockback: THREE.Vector3) => void,
+    hitMob: (mobId: number, damage: number, knockback: THREE.Vector3, type: ProjectileType) => void,
     getMobs: () => { id: number; position: THREE.Vector3; width: number; height: number }[],
     playerPos: THREE.Vector3,
     playerWidth: number,
     playerHeight: number,
     onPotionSplash?: (pos: THREE.Vector3, fromPlayer: boolean, damage: number) => void,
     onEnderEyeComplete?: (pos: THREE.Vector3, shattered: boolean) => void,
-    onEnderEyeUpdate?: (pos: THREE.Vector3) => void
+    onEnderEyeUpdate?: (pos: THREE.Vector3) => void,
+    onProjectileImpact?: (type: ProjectileType, pos: THREE.Vector3, fromPlayer: boolean) => void
   ) {
     const toRemove: number[] = [];
 
@@ -261,7 +298,7 @@ export class ProjectileSystem {
       if (proj.inGround) continue;
 
       // Apply gravity / Ender Eye movement
-      if (proj.type === 'arrow' || proj.type === 'potion') {
+      if (proj.type === 'arrow' || proj.type === 'potion' || proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl') {
         proj.velocity.y += ARROW_GRAVITY * dt;
       } else if (proj.type === 'eye_of_ender') {
         if (proj.lifetime > 1.5) {
@@ -297,6 +334,10 @@ export class ProjectileSystem {
               if (onPotionSplash) {
                 onPotionSplash(proj.position, proj.fromPlayer, proj.damage);
               }
+            } else if (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl') {
+              if (onProjectileImpact) {
+                onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
+              }
             } else {
               proj.inGround = true;
             }
@@ -306,7 +347,7 @@ export class ProjectileSystem {
         }
       }
 
-      if (hitBlock && proj.type === 'potion') {
+      if (hitBlock && (proj.type === 'potion' || proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl')) {
         toRemove.push(id);
         continue;
       }
@@ -330,6 +371,9 @@ export class ProjectileSystem {
             kb.y = 1;
             hitPlayer(proj.damage, kb, proj.type);
           }
+          if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl')) {
+            onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
+          }
           toRemove.push(id);
           continue;
         }
@@ -350,7 +394,10 @@ export class ProjectileSystem {
             } else {
               const kb = proj.velocity.clone().normalize().multiplyScalar(2);
               kb.y = 1;
-              hitMob(mob.id, proj.damage, kb);
+              hitMob(mob.id, proj.damage, kb, proj.type);
+            }
+            if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl')) {
+              onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
             }
             toRemove.push(id);
             hit = true;

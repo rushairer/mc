@@ -8,7 +8,7 @@
 
 ## 一、功能完成度总览
 
-**当前玩法完成度: ~89%** | 数据定义: 方块 1251 / 物品 722 | 展开状态: 方块 2484 / 物品 759 | 合成 351 + 熔炼 11 | 已实现生物: 24/60+ | 音效/着色器/粒子: 丰富 | 阶段 1 ✅ 完成 | 阶段 2 ✅ 完成 | 阶段 3 ✅ 完成 | 阶段 4 ✅ 完成 | 阶段 5 推进中
+**当前玩法完成度: ~90%** | 数据定义: 方块 1251 / 物品 722 | 展开状态: 方块 2484 / 物品 759 | 合成 351 + 熔炼 11 | 已实现生物: 24/60+ | 音效/着色器/粒子: 丰富 | 阶段 1 ✅ 完成 | 阶段 2 ✅ 完成 | 阶段 3 ✅ 完成 | 阶段 4 ✅ 完成 | 阶段 5 ✅ 完成
 
 > **统计口径**: 数据定义覆盖来自 `npm run audit:vanilla` / `npm run audit:items`，当前审计源为 Java 26.2 客户端资源；玩法完成度只统计已接入生成、交互、AI、UI 或系统逻辑的功能，避免把仅注册/可显示的数据项算作完整原版行为。
 
@@ -176,7 +176,7 @@
 | 5.2 | 多人同步：区块同步、实体同步、玩家同步 | ✅ | `src/server/` |
 | 5.3 | 聊天系统 | ✅ | `src/App.tsx`, `src/server/` |
 | 5.4 | 资源包系统（可替换纹理/模型/音效） | ✅ | `ResourcePackSystem.ts`, `TextureAtlas.ts`, `SoundSystem.ts`; 模型 manifest 字段已预留，渲染仍使用内建几何 |
-| 5.5 | 数据包系统（JSON 驱动的方块/物品/配方） | ⬜ | 重构注册系统 |
+| 5.5 | 数据包系统（JSON 驱动的方块/物品/配方） | ✅ | `DataPackSystem.ts`, `BlockRegistry.ts`, `ItemRegistry.ts`, `CraftingRecipes.ts`; 支持运行时 manifest 追加/覆盖方块、物品与合成配方 |
 | 5.6 | 游戏规则系统（`/gamerule`、难度设置） | ✅ | 新建 `GameRuleSystem.ts` |
 | 5.7 | 成就/进度系统 | ✅ | 新建 `AdvancementSystem.ts` |
 | 5.8 | 地图物品 + 书与笔 | ✅ | `ItemRegistry.ts`, 新建 `MapSystem.ts`, `MapUI.tsx`, `BookUI.tsx` |
@@ -227,6 +227,8 @@
 | 2026-06-20 | 阶段 5 | 5.6 - 5.7 游戏规则与成就系统：游戏难度、规则参数、L 键打开成就树、右上角 Toast 通知与 Web Audio 达成音效 | |
 | 2026-06-20 | 阶段 5 | 5.8 地图物品与书写系统：空地图生成成图、地图查看、书与笔编辑/签名、成书阅读与物品元数据存档 | |
 | 2026-06-20 | 阶段 5 | 5.4 资源包 manifest、纹理图集覆盖、外部音效覆盖、默认资源包与作者文档 | |
+| 2026-06-20 | 阶段 5 | 5.5 数据包 manifest、运行时方块/物品/配方覆盖、默认数据包与作者文档 | |
+| 2026-06-20 | **阶段 5 完成** | 全部 8 个任务完成 | |
 
 ---
 
@@ -260,6 +262,7 @@
 | `src/ui/BookUI.tsx` | 书与笔编辑/签名、成书阅读界面 |
 | `src/systems/SoundSystem.ts` | Web Audio 合成音效 |
 | `src/systems/ResourcePackSystem.ts` | 资源包 manifest 加载、活动资源包 URL 管理与资源路径解析 |
+| `src/systems/DataPackSystem.ts` | 数据包 manifest 加载、活动数据包 URL 管理与方块/物品/合成配方运行时注册 |
 | `src/ui/HUD.tsx` | 生命/饥饿/氧气/快捷栏 HUD |
 | `src/ui/InventoryUI.tsx` | 背包界面 |
 | `src/App.tsx` | React 根组件、菜单流程 |

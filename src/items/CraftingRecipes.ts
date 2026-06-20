@@ -1,13 +1,13 @@
 import rawRecipes from './data/recipes.json';
 
-interface RawRecipeIngredient {
+export interface RawRecipeIngredient {
   id: number;
   metadata?: number;
 }
 
-type RawRecipeCell = number | RawRecipeIngredient | (number | RawRecipeIngredient)[] | null;
+export type RawRecipeCell = number | RawRecipeIngredient | (number | RawRecipeIngredient)[] | null;
 
-interface RawRecipe {
+export interface RawRecipe {
   inShape?: RawRecipeCell[][];
   ingredients?: RawRecipeCell[];
   result: {
@@ -18,6 +18,12 @@ interface RawRecipe {
 }
 
 const recipesData = rawRecipes as Record<string, RawRecipe[]>;
+
+export function addCraftingRecipes(recipes: Record<string, RawRecipe[]>) {
+  for (const [resultId, entries] of Object.entries(recipes)) {
+    recipesData[resultId] = [...(recipesData[resultId] ?? []), ...entries];
+  }
+}
 
 // Helper to check if a player item (packed ID) matches a recipe ingredient
 function matchIngredient(playerItem: number, recipeItem: RawRecipeCell): boolean {

@@ -1,4 +1,5 @@
 import type { BlockDef } from '../types';
+import type { DataPackBlock } from '../systems/DataPackTypes';
 import rawBlocks from '../items/data/blocks.json';
 
 const blocks: Map<number, BlockDef> = new Map();
@@ -178,6 +179,29 @@ if (!blocks.has(0)) {
 }
 
 export const BlockRegistry = {
+  registerDataPackBlocks(dataBlocks: DataPackBlock[]) {
+    for (const block of dataBlocks) {
+      const blockDef: BlockDef = {
+        id: block.id,
+        officialId: block.officialId ?? `minecraft:${block.name}`,
+        name: block.name,
+        textureKey: block.textureKey,
+        textureTop: block.textureTop,
+        textureBottom: block.textureBottom,
+        transparent: block.transparent ?? false,
+        solid: block.solid ?? true,
+        hardness: block.hardness ?? 1,
+        toolCategory: block.toolCategory,
+        dropsId: block.dropsId,
+        luminance: block.luminance ?? 0,
+        baseId: block.baseId ?? block.id,
+        metadata: block.metadata ?? 0,
+        displayName: block.displayName,
+      };
+      registerBlock(blockDef);
+    }
+  },
+
   get(id: number): BlockDef | undefined {
     return blocks.get(id) ?? blocks.get(id & 0x3FF);
   },

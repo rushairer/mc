@@ -1,5 +1,6 @@
 import { BlockRegistry } from '../world/BlockRegistry';
 import rawItems from './data/items.json';
+import type { DataPackItem } from '../systems/DataPackTypes';
 
 export interface ItemDef {
   id: number; // internal runtime ID: legacy packed ID or generated bridge ID
@@ -267,6 +268,33 @@ for (const item of rawItems) {
 }
 
 export const ItemRegistry = {
+  registerDataPackItems(dataItems: DataPackItem[]) {
+    for (const item of dataItems) {
+      const itemDef: ItemDef = {
+        id: item.id,
+        officialId: item.officialId ?? `minecraft:${item.name}`,
+        baseId: item.baseId ?? (item.id & 0x3FF),
+        metadata: item.metadata ?? (item.id >> 10),
+        name: item.name,
+        displayName: item.displayName ?? item.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        maxStackSize: item.maxStackSize ?? 64,
+        category: item.category ?? 'material',
+        toolType: item.toolType,
+        toolMaterial: item.toolMaterial,
+        durability: item.durability,
+        damage: item.damage,
+        miningSpeed: item.miningSpeed,
+        hungerRestore: item.hungerRestore,
+        saturationRestore: item.saturationRestore,
+        armorSlot: item.armorSlot,
+        armorDefense: item.armorDefense,
+        placeBlockId: item.placeBlockId,
+      };
+      items.set(itemDef.id, itemDef);
+      itemsByOfficialId.set(itemDef.officialId, itemDef);
+    }
+  },
+
   get(id: number): ItemDef | undefined {
     // Check direct item registration
     const it = items.get(id);

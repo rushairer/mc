@@ -16,6 +16,7 @@ import { FluidSystem } from '../systems/FluidSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
 import { SoundSystem } from '../systems/SoundSystem';
 import { ResourcePackSystem } from '../systems/ResourcePackSystem';
+import { DataPackSystem } from '../systems/DataPackSystem';
 import { SaveSystem, type SaveData } from '../systems/SaveSystem';
 import { RedstoneSystem, type RedstoneEntity } from '../systems/RedstoneSystem';
 import { ProjectileSystem } from '../systems/ProjectileSystem';
@@ -205,6 +206,7 @@ export class Game {
     this.particles = new ParticleSystem(this.renderer.scene);
     this.fluids = new FluidSystem();
     this.sound = new SoundSystem();
+    this.loadDataPack();
     this.loadResourcePack();
     this.weather = new WeatherSystem(this.renderer.scene, this.sound);
     this.redstone = new RedstoneSystem();
@@ -281,6 +283,13 @@ export class Game {
       this.sound.applyResourcePack(pack),
     ]);
     console.info(`Resource pack loaded: ${pack.manifest.pack.name}`);
+  }
+
+  private async loadDataPack() {
+    const pack = await DataPackSystem.loadActivePack();
+    if (!pack) return;
+    DataPackSystem.apply(pack);
+    console.info(`Data pack loaded: ${pack.manifest.pack.name}`);
   }
 
   private handleContainerClick = () => {
@@ -2278,7 +2287,7 @@ export class Game {
       { pos: this.player.position, type: 'player' as const, width: 0.6 }
     ];
     for (const mob of this.mobs.mobs.values()) {
-      entitiesList.push({ pos: mob.position, type: 'mob' as const, width: mob.def.width });
+      entitiesList.push({ pos: mob.position, type: 'mob' as const, width: mob.width });
     }
     for (const item of this.droppedItems.items.values()) {
       entitiesList.push({ pos: item.position, type: 'item' as const, width: 0.3 });
@@ -4033,8 +4042,8 @@ export class Game {
         const mobA = mobs[i];
         const mobB = mobs[j];
 
-        const hwA = mobA.def.width / 2;
-        const hwB = mobB.def.width / 2;
+        const hwA = mobA.width / 2;
+        const hwB = mobB.width / 2;
         const dx = mobA.position.x - mobB.position.x;
         const dz = mobA.position.z - mobB.position.z;
         const distSq = dx * dx + dz * dz;
@@ -4042,8 +4051,8 @@ export class Game {
 
         if (distSq < minDist * minDist) {
           // Check Y overlap
-          const yOverlap = (mobA.position.y < mobB.position.y + mobB.def.height) &&
-                           (mobA.position.y + mobA.def.height > mobB.position.y);
+          const yOverlap = (mobA.position.y < mobB.position.y + mobB.height) &&
+                           (mobA.position.y + mobA.height > mobB.position.y);
           if (yOverlap) {
             let dist = Math.sqrt(distSq);
             let localDx = dx;
@@ -4083,7 +4092,7 @@ export class Game {
     const playerHeight = 1.8; // PLAYER_HEIGHT
 
     for (const mob of mobs) {
-      const hwM = mob.def.width / 2;
+      const hwM = mob.width / 2;
       const dx = player.position.x - mob.position.x;
       const dz = player.position.z - mob.position.z;
       const distSq = dx * dx + dz * dz;
@@ -4091,7 +4100,7 @@ export class Game {
 
       if (distSq < minDist * minDist) {
         // Check Y overlap
-        const yOverlap = (player.position.y < mob.position.y + mob.def.height) &&
+        const yOverlap = (player.position.y < mob.position.y + mob.height) &&
                          (player.position.y + playerHeight > mob.position.y);
         if (yOverlap) {
           let dist = Math.sqrt(distSq);

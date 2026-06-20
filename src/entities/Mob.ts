@@ -85,7 +85,6 @@ export class Mob {
   isAngry = false; // For zombie_pigman neutrality pack anger
   angerTimer = 0;
   villagerProfession: VillagerProfession = 'farmer';
-  halfWidth: number;
   air = MOB_MAX_AIR;
   drownTimer = 0;
   magmaCubeJumpTimer = 0;
@@ -146,7 +145,6 @@ export class Mob {
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.health = type === 'magma_cube' ? (size === 3 ? 16 : (size === 2 ? 4 : 1)) : this.def.health;
     this.villagerProfession = profession;
-    this.halfWidth = this.width / 2;
     this.mesh = this.createMesh();
     this.mesh.traverse(child => {
       if (child instanceof THREE.Mesh) {
@@ -1868,7 +1866,7 @@ export class Mob {
       return;
     }
 
-    const hw = this.halfWidth;
+    const hw = this.width / 2;
 
     // Detect doors/trapdoors the mob is already colliding with to ignore them during this physics step (allows walking out)
     const ignoredBlocks = new Set<string>();
@@ -1943,7 +1941,7 @@ export class Mob {
     isSolidBlock?: (x: number, y: number, z: number) => boolean,
     ignoredBlocks?: Set<string>
   ): boolean {
-    const hw = this.halfWidth;
+    const hw = this.width / 2;
     const minX = Math.floor(this.position.x - hw);
     const maxX = Math.floor(this.position.x + hw);
     const minY = Math.floor(this.position.y);

@@ -7,6 +7,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 
 ### Added
+- Add runtime data pack loading for declarative block, item, and crafting recipe overrides, with a default data pack manifest and authoring documentation.
 - Add resource pack manifests with runtime texture-atlas overrides, external sound overrides, a default pack manifest, and resource-pack authoring documentation.
 - Add filled maps with biome/height sampling plus readable map UI, and add writable/signed book item metadata with an in-game book editor for the stage 5.8 gameplay slice.
 - Add deterministic woodland mansions and pillager outposts with loot rooms, tower rewards, and pillager guards for the stage 3.9 gameplay slice.
@@ -16,5 +17,6 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Add End outer-island chorus trees, simplified End Cities, loot chests, Shulkers, Shulker bullets, and Levitation status effects for the stage 3.4 gameplay slice.
 
 ### Fixed
+- Use each mob instance's current width and height for entity collision checks so resized mobs collide with their actual body dimensions.
 - Keep default overworld spawning and legacy spawn saves away from stale or submerged terrain near sea level.
 - Refresh fluid flow immediately after block removal and keep full/source fluid surfaces at full voxel height.

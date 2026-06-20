@@ -1,0 +1,10 @@
+{
+  "pack": {
+    "name": "Default Data",
+    "description": "Built-in block, item, and recipe registries.",
+    "version": "0.2.0"
+  },
+  "blocks": [],
+  "items": [],
+  "recipes": {}
+}

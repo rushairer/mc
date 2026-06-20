@@ -6,6 +6,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-06-20
+
+### Added
+- Add sword sweep attacks that damage and knock back nearby forward-facing mobs after charged grounded sword hits, with sweep particle feedback.
+
 ## [0.11.0] - 2026-06-20
 
 ### Added

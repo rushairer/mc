@@ -1573,6 +1573,13 @@ export class Game {
               mobHit.mob.position.y + mobHit.mob.def.height * 0.75,
               mobHit.mob.position.z
             );
+          } else {
+            this.trySweepAttack(
+              mobHit.mob,
+              attackDamage,
+              attackCooldownProgress,
+              isHoldingSword
+            );
           }
         }
       } else if (this.chunks.currentDimension === Dimension.End && this.enderDragon.attack(
@@ -2599,6 +2606,58 @@ export class Game {
     this.attackCooldownDuration = Math.max(duration, 0.05);
     this.attackCooldownTimer = this.attackCooldownDuration;
     this.notifyState();
+  }
+
+  private trySweepAttack(
+    primaryMob: Mob,
+    attackDamage: number,
+    attackCooldownProgress: number,
+    isHoldingSword: boolean
+  ) {
+    if (!isHoldingSword || attackCooldownProgress < 0.9) return;
+    if (!this.player.onGround || this.player.flying || this.player.isSneaking) return;
+    if (this.input.isKeyDown('control')) return;
+
+    const forward = this.player.forward.clone().setY(0);
+    if (forward.lengthSq() === 0) return;
+    forward.normalize();
+
+    const playerPos = this.player.position;
+    const sweepDamage = Math.max(1, attackDamage * 0.35);
+    let sweptCount = 0;
+
+    for (const mob of this.mobs.mobs.values()) {
+      if (mob === primaryMob || mob.health <= 0) continue;
+
+      const toMob = mob.position.clone().sub(playerPos);
+      const verticalDelta = Math.abs(toMob.y);
+      toMob.y = 0;
+      const horizontalDistance = toMob.length();
+      if (horizontalDistance < 0.01 || horizontalDistance > 3.25 || verticalDelta > 1.5) continue;
+
+      const directionToMob = toMob.clone().normalize();
+      if (directionToMob.dot(forward) < 0.2) continue;
+      if (mob.position.distanceTo(primaryMob.position) > 2.6) continue;
+
+      const knockback = forward.clone().multiplyScalar(2.4);
+      knockback.y = 0.35;
+      mob.takeDamage(sweepDamage, knockback);
+      if (mob.def.type === 'zombie_pigman') {
+        this.mobs.makePigmenAngry(mob.position, 32);
+      }
+      this.particles.spawnDamageParticles(
+        mob.position.x,
+        mob.position.y + mob.def.height * 0.5,
+        mob.position.z,
+        3
+      );
+      sweptCount++;
+    }
+
+    if (sweptCount > 0) {
+      const center = playerPos.clone().addScaledVector(forward, 1.4);
+      this.particles.spawnBlockBreak(center.x, center.y + 1.0, center.z, 0xf5efd7, 10);
+    }
   }
 
   private spawnCriticalHitParticles(x: number, y: number, z: number) {

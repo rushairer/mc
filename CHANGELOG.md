@@ -6,6 +6,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-20
+
+### Added
+- Add firework rocket launching with support for legacy and modern rocket item IDs, accelerating flight, timed or impact explosions, colorful particles, area damage, and survival-mode item consumption.
+
 ## [0.8.0] - 2026-06-20
 
 ### Added

@@ -52,6 +52,8 @@ const RAW_SALMON_ID = (1 << 10) | 349;
 const CLOWNFISH_ID = (2 << 10) | 349;
 const PUFFERFISH_ID = (3 << 10) | 349;
 const TRIDENT_ID = 20275;
+const FIREWORK_ROCKET_ID = 401;
+const MODERN_FIREWORK_ROCKET_ID = 20096;
 const END_PORTAL_ID = 119;
 const END_PORTAL_FRAME_ID = 120;
 const FILLED_MAP_ID = 358;
@@ -2761,6 +2763,43 @@ export class Game {
       this.sound.playBlockPlace(42);
       this.droppedItems.spawnItem(TRIDENT_ID, 1, pos.clone(), new THREE.Vector3(0, 0.2, 0), 0.4);
     }
+
+    if (type === 'firework_rocket') {
+      this.handleFireworkExplosion(pos, fromPlayer);
+    }
+  }
+
+  private handleFireworkExplosion(pos: THREE.Vector3, fromPlayer: boolean) {
+    const colors = [0xff3333, 0x33ccff, 0xffee55, 0x66ff66, 0xff66cc];
+    for (const color of colors) {
+      this.particles.spawnBlockBreak(
+        pos.x + (Math.random() - 0.5) * 0.8,
+        pos.y + (Math.random() - 0.5) * 0.8,
+        pos.z + (Math.random() - 0.5) * 0.8,
+        color,
+        14
+      );
+    }
+    this.sound.playExplosion();
+
+    const radius = 3.0;
+    if (this.gameMode !== 'creative' && this.player.position.distanceTo(pos) <= radius) {
+      const kb = new THREE.Vector3().subVectors(this.player.position, pos).normalize().multiplyScalar(1.5);
+      kb.y = 1;
+      this.damagePlayer(5, 'mob', kb);
+    }
+
+    for (const mob of this.mobs.mobs.values()) {
+      const dist = mob.position.distanceTo(pos);
+      if (dist > radius) continue;
+      const falloff = 1 - dist / radius;
+      const kb = new THREE.Vector3().subVectors(mob.position, pos).normalize().multiplyScalar(2);
+      kb.y = 1;
+      mob.takeDamage(Math.max(1, Math.ceil(7 * falloff)), kb);
+      if (fromPlayer && mob.def.type === 'zombie_pigman') {
+        this.mobs.makePigmenAngry(mob.position, 32);
+      }
+    }
   }
 
   private handleCreeperExplosion(mob: Mob) {
@@ -3705,8 +3744,29 @@ export class Game {
   }
 
   private tryThrowHeldProjectile(heldItemId: number): boolean {
-    if (heldItemId !== SNOWBALL_ID && heldItemId !== EGG_ID && heldItemId !== ENDER_PEARL_ID && heldItemId !== TRIDENT_ID) {
+    if (
+      heldItemId !== SNOWBALL_ID &&
+      heldItemId !== EGG_ID &&
+      heldItemId !== ENDER_PEARL_ID &&
+      heldItemId !== TRIDENT_ID &&
+      heldItemId !== FIREWORK_ROCKET_ID &&
+      heldItemId !== MODERN_FIREWORK_ROCKET_ID
+    ) {
       return false;
+    }
+
+    if (heldItemId === FIREWORK_ROCKET_ID || heldItemId === MODERN_FIREWORK_ROCKET_ID) {
+      const origin = this.player.eyePosition.clone().add(this.player.forward.clone().multiplyScalar(0.45));
+      this.projectiles.shootFireworkRocket(origin, this.player.forward, true);
+      this.sound.playLever();
+
+      if (this.gameMode !== 'creative') {
+        this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+      }
+
+      this.placeCooldown = 0.4;
+      this.notifyState();
+      return true;
     }
 
     if (heldItemId === TRIDENT_ID) {

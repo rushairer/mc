@@ -10,18 +10,22 @@
     "generate:visual-map": "node scripts/generate-visual-map.mjs",
     "generate:assets": "node scripts/generate-procedural-assets.mjs",
     "audit:items": "node scripts/audit-items-world.mjs",
-    "audit:vanilla": "node scripts/audit-vanilla-coverage.mjs"
+    "audit:vanilla": "node scripts/audit-vanilla-coverage.mjs",
+    "server": "tsx src/server/standalone.ts"
   },
   "dependencies": {
+    "@types/ws": "^8.18.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "three": "^0.158.0"
+    "three": "^0.158.0",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/three": "^0.158.0",
     "@vitejs/plugin-react": "^4.1.0",
+    "tsx": "^4.22.4",
     "typescript": "^5.2.0",
     "vite": "^4.5.0"
   }

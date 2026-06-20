@@ -27,12 +27,14 @@ export class ChunkManager {
   private transparentMaterial: THREE.MeshLambertMaterial;
   timeOfDay = 0.25;
   private clock = new THREE.Clock();
+  game: any;
 
-  constructor(scene: THREE.Scene, atlas: TextureAtlas, seed: number) {
+  constructor(scene: THREE.Scene, atlas: TextureAtlas, seed: number, game?: any) {
     this.scene = scene;
     this.atlas = atlas;
     this.worldGen = new WorldGen(seed);
     this.dimensionGen = new DimensionGenerator(seed);
+    this.game = game;
 
     this.material = new THREE.MeshLambertMaterial({
       map: atlas.getTexture(),
@@ -349,22 +351,29 @@ export class ChunkManager {
 
   private loadChunk(cx: number, cz: number) {
     const chunk = new Chunk(cx, cz);
-    if (this.currentDimension === Dimension.Overworld) {
-      this.worldGen.generateChunk(chunk);
-    } else if (this.currentDimension === Dimension.Nether) {
-      this.dimensionGen.generateNetherChunk(chunk);
-    } else {
-      this.dimensionGen.generateEndChunk(chunk);
-    }
     this.chunks.set(ChunkManager.key(cx, cz), chunk);
-    this.computeChunkLight(chunk);
-    this.rebuildChunkMesh(chunk);
 
-    // Mark loaded neighbors as dirty so they rebuild and cull boundary faces
-    this.markDirty(cx - 1, cz);
-    this.markDirty(cx + 1, cz);
-    this.markDirty(cx, cz - 1);
-    this.markDirty(cx, cz + 1);
+    if (this.game && this.game.network && this.game.network.isConnected) {
+      // Request from server
+      this.game.network.send('C2S_CHUNK_REQUEST', { cx, cz });
+    } else {
+      // Local fallback (original behavior)
+      if (this.currentDimension === Dimension.Overworld) {
+        this.worldGen.generateChunk(chunk);
+      } else if (this.currentDimension === Dimension.Nether) {
+        this.dimensionGen.generateNetherChunk(chunk);
+      } else {
+        this.dimensionGen.generateEndChunk(chunk);
+      }
+      this.computeChunkLight(chunk);
+      this.rebuildChunkMesh(chunk);
+
+      // Mark loaded neighbors as dirty so they rebuild and cull boundary faces
+      this.markDirty(cx - 1, cz);
+      this.markDirty(cx + 1, cz);
+      this.markDirty(cx, cz - 1);
+      this.markDirty(cx, cz + 1);
+    }
   }
 
   private computeChunkLight(chunk: Chunk) {

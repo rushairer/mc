@@ -32,6 +32,8 @@ import { EnderDragonSystem } from '../systems/EnderDragonSystem';
 import { CHUNK_SIZE } from '../constants';
 import type { Enchantment } from '../systems/EnchantSystem';
 import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '../types';
+import { NetworkClient } from '../server/NetworkClient';
+import { PacketType } from '../server/NetworkProtocol';
 
 const HONEY_BOTTLE_ID = 454;
 const GLASS_BOTTLE_ID = 374;
@@ -98,6 +100,7 @@ export class Game {
   private atlas: TextureAtlas;
   chunks: ChunkManager;
   player: Player;
+  network: NetworkClient;
   inventory: Inventory;
   private survival: SurvivalSystem;
   private mobs: MobSystem;
@@ -169,7 +172,8 @@ export class Game {
     this.renderer = new Renderer(container);
     this.input = new InputManager(this.renderer.renderer.domElement);
     this.atlas = new TextureAtlas();
-    this.chunks = new ChunkManager(this.renderer.scene, this.atlas, this.seed);
+    this.network = new NetworkClient(this);
+    this.chunks = new ChunkManager(this.renderer.scene, this.atlas, this.seed, this);
     this.clock = new THREE.Clock();
     this.inventory = new Inventory();
     this.survival = new SurvivalSystem();
@@ -505,6 +509,11 @@ export class Game {
         this.player.flying = false;
       }
     }
+
+    if (!this.network.isConnected) {
+      this.network.connect('mock://local', 'Player', this.gameMode, this.activeSlot);
+    }
+
     this.openUI = 'none';
     // Don't request lock here — the loading screen may still be covering the canvas.
     // App.tsx will request pointer lock after the loading screen is hidden.
@@ -923,171 +932,175 @@ export class Game {
       this.portalTimer = Math.max(0, this.portalTimer - dt * 2.0);
     }
 
-    // Mob system
-    const isNight = this.isNight();
-    const heldItem = this.inventory.getSlot(this.player.selectedSlot)?.id || 0;
-    const playerLookDir = new THREE.Vector3();
-    this.renderer.camera.getWorldDirection(playerLookDir);
+    const isNetworkConnected = this.network && this.network.isConnected;
 
-    this.mobs.update(dt, this.player.position, isNight,
-      (x, y, z) => this.chunks.getBlock(x, y, z),
-      (damage, knockback, attacker) => {
-        this.damagePlayer(damage, 'mob', knockback);
-        if (attacker && attacker.def.type === 'wither_skeleton') {
-          this.potionEffects.apply({ id: 'wither', level: 1, duration: 10.0 }, (amount) => {
-            this.player.health = Math.min(20, this.player.health + amount);
-          });
+    if (!isNetworkConnected) {
+      // Mob system
+      const isNight = this.isNight();
+      const heldItem = this.inventory.getSlot(this.player.selectedSlot)?.id || 0;
+      const playerLookDir = new THREE.Vector3();
+      this.renderer.camera.getWorldDirection(playerLookDir);
+
+      this.mobs.update(dt, this.player.position, isNight,
+        (x, y, z) => this.chunks.getBlock(x, y, z),
+        (damage, knockback, attacker) => {
+          this.damagePlayer(damage, 'mob', knockback);
+          if (attacker && attacker.def.type === 'wither_skeleton') {
+            this.potionEffects.apply({ id: 'wither', level: 1, duration: 10.0 }, (amount) => {
+              this.player.health = Math.min(20, this.player.health + amount);
+            });
+          }
+        },
+        (x, y, z) => this.chunks.isSolidBlock(x, y, z),
+        this.gameMode,
+        (mob) => {
+          this.handleMobDeath(mob);
+        },
+        (origin, direction, type) => {
+          if (type === 'fireball') {
+            this.projectiles.shootFireball(origin, direction, false, 4);
+          } else if (type === 'potion') {
+            this.projectiles.shootPotion(origin, direction, false, 2);
+          } else if (type === 'shulker_bullet') {
+            this.projectiles.shootShulkerBullet(origin, direction, false, 4);
+          } else if (type === 'wither_skull') {
+            this.projectiles.shootWitherSkull(origin, direction, false, 8);
+          } else {
+            this.projectiles.shootArrow(origin, direction, false, 4);
+          }
+        },
+        this.chunks.currentDimension,
+        this.chunks.getWorldGen(),
+        heldItem,
+        (type, pos) => {
+          this.particles.spawnBlockBreak(pos.x, pos.y + 0.5, pos.z, 0xff5555, 20);
+          this.xp.spawnXP(1 + Math.floor(Math.random() * 7), pos.clone().add(new THREE.Vector3(0, 0.5, 0)));
+          this.sound.playXP();
+        },
+        playerLookDir,
+        this.chunks.dimensionGen.endGenerator
+      );
+
+      this.enderDragon.update(
+        dt,
+        this.chunks.currentDimension,
+        this.player.position,
+        (x, y, z) => this.chunks.getBlock(x, y, z),
+        (damage, knockback) => this.damagePlayer(damage, 'mob', knockback),
+        (dragon) => this.handleEnderDragonDeath(dragon.position)
+      );
+
+      // Check creeper explosions, fuse sound, play ambient mob sounds, and death sounds
+      for (const [id, mob] of this.mobs.mobs) {
+        if (mob.health <= 0 && !mob.deathSoundPlayed) {
+          mob.deathSoundPlayed = true;
+          this.sound.playMobDeath();
         }
-      },
-      (x, y, z) => this.chunks.isSolidBlock(x, y, z),
-      this.gameMode,
-      (mob) => {
-        this.handleMobDeath(mob);
-      },
-      (origin, direction, type) => {
-        if (type === 'fireball') {
-          this.projectiles.shootFireball(origin, direction, false, 4);
-        } else if (type === 'potion') {
-          this.projectiles.shootPotion(origin, direction, false, 2);
-        } else if (type === 'shulker_bullet') {
-          this.projectiles.shootShulkerBullet(origin, direction, false, 4);
-        } else if (type === 'wither_skull') {
-          this.projectiles.shootWitherSkull(origin, direction, false, 8);
-        } else {
-          this.projectiles.shootArrow(origin, direction, false, 4);
-        }
-      },
-      this.chunks.currentDimension,
-      this.chunks.getWorldGen(),
-      heldItem,
-      (type, pos) => {
-        this.particles.spawnBlockBreak(pos.x, pos.y + 0.5, pos.z, 0xff5555, 20);
-        this.xp.spawnXP(1 + Math.floor(Math.random() * 7), pos.clone().add(new THREE.Vector3(0, 0.5, 0)));
-        this.sound.playXP();
-      },
-      playerLookDir,
-      this.chunks.dimensionGen.endGenerator
-    );
-
-    this.enderDragon.update(
-      dt,
-      this.chunks.currentDimension,
-      this.player.position,
-      (x, y, z) => this.chunks.getBlock(x, y, z),
-      (damage, knockback) => this.damagePlayer(damage, 'mob', knockback),
-      (dragon) => this.handleEnderDragonDeath(dragon.position)
-    );
-
-    // Check creeper explosions, fuse sound, play ambient mob sounds, and death sounds
-    for (const [id, mob] of this.mobs.mobs) {
-      if (mob.health <= 0 && !mob.deathSoundPlayed) {
-        mob.deathSoundPlayed = true;
-        this.sound.playMobDeath();
-      }
-      if (mob.def.type === 'creeper') {
-        if (mob.fuseTimer >= 0 && mob.fuseTimer < dt) {
-          this.sound.playCreeperFuse();
-        }
-        if (mob.fuseTimer >= 1.5) {
-          this.handleCreeperExplosion(mob);
-          this.mobs.removeMob(id);
-          continue;
-        }
-      }
-
-      if (Math.random() < 0.002 * (dt / 0.016)) {
-        this.sound.playMobAmbient(mob.def.type);
-      }
-    }
-
-    // Update TNT fuses
-    for (let i = this.tntFuses.length - 1; i >= 0; i--) {
-      this.tntFuses[i].timer -= dt;
-      if (this.tntFuses[i].timer <= 0) {
-        const tnt = this.tntFuses[i];
-        this.createExplosion(tnt.position.x, tnt.position.y, tnt.position.z, 4);
-        this.tntFuses.splice(i, 1);
-      }
-    }
-
-    // Update vehicles
-    const vehicleKeys = {
-      w: this.chatOpen ? false : this.input.isKeyDown('w'),
-      s: this.chatOpen ? false : this.input.isKeyDown('s'),
-      a: this.chatOpen ? false : this.input.isKeyDown('a'),
-      d: this.chatOpen ? false : this.input.isKeyDown('d'),
-    };
-    this.vehicles.update(
-      dt,
-      (x, y, z) => this.chunks.getBlock(x, y, z),
-      (x, y, z) => this.chunks.isSolidBlock(x, y, z),
-      vehicleKeys
-    );
-
-    // Update projectiles
-    this.projectiles.update(
-      dt,
-      (x, y, z) => this.chunks.getBlock(x, y, z),
-      (damage, knockback, type) => {
-        this.damagePlayer(damage, 'mob', knockback);
-        if (type === 'shulker_bullet') {
-          this.potionEffects.apply({ id: 'levitation', level: 1, duration: 8 }, () => {});
-        }
-        if (type === 'wither_skull') {
-          this.potionEffects.apply({ id: 'wither', level: 1, duration: 10.0 }, (amount) => {
-            this.damagePlayer(amount, 'wither');
-          });
-        }
-      },
-      (mobId, damage, knockback) => {
-        const mob = this.mobs.mobs.get(mobId);
-        if (mob) {
-          mob.takeDamage(damage, knockback);
-          if (mob.def.type === 'zombie_pigman') {
-            this.mobs.makePigmenAngry(mob.position, 32);
+        if (mob.def.type === 'creeper') {
+          if (mob.fuseTimer >= 0 && mob.fuseTimer < dt) {
+            this.sound.playCreeperFuse();
+          }
+          if (mob.fuseTimer >= 1.5) {
+            this.handleCreeperExplosion(mob);
+            this.mobs.removeMob(id);
+            continue;
           }
         }
-      },
-      () => Array.from(this.mobs.mobs.values()).map(m => ({
-        id: m.id, position: m.position, width: m.width, height: m.height
-      })),
-      this.player.position,
-      0.6, 1.8,
-      (pos, fromPlayer, damage) => {
-        this.handlePotionSplash(pos, fromPlayer, damage);
-      },
-      (pos, shattered) => {
-        this.handleEnderEyeDone(pos, shattered);
-      },
-      (pos) => {
-        this.handleEnderEyeUpdate(pos);
+
+        if (Math.random() < 0.002 * (dt / 0.016)) {
+          this.sound.playMobAmbient(mob.def.type);
+        }
       }
-    );
-    this.handleDragonProjectileHits();
 
-    // Update dropped items
-    this.droppedItems.update(
-      dt,
-      this.player.position,
-      (x, y, z) => this.chunks.isSolidBlock(x, y, z),
-      this.inventory,
-      () => this.sound.playPickup(),
-      () => this.notifyState()
-    );
+      // Update TNT fuses
+      for (let i = this.tntFuses.length - 1; i >= 0; i--) {
+        this.tntFuses[i].timer -= dt;
+        if (this.tntFuses[i].timer <= 0) {
+          const tnt = this.tntFuses[i];
+          this.createExplosion(tnt.position.x, tnt.position.y, tnt.position.z, 4);
+          this.tntFuses.splice(i, 1);
+        }
+      }
 
-    this.xp.update(
-      dt,
-      this.player.position,
-      (x, y, z) => this.chunks.isSolidBlock(x, y, z),
-      () => {
-        this.sound.playXP();
-        this.particles.spawnXP(this.player.position.x, this.player.position.y + 0.5, this.player.position.z, 8);
-      },
-      () => this.notifyState()
-    );
+      // Update vehicles
+      const vehicleKeys = {
+        w: this.chatOpen ? false : this.input.isKeyDown('w'),
+        s: this.chatOpen ? false : this.input.isKeyDown('s'),
+        a: this.chatOpen ? false : this.input.isKeyDown('a'),
+        d: this.chatOpen ? false : this.input.isKeyDown('d'),
+      };
+      this.vehicles.update(
+        dt,
+        (x, y, z) => this.chunks.getBlock(x, y, z),
+        (x, y, z) => this.chunks.isSolidBlock(x, y, z),
+        vehicleKeys
+      );
 
-    // Resolve collisions (mob-mob, player-mob)
-    this.resolveCollisions();
+      // Update projectiles
+      this.projectiles.update(
+        dt,
+        (x, y, z) => this.chunks.getBlock(x, y, z),
+        (damage, knockback, type) => {
+          this.damagePlayer(damage, 'mob', knockback);
+          if (type === 'shulker_bullet') {
+            this.potionEffects.apply({ id: 'levitation', level: 1, duration: 8 }, () => {});
+          }
+          if (type === 'wither_skull') {
+            this.potionEffects.apply({ id: 'wither', level: 1, duration: 10.0 }, (amount) => {
+              this.damagePlayer(amount, 'wither');
+            });
+          }
+        },
+        (mobId, damage, knockback) => {
+          const mob = this.mobs.mobs.get(mobId);
+          if (mob) {
+            mob.takeDamage(damage, knockback);
+            if (mob.def.type === 'zombie_pigman') {
+              this.mobs.makePigmenAngry(mob.position, 32);
+            }
+          }
+        },
+        () => Array.from(this.mobs.mobs.values()).map(m => ({
+          id: m.id, position: m.position, width: m.width, height: m.height
+        })),
+        this.player.position,
+        0.6, 1.8,
+        (pos, fromPlayer, damage) => {
+          this.handlePotionSplash(pos, fromPlayer, damage);
+        },
+        (pos, shattered) => {
+          this.handleEnderEyeDone(pos, shattered);
+        },
+        (pos) => {
+          this.handleEnderEyeUpdate(pos);
+        }
+      );
+      this.handleDragonProjectileHits();
+
+      // Update dropped items
+      this.droppedItems.update(
+        dt,
+        this.player.position,
+        (x, y, z) => this.chunks.isSolidBlock(x, y, z),
+        this.inventory,
+        () => this.sound.playPickup(),
+        () => this.notifyState()
+      );
+
+      this.xp.update(
+        dt,
+        this.player.position,
+        (x, y, z) => this.chunks.isSolidBlock(x, y, z),
+        () => {
+          this.sound.playXP();
+          this.particles.spawnXP(this.player.position.x, this.player.position.y + 0.5, this.player.position.z, 8);
+        },
+        () => this.notifyState()
+      );
+
+      // Resolve collisions (mob-mob, player-mob)
+      this.resolveCollisions();
+    }
 
     if (!this.chatOpen && (this.input.isMouseDown(0) || this.input.isMouseDown(2))) {
       this.player.startSwing();
@@ -1123,6 +1136,18 @@ export class Game {
     if (!this.chatOpen && this.input.isKeyDown('q')) {
       this.dropHandItem();
       this.input.keys.delete('q');
+    }
+
+    if (isNetworkConnected) {
+      this.network.send(PacketType.C2S_PLAYER_MOVE, {
+        x: this.player.position.x,
+        y: this.player.position.y,
+        z: this.player.position.z,
+        yaw: this.player.yaw,
+        pitch: this.player.pitch,
+        flying: this.player.flying
+      });
+      this.network.update(dt);
     }
 
     // Chunk loading
@@ -1401,7 +1426,6 @@ export class Game {
         if (this.breakProgress >= 1) {
           const blockId = this.chunks.getBlock(bp.x, bp.y, bp.z);
           const blockDef = BlockRegistry.get(blockId);
-          const isDoor = this.isDoorBlock(blockId);
 
           // Spawn break particles
           if (blockDef) {
@@ -1409,71 +1433,77 @@ export class Game {
             this.particles.spawnBlockBreak(bp.x, bp.y, bp.z, blockColor);
           }
 
-          if (this.gameMode !== 'creative') {
-            // Drop item in 3D world
-            const dropPos = new THREE.Vector3(bp.x + 0.5, bp.y + 0.3, bp.z + 0.5);
-            const velocity = new THREE.Vector3(
-              (Math.random() - 0.5) * 1.5,
-              1.5 + Math.random() * 1.5,
-              (Math.random() - 0.5) * 1.5
-            );
-            if (isDoor) {
-              this.droppedItems.spawnItem(37, 1, dropPos, velocity, 0.5);
-            } else {
-              const dropId = ItemRegistry.getBlockDropItem(blockId);
-              if (dropId > 0) {
-                this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
+          if (isNetworkConnected) {
+            this.network.send(PacketType.C2S_BLOCK_BREAK, { x: bp.x, y: bp.y, z: bp.z });
+          } else {
+            const isDoor = this.isDoorBlock(blockId);
+
+            if (this.gameMode !== 'creative') {
+              // Drop item in 3D world
+              const dropPos = new THREE.Vector3(bp.x + 0.5, bp.y + 0.3, bp.z + 0.5);
+              const velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 1.5,
+                1.5 + Math.random() * 1.5,
+                (Math.random() - 0.5) * 1.5
+              );
+              if (isDoor) {
+                this.droppedItems.spawnItem(37, 1, dropPos, velocity, 0.5);
+              } else {
+                const dropId = ItemRegistry.getBlockDropItem(blockId);
+                if (dropId > 0) {
+                  this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
+                }
+              }
+
+              // Damage tool
+              const heldItemStack = this.inventory.getSlot(this.player.selectedSlot);
+              if (heldItemStack && ItemRegistry.isTool(heldItemStack.id)) {
+                this.inventory.damageTool(this.player.selectedSlot);
               }
             }
 
-            // Damage tool
-            const heldItemStack = this.inventory.getSlot(this.player.selectedSlot);
-            if (heldItemStack && ItemRegistry.isTool(heldItemStack.id)) {
-              this.inventory.damageTool(this.player.selectedSlot);
-            }
-          }
+            // Fluid check: if breaking a block next to water, trigger flow
+            this.checkFluidAdjacency(bp.x, bp.y, bp.z);
 
-          // Fluid check: if breaking a block next to water, trigger flow
-          this.checkFluidAdjacency(bp.x, bp.y, bp.z);
-
-          if (isDoor) {
-            this.breakDoor(bp.x, bp.y, bp.z);
-          } else {
-            const meta = this.chunks.getBlockMeta(bp.x, bp.y, bp.z);
-            if (meta?.inventory) {
-              for (const slot of meta.inventory) {
-                if (slot && slot.count > 0) {
-                  const dropPos = new THREE.Vector3(bp.x + 0.5, bp.y + 0.5, bp.z + 0.5);
+            if (isDoor) {
+              this.breakDoor(bp.x, bp.y, bp.z);
+            } else {
+              const meta = this.chunks.getBlockMeta(bp.x, bp.y, bp.z);
+              if (meta?.inventory) {
+                for (const slot of meta.inventory) {
+                  if (slot && slot.count > 0) {
+                    const dropPos = new THREE.Vector3(bp.x + 0.5, bp.y + 0.5, bp.z + 0.5);
+                    const velocity = new THREE.Vector3(
+                      (Math.random() - 0.5) * 1.5,
+                      1.5 + Math.random() * 1.5,
+                      (Math.random() - 0.5) * 1.5
+                    );
+                    this.droppedItems.spawnItem(slot.id, slot.count, dropPos, velocity, 0.5);
+                  }
+                }
+              }
+              this.chunks.setBlock(bp.x, bp.y, bp.z, 0);
+              
+              // If breaking the block under a Nether Wart (115), break the Nether Wart above it too
+              const aboveId = this.chunks.getBlock(bp.x, bp.y + 1, bp.z) & 0x3FF;
+              if (aboveId === 115) {
+                const dropId = ItemRegistry.getBlockDropItem(115) ?? 372;
+                this.chunks.setBlock(bp.x, bp.y + 1, bp.z, 0);
+                if (this.gameMode !== 'creative') {
+                  const dropPos = new THREE.Vector3(bp.x + 0.5, bp.y + 1.5, bp.z + 0.5);
                   const velocity = new THREE.Vector3(
                     (Math.random() - 0.5) * 1.5,
                     1.5 + Math.random() * 1.5,
                     (Math.random() - 0.5) * 1.5
                   );
-                  this.droppedItems.spawnItem(slot.id, slot.count, dropPos, velocity, 0.5);
+                  this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
                 }
               }
-            }
-            this.chunks.setBlock(bp.x, bp.y, bp.z, 0);
-            
-            // If breaking the block under a Nether Wart (115), break the Nether Wart above it too
-            const aboveId = this.chunks.getBlock(bp.x, bp.y + 1, bp.z) & 0x3FF;
-            if (aboveId === 115) {
-              const dropId = ItemRegistry.getBlockDropItem(115) ?? 372;
-              this.chunks.setBlock(bp.x, bp.y + 1, bp.z, 0);
-              if (this.gameMode !== 'creative') {
-                const dropPos = new THREE.Vector3(bp.x + 0.5, bp.y + 1.5, bp.z + 0.5);
-                const velocity = new THREE.Vector3(
-                  (Math.random() - 0.5) * 1.5,
-                  1.5 + Math.random() * 1.5,
-                  (Math.random() - 0.5) * 1.5
-                );
-                this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
-              }
-            }
 
-            this.redstone.unregister(bp.x, bp.y, bp.z);
-            this.chunks.setBlockMeta(bp.x, bp.y, bp.z, null);
-            this.redstone.observeBlockChange(bp.x, bp.y, bp.z);
+              this.redstone.unregister(bp.x, bp.y, bp.z);
+              this.chunks.setBlockMeta(bp.x, bp.y, bp.z, null);
+              this.redstone.observeBlockChange(bp.x, bp.y, bp.z);
+            }
           }
           this.sound.playBlockBreak(blockId);
           this.breakProgress = 0;
@@ -1805,67 +1835,82 @@ export class Game {
                 const blockDef = BlockRegistry.get(blockId) || BlockRegistry.getByName(itemDef?.name ?? '');
                 const isSlab = blockDef && blockDef.name.includes('slab') && !blockDef.name.includes('double');
 
-                if (isDoorItem || (blockDef && blockDef.name.endsWith('door') && !blockDef.name.includes('trapdoor'))) {
-                  const doorBlockId = blockDef?.id ?? 64; // Fallback to wooden door block (64)
-                  const placed = this.placeDoor(placePos.x, placePos.y, placePos.z, doorBlockId);
-                  if (placed) {
-                    this.sound.playBlockPlace(doorBlockId);
-                    if (this.gameMode !== 'creative') {
-                      this.inventory.removeFromSlot(this.player.selectedSlot);
-                    }
-                    this.placeCooldown = 0.25;
-                  }
-                } else if (isSlab) {
-                  // Slab placement
-                  const existingBlock = this.chunks.getBlock(placePos.x, placePos.y, placePos.z);
-                  if (existingBlock === blockId) {
-                    // Stacking: convert to double slab block
-                    let doubleBlockId = blockId;
-                    const doubleName = blockDef.name.startsWith('double_') ? blockDef.name : `double_${blockDef.name}`;
-                    const doubleDef = BlockRegistry.getByName(doubleName) || BlockRegistry.getByName(`minecraft:${doubleName}`);
-                    if (doubleDef) {
-                      doubleBlockId = doubleDef.id;
-                    }
-                    this.chunks.setBlock(placePos.x, placePos.y, placePos.z, doubleBlockId);
-                    this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, null);
-                    this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
-                  } else {
-                    this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
-                    const slabHalf = faceNormal.y > 0 ? 'bottom' : 'top';
-                    this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, { slabHalf });
-                    this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
-                  }
+                if (isNetworkConnected) {
+                  this.network.send(PacketType.C2S_BLOCK_PLACE, {
+                    x: placePos.x,
+                    y: placePos.y,
+                    z: placePos.z,
+                    blockId: blockId,
+                    facing: facing
+                  });
                   this.sound.playBlockPlace(blockId);
                   if (this.gameMode !== 'creative') {
                     this.inventory.removeFromSlot(this.player.selectedSlot);
                   }
                   this.placeCooldown = 0.25;
                 } else {
-                  this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
-                  this.sound.playBlockPlace(blockId);
-                  if (this.gameMode !== 'creative') {
-                    this.inventory.removeFromSlot(this.player.selectedSlot);
-                  }
-                  this.placeCooldown = 0.25;
+                  if (isDoorItem || (blockDef && blockDef.name.endsWith('door') && !blockDef.name.includes('trapdoor'))) {
+                    const doorBlockId = blockDef?.id ?? 64; // Fallback to wooden door block (64)
+                    const placed = this.placeDoor(placePos.x, placePos.y, placePos.z, doorBlockId);
+                    if (placed) {
+                      this.sound.playBlockPlace(doorBlockId);
+                      if (this.gameMode !== 'creative') {
+                        this.inventory.removeFromSlot(this.player.selectedSlot);
+                      }
+                      this.placeCooldown = 0.25;
+                    }
+                  } else if (isSlab) {
+                    // Slab placement
+                    const existingBlock = this.chunks.getBlock(placePos.x, placePos.y, placePos.z);
+                    if (existingBlock === blockId) {
+                      // Stacking: convert to double slab block
+                      let doubleBlockId = blockId;
+                      const doubleName = blockDef.name.startsWith('double_') ? blockDef.name : `double_${blockDef.name}`;
+                      const doubleDef = BlockRegistry.getByName(doubleName) || BlockRegistry.getByName(`minecraft:${doubleName}`);
+                      if (doubleDef) {
+                        doubleBlockId = doubleDef.id;
+                      }
+                      this.chunks.setBlock(placePos.x, placePos.y, placePos.z, doubleBlockId);
+                      this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, null);
+                      this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
+                    } else {
+                      this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
+                      const slabHalf = faceNormal.y > 0 ? 'bottom' : 'top';
+                      this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, { slabHalf });
+                      this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
+                    }
+                    this.sound.playBlockPlace(blockId);
+                    if (this.gameMode !== 'creative') {
+                      this.inventory.removeFromSlot(this.player.selectedSlot);
+                    }
+                    this.placeCooldown = 0.25;
+                  } else {
+                    this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
+                    this.sound.playBlockPlace(blockId);
+                    if (this.gameMode !== 'creative') {
+                      this.inventory.removeFromSlot(this.player.selectedSlot);
+                    }
+                    this.placeCooldown = 0.25;
 
-                  // Register redstone component if it is one
-                  this.setPlacedBlockMetadata(placePos.x, placePos.y, placePos.z, blockId, facing);
-                  this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
+                    // Register redstone component if it is one
+                    this.setPlacedBlockMetadata(placePos.x, placePos.y, placePos.z, blockId, facing);
+                    this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
 
-                  if ((blockId & 0x3FF) === 144 && ((blockId >> 10) & 0xF) === 1) {
-                    this.checkWitherSpawning(placePos.x, placePos.y, placePos.z);
-                  }
+                    if ((blockId & 0x3FF) === 144 && ((blockId >> 10) & 0xF) === 1) {
+                      this.checkWitherSpawning(placePos.x, placePos.y, placePos.z);
+                    }
 
-                  // If placing water/lava, start fluid simulation
-                  if (BlockRegistry.isFluid(blockId)) {
-                    this.fluids.addSource(placePos.x, placePos.y, placePos.z, blockId);
-                  }
+                    // If placing water/lava, start fluid simulation
+                    if (BlockRegistry.isFluid(blockId)) {
+                      this.fluids.addSource(placePos.x, placePos.y, placePos.z, blockId);
+                    }
 
-                  if (blockId === 63 || blockId === 68) {
-                    this.editingSignPos = placePos.clone();
-                    this.openUI = 'sign_edit';
-                    document.exitPointerLock();
-                    this.notifyState();
+                    if (blockId === 63 || blockId === 68) {
+                      this.editingSignPos = placePos.clone();
+                      this.openUI = 'sign_edit';
+                      document.exitPointerLock();
+                      this.notifyState();
+                    }
                   }
                 }
               }
@@ -2135,7 +2180,7 @@ export class Game {
     this.particles.update(dt);
 
     // Weather
-    this.weather.update(dt, this.player.position, isNight);
+    this.weather.update(dt, this.player.position, this.isNight());
 
     // Ambient sounds
     this.ambientTimer += dt;
@@ -2497,15 +2542,19 @@ export class Game {
   submitChat(message: string) {
     const trimmed = message.trim();
     if (trimmed) {
-      if (trimmed.startsWith('/')) {
-        const result = this.commands.execute(trimmed);
-        this.chatMessages.push(result.message);
+      if (this.network && this.network.isConnected) {
+        this.network.send(PacketType.C2S_CHAT, { text: trimmed });
       } else {
-        this.chatMessages.push(trimmed);
-      }
-      // Keep only last 50 messages
-      if (this.chatMessages.length > 50) {
-        this.chatMessages = this.chatMessages.slice(-50);
+        if (trimmed.startsWith('/')) {
+          const result = this.commands.execute(trimmed);
+          this.chatMessages.push(result.message);
+        } else {
+          this.chatMessages.push(`<Player> ${trimmed}`);
+        }
+        // Keep only last 50 messages
+        if (this.chatMessages.length > 50) {
+          this.chatMessages = this.chatMessages.slice(-50);
+        }
       }
     }
     this.chatOpen = false;
@@ -2513,6 +2562,14 @@ export class Game {
     this.input.mouseButtons.clear();
     this.input.requestLock();
     this.lockCooldown = 0.5;
+    this.notifyState();
+  }
+
+  addChatMessage(formatted: string) {
+    this.chatMessages.push(formatted);
+    if (this.chatMessages.length > 50) {
+      this.chatMessages = this.chatMessages.slice(-50);
+    }
     this.notifyState();
   }
 

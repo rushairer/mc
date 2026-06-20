@@ -69,7 +69,7 @@ export const App: React.FC = () => {
   const gameRef = useRef<Game | null>(null);
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const [showDebug, setShowDebug] = useState(true);
-  const [menuState, setMenuState] = useState<'welcome' | 'controls' | 'select_world' | 'select_mode' | 'none'>('welcome');
+  const [menuState, setMenuState] = useState<'welcome' | 'controls' | 'select_world' | 'select_mode' | 'multiplayer_menu' | 'none'>('welcome');
   const [selectedMode, setSelectedMode] = useState<'survival' | 'creative'>('survival');
   const [selectedSlot, setSelectedSlot] = useState<string>('world_1');
   const [splashText, setSplashText] = useState('Also try Terraria!');
@@ -82,6 +82,8 @@ export const App: React.FC = () => {
     world_2: { hasSave: false },
     world_3: { hasSave: false },
   });
+  const [serverUrl, setServerUrl] = useState('ws://localhost:8080');
+  const [multiplayerUsername, setMultiplayerUsername] = useState(() => 'Player_' + Math.floor(Math.random() * 9000 + 1000));
 
   const loadWorldSaves = useCallback(async () => {
     const slots = ['world_1', 'world_2', 'world_3'];
@@ -235,6 +237,39 @@ export const App: React.FC = () => {
       });
     }
   }, [selectedMode, selectedSlot]);
+
+  const handleJoinServer = useCallback(async () => {
+    setLoadingWorld(true);
+    setMenuState('none');
+    // Yield a frame for React to render the loading screen
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    if (gameRef.current) {
+      gameRef.current.dispose();
+    }
+
+    if (containerRef.current) {
+      const game = new Game(containerRef.current, 'survival', 'multiplayer');
+      gameRef.current = game;
+      game.onStateChange((state) => {
+        setGameState(state);
+      });
+      
+      // Enforce a minimum display time for the load screen
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      game.network.connect(serverUrl, multiplayerUsername, 'survival', 'multiplayer');
+      game.startGame('survival');
+      
+      setMenuState('none');
+      setLoadingWorld(false);
+
+      // Request pointer lock after React has painted the frame
+      requestAnimationFrame(() => {
+        game.requestPointerLock();
+      });
+    }
+  }, [serverUrl, multiplayerUsername]);
 
   const handleResumeGame = useCallback(() => {
     setMenuState('none');
@@ -722,6 +757,10 @@ export const App: React.FC = () => {
                 {t('singleplayer')}
               </button>
 
+              <button className="minecraft-btn" onClick={() => setMenuState('multiplayer_menu')}>
+                Multiplayer / 多人游戏
+              </button>
+
               <button className="minecraft-btn" onClick={() => setMenuState('controls')}>
                 {t('controlsInstructions')}
               </button>
@@ -755,6 +794,74 @@ export const App: React.FC = () => {
                   <option value="zh-TW" style={{ background: '#333', color: '#fff' }}>語言：繁體中文</option>
                 </select>
               </div>
+            </div>
+          )}
+
+          {/* MULTIPLAYER SERVER SELECT MENU */}
+          {menuState === 'multiplayer_menu' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '400px' }}>
+              <h2 style={{
+                color: '#fff',
+                fontSize: '24px',
+                marginBottom: '20px',
+                textShadow: '2px 2px 0 #000'
+              }}>
+                Play Multiplayer / 多人游戏
+              </h2>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', width: '100%', marginBottom: '24px', boxSizing: 'border-box' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                  <label style={{ color: '#aaa', fontSize: '14px', marginBottom: '6px', textAlign: 'left', textShadow: '1px 1px 0 #000' }}>
+                    Server Address / 服务器地址:
+                  </label>
+                  <input
+                    type="text"
+                    value={serverUrl}
+                    onChange={(e) => setServerUrl(e.target.value)}
+                    style={{
+                      padding: '10px',
+                      background: '#111',
+                      border: '2px solid #555',
+                      color: '#fff',
+                      fontFamily: '"Courier New", monospace',
+                      fontSize: '16px',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      width: '100%'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                  <label style={{ color: '#aaa', fontSize: '14px', marginBottom: '6px', textAlign: 'left', textShadow: '1px 1px 0 #000' }}>
+                    Username / 玩家名称:
+                  </label>
+                  <input
+                    type="text"
+                    value={multiplayerUsername}
+                    onChange={(e) => setMultiplayerUsername(e.target.value)}
+                    style={{
+                      padding: '10px',
+                      background: '#111',
+                      border: '2px solid #555',
+                      color: '#fff',
+                      fontFamily: '"Courier New", monospace',
+                      fontSize: '16px',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      width: '100%'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <button className="minecraft-btn" onClick={handleJoinServer}>
+                Join Server / 加入服务器
+              </button>
+
+              <button className="minecraft-btn" style={{ background: '#444' }} onClick={() => setMenuState('welcome')}>
+                Cancel / 取消
+              </button>
             </div>
           )}
 

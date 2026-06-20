@@ -6,6 +6,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-20
+
+### Added
+- Add falling melee critical hits with 1.5x damage against mobs and the Ender Dragon, gated by non-flying/non-riding/non-fluid airborne conditions and highlighted with critical hit particles.
+
 ## [0.9.0] - 2026-06-20
 
 ### Added

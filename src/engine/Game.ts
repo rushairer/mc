@@ -1505,6 +1505,8 @@ export class Game {
     const attackDamage = baseAttackDamage + EnchantSystem.getSharpnessBonus(
       EnchantSystem.getLevel(selectedItemStack, 'sharpness')
     );
+    const isCriticalMelee = this.isCriticalMeleeAttack();
+    const meleeAttackDamage = isCriticalMelee ? attackDamage * 1.5 : attackDamage;
 
     if (!this.chatOpen && this.input.isMouseDown(0) && this.swordSwingTimer <= 0) {
         // First: try to attack vehicle
@@ -1538,7 +1540,7 @@ export class Game {
       const mobHit = this.mobs.playerAttackMob(
         this.player.eyePosition,
         dir,
-        attackDamage,
+        meleeAttackDamage,
         4.5
       );
 
@@ -1552,11 +1554,18 @@ export class Game {
             mobHit.mob.position.y + mobHit.mob.def.height * 0.5,
             mobHit.mob.position.z
           );
+          if (isCriticalMelee) {
+            this.spawnCriticalHitParticles(
+              mobHit.mob.position.x,
+              mobHit.mob.position.y + mobHit.mob.def.height * 0.75,
+              mobHit.mob.position.z
+            );
+          }
         }
       } else if (this.chunks.currentDimension === Dimension.End && this.enderDragon.attack(
         this.player.eyePosition,
         dir,
-        attackDamage,
+        meleeAttackDamage,
         8.5
       )) {
         this.swordSwingTimer = 0.4;
@@ -1569,6 +1578,9 @@ export class Game {
             dragon.position.z,
             12
           );
+          if (isCriticalMelee) {
+            this.spawnCriticalHitParticles(dragon.position.x, dragon.position.y + 2.0, dragon.position.z);
+          }
         }
       } else if (this.targetBlock) {
         // Break block
@@ -2515,6 +2527,29 @@ export class Game {
       this.sound.playMobHurt();
       this.projectiles.removeProjectile(id);
     }
+  }
+
+  private isCriticalMeleeAttack(): boolean {
+    if (this.gameMode === 'creative') return false;
+    if (this.player.onGround || this.player.flying || this.riddenMob || this.riddenVehicle) return false;
+    if (this.player.velocity.y >= -0.1) return false;
+
+    const feetBlock = this.chunks.getBlock(
+      Math.floor(this.player.position.x),
+      Math.floor(this.player.position.y),
+      Math.floor(this.player.position.z)
+    );
+    const headBlock = this.chunks.getBlock(
+      Math.floor(this.player.eyePosition.x),
+      Math.floor(this.player.eyePosition.y),
+      Math.floor(this.player.eyePosition.z)
+    );
+    return !BlockRegistry.isFluid(feetBlock) && !BlockRegistry.isFluid(headBlock);
+  }
+
+  private spawnCriticalHitParticles(x: number, y: number, z: number) {
+    this.particles.spawnBlockBreak(x, y, z, 0xfff27a, 12);
+    this.particles.spawnBlockBreak(x, y, z, 0xffffff, 6);
   }
 
   private tryUseFishingRod(heldItemId: number): boolean {

@@ -680,6 +680,7 @@ export class Game {
     // Game time (day/night cycle)
     this.gameTime = (this.gameTime + dt / DAY_LENGTH) % 1;
     const lightningOpacity = this.weather.getLightningFlashOpacity();
+    this.renderer.setDimension(this.chunks.currentDimension);
     this.renderer.setTimeOfDay(this.gameTime, lightningOpacity);
     this.chunks.setLightningOffset(lightningOpacity);
     this.chunks.timeOfDay = this.gameTime;

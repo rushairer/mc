@@ -61,6 +61,7 @@ const initialGameState: GameState = {
   activePotionEffects: [],
   portalProgress: 0,
   isBlocking: false,
+  bowChargeProgress: 0,
   currentDimension: 0,
   bossName: null,
   bossHealth: 0,

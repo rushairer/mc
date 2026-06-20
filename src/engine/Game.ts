@@ -51,6 +51,11 @@ const WRITTEN_BOOK_ID = 387;
 const EMPTY_MAP_ID = 395;
 const SHIELD_ID = 442;
 const SHIELD_MAX_DURABILITY = 336;
+const BOW_FULL_CHARGE_TIME = 1.0;
+const BOW_MIN_RELEASE_TIME = 0.15;
+const BOW_BASE_DAMAGE = 6;
+const BOW_MIN_SPEED = 7;
+const BOW_MAX_SPEED = 30;
 const WORLD_SPAWN_X = 8;
 const WORLD_SPAWN_Z = 8;
 
@@ -94,6 +99,7 @@ export interface GameState {
   activePotionEffects: ActivePotionEffect[];
   portalProgress: number;
   isBlocking: boolean;
+  bowChargeProgress: number;
   lookedAtSignText?: string[] | null;
   currentDimension: number;
   bossName: string | null;
@@ -172,6 +178,8 @@ export class Game {
   private damageFlashTimer = 0;
   private swordSwingTimer = 0;
   private isShieldBlocking = false;
+  private bowChargeTimer = 0;
+  private bowChargeActive = false;
   private eatingTimer = 0;
   private chewSoundTimer = 0;
   private stepTimer = 0;
@@ -879,6 +887,10 @@ export class Game {
 
     // UI open: skip game input
     if (this.openUI !== 'none') {
+      if (this.bowChargeActive) {
+        this.bowChargeActive = false;
+        this.bowChargeTimer = 0;
+      }
       this.particles.update(dt);
       this.mobs.update(dt, this.player.position, this.isNight(),
         (x, y, z) => this.chunks.getBlock(x, y, z),
@@ -1451,6 +1463,8 @@ export class Game {
       this.notifyState();
     }
 
+    const bowInputActive = this.updateBowCharging(dt);
+
     // ─── Left click: attack mobs OR break blocks ───
     const selectedItemStack = this.inventory.getSlot(this.player.selectedSlot);
     const selectedItemId = selectedItemStack?.id ?? 0;
@@ -1465,24 +1479,6 @@ export class Game {
     );
 
     if (!this.chatOpen && this.input.isMouseDown(0) && this.swordSwingTimer <= 0) {
-      // Bow shooting
-      const heldItemId = this.inventory.getSlot(this.player.selectedSlot)?.id;
-      const heldItemDef = heldItemId ? ItemRegistry.get(heldItemId) : null;
-      if (heldItemDef && heldItemDef.name === 'bow') { // Bow
-        const arrowDef = ItemRegistry.getByName('arrow');
-        const arrowId = arrowDef?.id ?? 262;
-        const hasArrow = this.inventory.countItem(arrowId) > 0 || this.gameMode === 'creative';
-        if (hasArrow) {
-          if (this.gameMode !== 'creative') this.inventory.removeItem(arrowId, 1);
-          this.projectiles.shootArrow(
-            this.player.eyePosition.clone(),
-            this.player.forward.clone(),
-            true
-          );
-          this.sound.playHurt(); // reuse as bow sound
-          this.swordSwingTimer = 0.9; // bow cooldown
-        }
-      } else {
         // First: try to attack vehicle
         const targetVehicle = this.vehicles.getVehicleInRay(this.player.eyePosition, this.player.forward, 4.5);
         if (targetVehicle) {
@@ -1666,7 +1662,6 @@ export class Game {
         }
         this.lastFrameWasBreaking = true;
       }
-      } // close else (not bow)
     } else {
       this.breakProgress = 0;
       this.breakingBlockPos = null;
@@ -1674,7 +1669,7 @@ export class Game {
     }
 
     // ─── Right click: place block / interact ───
-    if (!this.chatOpen && this.input.isMouseDown(2) && this.placeCooldown <= 0) {
+    if (!bowInputActive && !this.chatOpen && this.input.isMouseDown(2) && this.placeCooldown <= 0) {
       // Vehicle mount/ride check
       const targetVehicle = this.vehicles.getVehicleInRay(this.player.eyePosition, this.player.forward, 4.5);
       if (targetVehicle && !this.riddenVehicle && !this.riddenMob) {
@@ -2729,12 +2724,92 @@ export class Game {
   }
 
   private updateShieldBlockingState() {
-    const wantsToBlock = !this.chatOpen && this.openUI === 'none' && this.input.isMouseDown(2);
+    const selected = this.inventory.getSlot(this.player.selectedSlot);
+    const wantsToBlock = !this.bowChargeActive &&
+      !this.isBowStack(selected) &&
+      !this.chatOpen &&
+      this.openUI === 'none' &&
+      this.input.isMouseDown(2);
     const nextBlocking = wantsToBlock && this.getActiveShieldSlot() !== null;
     if (nextBlocking !== this.isShieldBlocking) {
       this.isShieldBlocking = nextBlocking;
       this.notifyState();
     }
+  }
+
+  private isBowStack(stack: ItemStack | null | undefined): stack is ItemStack {
+    if (!stack) return false;
+    const def = ItemRegistry.get(stack.id);
+    return def?.name === 'bow' || def?.officialId === 'minecraft:bow';
+  }
+
+  private getArrowItemId(): number {
+    return ItemRegistry.getByName('arrow')?.id ?? 262;
+  }
+
+  private canUseBow(): boolean {
+    return this.gameMode === 'creative' || this.inventory.countItem(this.getArrowItemId()) > 0;
+  }
+
+  private getBowPower(chargeTime: number): number {
+    const normalized = Math.min(1, Math.max(0, chargeTime / BOW_FULL_CHARGE_TIME));
+    return Math.min(1, (normalized * normalized + normalized * 2) / 3);
+  }
+
+  private updateBowCharging(dt: number): boolean {
+    const selected = this.inventory.getSlot(this.player.selectedSlot);
+    const rightDown = !this.chatOpen && this.openUI === 'none' && this.input.isMouseDown(2);
+    const canKeepUsingBow = rightDown && this.isBowStack(selected);
+
+    if (!canKeepUsingBow) {
+      if (this.bowChargeActive) {
+        this.releaseBowCharge(this.isBowStack(selected));
+        return true;
+      }
+      return false;
+    }
+
+    if (!this.bowChargeActive) {
+      if (!this.canUseBow()) return false;
+      this.bowChargeActive = true;
+      this.bowChargeTimer = 0;
+      this.breakProgress = 0;
+      this.breakingBlockPos = null;
+      this.lastFrameWasBreaking = false;
+      this.notifyState();
+      return true;
+    }
+
+    this.bowChargeTimer += dt;
+    return true;
+  }
+
+  private releaseBowCharge(stillHoldingBow: boolean) {
+    const chargeTime = this.bowChargeTimer;
+    this.bowChargeActive = false;
+    this.bowChargeTimer = 0;
+
+    if (!stillHoldingBow || chargeTime < BOW_MIN_RELEASE_TIME || !this.canUseBow()) {
+      this.notifyState();
+      return;
+    }
+
+    const power = this.getBowPower(chargeTime);
+    const arrowId = this.getArrowItemId();
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeItem(arrowId, 1);
+    }
+
+    this.projectiles.shootArrow(
+      this.player.eyePosition.clone(),
+      this.player.forward.clone(),
+      true,
+      Math.max(1, BOW_BASE_DAMAGE * power),
+      THREE.MathUtils.lerp(BOW_MIN_SPEED, BOW_MAX_SPEED, power)
+    );
+    this.sound.playHurt();
+    this.swordSwingTimer = Math.max(0.2, 0.9 * power);
+    this.notifyState();
   }
 
   private isShieldStack(stack: ItemStack | null | undefined): stack is ItemStack {
@@ -2959,6 +3034,7 @@ export class Game {
       activePotionEffects: this.potionEffects.getEffects(),
       portalProgress: Math.min(1.0, this.portalTimer / (this.gameMode === 'creative' ? 0.5 : 3.0)),
       isBlocking: this.isShieldBlocking,
+      bowChargeProgress: this.bowChargeActive ? this.getBowPower(this.bowChargeTimer) : 0,
       lookedAtSignText: this.lookedAtSignText,
       currentDimension: this.chunks.currentDimension,
       bossName: dragonState.active ? 'Ender Dragon' : (activeWither ? 'Wither' : null),

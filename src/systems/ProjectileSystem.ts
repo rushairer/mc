@@ -68,9 +68,15 @@ export class ProjectileSystem {
     mesh.position.copy(potion.position);
   }
 
-  shootArrow(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage: number = ARROW_DAMAGE) {
+  shootArrow(
+    origin: THREE.Vector3,
+    direction: THREE.Vector3,
+    fromPlayer: boolean,
+    damage: number = ARROW_DAMAGE,
+    speed: number = ARROW_SPEED
+  ) {
     const mesh = this.createArrowMesh();
-    const vel = direction.clone().normalize().multiplyScalar(ARROW_SPEED);
+    const vel = direction.clone().normalize().multiplyScalar(speed);
     // Add slight upward arc
     vel.y += 0.5;
 

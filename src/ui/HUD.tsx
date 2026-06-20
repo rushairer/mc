@@ -349,6 +349,31 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
         </div>
       )}
 
+      {state.bowChargeProgress > 0 && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          marginBottom: '6px',
+        }}>
+          <div style={{
+            width: '170px',
+            height: '10px',
+            border: '2px solid #1a1208',
+            background: '#191006',
+            boxShadow: '0 2px 0 rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.14)',
+          }}>
+            <div style={{
+              width: `${Math.max(0, Math.min(1, state.bowChargeProgress)) * 100}%`,
+              height: '100%',
+              background: state.bowChargeProgress >= 0.99
+                ? 'linear-gradient(180deg, #fff4a8 0%, #f0b22a 55%, #9a5d10 100%)'
+                : 'linear-gradient(180deg, #d7efe5 0%, #77cfa5 55%, #27785d 100%)',
+              boxShadow: state.bowChargeProgress >= 0.99 ? '0 0 8px rgba(255,232,122,0.8)' : 'none',
+            }} />
+          </div>
+        </div>
+      )}
+
       {/* Item Name Pop-up */}
       {fadeName && (
         <div style={{

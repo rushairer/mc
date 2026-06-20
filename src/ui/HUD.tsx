@@ -454,6 +454,46 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
           );
         })}
       </div>
+
+      {/* Looked At Sign Text Overlay */}
+      {state.lookedAtSignText && (
+        <div style={{
+          position: 'absolute',
+          bottom: '150px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '200px',
+          background: '#a07040',
+          border: '3px solid #604020',
+          borderRadius: '4px',
+          padding: '8px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '2px',
+          boxShadow: '0 4px 8px rgba(0,0,0,0.5)',
+          pointerEvents: 'none',
+          zIndex: 100,
+        }}>
+          {state.lookedAtSignText.map((line, idx) => (
+            <div
+              key={idx}
+              style={{
+                color: '#000',
+                fontSize: '14px',
+                fontFamily: '"Courier New", monospace',
+                fontWeight: 'bold',
+                textAlign: 'center',
+                whiteSpace: 'pre',
+                minHeight: '16px',
+                width: '100%',
+              }}
+            >
+              {line || ' '}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

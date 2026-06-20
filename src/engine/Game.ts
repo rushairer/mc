@@ -39,7 +39,7 @@ const ENDER_EYE_ID = 381;
 const END_PORTAL_ID = 119;
 const END_PORTAL_FRAME_ID = 120;
 
-export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause' | 'end_poem';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause' | 'end_poem' | 'sign_edit';
 
 export interface GameState {
   fps: number;
@@ -78,6 +78,7 @@ export interface GameState {
   xpNext: number;
   activePotionEffects: ActivePotionEffect[];
   portalProgress: number;
+  lookedAtSignText?: string[] | null;
   currentDimension: number;
   bossName: string | null;
   bossHealth: number;
@@ -113,6 +114,8 @@ export class Game {
   private enderDragon: EnderDragonSystem;
   vehicles: VehicleSystem;
   riddenVehicle: Vehicle | null = null;
+  editingSignPos: THREE.Vector3 | null = null;
+  lookedAtSignText: string[] | null = null;
   private commands: CommandSystem;
   private clock: THREE.Clock;
   running = false;
@@ -539,6 +542,19 @@ export class Game {
       this.openBrewingPos = null;
     } else if (this.openUI === 'trading') {
       this.tradingProfession = null;
+    }
+    this.openUI = 'none';
+    this.input.requestLock();
+    this.lockCooldown = 0.5;
+    this.notifyState();
+  }
+
+  saveSignText(lines: string[]) {
+    if (this.editingSignPos) {
+      const pos = this.editingSignPos;
+      const currentMeta = this.chunks.getBlockMeta(pos.x, pos.y, pos.z) || {};
+      this.chunks.setBlockMeta(pos.x, pos.y, pos.z, { ...currentMeta, signText: lines }, true);
+      this.editingSignPos = null;
     }
     this.openUI = 'none';
     this.input.requestLock();
@@ -1216,6 +1232,25 @@ export class Game {
     this.targetBlock = this.player.raycast(this.chunks);
     this.updateHighlight();
 
+    const prevSignText = this.lookedAtSignText;
+    if (this.targetBlock) {
+      const { blockPos } = this.targetBlock;
+      const targetId = this.chunks.getBlock(blockPos.x, blockPos.y, blockPos.z);
+      const baseId = targetId & 0x3FF;
+      if (baseId === 63 || baseId === 68) {
+        const meta = this.chunks.getBlockMeta(blockPos.x, blockPos.y, blockPos.z);
+        this.lookedAtSignText = meta?.signText ?? ['', '', '', ''];
+      } else {
+        this.lookedAtSignText = null;
+      }
+    } else {
+      this.lookedAtSignText = null;
+    }
+
+    if (JSON.stringify(prevSignText) !== JSON.stringify(this.lookedAtSignText)) {
+      this.notifyState();
+    }
+
     // ─── Left click: attack mobs OR break blocks ───
     const selectedItemStack = this.inventory.getSlot(this.player.selectedSlot);
     const selectedItemId = selectedItemStack?.id ?? 0;
@@ -1715,7 +1750,15 @@ export class Game {
             if (slot && slot.count > 0) {
               const itemDef = ItemRegistry.get(slot.id);
               const isDoorItem = itemDef && itemDef.name.endsWith('door');
-              const blockId = ItemRegistry.getPlaceBlockId(slot.id) ?? 0;
+              let blockId = ItemRegistry.getPlaceBlockId(slot.id) ?? 0;
+              if (blockId === 63 || blockId === 176) {
+                if (faceNormal.y < 0) {
+                  return; // Cannot place signs/banners on the bottom of a block
+                }
+                if (faceNormal.y === 0) {
+                  blockId = blockId === 63 ? 68 : 177;
+                }
+              }
               if (blockId > 0) {
                 if (blockId === 115) {
                   const blockBelow = this.chunks.getBlock(placePos.x, placePos.y - 1, placePos.z) & 0x3FF;
@@ -1784,6 +1827,13 @@ export class Game {
                   // If placing water/lava, start fluid simulation
                   if (BlockRegistry.isFluid(blockId)) {
                     this.fluids.addSource(placePos.x, placePos.y, placePos.z, blockId);
+                  }
+
+                  if (blockId === 63 || blockId === 68) {
+                    this.editingSignPos = placePos.clone();
+                    this.openUI = 'sign_edit';
+                    document.exitPointerLock();
+                    this.notifyState();
                   }
                 }
               }
@@ -2482,6 +2532,7 @@ export class Game {
       xpNext: xpState.next,
       activePotionEffects: this.potionEffects.getEffects(),
       portalProgress: Math.min(1.0, this.portalTimer / (this.gameMode === 'creative' ? 0.5 : 3.0)),
+      lookedAtSignText: this.lookedAtSignText,
       currentDimension: this.chunks.currentDimension,
       bossName: dragonState.active ? 'Ender Dragon' : null,
       bossHealth: dragonState.health,
@@ -3080,6 +3131,17 @@ export class Game {
         facing: hingeFacing,
         open: false,
       }, true);
+      return;
+    }
+
+    if (name === 'standing_sign' || name === 'standing_banner') {
+      const rotation = Math.round(((this.player.yaw + Math.PI) * 16) / (2 * Math.PI)) % 16;
+      this.chunks.setBlockMeta(x, y, z, { rotation }, true);
+      return;
+    }
+
+    if (name === 'wall_sign' || name === 'wall_banner') {
+      this.chunks.setBlockMeta(x, y, z, { facing }, true);
       return;
     }
 

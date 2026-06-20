@@ -13,6 +13,7 @@ import { BrewingUI } from './ui/BrewingUI';
 import { HopperUI } from './ui/HopperUI';
 import { TradingUI } from './ui/TradingUI';
 import { EndPoemUI } from './ui/EndPoemUI';
+import { SignEditUI } from './ui/SignEditUI';
 import type { Enchantment } from './systems/EnchantSystem';
 import type { TradeOffer } from './systems/VillageSystem';
 import type { ItemStack } from './types';
@@ -573,6 +574,15 @@ export const App: React.FC = () => {
         <EndPoemUI
           onComplete={handleEndPoemComplete}
           playerName="Steve"
+        />
+      )}
+
+      {/* Sign Edit UI */}
+      {gameState.openUI === 'sign_edit' && (
+        <SignEditUI
+          onSave={(lines) => {
+            gameRef.current?.saveSignText(lines);
+          }}
         />
       )}
 

@@ -455,6 +455,24 @@ export class Chunk {
             continue;
           }
 
+          // Signs
+          if ((id & 0x3FF) === 63 || (id & 0x3FF) === 68) {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            this.addSign(target, x, y, z, id, meta, atlas, lightBrightness);
+            continue;
+          }
+
+          // Banners
+          if ((id & 0x3FF) === 176 || (id & 0x3FF) === 177) {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            this.addBanner(target, x, y, z, id, meta, atlas, lightBrightness);
+            continue;
+          }
+
           // Flowers & plants - cross-shaped rendering for transparent non-solid blocks.
           // Fluids are also transparent/non-solid, but they must render as culled voxel
           // surfaces; treating water as a plant fills oceans with crossed internal planes.
@@ -625,6 +643,88 @@ export class Chunk {
       baseIdx, baseIdx + 1, baseIdx + 2,
       baseIdx, baseIdx + 2, baseIdx + 3
     );
+  }
+
+  private addSign(
+    data: ChunkMeshData,
+    x: number, y: number, z: number,
+    blockId: number,
+    meta: any,
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
+    lightBrightness: number
+  ) {
+    const baseId = blockId & 0x3FF;
+    const isStanding = baseId === 63;
+    
+    if (isStanding) {
+      const poleBounds: CuboidBounds = {
+        minX: 0.45, maxX: 0.55,
+        minY: 0, maxY: 0.6,
+        minZ: 0.45, maxZ: 0.55
+      };
+      this.addCuboid(data, x, y, z, blockId, atlas, poleBounds, {}, undefined, false, lightBrightness);
+      
+      const boardBounds: CuboidBounds = {
+        minX: 0.05, maxX: 0.95,
+        minY: 0.6, maxY: 1.0,
+        minZ: 0.44, maxZ: 0.56
+      };
+      this.addCuboid(data, x, y, z, blockId, atlas, boardBounds, {}, undefined, false, lightBrightness);
+    } else {
+      const facing = meta?.facing ?? 'north';
+      let bounds: CuboidBounds;
+      if (facing === 'south') {
+        bounds = { minX: 0.05, maxX: 0.95, minY: 0.25, maxY: 0.75, minZ: 0, maxZ: 0.12 };
+      } else if (facing === 'north') {
+        bounds = { minX: 0.05, maxX: 0.95, minY: 0.25, maxY: 0.75, minZ: 0.88, maxZ: 1.0 };
+      } else if (facing === 'east') {
+        bounds = { minX: 0, maxX: 0.12, minY: 0.25, maxY: 0.75, minZ: 0.05, maxZ: 0.95 };
+      } else {
+        bounds = { minX: 0.88, maxX: 1.0, minY: 0.25, maxY: 0.75, minZ: 0.05, maxZ: 0.95 };
+      }
+      this.addCuboid(data, x, y, z, blockId, atlas, bounds, {}, undefined, false, lightBrightness);
+    }
+  }
+
+  private addBanner(
+    data: ChunkMeshData,
+    x: number, y: number, z: number,
+    blockId: number,
+    meta: any,
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
+    lightBrightness: number
+  ) {
+    const baseId = blockId & 0x3FF;
+    const isStanding = baseId === 176;
+
+    if (isStanding) {
+      const poleBounds: CuboidBounds = {
+        minX: 0.45, maxX: 0.55,
+        minY: 0, maxY: 1.0,
+        minZ: 0.45, maxZ: 0.55
+      };
+      this.addCuboid(data, x, y, z, blockId, atlas, poleBounds, {}, undefined, false, lightBrightness);
+      
+      const bannerBounds: CuboidBounds = {
+        minX: 0.15, maxX: 0.85,
+        minY: 0.15, maxY: 0.95,
+        minZ: 0.48, maxZ: 0.52
+      };
+      this.addCuboid(data, x, y, z, blockId, atlas, bannerBounds, {}, undefined, false, lightBrightness);
+    } else {
+      const facing = meta?.facing ?? 'north';
+      let bounds: CuboidBounds;
+      if (facing === 'south') {
+        bounds = { minX: 0.15, maxX: 0.85, minY: 0.05, maxY: 0.85, minZ: 0, maxZ: 0.04 };
+      } else if (facing === 'north') {
+        bounds = { minX: 0.15, maxX: 0.85, minY: 0.05, maxY: 0.85, minZ: 0.96, maxZ: 1.0 };
+      } else if (facing === 'east') {
+        bounds = { minX: 0, maxX: 0.04, minY: 0.05, maxY: 0.85, minZ: 0.15, maxZ: 0.85 };
+      } else {
+        bounds = { minX: 0.96, maxX: 1.0, minY: 0.05, maxY: 0.85, minZ: 0.15, maxZ: 0.85 };
+      }
+      this.addCuboid(data, x, y, z, blockId, atlas, bounds, {}, undefined, false, lightBrightness);
+    }
   }
 
   private addTorch(

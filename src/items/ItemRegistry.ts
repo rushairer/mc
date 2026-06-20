@@ -102,6 +102,7 @@ const BLOCK_DROP_OVERRIDES: Record<number, number | (() => number)> = {
 const ITEM_PLACE_BLOCK_OVERRIDES: Record<number, number> = {
   295: 59,  // wheat seeds -> wheat crop
   323: 63,  // sign -> standing sign
+  425: 176, // banner -> standing banner
   324: 64,  // oak door
   330: 71,  // iron door
   331: 55,  // redstone dust -> redstone wire

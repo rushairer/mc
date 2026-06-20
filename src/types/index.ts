@@ -58,6 +58,7 @@ export interface ChunkMeshData {
   uvs: number[];
   indices: number[];
   colors: number[];
+  blockTypes?: number[];
 }
 
 export interface PlayerState {

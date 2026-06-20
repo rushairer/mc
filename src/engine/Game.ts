@@ -155,6 +155,9 @@ export class Game {
   private tradingProfession: VillagerProfession | null = null;
   private lastLightRebuildTime = -1;
   private lightScanTimer = 0;
+  private ambientTimer = 0;
+  private particleScanTimer = 0;
+  private ambientParticleSources: { x: number; y: number; z: number; type: 'torch' | 'furnace' | 'enchanting_table' }[] = [];
 
   activeSlot: string = 'world_1';
 
@@ -975,11 +978,21 @@ export class Game {
       (dragon) => this.handleEnderDragonDeath(dragon.position)
     );
 
-    // Check creeper explosions
+    // Check creeper explosions, fuse sound, and play ambient mob sounds
     for (const [id, mob] of this.mobs.mobs) {
-      if (mob.def.type === 'creeper' && mob.fuseTimer >= 1.5) {
-        this.handleCreeperExplosion(mob);
-        this.mobs.removeMob(id);
+      if (mob.def.type === 'creeper') {
+        if (mob.fuseTimer >= 0 && mob.fuseTimer < dt) {
+          this.sound.playCreeperFuse();
+        }
+        if (mob.fuseTimer >= 1.5) {
+          this.handleCreeperExplosion(mob);
+          this.mobs.removeMob(id);
+          continue;
+        }
+      }
+
+      if (Math.random() < 0.002 * (dt / 0.016)) {
+        this.sound.playMobAmbient(mob.def.type);
       }
     }
 
@@ -1062,7 +1075,10 @@ export class Game {
       dt,
       this.player.position,
       (x, y, z) => this.chunks.isSolidBlock(x, y, z),
-      () => this.sound.playXP(),
+      () => {
+        this.sound.playXP();
+        this.particles.spawnXP(this.player.position.x, this.player.position.y + 0.5, this.player.position.z, 8);
+      },
       () => this.notifyState()
     );
 
@@ -1295,7 +1311,7 @@ export class Game {
         const targetVehicle = this.vehicles.getVehicleInRay(this.player.eyePosition, this.player.forward, 4.5);
         if (targetVehicle) {
           this.swordSwingTimer = 0.4;
-          this.sound.playBlockBreak();
+          this.sound.playBlockBreak(5); // Planks/wood sound for vehicle destruction
           
           let itemId = 328;
           if (targetVehicle.type === 'boat') {
@@ -1455,7 +1471,7 @@ export class Game {
             this.chunks.setBlockMeta(bp.x, bp.y, bp.z, null);
             this.redstone.observeBlockChange(bp.x, bp.y, bp.z);
           }
-          this.sound.playBlockBreak();
+          this.sound.playBlockBreak(blockId);
           this.breakProgress = 0;
           this.breakingBlockPos = null;
         }
@@ -1610,7 +1626,7 @@ export class Game {
         if (isBoatItem) {
           const placePos = blockPos.clone().add(faceNormal).add(new THREE.Vector3(0.5, 0.2, 0.5));
           this.vehicles.spawnVehicle('boat', placePos);
-          this.sound.playBlockPlace();
+          this.sound.playBlockPlace(5); // Planks/wood sound for boat
           if (this.gameMode !== 'creative') {
             this.inventory.removeFromSlot(this.player.selectedSlot, 1);
           }
@@ -1623,7 +1639,7 @@ export class Game {
           if (isTargetRail) {
             const placePos = blockPos.clone().add(new THREE.Vector3(0.5, 0.05, 0.5));
             this.vehicles.spawnVehicle('minecart', placePos);
-            this.sound.playBlockPlace();
+            this.sound.playBlockPlace(1); // Stone/metal sound for minecart
             if (this.gameMode !== 'creative') {
               this.inventory.removeFromSlot(this.player.selectedSlot, 1);
             }
@@ -1641,7 +1657,7 @@ export class Game {
             placePos.x, placePos.y, placePos.z
           );
           if (result) {
-            this.sound.playBlockPlace(); // flint sound
+            this.sound.playBlockPlace(0); // flint sound (stone category)
             if (this.gameMode !== 'creative') {
               this.inventory.damageTool(this.player.selectedSlot);
             }
@@ -1653,7 +1669,7 @@ export class Game {
         if ((targetId & 0x3FF) === END_PORTAL_FRAME_ID && heldItemId === ENDER_EYE_ID) {
           const activated = this.useEnderEyeOnPortalFrame(blockPos.x, blockPos.y, blockPos.z);
           if (activated) {
-            this.sound.playBlockPlace();
+            this.sound.playBlockPlace(END_PORTAL_FRAME_ID);
             if (this.gameMode !== 'creative') {
               this.inventory.removeFromSlot(this.player.selectedSlot, 1);
             }
@@ -1740,7 +1756,7 @@ export class Game {
         } else if (targetName === 'bed') {
           // Bed: set spawn point
           this.bedSpawnPoint = new THREE.Vector3(blockPos.x + 0.5, blockPos.y + 1, blockPos.z + 0.5);
-          this.sound.playBlockPlace();
+          this.sound.playBlockPlace(35); // Wool/fabric sound for bed
           this.placeCooldown = 0.25;
         } else {
           // Place block
@@ -1789,7 +1805,7 @@ export class Game {
                   const doorBlockId = blockDef?.id ?? 64; // Fallback to wooden door block (64)
                   const placed = this.placeDoor(placePos.x, placePos.y, placePos.z, doorBlockId);
                   if (placed) {
-                    this.sound.playBlockPlace();
+                    this.sound.playBlockPlace(doorBlockId);
                     if (this.gameMode !== 'creative') {
                       this.inventory.removeFromSlot(this.player.selectedSlot);
                     }
@@ -1815,14 +1831,14 @@ export class Game {
                     this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, { slabHalf });
                     this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
                   }
-                  this.sound.playBlockPlace();
+                  this.sound.playBlockPlace(blockId);
                   if (this.gameMode !== 'creative') {
                     this.inventory.removeFromSlot(this.player.selectedSlot);
                   }
                   this.placeCooldown = 0.25;
                 } else {
                   this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
-                  this.sound.playBlockPlace();
+                  this.sound.playBlockPlace(blockId);
                   if (this.gameMode !== 'creative') {
                     this.inventory.removeFromSlot(this.player.selectedSlot);
                   }
@@ -2111,10 +2127,23 @@ export class Game {
     this.hoppers.update(dt);
 
     // Particles
+    this.spawnAmbientParticles(dt);
     this.particles.update(dt);
 
     // Weather
     this.weather.update(dt, this.player.position, isNight);
+
+    // Ambient sounds
+    this.ambientTimer += dt;
+    if (this.ambientTimer >= 1.5) {
+      this.ambientTimer = 0;
+      const px = Math.floor(this.player.position.x);
+      const py = Math.floor(this.player.position.y);
+      const pz = Math.floor(this.player.position.z);
+      const biome = this.chunks.getBiomeAt(px, pz);
+      const light = this.chunks.getLight(px, py, pz);
+      this.sound.updateAmbientSounds(biome, py, light);
+    }
 
     // Dynamic lighting
     this.lightScanTimer += dt;
@@ -2219,7 +2248,7 @@ export class Game {
 
   private handlePotionSplash(pos: THREE.Vector3, fromPlayer: boolean, damage: number) {
     this.particles.spawnBlockBreak(pos.x, pos.y, pos.z, 0x8a2be2, 35);
-    this.sound.playBlockBreak();
+    this.sound.playBlockBreak(0); // Default break sound category (stone) for potion splash
 
     const splashRadius = 3.5;
     const distToPlayer = this.player.position.distanceTo(pos);
@@ -3773,6 +3802,73 @@ export class Game {
     // Sort by distance to player
     lightPositions.sort((a, b) => a.distanceToSquared(this.player.position) - b.distanceToSquared(this.player.position));
     this.renderer.updateTorchLights(lightPositions.slice(0, 4));
+  }
+
+  private spawnAmbientParticles(dt: number) {
+    this.particleScanTimer += dt;
+    if (this.particleScanTimer >= 0.5) {
+      this.particleScanTimer = 0;
+      this.ambientParticleSources = [];
+      const px = Math.floor(this.player.position.x);
+      const py = Math.floor(this.player.position.y);
+      const pz = Math.floor(this.player.position.z);
+      
+      for (let x = px - 8; x <= px + 8; x++) {
+        for (let y = py - 4; y <= py + 8; y++) {
+          for (let z = pz - 8; z <= pz + 8; z++) {
+            const blockId = this.chunks.getBlock(x, y, z);
+            const baseId = blockId & 0x3FF;
+            if (baseId === 50) { // Torch
+              this.ambientParticleSources.push({ x, y, z, type: 'torch' });
+            } else if (baseId === 62) { // Lit furnace
+              this.ambientParticleSources.push({ x, y, z, type: 'furnace' });
+            } else if (baseId === 116) { // Enchanting table
+              this.ambientParticleSources.push({ x, y, z, type: 'enchanting_table' });
+            }
+          }
+        }
+      }
+    }
+
+    const probabilityMult = dt / 0.016;
+    for (const src of this.ambientParticleSources) {
+      if (src.type === 'torch') {
+        if (Math.random() < 0.05 * probabilityMult) {
+          this.particles.spawnFlame(src.x + 0.5, src.y + 0.6, src.z + 0.5, 1);
+        }
+        if (Math.random() < 0.02 * probabilityMult) {
+          this.particles.spawnSmoke(src.x + 0.5, src.y + 0.6, src.z + 0.5, 1);
+        }
+      } else if (src.type === 'furnace') {
+        if (Math.random() < 0.08 * probabilityMult) {
+          this.particles.spawnFlame(src.x + 0.5, src.y + 0.3, src.z + 0.5, 1);
+        }
+        if (Math.random() < 0.04 * probabilityMult) {
+          this.particles.spawnSmoke(src.x + 0.5, src.y + 0.6, src.z + 0.5, 1);
+        }
+      } else if (src.type === 'enchanting_table') {
+        for (let dx = -2; dx <= 2; dx++) {
+          for (let dy = 0; dy <= 1; dy++) {
+            for (let dz = -2; dz <= 2; dz++) {
+              if (dx === 0 && dz === 0) continue;
+              const bx = src.x + dx;
+              const by = src.y + dy;
+              const bz = src.z + dz;
+              const blockId = this.chunks.getBlock(bx, by, bz);
+              if ((blockId & 0x3FF) === 47) { // Bookshelf
+                if (Math.random() < 0.01 * probabilityMult) {
+                  this.particles.spawnEnchantingGlyphs(
+                    bx + 0.5, by + 0.5, bz + 0.5,
+                    src.x + 0.5, src.y + 0.8, src.z + 0.5,
+                    1
+                  );
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   dispose() {

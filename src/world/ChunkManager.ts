@@ -26,6 +26,7 @@ export class ChunkManager {
   private material: THREE.MeshBasicMaterial;
   private transparentMaterial: THREE.MeshBasicMaterial;
   timeOfDay = 0.25;
+  private clock = new THREE.Clock();
 
   constructor(scene: THREE.Scene, atlas: TextureAtlas, seed: number) {
     this.scene = scene;
@@ -48,23 +49,80 @@ export class ChunkManager {
       depthWrite: false,
     });
 
-    const setupLightningShader = (material: THREE.Material) => {
+    const setupCustomShader = (material: THREE.Material) => {
       material.onBeforeCompile = (shader) => {
         shader.uniforms.lightningOffset = { value: 0 };
+        shader.uniforms.time = { value: 0 };
+
         shader.vertexShader = shader.vertexShader.replace(
           '#include <common>',
-          '#include <common>\nuniform float lightningOffset;'
+          `#include <common>
+           uniform float lightningOffset;
+           uniform float time;
+           attribute float blockType;
+           varying float vBlockType;
+           varying vec3 vWorldPosition;`
         );
+
         shader.vertexShader = shader.vertexShader.replace(
           '#include <color_vertex>',
-          '#include <color_vertex>\nvColor = clamp(vColor + vec3(lightningOffset), 0.0, 1.0);'
+          `#include <color_vertex>
+           vColor = clamp(vColor + vec3(lightningOffset), 0.0, 1.0);
+           vBlockType = blockType;
+           vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+
+           // Apply vertex movement for water waves (blockType == 1.0)
+           if (blockType == 1.0) {
+             float wave = sin(time * 2.5 + position.x * 2.0 + position.z * 2.0) * 0.08;
+             gl_Position.y += wave;
+           }`
         );
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <common>',
+          `#include <common>
+           uniform float time;
+           varying float vBlockType;
+           varying vec3 vWorldPosition;`
+        );
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `#include <map_fragment>
+           
+           // Water animation & custom coloring (blockType == 1.0)
+           if (vBlockType == 1.0) {
+             vec2 flowUv = vUv;
+             flowUv.y += time * 0.04;
+             flowUv.x += sin(time * 0.4 + vWorldPosition.y) * 0.015;
+             vec4 texelColor = texture2D(map, flowUv);
+             diffuseColor = vec4(mix(texelColor.rgb, vec3(0.0, 0.35, 0.75), 0.45), 0.8);
+           }
+           // Lava animation & glowing (blockType == 2.0)
+           else if (vBlockType == 2.0) {
+             vec2 flowUv = vUv;
+             flowUv.y -= time * 0.015;
+             flowUv.x += cos(time * 0.15) * 0.01;
+             vec4 texelColor = texture2D(map, flowUv);
+             diffuseColor = vec4(mix(texelColor.rgb, vec3(1.0, 0.25, 0.0), 0.25), 1.0);
+             diffuseColor.rgb = clamp(diffuseColor.rgb * 1.4, 0.0, 1.0);
+           }
+           // Nether / End Portal animation (blockType == 3.0)
+           else if (vBlockType == 3.0) {
+             vec2 swirlUv = vUv;
+             swirlUv.x += sin(time * 1.2 + vWorldPosition.y * 2.5) * 0.04;
+             swirlUv.y += cos(time * 1.2 + vWorldPosition.x * 2.5) * 0.04;
+             vec4 texelColor = texture2D(map, swirlUv);
+             diffuseColor = vec4(mix(texelColor.rgb, vec3(0.45, 0.0, 0.75), 0.65), 0.85);
+           }`
+        );
+
         material.userData.shader = shader;
       };
     };
 
-    setupLightningShader(this.material);
-    setupLightningShader(this.transparentMaterial);
+    setupCustomShader(this.material);
+    setupCustomShader(this.transparentMaterial);
   }
 
   static key(cx: number, cz: number): string {
@@ -243,6 +301,14 @@ export class ChunkManager {
   }
 
   update(playerX: number, playerZ: number) {
+    const elapsed = this.clock.getElapsedTime();
+    if (this.material.userData.shader) {
+      this.material.userData.shader.uniforms.time.value = elapsed;
+    }
+    if (this.transparentMaterial.userData.shader) {
+      this.transparentMaterial.userData.shader.uniforms.time.value = elapsed;
+    }
+
     const pcx = Math.floor(playerX / CHUNK_SIZE);
     const pcz = Math.floor(playerZ / CHUNK_SIZE);
 
@@ -370,8 +436,12 @@ export class ChunkManager {
       return this.getBlockLight(wx, wy, wz);
     };
 
+    const getBiome = (wx: number, wz: number): number => {
+      return this.worldGen.getBiome(wx, wz);
+    };
+
     const { solidGeo, transparentGeo } = chunk.buildMesh(
-      this.atlas, getNeighborBlock, getNeighborSkyLight, getNeighborBlockLight, this.timeOfDay
+      this.atlas, getNeighborBlock, getNeighborSkyLight, getNeighborBlockLight, this.timeOfDay, getBiome
     );
 
     if (solidGeo.attributes.position) {

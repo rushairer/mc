@@ -3,6 +3,44 @@ import { CHUNK_SIZE, WORLD_HEIGHT } from '../constants';
 import { BlockRegistry } from './BlockRegistry';
 import { VisualResolver } from '../visual/VisualResolver';
 import type { BlockMetadata, ChunkMeshData, SerializedBlockMetadata } from '../types';
+import { BiomeType } from './WorldGen';
+// Biome Grass Colors
+const BIOME_GRASS_COLORS: Record<number, [number, number, number]> = {
+  [BiomeType.Plains]: [0.57, 0.76, 0.34],
+  [BiomeType.Desert]: [0.75, 0.72, 0.33],
+  [BiomeType.Mountains]: [0.54, 0.72, 0.42],
+  [BiomeType.Forest]: [0.47, 0.75, 0.35],
+  [BiomeType.Snow]: [0.50, 0.70, 0.59],
+  [BiomeType.Ocean]: [0.42, 0.64, 0.38],
+  [BiomeType.Swamp]: [0.41, 0.44, 0.22],
+  [BiomeType.Jungle]: [0.35, 0.78, 0.24],
+  [BiomeType.River]: [0.47, 0.76, 0.28],
+  [BiomeType.MushroomIsland]: [0.33, 0.79, 0.24],
+  [BiomeType.Badlands]: [0.56, 0.51, 0.30],
+};
+
+// Biome Leaves Colors
+const BIOME_LEAVES_COLORS: Record<number, [number, number, number]> = {
+  [BiomeType.Plains]: [0.47, 0.76, 0.28],
+  [BiomeType.Desert]: [0.75, 0.72, 0.33],
+  [BiomeType.Mountains]: [0.54, 0.72, 0.42],
+  [BiomeType.Forest]: [0.47, 0.75, 0.35],
+  [BiomeType.Snow]: [0.50, 0.70, 0.59],
+  [BiomeType.Ocean]: [0.42, 0.64, 0.38],
+  [BiomeType.Swamp]: [0.41, 0.44, 0.22],
+  [BiomeType.Jungle]: [0.35, 0.78, 0.24],
+  [BiomeType.River]: [0.47, 0.76, 0.28],
+  [BiomeType.MushroomIsland]: [0.33, 0.79, 0.24],
+  [BiomeType.Badlands]: [0.56, 0.51, 0.30],
+};
+
+function getBlockType(blockId: number): number {
+  const baseId = blockId & 0x3FF;
+  if (baseId === 8 || baseId === 9) return 1; // Water
+  if (baseId === 10 || baseId === 11) return 2; // Lava
+  if (baseId === 90 || baseId === 119) return 3; // Portal
+  return 0; // Normal
+}
 
 export class Chunk {
   data: Uint16Array;
@@ -271,10 +309,11 @@ export class Chunk {
     getNeighborBlock: (wx: number, wy: number, wz: number) => number,
     getNeighborSkyLight: (wx: number, wy: number, wz: number) => number,
     getNeighborBlockLight: (wx: number, wy: number, wz: number) => number,
-    timeOfDay: number = 0.25
+    timeOfDay: number = 0.25,
+    getBiome?: (wx: number, wz: number) => number
   ): { solidGeo: THREE.BufferGeometry; transparentGeo: THREE.BufferGeometry } {
-    const solid: ChunkMeshData = { positions: [], normals: [], uvs: [], indices: [], colors: [] };
-    const transparent: ChunkMeshData = { positions: [], normals: [], uvs: [], indices: [], colors: [] };
+    const solid: ChunkMeshData = { positions: [], normals: [], uvs: [], indices: [], colors: [], blockTypes: [] };
+    const transparent: ChunkMeshData = { positions: [], normals: [], uvs: [], indices: [], colors: [], blockTypes: [] };
 
     const worldX = this.cx * CHUNK_SIZE;
     const worldZ = this.cz * CHUNK_SIZE;
@@ -285,6 +324,8 @@ export class Chunk {
         for (let x = 0; x < CHUNK_SIZE; x++) {
           const id = this.getBlock(x, y, z);
           if (id === 0) continue;
+
+          const biome = getBiome ? getBiome(worldX + x, worldZ + z) : 0;
 
           const def = BlockRegistry.get(id);
           if (!def) continue;
@@ -328,7 +369,7 @@ export class Chunk {
             const bounds: CuboidBounds = isTop
               ? { minX: 0, maxX: 1, minY: 0.5, maxY: 1, minZ: 0, maxZ: 1 }
               : { minX: 0, maxX: 1, minY: 0, maxY: 0.5, minZ: 0, maxZ: 1 };
-            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness);
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome);
             continue;
           }
 
@@ -353,7 +394,7 @@ export class Chunk {
               minY: 0, maxY: height,
               minZ: 0.0625, maxZ: 0.9375
             };
-            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness);
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome);
             continue;
           }
 
@@ -367,7 +408,7 @@ export class Chunk {
               minY: 0.05, maxY: 0.07,
               minZ: 0.4, maxZ: 0.6
             };
-            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness);
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome);
             continue;
           }
 
@@ -389,7 +430,7 @@ export class Chunk {
             } else { // east (attached to west wall)
               bounds = { minX: 0, maxX: 0.25, minY: 0.2, maxY: 0.7, minZ: 0.375, maxZ: 0.625 };
             }
-            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness);
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome);
             continue;
           }
 
@@ -408,7 +449,7 @@ export class Chunk {
             const blockLight = this.getBlockLightAt(x, y, z);
             const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
             const bounds = { minX: 0, maxX: 1, minY: 0, maxY: 0.015, minZ: 0, maxZ: 1 };
-            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness);
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome);
             continue;
           }
 
@@ -420,23 +461,23 @@ export class Chunk {
             
             let attached = false;
             if (BlockRegistry.isSolid(getNeighborBlock(worldX + x, y, worldZ + z - 1))) {
-              this.addCuboid(target, x, y, z, id, atlas, { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 0.015 }, {}, undefined, false, lightBrightness);
+              this.addCuboid(target, x, y, z, id, atlas, { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 0.015 }, {}, undefined, false, lightBrightness, biome);
               attached = true;
             }
             if (BlockRegistry.isSolid(getNeighborBlock(worldX + x, y, worldZ + z + 1))) {
-              this.addCuboid(target, x, y, z, id, atlas, { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0.985, maxZ: 1 }, {}, undefined, false, lightBrightness);
+              this.addCuboid(target, x, y, z, id, atlas, { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0.985, maxZ: 1 }, {}, undefined, false, lightBrightness, biome);
               attached = true;
             }
             if (BlockRegistry.isSolid(getNeighborBlock(worldX + x - 1, y, worldZ + z))) {
-              this.addCuboid(target, x, y, z, id, atlas, { minX: 0, maxX: 0.015, minY: 0, maxY: 1, minZ: 0, maxZ: 1 }, {}, undefined, false, lightBrightness);
+              this.addCuboid(target, x, y, z, id, atlas, { minX: 0, maxX: 0.015, minY: 0, maxY: 1, minZ: 0, maxZ: 1 }, {}, undefined, false, lightBrightness, biome);
               attached = true;
             }
             if (BlockRegistry.isSolid(getNeighborBlock(worldX + x + 1, y, worldZ + z))) {
-              this.addCuboid(target, x, y, z, id, atlas, { minX: 0.985, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 1 }, {}, undefined, false, lightBrightness);
+              this.addCuboid(target, x, y, z, id, atlas, { minX: 0.985, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 1 }, {}, undefined, false, lightBrightness, biome);
               attached = true;
             }
             if (!attached) {
-              this.addPlant(target, x, y, z, id, atlas, lightBrightness);
+              this.addPlant(target, x, y, z, id, atlas, lightBrightness, biome);
             }
             continue;
           }
@@ -451,7 +492,7 @@ export class Chunk {
               minY: 0, maxY: 0.05,
               minZ: 0, maxZ: 1
             };
-            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness);
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome);
             continue;
           }
 
@@ -480,7 +521,7 @@ export class Chunk {
             const skyLight = this.getSkyLightAt(x, y, z);
             const blockLight = this.getBlockLightAt(x, y, z);
             const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
-            this.addPlant(target, x, y, z, id, atlas, lightBrightness);
+            this.addPlant(target, x, y, z, id, atlas, lightBrightness, biome);
             continue;
           }
 
@@ -567,7 +608,7 @@ export class Chunk {
             }
 
             const lightBrightness = this.getAdjustedBrightness(faceSkyLight, faceBlockLight, timeOfDay);
-            this.addFace(target, x, y, z, face, id, atlas, depth, lightBrightness, fluidLevel);
+            this.addFace(target, x, y, z, face, id, atlas, depth, lightBrightness, fluidLevel, getNeighborBlock, biome);
           }
         }
       }
@@ -587,7 +628,9 @@ export class Chunk {
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
     waterDepth: number = 0,
     lightBrightness: number = 1.0,
-    fluidLevel: number = 8
+    fluidLevel: number = 8,
+    getNeighborBlock?: (wx: number, wy: number, wz: number) => number,
+    biome: number = 0
   ) {
     const texKey = VisualResolver.getBlockFaceTexture(blockId, face);
     const uv = atlas.getUV(texKey);
@@ -598,6 +641,50 @@ export class Chunk {
     // Source water (level 8) → 15/16 height; flowing water → (level-1)/8 height
     const surfaceY = fluidLevel >= 8 ? 15 / 16 : (fluidLevel - 1) / 8;
 
+    const worldX = this.cx * CHUNK_SIZE + x;
+    const worldZ = this.cz * CHUNK_SIZE + z;
+    const worldY = y;
+
+    // Compute brightness from lightBrightness + face direction shading
+    let baseBrightness = lightBrightness * FACE_BRIGHTNESS[face];
+    // Clamp minimum so nothing is completely black
+    baseBrightness = Math.max(0.0, Math.min(1.0, baseBrightness));
+
+    if (waterDepth > 0 && !BlockRegistry.isWater(blockId)) {
+      const tint = Math.max(0.12, Math.pow(0.82, waterDepth));
+      baseBrightness *= tint;
+    }
+
+    const def = BlockRegistry.get(blockId);
+    const isHighAltitude = y >= 105 && (biome === BiomeType.Mountains || biome === BiomeType.Snow);
+
+    let biomeTint: [number, number, number] | null = null;
+    if (def) {
+      const name = def.name;
+      if (name === 'grass' && face === 0) {
+        if (isHighAltitude) {
+          biomeTint = [0.95, 0.97, 0.98]; // Snow overlay
+        } else {
+          biomeTint = BIOME_GRASS_COLORS[biome] || [1.0, 1.0, 1.0];
+        }
+      } else if (name.includes('leaves')) {
+        if (isHighAltitude) {
+          biomeTint = [0.85, 0.92, 0.90]; // Snowy leaves
+        } else if (!name.includes('spruce') && !name.includes('birch')) {
+          biomeTint = BIOME_LEAVES_COLORS[biome] || [1.0, 1.0, 1.0];
+        }
+      } else if (name === 'vine') {
+        if (isHighAltitude) {
+          biomeTint = [0.85, 0.92, 0.90];
+        } else {
+          biomeTint = BIOME_LEAVES_COLORS[biome] || [1.0, 1.0, 1.0];
+        }
+      }
+    }
+
+    const [nx, ny, nz] = FACE_DIRS[face];
+    const bType = getBlockType(blockId);
+
     for (const [vx, vy, vz] of verts) {
       // Lower top vertices of fluid blocks to match surface height
       let adjVy = vy;
@@ -605,8 +692,66 @@ export class Chunk {
         adjVy = surfaceY;
       }
       data.positions.push(x + vx, y + adjVy, z + vz);
-      const [nx, ny, nz] = FACE_DIRS[face];
       data.normals.push(nx, ny, nz);
+      if (data.blockTypes) {
+        data.blockTypes.push(bType);
+      }
+
+      // Compute Ambient Occlusion
+      let aoMultiplier = 1.0;
+      const isAOApplicable = !isFluid && def && !def.transparent;
+      if (isAOApplicable && getNeighborBlock) {
+        let ox = 0, oy = 0, oz = 0;
+        if (nx === 0) ox = (vx === 0 ? -1 : 1);
+        if (ny === 0) oy = (vy === 0 ? -1 : 1);
+        if (nz === 0) oz = (vz === 0 ? -1 : 1);
+
+        let blockSide1 = 0;
+        let blockSide2 = 0;
+        let blockCorner = 0;
+
+        if (nx !== 0) {
+          blockSide1 = getNeighborBlock(worldX + nx, worldY + oy, worldZ);
+          blockSide2 = getNeighborBlock(worldX + nx, worldY, worldZ + oz);
+          blockCorner = getNeighborBlock(worldX + nx, worldY + oy, worldZ + oz);
+        } else if (ny !== 0) {
+          blockSide1 = getNeighborBlock(worldX + ox, worldY + ny, worldZ);
+          blockSide2 = getNeighborBlock(worldX, worldY + ny, worldZ + oz);
+          blockCorner = getNeighborBlock(worldX + ox, worldY + ny, worldZ + oz);
+        } else {
+          blockSide1 = getNeighborBlock(worldX + ox, worldY, worldZ + nz);
+          blockSide2 = getNeighborBlock(worldX, worldY + oy, worldZ + nz);
+          blockCorner = getNeighborBlock(worldX + ox, worldY + oy, worldZ + nz);
+        }
+
+        const isOpaque = (id: number) => id !== 0 && !BlockRegistry.isTransparent(id);
+        const s1 = isOpaque(blockSide1) ? 1 : 0;
+        const s2 = isOpaque(blockSide2) ? 1 : 0;
+        const c = isOpaque(blockCorner) ? 1 : 0;
+
+        let ao = 3;
+        if (s1 === 1 && s2 === 1) {
+          ao = 0;
+        } else {
+          ao = 3 - (s1 + s2 + c);
+        }
+
+        if (ao === 2) aoMultiplier = 0.82;
+        else if (ao === 1) aoMultiplier = 0.65;
+        else if (ao === 0) aoMultiplier = 0.48;
+      }
+
+      let vr = baseBrightness * aoMultiplier;
+      let vg = baseBrightness * aoMultiplier;
+      let vb = baseBrightness * aoMultiplier;
+
+      if (biomeTint) {
+        vr *= biomeTint[0];
+        vg *= biomeTint[1];
+        vb *= biomeTint[2];
+      }
+
+      data.colors.push(vr, vg, vb);
     }
 
     // UV mapping — scale v-coords when fluid surface is lower
@@ -622,21 +767,6 @@ export class Chunk {
       data.uvs.push(uv.u1, uv.v0 + (uv.v1 - uv.v0) * uvVScale);
       data.uvs.push(uv.u0, uv.v0 + (uv.v1 - uv.v0) * uvVScale);
     }
-
-    // Compute brightness from lightBrightness + face direction shading
-    let brightness = lightBrightness * FACE_BRIGHTNESS[face];
-    // Clamp minimum so nothing is completely black
-    brightness = Math.max(0.0, Math.min(1.0, brightness));
-
-    if (waterDepth > 0 && !BlockRegistry.isWater(blockId)) {
-      const tint = Math.max(0.12, Math.pow(0.82, waterDepth));
-      brightness *= tint;
-    }
-
-    data.colors.push(brightness, brightness, brightness);
-    data.colors.push(brightness, brightness, brightness);
-    data.colors.push(brightness, brightness, brightness);
-    data.colors.push(brightness, brightness, brightness);
 
     // two triangles
     data.indices.push(
@@ -933,7 +1063,8 @@ export class Chunk {
     faceOverrides: Partial<Record<'top' | 'bottom', boolean>> = {},
     customTextureKeys?: string[],
     mirrorHorizontal = false,
-    lightBrightness: number = 1.0
+    lightBrightness: number = 1.0,
+    biome: number = 0
   ) {
     const faces = getCuboidFaces(bounds);
     const shouldDraw = {
@@ -946,6 +1077,19 @@ export class Chunk {
     };
     const finalLightBrightness = Math.max(0.0, lightBrightness);
 
+    const def = BlockRegistry.get(blockId);
+    let biomeTint: [number, number, number] | null = null;
+    if (def && def.name === 'vine') {
+      const isHighAltitude = y >= 105 && (biome === BiomeType.Mountains || biome === BiomeType.Snow);
+      if (isHighAltitude) {
+        biomeTint = [0.85, 0.92, 0.90];
+      } else {
+        biomeTint = BIOME_LEAVES_COLORS[biome] || [1.0, 1.0, 1.0];
+      }
+    }
+
+    const bType = getBlockType(blockId);
+
     faces.forEach((faceDef, faceIndex) => {
       const faceName = FACE_NAMES[faceIndex];
       if (!shouldDraw[faceName]) return;
@@ -957,8 +1101,19 @@ export class Chunk {
       for (const [vx, vy, vz] of faceDef.verts) {
         data.positions.push(x + vx, y + vy, z + vz);
         data.normals.push(...faceDef.normal);
+        if (data.blockTypes) {
+          data.blockTypes.push(bType);
+        }
         const brightness = Math.max(0.0, FACE_BRIGHTNESS[faceIndex] * finalLightBrightness);
-        data.colors.push(brightness, brightness, brightness);
+        let vr = brightness;
+        let vg = brightness;
+        let vb = brightness;
+        if (biomeTint) {
+          vr *= biomeTint[0];
+          vg *= biomeTint[1];
+          vb *= biomeTint[2];
+        }
+        data.colors.push(vr, vg, vb);
       }
 
       const uStart = mirrorHorizontal ? uv.u1 : uv.u0;
@@ -1006,6 +1161,7 @@ export class Chunk {
     for (let i = 0; i < 4; i++) {
       data.normals.push(...normal);
       data.colors.push(brightness, brightness, brightness);
+      if (data.blockTypes) data.blockTypes.push(0);
     }
 
     data.uvs.push(uv.u0, uv.v0); // Bottom-left
@@ -1095,31 +1251,43 @@ export class Chunk {
     x: number, y: number, z: number,
     blockId: number,
     atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
-    lightBrightness: number = 1.0
+    lightBrightness: number = 1.0,
+    biome: number = 0
   ) {
     const texKey = VisualResolver.getBlockFaceTexture(blockId, 0);
     const uv = atlas.getUV(texKey);
     const brightness = Math.max(0.0, lightBrightness);
 
+    const def = BlockRegistry.get(blockId);
+    let tint: [number, number, number] = [1.0, 1.0, 1.0];
+    if (def && (def.name.includes('grass') || def.name.includes('fern'))) {
+      const isHighAltitude = y >= 105 && (biome === BiomeType.Mountains || biome === BiomeType.Snow);
+      if (isHighAltitude) {
+        tint = [0.90, 0.95, 0.98]; // snowy frost
+      } else {
+        tint = BIOME_GRASS_COLORS[biome] || [1.0, 1.0, 1.0];
+      }
+    }
+
     // Two diagonal planes forming an X shape
     // Plane 1: NW to SE
     this.addPlantQuad(data,
       [x, y, z], [x + 1, y, z + 1], [x + 1, y + 1, z + 1], [x, y + 1, z],
-      [-0.707, 0, 0.707], uv, brightness
+      [-0.707, 0, 0.707], uv, brightness, tint
     );
     this.addPlantQuad(data,
       [x + 1, y, z + 1], [x, y, z], [x, y + 1, z], [x + 1, y + 1, z + 1],
-      [0.707, 0, -0.707], uv, brightness
+      [0.707, 0, -0.707], uv, brightness, tint
     );
 
     // Plane 2: NE to SW
     this.addPlantQuad(data,
       [x + 1, y, z], [x, y, z + 1], [x, y + 1, z + 1], [x + 1, y + 1, z],
-      [0.707, 0, 0.707], uv, brightness
+      [0.707, 0, 0.707], uv, brightness, tint
     );
     this.addPlantQuad(data,
       [x, y, z + 1], [x + 1, y, z], [x + 1, y + 1, z], [x, y + 1, z + 1],
-      [-0.707, 0, -0.707], uv, brightness
+      [-0.707, 0, -0.707], uv, brightness, tint
     );
   }
 
@@ -1131,13 +1299,17 @@ export class Chunk {
     p4: [number, number, number],
     normal: [number, number, number],
     uv: { u0: number; v0: number; u1: number; v1: number },
-    brightness: number
+    brightness: number,
+    tint: [number, number, number] = [1.0, 1.0, 1.0]
   ) {
     const baseIdx = data.positions.length / 3;
     data.positions.push(...p1, ...p2, ...p3, ...p4);
     for (let i = 0; i < 4; i++) {
       data.normals.push(...normal);
-      data.colors.push(brightness, brightness, brightness);
+      data.colors.push(brightness * tint[0], brightness * tint[1], brightness * tint[2]);
+      if (data.blockTypes) {
+        data.blockTypes.push(0);
+      }
     }
     data.uvs.push(uv.u0, uv.v0, uv.u1, uv.v0, uv.u1, uv.v1, uv.u0, uv.v1);
     data.indices.push(baseIdx, baseIdx + 1, baseIdx + 2, baseIdx, baseIdx + 2, baseIdx + 3);
@@ -1151,6 +1323,12 @@ export class Chunk {
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(data.normals, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(data.uvs, 2));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(data.colors, 3));
+    if (data.blockTypes) {
+      geo.setAttribute('blockType', new THREE.Float32BufferAttribute(data.blockTypes, 1));
+    } else {
+      const count = data.positions.length / 3;
+      geo.setAttribute('blockType', new THREE.Float32BufferAttribute(new Float32Array(count), 1));
+    }
     geo.setIndex(data.indices);
     return geo;
   }

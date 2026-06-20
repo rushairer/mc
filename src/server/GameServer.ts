@@ -31,6 +31,7 @@ interface PlayerSession {
   xpCurrent: number;
   inventory: (ItemStack | null)[];
   armor: (ItemStack | null)[];
+  offhand: ItemStack | null;
   selectedSlot: number;
 }
 
@@ -153,6 +154,7 @@ export class GameServer {
       xpCurrent: 0,
       inventory: Array(36).fill(null),
       armor: Array(4).fill(null),
+      offhand: null,
       selectedSlot: 0
     };
 
@@ -218,7 +220,7 @@ export class GameServer {
     // Send current game state
     this.sendTo(session, PacketType.S2C_TIME, { gameTime: this.gameTime });
     this.sendTo(session, PacketType.S2C_WEATHER, { type: this.weatherType, intensity: this.weatherIntensity });
-    this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, { slots: session.inventory, armor: session.armor });
+    this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, { slots: session.inventory, armor: session.armor, offhand: session.offhand });
 
     // Send initial active mobs
     for (const mob of this.mobs.values()) {
@@ -347,7 +349,8 @@ export class GameServer {
       },
       inventory: {
         slots: localSession.inventory,
-        armor: localSession.armor
+        armor: localSession.armor,
+        offhand: localSession.offhand
       },
       seed: this.seed,
       chunks: chunkList,
@@ -407,6 +410,7 @@ export class GameServer {
       }
       session.inventory = data.inventory.slots;
       session.armor = data.inventory.armor;
+      session.offhand = data.inventory.offhand ?? null;
 
       // Clear current server chunks
       this.overworldChunks.clear();
@@ -465,7 +469,7 @@ export class GameServer {
         z: session.z,
         gameMode: 'survival'
       });
-      this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, { slots: session.inventory, armor: session.armor });
+      this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, { slots: session.inventory, armor: session.armor, offhand: session.offhand });
       this.broadcast(PacketType.S2C_CHAT, { sender: 'System', text: 'Loaded world save.' });
 
     } catch (e) {
@@ -659,6 +663,8 @@ export class GameServer {
           session.inventory[slotIndex] = heldItem;
         } else if (slotIndex >= 100 && slotIndex < 104) {
           session.armor[slotIndex - 100] = heldItem;
+        } else if (slotIndex === 200) {
+          session.offhand = heldItem;
         }
         break;
       }
@@ -745,7 +751,7 @@ export class GameServer {
           }
 
           if (added) {
-            this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, { slots: session.inventory, armor: session.armor });
+            this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, { slots: session.inventory, armor: session.armor, offhand: session.offhand });
             this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: `Gave ${count} of ${itemId}` });
           } else {
             this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: `Inventory full.` });
@@ -1248,7 +1254,7 @@ export class GameServer {
               this.droppedItems.delete(item.id);
               this.broadcast(PacketType.S2C_DROPPED_ITEM_DESPAWN, { id: item.id });
               this.broadcast(PacketType.S2C_SOUND, { type: 'pickup', x: player.x, y: player.y, z: player.z });
-              this.sendTo(player, PacketType.S2C_INVENTORY_SYNC, { slots: player.inventory, armor: player.armor });
+              this.sendTo(player, PacketType.S2C_INVENTORY_SYNC, { slots: player.inventory, armor: player.armor, offhand: player.offhand });
               break;
             }
           }

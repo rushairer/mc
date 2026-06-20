@@ -174,6 +174,7 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
   const hotbarItems = state.inventory
     ? Array.from({ length: 9 }, (_, i) => state.inventory.getSlot(i))
     : [];
+  const offhandItem = state.inventory?.getOffhand() ?? null;
 
   React.useEffect(() => {
     if (state.selectedSlot !== lastSelectedSlot || state.heldItemId !== lastHeldId) {
@@ -376,10 +377,53 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
       <div style={{
         display: 'flex',
         justifyContent: 'center',
+        alignItems: 'center',
         gap: '2px',
         padding: '4px',
         background: 'rgba(0,0,0,0.5)',
       }}>
+        <div style={{
+          width: '42px',
+          height: '42px',
+          border: '2px solid #555',
+          background: 'rgba(55,55,55,0.75)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '9px',
+          color: '#fff',
+          textShadow: '1px 1px 0 #000',
+          position: 'relative',
+          marginRight: '8px',
+        }}>
+          {offhandItem && ItemRegistry.get(offhandItem.id) ? (
+            <>
+              <div
+                style={getItemIconStyle(offhandItem.id, 28)}
+                title={getLocalizedItemName(offhandItem.id, ItemRegistry.get(offhandItem.id)!.displayName)}
+              />
+              {offhandItem.count > 1 && (
+                <span style={{
+                  position: 'absolute',
+                  bottom: '1px',
+                  right: '3px',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                }}>
+                  {offhandItem.count}
+                </span>
+              )}
+            </>
+          ) : null}
+          <span style={{
+            position: 'absolute',
+            top: '1px',
+            right: '3px',
+            fontSize: '8px',
+            color: '#aaa',
+          }}>F</span>
+        </div>
         {Array.from({ length: 9 }, (_, i) => {
           const item = hotbarItems[i];
           const itemDef = item ? ItemRegistry.get(item.id) : null;

@@ -1164,7 +1164,8 @@ export const App: React.FC = () => {
                 <div><b>W / A / S / D</b> — {t('controlMove').split(' — ')[1]}</div>
                 <div><b>Space</b> — {t('controlJump').split(' — ')[1]}</div>
                 <div><b>Shift</b> — {t('controlSprint').split(' — ')[1]}</div>
-                <div><b>F</b> — {t('controlFly').split(' — ')[1]}</div>
+                <div><b>G</b> — {t('controlFly').split(' — ')[1]}</div>
+                <div><b>F</b> — {t('controlOffhand').split(' — ')[1]}</div>
                 <div><b>Mouse</b> — {t('controlLook').split(' — ')[1]}</div>
                 <div><b>Left Click</b> — {t('controlBreak').split(' — ')[1]}</div>
                 <div><b>Right Click</b> — {t('controlPlace').split(' — ')[1]}</div>

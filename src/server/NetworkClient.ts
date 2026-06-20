@@ -361,13 +361,14 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_INVENTORY_SYNC: {
-        const { slots, armor } = packet.payload;
+        const { slots, armor, offhand } = packet.payload;
         for (let i = 0; i < 36; i++) {
           this.game.inventory.setSlot(i, slots[i]);
         }
         for (let i = 0; i < 4; i++) {
           this.game.inventory.setArmorSlot(i, armor[i]);
         }
+        this.game.inventory.setOffhand(offhand ?? null);
         this.game.notifyState();
         break;
       }

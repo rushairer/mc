@@ -71,7 +71,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     x: number;
     y: number;
     index: number;
-    type: 'inventory' | 'armor' | 'crafting';
+    type: 'inventory' | 'armor' | 'offhand' | 'crafting';
   } | null>(null);
   const mouseRef = useRef({ x: 0, y: 0 });
 
@@ -219,6 +219,20 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     onInventoryChange();
   }, [heldItem, inventory, onInventoryChange]);
 
+  const handleOffhandSlotClick = useCallback(() => {
+    const currentOffhandItem = inventory.getOffhand();
+
+    if (heldItem) {
+      inventory.setOffhand(heldItem);
+      setHeldItem(currentOffhandItem);
+    } else if (currentOffhandItem) {
+      setHeldItem(currentOffhandItem);
+      inventory.setOffhand(null);
+    }
+
+    onInventoryChange();
+  }, [heldItem, inventory, onInventoryChange]);
+
   const handleCraftResultClick = useCallback(() => {
     if (!craftResult) return;
     // Add result to inventory
@@ -297,6 +311,20 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
               }
               onInventoryChange();
             }
+          } else if (type === 'offhand') {
+            const offhandItem = inventory.getOffhand();
+            if (offhandItem) {
+              const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? offhandItem.count : 1;
+              onDropItem?.(offhandItem.id, dropCount);
+              if (offhandItem.count <= dropCount) {
+                inventory.setOffhand(null);
+                setHoveredSlot(null);
+              } else {
+                offhandItem.count -= dropCount;
+                setHoveredSlot({ ...hoveredSlot, item: { ...offhandItem } });
+              }
+              onInventoryChange();
+            }
           }
         }
       }
@@ -323,13 +351,20 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     </svg>
   ];
 
+  const offhandPlaceholder = (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.25, color: '#fff' }}>
+      <path d="M12 3 20 6v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" />
+      <path d="M12 6v11" />
+    </svg>
+  );
+
   const renderSlot = (
     item: ItemStack | null,
     index: number,
     onClick: () => void,
     highlight?: boolean,
     placeholder?: React.ReactNode,
-    slotType: 'inventory' | 'armor' | 'crafting' = 'inventory'
+    slotType: 'inventory' | 'armor' | 'offhand' | 'crafting' = 'inventory'
   ) => {
     const itemDef = item ? ItemRegistry.get(item.id) : null;
     return (
@@ -768,6 +803,19 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
                 )
               )}
             </div>
+          </div>
+
+          {/* Offhand Slot */}
+          <div>
+            <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('offhand')}</div>
+            {renderSlot(
+              inventory.getOffhand(),
+              0,
+              handleOffhandSlotClick,
+              false,
+              offhandPlaceholder,
+              'offhand'
+            )}
           </div>
 
           {/* Player Preview */}

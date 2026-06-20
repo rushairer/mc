@@ -45,6 +45,7 @@ export interface TranslationsSchema {
   controlJump: string;
   controlSprint: string;
   controlFly: string;
+  controlOffhand: string;
   controlLook: string;
   controlBreak: string;
   controlPlace: string;
@@ -59,6 +60,7 @@ export interface TranslationsSchema {
   inventory: string;
   hotbar: string;
   armor: string;
+  offhand: string;
   crafting2x2: string;
   craftingTable3x3: string;
   creativeCatalog: string;
@@ -242,7 +244,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     controlMove: 'W / A / S / D — Move',
     controlJump: 'Space — Jump',
     controlSprint: 'Shift — Sprint',
-    controlFly: 'F — Toggle Fly (Creative mode only)',
+    controlFly: 'G — Toggle Fly (Creative mode only)',
+    controlOffhand: 'F — Swap main hand and offhand',
     controlLook: 'Mouse — Look around',
     controlBreak: 'Left Click — Break block / Attack mob',
     controlPlace: 'Right Click — Place block / Open UI / Eat food',
@@ -255,6 +258,7 @@ export const translations: Record<Locale, TranslationsSchema> = {
     inventory: 'Inventory',
     hotbar: 'Hotbar',
     armor: 'Armor',
+    offhand: 'Offhand',
     crafting2x2: 'Crafting (2×2)',
     craftingTable3x3: 'Crafting Table (3×3)',
     creativeCatalog: 'Creative Catalog',
@@ -436,7 +440,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     controlMove: 'W / A / S / D — 移动',
     controlJump: '空格键 — 跳跃',
     controlSprint: 'Shift键 — 疾跑',
-    controlFly: 'F键 — 切换飞行 (仅限创造模式)',
+    controlFly: 'G键 — 切换飞行 (仅限创造模式)',
+    controlOffhand: 'F键 — 交换主手与副手物品',
     controlLook: '鼠标 — 环顾四周',
     controlBreak: '左键单击 — 破坏方块 / 攻击怪物',
     controlPlace: '右键单击 — 放置方块 / 打开界面 / 吃食物',
@@ -449,6 +454,7 @@ export const translations: Record<Locale, TranslationsSchema> = {
     inventory: '背包',
     hotbar: '快捷栏',
     armor: '装备',
+    offhand: '副手',
     crafting2x2: '合成 (2×2)',
     craftingTable3x3: '工作台 (3×3)',
     creativeCatalog: '创造模式物品栏',
@@ -630,7 +636,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     controlMove: 'W / A / S / D — 移動',
     controlJump: '空格鍵 — 跳躍',
     controlSprint: 'Shift鍵 — 疾跑',
-    controlFly: 'F鍵 — 切換飛行 (僅限創造模式)',
+    controlFly: 'G鍵 — 切換飛行 (僅限創造模式)',
+    controlOffhand: 'F鍵 — 交換主手與副手物品',
     controlLook: '滑鼠 — 環顧四周',
     controlBreak: '左鍵單擊 — 破壞方塊 / 攻擊怪物',
     controlPlace: '右鍵單擊 — 放置方块 / 打開介面 / 吃食物',
@@ -643,6 +650,7 @@ export const translations: Record<Locale, TranslationsSchema> = {
     inventory: '背包',
     hotbar: '快捷欄',
     armor: '裝備',
+    offhand: '副手',
     crafting2x2: '合成 (2×2)',
     craftingTable3x3: '工作台 (3×3)',
     creativeCatalog: '創造模式物品欄',

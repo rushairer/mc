@@ -928,6 +928,13 @@ export class Game {
           this.input.keys.delete(String(i));
         }
       }
+
+      if (this.input.isKeyDown('f')) {
+        this.inventory.swapSelectedWithOffhand(this.player.selectedSlot);
+        this.input.keys.delete('f');
+        this.sound.playPickup();
+        this.notifyState();
+      }
     }
 
     // Riding Horse controls
@@ -1253,10 +1260,10 @@ export class Game {
       this.notifyState();
     }
 
-    // F key → fly toggle (creative mode only)
-    if (!this.chatOpen && this.input.isKeyDown('f') && this.gameMode === 'creative') {
+    // G key → fly toggle (creative mode only); F follows vanilla offhand swapping.
+    if (!this.chatOpen && this.input.isKeyDown('g') && this.gameMode === 'creative') {
       this.player.flying = !this.player.flying;
-      this.input.keys.delete('f');
+      this.input.keys.delete('g');
       this.notifyState();
     }
 
@@ -2272,6 +2279,16 @@ export class Game {
             }
           }
         }
+        const offhandItem = this.inventory.getOffhand();
+        if (offhandItem) {
+          const velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 4.0,
+            2.0 + Math.random() * 3.0,
+            (Math.random() - 0.5) * 4.0
+          );
+          this.droppedItems.spawnItem(offhandItem.id, offhandItem.count, deathPos, velocity, 1.0);
+          this.inventory.setOffhand(null);
+        }
         this.xp.reset();
       }
       this.openUI = 'death';
@@ -3087,6 +3104,7 @@ export class Game {
       inventory: {
         slots: this.inventory.toJSON(),
         armor: [...this.inventory.armor],
+        offhand: this.inventory.getOffhand(),
       },
       seed: this.seed,
       chunks: chunkData,
@@ -3171,7 +3189,11 @@ export class Game {
         } else {
           this.inventory.armor = new Array(4).fill(null);
         }
-        this.maps.restoreFromMaps(this.inventory.slots.flatMap((slot) => slot?.map ? [slot.map] : []));
+        this.inventory.setOffhand(data.inventory.offhand ?? null);
+        this.maps.restoreFromMaps([
+          ...this.inventory.slots.flatMap((slot) => slot?.map ? [slot.map] : []),
+          ...(this.inventory.getOffhand()?.map ? [this.inventory.getOffhand()!.map!] : []),
+        ]);
       }
 
       if (data.chunks) {

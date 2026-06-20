@@ -11,6 +11,8 @@ export class Inventory {
   slots: (ItemStack | null)[] = new Array(INVENTORY_SIZE).fill(null);
   /** Armor: helmet, chestplate, leggings, boots */
   armor: (ItemStack | null)[] = new Array(ARMOR_SLOTS).fill(null);
+  /** Offhand slot for shields, maps, torches, and other secondary items. */
+  offhand: ItemStack | null = null;
 
   /** Add item to inventory. Returns leftover count that didn't fit. */
   addItem(id: number, count: number = 1): number {
@@ -91,6 +93,39 @@ export class Inventory {
   /** Set a slot directly. */
   setSlot(slotIndex: number, item: ItemStack | null): void {
     this.slots[slotIndex] = item;
+  }
+
+  /** Get equipped armor slot. */
+  getArmorSlot(slotIndex: number): ItemStack | null {
+    if (!this.armor || !Array.isArray(this.armor)) {
+      this.armor = new Array(ARMOR_SLOTS).fill(null);
+    }
+    return this.armor[slotIndex] ?? null;
+  }
+
+  /** Set equipped armor slot. */
+  setArmorSlot(slotIndex: number, item: ItemStack | null): void {
+    if (!this.armor || !Array.isArray(this.armor)) {
+      this.armor = new Array(ARMOR_SLOTS).fill(null);
+    }
+    this.armor[slotIndex] = item;
+  }
+
+  /** Get the offhand slot item. */
+  getOffhand(): ItemStack | null {
+    return this.offhand;
+  }
+
+  /** Set the offhand slot directly. */
+  setOffhand(item: ItemStack | null): void {
+    this.offhand = item;
+  }
+
+  /** Swap selected hotbar item with the offhand slot. */
+  swapSelectedWithOffhand(selectedSlot: number): void {
+    const selected = this.getSlot(selectedSlot);
+    this.setSlot(selectedSlot, this.offhand);
+    this.offhand = selected;
   }
 
   /** Swap two slots. */

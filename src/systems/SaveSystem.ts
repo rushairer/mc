@@ -41,6 +41,7 @@ export interface SaveData {
   inventory: {
     slots: (ItemStack | null)[];
     armor: (ItemStack | null)[];
+    offhand?: ItemStack | null;
   };
   seed: number;
   chunks: { cx: number; cz: number; data: Uint16Array; metadata?: SerializedBlockMetadata[]; dimension?: number }[];

@@ -36,7 +36,7 @@ export class MobSystem {
     isSolidBlock?: (x: number, y: number, z: number) => boolean,
     gameMode: 'survival' | 'creative' = 'survival',
     onMobDeath?: (mob: Mob) => void,
-    onMobShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, type: 'arrow' | 'fireball' | 'potion' | 'shulker_bullet') => void,
+    onMobShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, type: 'arrow' | 'fireball' | 'potion' | 'shulker_bullet' | 'wither_skull') => void,
     dimension = 0,
     worldGen?: WorldGen,
     playerHeldItem = 0,
@@ -47,6 +47,14 @@ export class MobSystem {
     if (!getBlock || !hurtPlayer) return;
     // Target updates for Golems, Wolves, Creeper escape
     for (const [id, mob] of this.mobs) {
+      if (mob.def.type === 'pillager') {
+        mob.summonTimer = (mob.summonTimer ?? 0) - dt;
+        if (mob.summonTimer <= 0 && mob.position.distanceTo(playerPos) < 16 && gameMode !== 'creative') {
+          this.spawnMob('vex', mob.position.x + (Math.random() - 0.5) * 2, mob.position.y + 0.5, mob.position.z + (Math.random() - 0.5) * 2);
+          mob.summonTimer = 12.0 + Math.random() * 8.0;
+        }
+      }
+
       if (mob.def.type === 'iron_golem') {
         if (mob.isAngry) {
           mob.targetPlayer = true;
@@ -260,7 +268,9 @@ export class MobSystem {
 
       const biome = worldGen ? worldGen.getBiome(wx, wz) : null;
 
-      if (lightLevel >= 7 && !isNight) {
+      if (biome === BiomeType.Ocean) {
+        mobType = 'guardian';
+      } else if (lightLevel >= 7 && !isNight) {
         // Daytime: passive mobs
         const passiveTypes: MobType[] = ['cow', 'pig', 'sheep', 'chicken'];
         if (biome === BiomeType.Jungle) {

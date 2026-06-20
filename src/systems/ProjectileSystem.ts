@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 
-export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'fireball' | 'potion' | 'shulker_bullet' | 'eye_of_ender';
+export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'fireball' | 'potion' | 'shulker_bullet' | 'eye_of_ender' | 'wither_skull';
 
 export interface Projectile {
   id: number;
@@ -102,6 +102,27 @@ export class ProjectileSystem {
     this.projectiles.set(fireball.id, fireball);
   }
 
+  shootWitherSkull(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage: number = 8) {
+    const mesh = this.createWitherSkullMesh();
+    const vel = direction.clone().normalize().multiplyScalar(16);
+
+    const skull: Projectile = {
+      id: this.nextId++,
+      type: 'wither_skull',
+      position: origin.clone(),
+      velocity: vel,
+      damage,
+      fromPlayer,
+      lifetime: 10,
+      mesh,
+      inGround: false
+    };
+
+    mesh.position.copy(origin);
+    this.scene.add(mesh);
+    this.projectiles.set(skull.id, skull);
+  }
+
   shootShulkerBullet(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage: number = 4) {
     const mesh = this.createShulkerBulletMesh();
     const vel = direction.clone().normalize().multiplyScalar(9);
@@ -183,6 +204,12 @@ export class ProjectileSystem {
       color: 0x1E5E4A,
       emissive: 0x0A2B20,
     });
+    return new THREE.Mesh(geo, mat);
+  }
+
+  private createWitherSkullMesh(): THREE.Mesh {
+    const geo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+    const mat = new THREE.MeshLambertMaterial({ color: 0x141414 });
     return new THREE.Mesh(geo, mat);
   }
 

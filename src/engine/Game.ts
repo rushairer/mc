@@ -947,6 +947,8 @@ export class Game {
           this.projectiles.shootPotion(origin, direction, false, 2);
         } else if (type === 'shulker_bullet') {
           this.projectiles.shootShulkerBullet(origin, direction, false, 4);
+        } else if (type === 'wither_skull') {
+          this.projectiles.shootWitherSkull(origin, direction, false, 8);
         } else {
           this.projectiles.shootArrow(origin, direction, false, 4);
         }
@@ -1012,6 +1014,11 @@ export class Game {
         this.damagePlayer(damage, 'mob', knockback);
         if (type === 'shulker_bullet') {
           this.potionEffects.apply({ id: 'levitation', level: 1, duration: 8 }, () => {});
+        }
+        if (type === 'wither_skull') {
+          this.potionEffects.apply({ id: 'wither', level: 1, duration: 10.0 }, (amount) => {
+            this.damagePlayer(amount, 'wither');
+          });
         }
       },
       (mobId, damage, knockback) => {
@@ -1824,6 +1831,10 @@ export class Game {
                   this.setPlacedBlockMetadata(placePos.x, placePos.y, placePos.z, blockId, facing);
                   this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
 
+                  if ((blockId & 0x3FF) === 144 && ((blockId >> 10) & 0xF) === 1) {
+                    this.checkWitherSpawning(placePos.x, placePos.y, placePos.z);
+                  }
+
                   // If placing water/lava, start fluid simulation
                   if (BlockRegistry.isFluid(blockId)) {
                     this.fluids.addSource(placePos.x, placePos.y, placePos.z, blockId);
@@ -2494,6 +2505,7 @@ export class Game {
     const isUnderwater = (headBlock & 0x3FF) === 8 || (headBlock & 0x3FF) === 9;
     const xpState = this.xp.getState();
     const dragonState = this.enderDragon.getState();
+    const activeWither = Array.from(this.mobs.mobs.values()).find(m => m.def.type === 'wither' && m.health > 0);
 
     const state: GameState = {
       fps: this.currentFps,
@@ -2534,9 +2546,9 @@ export class Game {
       portalProgress: Math.min(1.0, this.portalTimer / (this.gameMode === 'creative' ? 0.5 : 3.0)),
       lookedAtSignText: this.lookedAtSignText,
       currentDimension: this.chunks.currentDimension,
-      bossName: dragonState.active ? 'Ender Dragon' : null,
-      bossHealth: dragonState.health,
-      bossMaxHealth: dragonState.maxHealth,
+      bossName: dragonState.active ? 'Ender Dragon' : (activeWither ? 'Wither' : null),
+      bossHealth: dragonState.active ? dragonState.health : (activeWither ? activeWither.health : 0),
+      bossMaxHealth: dragonState.active ? dragonState.maxHealth : (activeWither ? activeWither.def.health : 0),
     };
 
     for (const listener of this.stateListeners) {
@@ -3147,6 +3159,80 @@ export class Game {
 
     if (this.usesFacingMetadata(blockId)) {
       this.chunks.setBlockMeta(x, y, z, { facing }, true);
+    }
+  }
+
+  private checkWitherSpawning(x: number, y: number, z: number) {
+    const isSoulSand = (bx: number, by: number, bz: number) => {
+      return (this.chunks.getBlock(bx, by, bz) & 0x3FF) === 88;
+    };
+    const isSkull = (bx: number, by: number, bz: number) => {
+      const id = this.chunks.getBlock(bx, by, bz);
+      return (id & 0x3FF) === 144 && ((id >> 10) & 0xF) === 1;
+    };
+
+    // Check X-aligned
+    for (let offset = -1; offset <= 1; offset++) {
+      const centerX = x - offset;
+      const centerY = y - 1;
+      const centerZ = z;
+
+      if (
+        isSoulSand(centerX, centerY, centerZ) &&
+        isSoulSand(centerX, centerY - 1, centerZ) &&
+        isSoulSand(centerX - 1, centerY, centerZ) &&
+        isSoulSand(centerX + 1, centerY, centerZ) &&
+        isSkull(centerX - 1, centerY + 1, centerZ) &&
+        isSkull(centerX, centerY + 1, centerZ) &&
+        isSkull(centerX + 1, centerY + 1, centerZ)
+      ) {
+        // Clear blocks
+        this.chunks.setBlock(centerX, centerY, centerZ, 0);
+        this.chunks.setBlock(centerX, centerY - 1, centerZ, 0);
+        this.chunks.setBlock(centerX - 1, centerY, centerZ, 0);
+        this.chunks.setBlock(centerX + 1, centerY, centerZ, 0);
+        this.chunks.setBlock(centerX - 1, centerY + 1, centerZ, 0);
+        this.chunks.setBlock(centerX, centerY + 1, centerZ, 0);
+        this.chunks.setBlock(centerX + 1, centerY + 1, centerZ, 0);
+
+        // Spawn Wither
+        this.mobs.spawnMob('wither', centerX, centerY + 1, centerZ);
+        this.particles.spawnBlockBreak(centerX, centerY, centerZ, 0x141414, 50);
+        this.sound.playExplosion();
+        return;
+      }
+    }
+
+    // Check Z-aligned
+    for (let offset = -1; offset <= 1; offset++) {
+      const centerX = x;
+      const centerY = y - 1;
+      const centerZ = z - offset;
+
+      if (
+        isSoulSand(centerX, centerY, centerZ) &&
+        isSoulSand(centerX, centerY - 1, centerZ) &&
+        isSoulSand(centerX, centerY, centerZ - 1) &&
+        isSoulSand(centerX, centerY, centerZ + 1) &&
+        isSkull(centerX, centerY + 1, centerZ - 1) &&
+        isSkull(centerX, centerY + 1, centerZ) &&
+        isSkull(centerX, centerY + 1, centerZ + 1)
+      ) {
+        // Clear blocks
+        this.chunks.setBlock(centerX, centerY, centerZ, 0);
+        this.chunks.setBlock(centerX, centerY - 1, centerZ, 0);
+        this.chunks.setBlock(centerX, centerY, centerZ - 1, 0);
+        this.chunks.setBlock(centerX, centerY, centerZ + 1, 0);
+        this.chunks.setBlock(centerX, centerY + 1, centerZ - 1, 0);
+        this.chunks.setBlock(centerX, centerY + 1, centerZ, 0);
+        this.chunks.setBlock(centerX, centerY + 1, centerZ + 1, 0);
+
+        // Spawn Wither
+        this.mobs.spawnMob('wither', centerX, centerY + 1, centerZ);
+        this.particles.spawnBlockBreak(centerX, centerY, centerZ, 0x141414, 50);
+        this.sound.playExplosion();
+        return;
+      }
     }
   }
 

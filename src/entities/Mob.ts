@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 import type { VillagerProfession } from '../systems/VillageSystem';
 
-export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker' | 'pillager';
+export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker' | 'pillager' | 'wither' | 'guardian' | 'vex';
 
 export interface MobDef {
   type: MobType;
@@ -42,6 +42,9 @@ const MOB_DEFS: Record<MobType, MobDef> = {
   horse:    { type: 'horse',    health: 24, speed: 3.2, damage: 0, hostile: false, width: 1.3, height: 1.6, bodyColor: 0x825a3c, headColor: 0x825a3c, eyeColor: 0x000000, xpDrop: 2, drops: [{ id: 334, count: 1, chance: 0.5 }] },
   shulker:  { type: 'shulker',  health: 20, speed: 0.0, damage: 4, hostile: true, width: 0.9, height: 1.0, bodyColor: 0x9461a8, headColor: 0xb083c1, eyeColor: 0x111111, xpDrop: 5, drops: [{ id: 450, count: 1, chance: 0.5 }] },
   pillager: { type: 'pillager', health: 24, speed: 2.4, damage: 3, hostile: true, width: 0.6, height: 1.95, bodyColor: 0x4d5560, headColor: 0x9f8f7d, eyeColor: 0x235f86, xpDrop: 5, drops: [{ id: 262, count: 2, chance: 0.55 }, { id: 4094, count: 1, chance: 0.08 }, { id: 388, count: 1, chance: 0.08 }] },
+  wither:   { type: 'wither',   health: 300, speed: 3.5, damage: 8, hostile: true, width: 0.9, height: 1.9, bodyColor: 0x141414, headColor: 0x141414, eyeColor: 0xFFFFFF, xpDrop: 50, drops: [{ id: 399, count: 1, chance: 1.0 }] },
+  guardian: { type: 'guardian', health: 30,  speed: 2.0, damage: 6, hostile: true, width: 0.8, height: 0.8, bodyColor: 0x5c8c8c, headColor: 0x5c8c8c, eyeColor: 0xFF5500, xpDrop: 10, drops: [{ id: 409, count: 1, chance: 0.4 }] },
+  vex:      { type: 'vex',      health: 14,  speed: 4.0, damage: 3, hostile: true, width: 0.4, height: 0.8, bodyColor: 0xbfd3ff, headColor: 0xbfd3ff, eyeColor: 0xFF0000, xpDrop: 3,  drops: [] },
 };
 
 const MOB_MAX_AIR = 15.0;
@@ -100,6 +103,9 @@ export class Mob {
   targetMob: Mob | null = null;
   runAwayFrom: THREE.Vector3 | null = null;
   shouldTeleport = false;
+  flopTimer = 0;
+  laserCharge = 0;
+  summonTimer = 0;
 
   static nextId = 1;
 
@@ -867,6 +873,120 @@ export class Mob {
       eyeL.position.set(-0.16, 0.62, 0.33);
       eyeR.position.set(0.16, 0.62, 0.33);
       group.add(eyeL, eyeR);
+    } else if (type === 'wither') {
+      const witherMat = new THREE.MeshLambertMaterial({ color: 0x141414 });
+      const eyeMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+
+      const headGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
+      const head = new THREE.Mesh(headGeo, witherMat);
+      head.name = 'head';
+      head.position.set(0, 1.4, 0);
+      group.add(head);
+
+      const sideHeadGeo = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+      const headL = new THREE.Mesh(sideHeadGeo, witherMat);
+      headL.position.set(-0.4, 1.3, 0);
+      const headR = new THREE.Mesh(sideHeadGeo, witherMat);
+      headR.position.set(0.4, 1.3, 0);
+      group.add(headL, headR);
+
+      const eyeGeo = new THREE.BoxGeometry(0.06, 0.03, 0.02);
+      const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+      const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+      eyeL.position.set(-0.08, 1.42, 0.176);
+      eyeR.position.set(0.08, 1.42, 0.176);
+      group.add(eyeL, eyeR);
+
+      const barGeo = new THREE.BoxGeometry(0.9, 0.12, 0.12);
+      const bar = new THREE.Mesh(barGeo, witherMat);
+      bar.position.set(0, 1.15, 0);
+      group.add(bar);
+
+      const spineGeo = new THREE.BoxGeometry(0.12, 0.6, 0.12);
+      const spine = new THREE.Mesh(spineGeo, witherMat);
+      spine.position.set(0, 0.8, 0);
+      group.add(spine);
+
+      const ribGeo = new THREE.BoxGeometry(0.45, 0.08, 0.12);
+      const rib1 = new THREE.Mesh(ribGeo, witherMat);
+      rib1.position.set(0, 0.95, 0);
+      const rib2 = new THREE.Mesh(ribGeo, witherMat);
+      rib2.position.set(0, 0.8, 0);
+      const rib3 = new THREE.Mesh(ribGeo, witherMat);
+      rib3.position.set(0, 0.65, 0);
+      group.add(rib1, rib2, rib3);
+
+    } else if (type === 'guardian') {
+      const bodyMat = new THREE.MeshLambertMaterial({ color: 0x5c8c8c });
+      const spikeMat = new THREE.MeshLambertMaterial({ color: 0xff5500 });
+      const eyeMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), bodyMat);
+      body.position.y = 0.5;
+      group.add(body);
+
+      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.05), eyeMat);
+      eye.position.set(0, 0.5, 0.351);
+      group.add(eye);
+
+      const spikeGeo = new THREE.BoxGeometry(0.1, 0.25, 0.1);
+      const spike1 = new THREE.Mesh(spikeGeo, spikeMat);
+      spike1.position.set(-0.35, 0.75, 0);
+      const spike2 = new THREE.Mesh(spikeGeo, spikeMat);
+      spike2.position.set(0.35, 0.75, 0);
+      const spike3 = new THREE.Mesh(spikeGeo, spikeMat);
+      spike3.position.set(0, 0.85, 0);
+      const spike4 = new THREE.Mesh(spikeGeo, spikeMat);
+      spike4.position.set(0, 0.15, 0);
+      group.add(spike1, spike2, spike3, spike4);
+
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.35, 0.35), bodyMat);
+      tail.position.set(0, 0.5, -0.45);
+      group.add(tail);
+
+      const laserGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+      const laserMat = new THREE.LineBasicMaterial({ color: 0xff00ff });
+      const laser = new THREE.Line(laserGeo, laserMat);
+      laser.name = 'laser';
+      laser.visible = false;
+      group.add(laser);
+
+    } else if (type === 'vex') {
+      const skinMat = new THREE.MeshLambertMaterial({ color: 0xbfd3ff });
+      const clothesMat = new THREE.MeshLambertMaterial({ color: 0x6e7e8c });
+      const wingMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee, transparent: true, opacity: 0.7 });
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 0.1), clothesMat);
+      body.position.y = 0.45;
+      group.add(body);
+
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), skinMat);
+      head.name = 'head';
+      head.position.set(0, 0.7, 0);
+      group.add(head);
+
+      const eyeGeo = new THREE.BoxGeometry(0.03, 0.02, 0.01);
+      const eyeMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+      const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+      const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+      eyeL.position.set(-0.05, 0.7, 0.101);
+      eyeR.position.set(0.05, 0.7, 0.101);
+      group.add(eyeL, eyeR);
+
+      const wingGeo = new THREE.BoxGeometry(0.02, 0.2, 0.3);
+      const wingL = new THREE.Mesh(wingGeo, wingMat);
+      wingL.position.set(-0.15, 0.5, -0.15);
+      wingL.rotation.y = -0.5;
+      const wingR = new THREE.Mesh(wingGeo, wingMat);
+      wingR.position.set(0.15, 0.5, -0.15);
+      wingR.rotation.y = 0.5;
+      group.add(wingL, wingR);
+
+      const swordMat = new THREE.MeshLambertMaterial({ color: 0xdcdcdc });
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.3, 0.03), swordMat);
+      blade.position.set(0.2, 0.5, 0.1);
+      blade.rotation.x = -Math.PI / 3;
+      group.add(blade);
     }
 
     return group;
@@ -879,13 +999,23 @@ export class Mob {
     hurtPlayer: (damage: number, knockback: THREE.Vector3, attacker?: Mob) => void,
     isSolidBlock?: (x: number, y: number, z: number) => boolean,
     gameMode: 'survival' | 'creative' = 'survival',
-    onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, type: 'arrow' | 'fireball' | 'potion' | 'shulker_bullet') => void,
+    onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, type: 'arrow' | 'fireball' | 'potion' | 'shulker_bullet' | 'wither_skull') => void,
     playerHeldItem = 0,
     playerLookDir?: THREE.Vector3
   ) {
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
     this.despawnTimer += dt;
+
+    if (this.def.type === 'guardian') {
+      const isHostile = this.def.hostile;
+      const isAttacking = isHostile && gameMode !== 'creative' && this.position.distanceTo(playerPos) < 16;
+      if (!isAttacking) {
+        this.laserCharge = 0;
+        const laser = this.mesh.getObjectByName('laser');
+        if (laser) laser.visible = false;
+      }
+    }
 
     // Tick breeding timers
     this.loveTimer = Math.max(0, this.loveTimer - dt);
@@ -986,10 +1116,11 @@ export class Mob {
       this.velocity.z *= 0.55;
     } else {
       // Physics - gravity
-      if (this.def.type === 'blaze') {
-        const targetY = playerPos.y + 1 + Math.sin(Date.now() * 0.003) * 0.5;
+      if (this.def.type === 'blaze' || this.def.type === 'wither' || this.def.type === 'vex') {
+        const hoverHeight = this.def.type === 'wither' ? 4.5 : (this.def.type === 'vex' ? 2.0 : 1.0);
+        const targetY = playerPos.y + hoverHeight + Math.sin(Date.now() * 0.003) * 0.5;
         this.velocity.y = (targetY - this.position.y) * 1.5;
-        this.velocity.y = Math.max(-2, Math.min(2, this.velocity.y));
+        this.velocity.y = Math.max(-3, Math.min(3, this.velocity.y));
         this.onGround = false;
       } else if (!this.onGround) {
         this.velocity.y += -28 * dt;
@@ -1101,6 +1232,37 @@ export class Mob {
           origin.y += 0.75;
           onShoot(origin, dir, 'shulker_bullet');
           this.shootTimer = 3.5;
+        }
+      } else if (this.def.type === 'wither' && onShoot) {
+        this.shootTimer = Math.max(0, this.shootTimer - dt);
+        if (distToPlayer < 24 && this.shootTimer <= 0) {
+          const dir = new THREE.Vector3().subVectors(playerPos, this.position).normalize();
+          const origin = this.position.clone();
+          origin.y += 1.2; // Head height
+          onShoot(origin, dir, 'wither_skull');
+          this.shootTimer = 2.0;
+        }
+      } else if (this.def.type === 'guardian') {
+        if (distToPlayer < 16) {
+          this.laserCharge += dt;
+          const laser = this.mesh.getObjectByName('laser') as THREE.Line;
+          if (laser) {
+            laser.visible = true;
+            const localPlayerPos = playerPos.clone().sub(this.position);
+            localPlayerPos.y += 0.8;
+            const points = [new THREE.Vector3(0, 0.5, 0), localPlayerPos];
+            laser.geometry.setFromPoints(points);
+          }
+          if (this.laserCharge >= 3.0) {
+            const knockback = new THREE.Vector3().subVectors(playerPos, this.position).normalize().multiplyScalar(3.0);
+            knockback.y = 2.0;
+            hurtPlayer(this.damage, knockback, this);
+            this.laserCharge = 0;
+          }
+        } else {
+          this.laserCharge = 0;
+          const laser = this.mesh.getObjectByName('laser');
+          if (laser) laser.visible = false;
         }
       } else {
         // Generic melee attack (zombie, pigman, spider, magma_cube, iron_golem, wolf)
@@ -1258,7 +1420,19 @@ export class Mob {
   ) {
     const distToPlayer = this.position.distanceTo(playerPos);
 
-    if (inWater) {
+    if (this.def.type === 'guardian' && !inWater) {
+      this.aiState = 'wander';
+      this.flopTimer = (this.flopTimer ?? 0) - dt;
+      if (this.flopTimer <= 0) {
+        this.velocity.y = 4.5;
+        this.velocity.x = (Math.random() - 0.5) * 3.0;
+        this.velocity.z = (Math.random() - 0.5) * 3.0;
+        this.flopTimer = 1.0 + Math.random() * 1.5;
+      }
+      return;
+    }
+
+    if (inWater && this.def.type !== 'guardian') {
       const escapeDir = this.findWaterEscapeDirection(getBlock);
       if (escapeDir) {
         this.aiState = 'wander';
@@ -1538,6 +1712,13 @@ export class Mob {
     getBlock: (x: number, y: number, z: number) => number,
     isSolidBlock?: (x: number, y: number, z: number) => boolean
   ) {
+    if (this.def.type === 'vex') {
+      this.position.x += this.velocity.x * dt;
+      this.position.y += this.velocity.y * dt;
+      this.position.z += this.velocity.z * dt;
+      return;
+    }
+
     const hw = this.halfWidth;
 
     // Detect doors/trapdoors the mob is already colliding with to ignore them during this physics step (allows walking out)

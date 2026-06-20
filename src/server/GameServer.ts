@@ -6,8 +6,11 @@ import { Chunk } from '../world/Chunk';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { MOB_DEFS, Mob, type MobType } from '../entities/Mob';
-import { CHUNK_SIZE, WORLD_HEIGHT } from '../constants';
+import { CHUNK_SIZE, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
 import type { ItemStack, BlockMetadata } from '../types';
+
+const WORLD_SPAWN_X = 8;
+const WORLD_SPAWN_Z = 8;
 
 interface PlayerSession {
   id: string;
@@ -128,18 +131,16 @@ export class GameServer {
   addPlayer(socket: any, username: string, isLocalHost: boolean): PlayerSession {
     const id = 'player_' + Math.random().toString(36).substring(2, 9);
     
-    // Default Spawn point
-    const spawnX = 8;
-    const spawnZ = 8;
-    const spawnY = this.worldGen.getTerrainHeight(spawnX, spawnZ) + 3;
+    // Default spawn point
+    const spawn = this.findSafeWorldSpawnPosition();
 
     const session: PlayerSession = {
       id,
       username,
       socket,
-      x: spawnX,
-      y: spawnY,
-      z: spawnZ,
+      x: spawn.x,
+      y: spawn.y,
+      z: spawn.z,
       yaw: 0,
       pitch: 0,
       flying: false,
@@ -389,19 +390,23 @@ export class GameServer {
       session.xpLevel = data.player.xpLevel ?? 0;
       session.xpCurrent = data.player.xpCurrent ?? 0;
       session.dimension = data.player.currentDimension ?? 0;
+      let migratedLegacySpawn = false;
+      if (
+        this.shouldMigrateLegacySpawn(session.x, session.z, session.dimension) ||
+        this.isSavedSpawnColumnStale(data.chunks, session.x, session.z, session.dimension) ||
+        this.isDamagedSpawnSave(session.x, session.y, session.z, session.health, session.dimension)
+      ) {
+        const spawn = this.findSafeWorldSpawnPosition();
+        session.x = spawn.x;
+        session.y = spawn.y;
+        session.z = spawn.z;
+        session.health = 20;
+        session.hunger = 20;
+        session.oxygen = 15;
+        migratedLegacySpawn = true;
+      }
       session.inventory = data.inventory.slots;
       session.armor = data.inventory.armor;
-
-      // Broadcast changes
-      this.sendTo(session, PacketType.S2C_JOIN_ACK, {
-        playerId: session.id,
-        seed: this.seed,
-        x: session.x,
-        y: session.y,
-        z: session.z,
-        gameMode: 'survival'
-      });
-      this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, { slots: session.inventory, armor: session.armor });
 
       // Clear current server chunks
       this.overworldChunks.clear();
@@ -410,6 +415,10 @@ export class GameServer {
 
       // Deserialise chunks
       for (const cData of data.chunks) {
+        if (migratedLegacySpawn && this.isChunkNearSession(cData.cx, cData.cz, cData.dimension ?? 0, session)) {
+          continue;
+        }
+
         const chunk = new Chunk(cData.cx, cData.cz);
         chunk.data.set(cData.data);
         
@@ -427,7 +436,6 @@ export class GameServer {
 
       // Deserialise mobs
       this.mobs.clear();
-      this.broadcast(PacketType.S2C_CHAT, { sender: 'System', text: 'Loaded world save.' });
 
       if (data.mobs) {
         for (const mData of data.mobs) {
@@ -444,9 +452,117 @@ export class GameServer {
         }
       }
 
+      if (migratedLegacySpawn) {
+        session.y = this.findSafeYInLoadedWorld(session.x, session.z, session.dimension) + 2;
+      }
+
+      // Broadcast changes after chunks are ready so clients request regenerated safe-spawn chunks.
+      this.sendTo(session, PacketType.S2C_JOIN_ACK, {
+        playerId: session.id,
+        seed: this.seed,
+        x: session.x,
+        y: session.y,
+        z: session.z,
+        gameMode: 'survival'
+      });
+      this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, { slots: session.inventory, armor: session.armor });
+      this.broadcast(PacketType.S2C_CHAT, { sender: 'System', text: 'Loaded world save.' });
+
     } catch (e) {
       console.error("Failed to load world save", e);
     }
+  }
+
+  private findSafeWorldSpawnPosition(): THREE.Vector3 {
+    const maxRadius = 128;
+
+    for (let radius = 0; radius <= maxRadius; radius += 4) {
+      for (let dx = -radius; dx <= radius; dx += 4) {
+        for (let dz = -radius; dz <= radius; dz += 4) {
+          if (radius !== 0 && Math.abs(dx) !== radius && Math.abs(dz) !== radius) continue;
+
+          const x = WORLD_SPAWN_X + dx;
+          const z = WORLD_SPAWN_Z + dz;
+          const y = this.worldGen.getTerrainHeight(x, z);
+          if (y <= SEA_LEVEL + 1) continue;
+
+          return new THREE.Vector3(x + 0.5, y + 2, z + 0.5);
+        }
+      }
+    }
+
+    const fallbackY = Math.max(this.worldGen.getTerrainHeight(WORLD_SPAWN_X, WORLD_SPAWN_Z) + 2, SEA_LEVEL + 2);
+    return new THREE.Vector3(WORLD_SPAWN_X + 0.5, fallbackY, WORLD_SPAWN_Z + 0.5);
+  }
+
+  private shouldMigrateLegacySpawn(x: number, z: number, dimension: number): boolean {
+    if (dimension !== 0) return false;
+
+    const distanceFromOldSpawn = Math.hypot(x - WORLD_SPAWN_X, z - WORLD_SPAWN_Z);
+    if (distanceFromOldSpawn > 16) return false;
+
+    const terrainY = this.worldGen.getTerrainHeight(Math.floor(x), Math.floor(z));
+    return terrainY <= SEA_LEVEL + 1;
+  }
+
+  private isChunkNearSession(cx: number, cz: number, dimension: number, session: PlayerSession): boolean {
+    if (dimension !== 0) return false;
+
+    const spawnChunkX = Math.floor(session.x / CHUNK_SIZE);
+    const spawnChunkZ = Math.floor(session.z / CHUNK_SIZE);
+    return Math.abs(cx - spawnChunkX) <= RENDER_DISTANCE + 1 && Math.abs(cz - spawnChunkZ) <= RENDER_DISTANCE + 1;
+  }
+
+  private isSavedSpawnColumnStale(
+    chunks: { cx: number; cz: number; data: Uint16Array; dimension?: number }[] | undefined,
+    x: number,
+    z: number,
+    dimension: number
+  ): boolean {
+    if (!chunks || dimension !== 0) return false;
+    if (Math.hypot(x - WORLD_SPAWN_X, z - WORLD_SPAWN_Z) > 32) return false;
+
+    const wx = Math.floor(x);
+    const wz = Math.floor(z);
+    const expectedTerrainY = this.worldGen.getTerrainHeight(wx, wz);
+    if (expectedTerrainY <= SEA_LEVEL + 1 || expectedTerrainY < 0 || expectedTerrainY >= WORLD_HEIGHT) return false;
+
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const chunk = chunks.find((c) => c.cx === cx && c.cz === cz && (c.dimension ?? 0) === 0);
+    if (!chunk) return false;
+
+    const lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const id = chunk.data[lx + lz * CHUNK_SIZE + expectedTerrainY * CHUNK_SIZE * CHUNK_SIZE] ?? 0;
+    return !BlockRegistry.isSolid(id) || BlockRegistry.isFluid(id);
+  }
+
+  private isDamagedSpawnSave(x: number, y: number, z: number, health: number, dimension: number): boolean {
+    if (dimension !== 0) return false;
+    if (Math.hypot(x - WORLD_SPAWN_X, z - WORLD_SPAWN_Z) > 32) return false;
+    return health <= 0 || y < SEA_LEVEL;
+  }
+
+  private findSafeYInLoadedWorld(x: number, z: number, dimension: number): number {
+    const wx = Math.floor(x);
+    const wz = Math.floor(z);
+    const chunk = this.getOrGenerateChunk(
+      Math.floor(wx / CHUNK_SIZE),
+      Math.floor(wz / CHUNK_SIZE),
+      dimension
+    );
+    const lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+
+    for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
+      const id = chunk.getBlock(lx, y, lz);
+      if (BlockRegistry.isSolid(id) && !BlockRegistry.isFluid(id)) {
+        return y;
+      }
+    }
+
+    return Math.max(this.worldGen.getTerrainHeight(wx, wz), SEA_LEVEL + 1);
   }
 
   // --- Network message handling ---

@@ -638,8 +638,8 @@ export class Chunk {
     const verts = FACE_QUADS[face];
     const baseIdx = data.positions.length / 3;
     const isFluid = BlockRegistry.isFluid(blockId);
-    // Source water (level 8) → 15/16 height; flowing water → (level-1)/8 height
-    const surfaceY = fluidLevel >= 8 ? 15 / 16 : (fluidLevel - 1) / 8;
+    // Full/source and falling fluids occupy the whole voxel; lower levels taper only horizontal flow.
+    const surfaceY = fluidLevel >= 8 ? 1 : (fluidLevel - 1) / 8;
 
     const worldX = this.cx * CHUNK_SIZE + x;
     const worldZ = this.cz * CHUNK_SIZE + z;

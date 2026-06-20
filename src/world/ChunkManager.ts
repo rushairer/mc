@@ -94,28 +94,22 @@ export class ChunkManager {
            
            // Water animation & custom coloring (blockType == 1.0)
            if (vBlockType == 1.0) {
-             vec2 flowUv = vUv;
-             flowUv.y += time * 0.04;
-             flowUv.x += sin(time * 0.4 + vWorldPosition.y) * 0.015;
-             vec4 texelColor = texture2D(map, flowUv);
-             diffuseColor = vec4(mix(texelColor.rgb, vec3(0.0, 0.35, 0.75), 0.45), 0.8);
+             float rippleA = sin(vWorldPosition.x * 4.0 + time * 1.7);
+             float rippleB = cos(vWorldPosition.z * 3.5 - time * 1.2);
+             float ripple = (rippleA + rippleB) * 0.035;
+             vec3 waterColor = vec3(0.05, 0.32, 0.72) + vec3(ripple);
+             diffuseColor = vec4(mix(diffuseColor.rgb, waterColor, 0.68), 0.72);
            }
            // Lava animation & glowing (blockType == 2.0)
            else if (vBlockType == 2.0) {
-             vec2 flowUv = vUv;
-             flowUv.y -= time * 0.015;
-             flowUv.x += cos(time * 0.15) * 0.01;
-             vec4 texelColor = texture2D(map, flowUv);
-             diffuseColor = vec4(mix(texelColor.rgb, vec3(1.0, 0.25, 0.0), 0.25), 1.0);
+             float pulse = sin(vWorldPosition.x * 3.0 + vWorldPosition.z * 2.4 + time * 1.8) * 0.08;
+             diffuseColor = vec4(mix(diffuseColor.rgb, vec3(1.0, 0.25 + pulse, 0.0), 0.28), 1.0);
              diffuseColor.rgb = clamp(diffuseColor.rgb * 1.4, 0.0, 1.0);
            }
            // Nether / End Portal animation (blockType == 3.0)
            else if (vBlockType == 3.0) {
-             vec2 swirlUv = vUv;
-             swirlUv.x += sin(time * 1.2 + vWorldPosition.y * 2.5) * 0.04;
-             swirlUv.y += cos(time * 1.2 + vWorldPosition.x * 2.5) * 0.04;
-             vec4 texelColor = texture2D(map, swirlUv);
-             diffuseColor = vec4(mix(texelColor.rgb, vec3(0.45, 0.0, 0.75), 0.65), 0.85);
+             float shimmer = sin(time * 1.2 + vWorldPosition.y * 2.5 + vWorldPosition.x * 1.7) * 0.08;
+             diffuseColor = vec4(mix(diffuseColor.rgb, vec3(0.45 + shimmer, 0.0, 0.75), 0.65), 0.85);
            }`
         );
 

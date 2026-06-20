@@ -15,6 +15,8 @@ import { TradingUI } from './ui/TradingUI';
 import { EndPoemUI } from './ui/EndPoemUI';
 import { AdvancementsUI } from './ui/AdvancementsUI';
 import { SignEditUI } from './ui/SignEditUI';
+import { MapUI } from './ui/MapUI';
+import { BookUI } from './ui/BookUI';
 import type { Enchantment } from './systems/EnchantSystem';
 import type { TradeOffer } from './systems/VillageSystem';
 import type { ItemStack } from './types';
@@ -62,6 +64,9 @@ const initialGameState: GameState = {
   bossName: null,
   bossHealth: 0,
   bossMaxHealth: 0,
+  openMapItem: null,
+  openBookItem: null,
+  openBookEditable: false,
 };
 
 export const App: React.FC = () => {
@@ -204,6 +209,10 @@ export const App: React.FC = () => {
 
   const handleTrade = useCallback((offer: TradeOffer) => {
     return gameRef.current?.performTrade(offer) ?? false;
+  }, []);
+
+  const handleSaveBook = useCallback((pages: string[], title?: string) => {
+    gameRef.current?.saveBook(pages, title);
   }, []);
 
   const handleSingleplayerClick = useCallback(() => {
@@ -590,6 +599,24 @@ export const App: React.FC = () => {
           unlockedList={gameState.unlockedAdvancements ?? []}
           onClose={handleCloseUI}
           getItemIconStyle={getItemIconStyle}
+        />
+      )}
+
+      {/* Map UI */}
+      {gameState.openUI === 'map' && gameState.openMapItem && (
+        <MapUI
+          item={gameState.openMapItem}
+          onClose={handleCloseUI}
+        />
+      )}
+
+      {/* Book UI */}
+      {gameState.openUI === 'book' && gameState.openBookItem && (
+        <BookUI
+          item={gameState.openBookItem}
+          editable={gameState.openBookEditable}
+          onClose={handleCloseUI}
+          onSave={handleSaveBook}
         />
       )}
 

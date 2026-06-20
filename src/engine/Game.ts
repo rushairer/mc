@@ -28,10 +28,11 @@ import { EnchantSystem } from '../systems/EnchantSystem';
 import { PotionEffectSystem } from '../systems/PotionEffect';
 import { GameRuleSystem } from '../systems/GameRuleSystem';
 import { AdvancementSystem } from '../systems/AdvancementSystem';
+import { MapSystem } from '../systems/MapSystem';
 import { HopperSystem } from '../systems/HopperSystem';
 import { VillageSystem, type TradeOffer, type VillagerProfession } from '../systems/VillageSystem';
 import { EnderDragonSystem } from '../systems/EnderDragonSystem';
-import { CHUNK_SIZE } from '../constants';
+import { CHUNK_SIZE, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
 import type { Enchantment } from '../systems/EnchantSystem';
 import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '../types';
 import { NetworkClient } from '../server/NetworkClient';
@@ -42,8 +43,14 @@ const GLASS_BOTTLE_ID = 374;
 const ENDER_EYE_ID = 381;
 const END_PORTAL_ID = 119;
 const END_PORTAL_FRAME_ID = 120;
+const FILLED_MAP_ID = 358;
+const WRITABLE_BOOK_ID = 386;
+const WRITTEN_BOOK_ID = 387;
+const EMPTY_MAP_ID = 395;
+const WORLD_SPAWN_X = 8;
+const WORLD_SPAWN_Z = 8;
 
-export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause' | 'end_poem' | 'sign_edit' | 'advancements';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause' | 'end_poem' | 'sign_edit' | 'advancements' | 'map' | 'book';
 
 export interface GameState {
   fps: number;
@@ -87,6 +94,9 @@ export interface GameState {
   bossName: string | null;
   bossHealth: number;
   bossMaxHealth: number;
+  openMapItem: ItemStack | null;
+  openBookItem: ItemStack | null;
+  openBookEditable: boolean;
   unlockedAdvancements?: string[];
   gamerules?: {
     difficulty: string;
@@ -120,11 +130,14 @@ export class Game {
   droppedItems!: DroppedItemSystem;
   private xp: XPSystem;
   private potionEffects: PotionEffectSystem;
+  private maps: MapSystem;
   private hoppers: HopperSystem;
   private enderDragon: EnderDragonSystem;
   vehicles: VehicleSystem;
   riddenVehicle: Vehicle | null = null;
   editingSignPos: THREE.Vector3 | null = null;
+  editingBookSlot: number | null = null;
+  openMapSlot: number | null = null;
   lookedAtSignText: string[] | null = null;
   private commands: CommandSystem;
   private clock: THREE.Clock;
@@ -196,6 +209,7 @@ export class Game {
     this.projectiles = new ProjectileSystem(this.renderer.scene);
     this.xp = new XPSystem(this.renderer.scene);
     this.potionEffects = new PotionEffectSystem();
+    this.maps = new MapSystem();
     this.enderDragon = new EnderDragonSystem(this.renderer.scene);
     this.commands = new CommandSystem({
       getPlayerPosition: () => ({
@@ -228,16 +242,16 @@ export class Game {
     this.inventory.setSlot(6, { id: 58, count: 4 });   // Crafting Table
     this.inventory.setSlot(7, { id: 54, count: 4 });   // Chest
     this.inventory.setSlot(8, { id: 50, count: 64 });  // Torch
+    this.inventory.setSlot(9, { id: EMPTY_MAP_ID, count: 1 });  // Empty Map
+    this.inventory.setSlot(10, { id: WRITABLE_BOOK_ID, count: 1, book: { pages: [''] } }); // Book and Quill
 
 
     // Spawn
-    const spawnX = 8;
-    const spawnZ = 8;
-    const spawnY = this.chunks.getWorldGen().getTerrainHeight(spawnX, spawnZ) + 3;
-    this.player = new Player(spawnX, spawnY, spawnZ);
+    const spawn = this.findSafeWorldSpawnPosition();
+    this.player = new Player(spawn.x, spawn.y, spawn.z);
     this.droppedItems = new DroppedItemSystem(this.renderer.scene, (itemId) => this.player.createItemVisualMesh(itemId));
     this.hoppers = new HopperSystem(this.chunks, this.droppedItems, () => this.notifyState());
-    this.chunks.update(spawnX, spawnZ);
+    this.chunks.update(spawn.x, spawn.z);
     this.player.resolveStuck(this.chunks);
     this.renderer.scene.add(this.player.mesh);
 
@@ -490,6 +504,20 @@ export class Game {
     this.notifyState();
   }
 
+  openMapUI(slotIndex: number) {
+    this.openMapSlot = slotIndex;
+    this.openUI = 'map';
+    document.exitPointerLock();
+    this.notifyState();
+  }
+
+  openBookUI(slotIndex: number) {
+    this.editingBookSlot = slotIndex;
+    this.openUI = 'book';
+    document.exitPointerLock();
+    this.notifyState();
+  }
+
   performTrade(offer: TradeOffer): boolean {
     const traded = VillageSystem.performTrade(this.inventory, offer, this.gameMode === 'creative');
     if (traded) {
@@ -572,6 +600,10 @@ export class Game {
       this.openBrewingPos = null;
     } else if (this.openUI === 'trading') {
       this.tradingProfession = null;
+    } else if (this.openUI === 'book') {
+      this.editingBookSlot = null;
+    } else if (this.openUI === 'map') {
+      this.openMapSlot = null;
     }
     this.openUI = 'none';
     this.input.requestLock();
@@ -586,6 +618,38 @@ export class Game {
       this.chunks.setBlockMeta(pos.x, pos.y, pos.z, { ...currentMeta, signText: lines }, true);
       this.editingSignPos = null;
     }
+    this.openUI = 'none';
+    this.input.requestLock();
+    this.lockCooldown = 0.5;
+    this.notifyState();
+  }
+
+  saveBook(pages: string[], title?: string) {
+    if (this.editingBookSlot === null) return;
+
+    const slot = this.inventory.getSlot(this.editingBookSlot);
+    if (!slot || (slot.id !== WRITABLE_BOOK_ID && slot.id !== WRITTEN_BOOK_ID)) return;
+
+    const cleanPages = pages.map((page) => page.slice(0, 1024)).slice(0, 50);
+    if (title && slot.id === WRITABLE_BOOK_ID) {
+      slot.id = WRITTEN_BOOK_ID;
+      slot.count = 1;
+      slot.customName = title.slice(0, 32);
+      slot.book = {
+        title: title.slice(0, 32),
+        author: 'Steve',
+        pages: cleanPages.length > 0 ? cleanPages : [''],
+        signed: true,
+      };
+    } else {
+      slot.book = {
+        ...(slot.book ?? {}),
+        pages: cleanPages.length > 0 ? cleanPages : [''],
+        signed: slot.id === WRITTEN_BOOK_ID || slot.book?.signed,
+      };
+    }
+
+    this.editingBookSlot = null;
     this.openUI = 'none';
     this.input.requestLock();
     this.lockCooldown = 0.5;
@@ -617,7 +681,7 @@ export class Game {
   }
 
   private findSafeRespawnPosition(): THREE.Vector3 {
-    const spawnPoint = new THREE.Vector3(8, 0, 8);
+    const spawnPoint = new THREE.Vector3(WORLD_SPAWN_X + 0.5, 0, WORLD_SPAWN_Z + 0.5);
     let bestPos: THREE.Vector3 | null = null;
 
     for (let attempt = 0; attempt < 30; attempt++) {
@@ -629,6 +693,9 @@ export class Game {
 
       // Get surface Y height
       const ry = this.chunks.getWorldGen().getTerrainHeight(rx, rz);
+      if (ry <= SEA_LEVEL + 1) {
+        continue;
+      }
 
       // Check block type at surface and below
       const surfaceBlockId = this.chunks.getBlock(rx, ry, rz);
@@ -658,21 +725,34 @@ export class Game {
 
     // Fallback: if all attempts fail, use the last candidate but clear/kill mobs within 12 blocks of it
     if (!bestPos) {
-      const angle = Math.random() * Math.PI * 2;
-      const rx = Math.floor(spawnPoint.x + Math.cos(angle) * 30);
-      const rz = Math.floor(spawnPoint.z + Math.sin(angle) * 30);
-      const ry = this.chunks.getWorldGen().getTerrainHeight(rx, rz);
-      bestPos = new THREE.Vector3(rx + 0.5, ry + 1.5, rz + 0.5);
+      bestPos = this.findSafeWorldSpawnPosition();
+    }
 
-      const nearbyMobs = this.mobs.getMobsNear(bestPos, 12);
-      for (const mob of nearbyMobs) {
-        if (mob.def.hostile) {
-          mob.health = 0; // kill it
+    return bestPos;
+  }
+
+  private findSafeWorldSpawnPosition(): THREE.Vector3 {
+    const worldGen = this.chunks.getWorldGen();
+    const maxRadius = 128;
+
+    for (let radius = 0; radius <= maxRadius; radius += 4) {
+      for (let dx = -radius; dx <= radius; dx += 4) {
+        for (let dz = -radius; dz <= radius; dz += 4) {
+          if (radius !== 0 && Math.abs(dx) !== radius && Math.abs(dz) !== radius) continue;
+
+          const x = WORLD_SPAWN_X + dx;
+          const z = WORLD_SPAWN_Z + dz;
+          const y = worldGen.getTerrainHeight(x, z);
+
+          if (y <= SEA_LEVEL + 1) continue;
+
+          return new THREE.Vector3(x + 0.5, y + 2, z + 0.5);
         }
       }
     }
 
-    return bestPos;
+    const fallbackY = Math.max(worldGen.getTerrainHeight(WORLD_SPAWN_X, WORLD_SPAWN_Z) + 2, SEA_LEVEL + 2);
+    return new THREE.Vector3(WORLD_SPAWN_X + 0.5, fallbackY, WORLD_SPAWN_Z + 0.5);
   }
 
   requestSave() {
@@ -1503,9 +1583,6 @@ export class Game {
               }
             }
 
-            // Fluid check: if breaking a block next to water, trigger flow
-            this.checkFluidAdjacency(bp.x, bp.y, bp.z);
-
             if (isDoor) {
               this.breakDoor(bp.x, bp.y, bp.z);
             } else {
@@ -1545,6 +1622,10 @@ export class Game {
               this.chunks.setBlockMeta(bp.x, bp.y, bp.z, null);
               this.redstone.observeBlockChange(bp.x, bp.y, bp.z);
             }
+
+            // Fluid check after removal: water should see this cell as air and flow into it.
+            this.checkFluidAdjacency(bp.x, bp.y, bp.z);
+            this.updateFluids(0.4);
           }
           this.sound.playBlockBreak(blockId);
           this.breakProgress = 0;
@@ -1687,6 +1768,9 @@ export class Game {
           return;
         }
       }
+
+      const selectedSlot = this.inventory.getSlot(this.player.selectedSlot);
+      const heldItemId = selectedSlot?.id ?? 0;
 
       if (this.targetBlock) {
         const { blockPos, faceNormal } = this.targetBlock;
@@ -1961,6 +2045,11 @@ export class Game {
         }
       }
 
+      if (selectedSlot && this.tryUseHeldReadableItem(selectedSlot)) {
+        this.placeCooldown = 0.35;
+        return;
+      }
+
       if (heldItemId === ENDER_EYE_ID && this.placeCooldown <= 0) {
         this.throwEnderEye();
       }
@@ -2211,11 +2300,7 @@ export class Game {
     );
 
     // Fluid simulation
-    this.fluids.update(dt,
-      (x, y, z) => this.chunks.getBlock(x, y, z),
-      (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
-      (x, y, z, meta) => this.chunks.setBlockMeta(x, y, z, meta)
-    );
+    this.updateFluids(dt);
 
     // Hopper simulation
     this.hoppers.update(dt);
@@ -2249,6 +2334,57 @@ export class Game {
     this.renderer.render();
     this.notifyState();
   };
+
+  private updateFluids(dt: number) {
+    this.fluids.update(dt,
+      (x, y, z) => this.chunks.getBlock(x, y, z),
+      (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
+      (x, y, z, meta, markDirty) => this.chunks.setBlockMeta(x, y, z, meta, markDirty)
+    );
+  }
+
+  private tryUseHeldReadableItem(slot: ItemStack): boolean {
+    if (slot.id === EMPTY_MAP_ID) {
+      const filledMap: ItemStack = {
+        id: FILLED_MAP_ID,
+        count: 1,
+        map: this.maps.createFilledMap(
+          this.chunks.getWorldGen(),
+          this.player.position.x,
+          this.player.position.z,
+          this.chunks.currentDimension
+        ),
+      };
+
+      if (this.gameMode === 'creative') {
+        this.inventory.setSlot(this.player.selectedSlot, filledMap);
+      } else if (slot.count <= 1) {
+        this.inventory.setSlot(this.player.selectedSlot, filledMap);
+      } else {
+        const remainingEmptyMaps = slot.count - 1;
+        this.inventory.setSlot(this.player.selectedSlot, filledMap);
+        this.inventory.addStack({ id: EMPTY_MAP_ID, count: remainingEmptyMaps });
+      }
+      this.sound.playPickup();
+      this.openMapUI(this.player.selectedSlot);
+      return true;
+    }
+
+    if (slot.id === FILLED_MAP_ID && slot.map) {
+      this.openMapUI(this.player.selectedSlot);
+      return true;
+    }
+
+    if (slot.id === WRITABLE_BOOK_ID || slot.id === WRITTEN_BOOK_ID) {
+      if (!slot.book) {
+        slot.book = { pages: [''], signed: slot.id === WRITTEN_BOOK_ID };
+      }
+      this.openBookUI(this.player.selectedSlot);
+      return true;
+    }
+
+    return false;
+  }
 
   private handleMobDeath(mob: Mob) {
     this.advancements.checkMobKilled(mob.def.type);
@@ -2712,6 +2848,9 @@ export class Game {
       bossName: dragonState.active ? 'Ender Dragon' : (activeWither ? 'Wither' : null),
       bossHealth: dragonState.active ? dragonState.health : (activeWither ? activeWither.health : 0),
       bossMaxHealth: dragonState.active ? dragonState.maxHealth : (activeWither ? activeWither.def.health : 0),
+      openMapItem: this.openMapSlot !== null ? this.inventory.getSlot(this.openMapSlot) : null,
+      openBookItem: this.editingBookSlot !== null ? this.inventory.getSlot(this.editingBookSlot) : null,
+      openBookEditable: this.editingBookSlot !== null && this.inventory.getSlot(this.editingBookSlot)?.id === WRITABLE_BOOK_ID,
       unlockedAdvancements: this.advancements ? this.advancements.getUnlockedList() : [],
       gamerules: this.gamerules ? {
         difficulty: this.gamerules.getDifficulty(),
@@ -2803,10 +2942,8 @@ export class Game {
     this.vehicles.dispose();
 
     this.chunks.currentDimension = Dimension.Overworld;
-    const spawnX = 8;
-    const spawnZ = 8;
-    const spawnY = this.chunks.getWorldGen().getTerrainHeight(spawnX, spawnZ) + 3;
-    this.player.position.set(spawnX + 0.5, spawnY, spawnZ + 0.5);
+    const spawn = this.findSafeWorldSpawnPosition();
+    this.player.position.copy(spawn);
     this.player.velocity.set(0, 0, 0);
 
     this.chunks.update(this.player.position.x, this.player.position.z);
@@ -2969,6 +3106,19 @@ export class Game {
       } else {
         this.chunks.currentDimension = Dimension.Overworld;
       }
+      let migratedLegacySpawn = false;
+      if (
+        this.shouldMigrateLegacySpawn(data.player.x, data.player.z, this.chunks.currentDimension) ||
+        this.isSavedSpawnColumnStale(data.chunks, data.player.x, data.player.z, this.chunks.currentDimension) ||
+        this.isDamagedSpawnSave(data.player.x, data.player.y, data.player.z, data.player.health, this.chunks.currentDimension)
+      ) {
+        this.player.position.copy(this.findSafeWorldSpawnPosition());
+        this.player.velocity.set(0, 0, 0);
+        this.player.health = 20;
+        this.player.hunger = 20;
+        this.player.oxygen = 15;
+        migratedLegacySpawn = true;
+      }
       this.xp.setState(
         data.player.xpLevel ?? 0,
         data.player.xpCurrent ?? 0,
@@ -3000,6 +3150,7 @@ export class Game {
         } else {
           this.inventory.armor = new Array(4).fill(null);
         }
+        this.maps.restoreFromMaps(this.inventory.slots.flatMap((slot) => slot?.map ? [slot.map] : []));
       }
 
       if (data.chunks) {
@@ -3007,8 +3158,16 @@ export class Game {
         this.chunks.netherChunks.clear();
         this.chunks.endChunks.clear();
         for (const chunk of data.chunks) {
+          if (migratedLegacySpawn && this.isChunkNearPlayerSpawn(chunk.cx, chunk.cz, chunk.dimension ?? 0)) {
+            continue;
+          }
           this.chunks.restoreChunk(chunk.cx, chunk.cz, chunk.data, chunk.metadata, chunk.dimension ?? 0);
         }
+      }
+
+      if (migratedLegacySpawn) {
+        this.chunks.update(this.player.position.x, this.player.position.z);
+        this.player.position.y = this.findSafeYInLoadedWorld(this.player.position.x, this.player.position.z) + 2;
       }
 
       this.restoreRedstoneFromLoadedChunks();
@@ -3021,6 +3180,64 @@ export class Game {
     } catch (e) {
       console.warn('Load failed:', e);
     }
+  }
+
+  private shouldMigrateLegacySpawn(x: number, z: number, dimension: Dimension): boolean {
+    if (dimension !== Dimension.Overworld) return false;
+
+    const distanceFromOldSpawn = Math.hypot(x - WORLD_SPAWN_X, z - WORLD_SPAWN_Z);
+    if (distanceFromOldSpawn > 16) return false;
+
+    const terrainY = this.chunks.getWorldGen().getTerrainHeight(Math.floor(x), Math.floor(z));
+    return terrainY <= SEA_LEVEL + 1;
+  }
+
+  private isChunkNearPlayerSpawn(cx: number, cz: number, dimension: number): boolean {
+    if (dimension !== Dimension.Overworld) return false;
+
+    const spawnChunkX = Math.floor(this.player.position.x / CHUNK_SIZE);
+    const spawnChunkZ = Math.floor(this.player.position.z / CHUNK_SIZE);
+    return Math.abs(cx - spawnChunkX) <= RENDER_DISTANCE + 1 && Math.abs(cz - spawnChunkZ) <= RENDER_DISTANCE + 1;
+  }
+
+  private isSavedSpawnColumnStale(chunks: SaveData['chunks'] | undefined, x: number, z: number, dimension: Dimension): boolean {
+    if (!chunks || dimension !== Dimension.Overworld) return false;
+    if (Math.hypot(x - WORLD_SPAWN_X, z - WORLD_SPAWN_Z) > 32) return false;
+
+    const wx = Math.floor(x);
+    const wz = Math.floor(z);
+    const expectedTerrainY = this.chunks.getWorldGen().getTerrainHeight(wx, wz);
+    if (expectedTerrainY <= SEA_LEVEL + 1 || expectedTerrainY < 0 || expectedTerrainY >= WORLD_HEIGHT) return false;
+
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const chunk = chunks.find((c) => c.cx === cx && c.cz === cz && (c.dimension ?? 0) === Dimension.Overworld);
+    if (!chunk) return false;
+
+    const lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const id = chunk.data[lx + lz * CHUNK_SIZE + expectedTerrainY * CHUNK_SIZE * CHUNK_SIZE] ?? 0;
+    return !BlockRegistry.isSolid(id) || BlockRegistry.isFluid(id);
+  }
+
+  private isDamagedSpawnSave(x: number, y: number, z: number, health: number, dimension: Dimension): boolean {
+    if (dimension !== Dimension.Overworld) return false;
+    if (Math.hypot(x - WORLD_SPAWN_X, z - WORLD_SPAWN_Z) > 32) return false;
+    return health <= 0 || y < SEA_LEVEL;
+  }
+
+  private findSafeYInLoadedWorld(x: number, z: number): number {
+    const wx = Math.floor(x);
+    const wz = Math.floor(z);
+
+    for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
+      const id = this.chunks.getBlock(wx, y, wz);
+      if (BlockRegistry.isSolid(id) && !BlockRegistry.isFluid(id)) {
+        return y;
+      }
+    }
+
+    return Math.max(this.chunks.getWorldGen().getTerrainHeight(wx, wz), SEA_LEVEL + 1);
   }
 
   completeEndPoem() {

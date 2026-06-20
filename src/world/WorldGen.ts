@@ -154,7 +154,7 @@ export class WorldGen {
   }
 
   getBiome(wx: number, wz: number): BiomeType {
-    const continent = 64 + this.noise.fbm2D(wx * 0.008, wz * 0.008, 4) * 30;
+    const continent = SEA_LEVEL + this.noise.fbm2D(wx * 0.008, wz * 0.008, 4) * 30;
 
     // Rare island patches in deep ocean become mushroom fields instead of random inland spots.
     const mNoise = this.mushroomNoise.noise2D(wx * 0.002, wz * 0.002);

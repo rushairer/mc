@@ -84,6 +84,21 @@ export interface ItemStack {
     name: string;
     effect?: PotionEffectData;
   };
+  map?: {
+    id: number;
+    centerX: number;
+    centerZ: number;
+    scale: number;
+    dimension: number;
+    pixels: string[];
+    playerMarker: { x: number; z: number };
+  };
+  book?: {
+    title?: string;
+    author?: string;
+    pages: string[];
+    signed?: boolean;
+  };
 }
 
 export type PotionKind = 'bottle' | 'water' | 'awkward' | 'healing' | 'regeneration' | 'speed' | 'fire_resistance' | 'poison';

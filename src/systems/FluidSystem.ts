@@ -14,7 +14,6 @@ const MAX_UPDATES_PER_TICK = 20;
 
 export class FluidSystem {
   private queue: FluidUpdate[] = [];
-  private processed: Set<string> = new Set();
   private tickTimer = 0;
   private tickInterval = 0.4; // seconds between fluid ticks
 
@@ -22,7 +21,7 @@ export class FluidSystem {
     dt: number,
     getBlock: (x: number, y: number, z: number) => number,
     setBlock: (x: number, y: number, z: number, id: number) => void,
-    setBlockMeta: (x: number, y: number, z: number, meta: BlockMetadata | null) => void
+    setBlockMeta: (x: number, y: number, z: number, meta: BlockMetadata | null, markDirty?: boolean) => void
   ) {
     this.tickTimer += dt;
     if (this.tickTimer < this.tickInterval) return;
@@ -31,12 +30,13 @@ export class FluidSystem {
     // Process fluid updates
     let count = 0;
     const nextQueue: FluidUpdate[] = [];
+    const processedThisTick: Set<string> = new Set();
 
     while (this.queue.length > 0 && count < MAX_UPDATES_PER_TICK) {
       const upd = this.queue.shift()!;
       const key = `${upd.x},${upd.y},${upd.z}`;
-      if (this.processed.has(key)) continue;
-      this.processed.add(key);
+      if (processedThisTick.has(key)) continue;
+      processedThisTick.add(key);
       count++;
 
       const baseType = upd.type & 0x3FF;
@@ -52,9 +52,6 @@ export class FluidSystem {
     }
 
     this.queue.push(...nextQueue);
-    if (this.queue.length === 0) {
-      this.processed.clear();
-    }
   }
 
   /** Called when a water/lava block is placed. */
@@ -67,19 +64,19 @@ export class FluidSystem {
     x: number, y: number, z: number,
     id: number, level: number,
     setBlock: (x: number, y: number, z: number, id: number) => void,
-    setBlockMeta: (x: number, y: number, z: number, meta: BlockMetadata | null) => void
+    setBlockMeta: (x: number, y: number, z: number, meta: BlockMetadata | null, markDirty?: boolean) => void
   ) {
     setBlock(x, y, z, id);
     // fluidLevel: level 7→8 (source full height), level 6→7, …, level 1→2
     // flow-down uses level 7 → fluidLevel 8
-    setBlockMeta(x, y, z, { fluidLevel: level + 1 });
+    setBlockMeta(x, y, z, { fluidLevel: level + 1 }, true);
   }
 
   private processWater(
     upd: FluidUpdate,
     getBlock: (x: number, y: number, z: number) => number,
     setBlock: (x: number, y: number, z: number, id: number) => void,
-    setBlockMeta: (x: number, y: number, z: number, meta: BlockMetadata | null) => void,
+    setBlockMeta: (x: number, y: number, z: number, meta: BlockMetadata | null, markDirty?: boolean) => void,
     nextQueue: FluidUpdate[]
   ) {
     // Flow down first
@@ -108,7 +105,7 @@ export class FluidSystem {
     upd: FluidUpdate,
     getBlock: (x: number, y: number, z: number) => number,
     setBlock: (x: number, y: number, z: number, id: number) => void,
-    setBlockMeta: (x: number, y: number, z: number, meta: BlockMetadata | null) => void,
+    setBlockMeta: (x: number, y: number, z: number, meta: BlockMetadata | null, markDirty?: boolean) => void,
     nextQueue: FluidUpdate[]
   ) {
     // Flow down first
@@ -145,6 +142,5 @@ export class FluidSystem {
 
   clear() {
     this.queue = [];
-    this.processed.clear();
   }
 }

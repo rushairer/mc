@@ -39,7 +39,7 @@
 
 ### 当前阶段
 
-**阶段 2: 深度内容** — 参见 `docs/DEVELOPMENT_ROADMAP.md` 阶段 2 详细任务列表
+**阶段 4: 渲染与体验** — 参见 `docs/DEVELOPMENT_ROADMAP.md` 阶段 4 详细任务列表
 
 ### 重要提示
 

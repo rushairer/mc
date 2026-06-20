@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { VisualResolver } from '../visual/VisualResolver';
+import { LoadedResourcePack, ResourcePackSystem } from '../systems/ResourcePackSystem';
 
 const ATLAS_SIZE = 1024;
 const TILE_SIZE = 16;
@@ -77,6 +78,23 @@ export class TextureAtlas {
     };
   }
 
+  async applyResourcePack(pack: LoadedResourcePack | null): Promise<void> {
+    if (!pack?.manifest.textures) return;
+
+    const entries = Object.entries(pack.manifest.textures);
+    await Promise.all(entries.map(async ([key, path]) => {
+      try {
+        const image = await this.loadImage(ResourcePackSystem.resolveAssetUrl(pack, path));
+        this.drawImageTile(key, image);
+      } catch (error) {
+        console.warn(`Texture override not loaded: ${key}`, error);
+      }
+    }));
+
+    this.dataURL = this.canvas.toDataURL();
+    this.texture.needsUpdate = true;
+  }
+
   private allocateTile(key: string): number {
     if (this.tileIndex.has(key)) return this.tileIndex.get(key)!;
     const idx = this.nextIndex++;
@@ -112,6 +130,27 @@ export class TextureAtlas {
     const y = row * TILE_SIZE;
     draw(this.ctx, x, y, TILE_SIZE);
     this.texture.needsUpdate = true;
+  }
+
+  private drawImageTile(key: string, image: CanvasImageSource) {
+    const idx = this.allocateTile(key);
+    const col = idx % TILES_PER_ROW;
+    const row = Math.floor(idx / TILES_PER_ROW);
+    const x = col * TILE_SIZE;
+    const y = row * TILE_SIZE;
+    this.ctx.clearRect(x, y, TILE_SIZE, TILE_SIZE);
+    this.ctx.drawImage(image, x, y, TILE_SIZE, TILE_SIZE);
+    this.texture.needsUpdate = true;
+  }
+
+  private loadImage(url: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.crossOrigin = 'anonymous';
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error(`Failed to load image ${url}`));
+      image.src = url;
+    });
   }
 
   private generateAllTextures() {

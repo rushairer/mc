@@ -2,6 +2,7 @@
  * Sound system using Web Audio API.
  * Generates simple sounds procedurally (no external files needed).
  */
+import { LoadedResourcePack, ResourcePackSystem } from './ResourcePackSystem';
 
 export class SoundSystem {
   private ctx: AudioContext | null = null;
@@ -12,6 +13,7 @@ export class SoundSystem {
   private activeAmbientOsc: OscillatorNode | null = null;
   private activeAmbientGain: GainNode | null = null;
   private currentAmbientType = '';
+  private resourceSounds: Map<string, AudioBuffer[]> = new Map();
 
   init() {
     if (this.initialized) return;
@@ -36,7 +38,52 @@ export class SoundSystem {
     return this.ctx;
   }
 
+  async applyResourcePack(pack: LoadedResourcePack | null): Promise<void> {
+    this.resourceSounds.clear();
+    if (!pack?.manifest.sounds) return;
+
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+
+    await Promise.all(Object.entries(pack.manifest.sounds).map(async ([key, paths]) => {
+      const buffers: AudioBuffer[] = [];
+      for (const path of Array.isArray(paths) ? paths : [paths]) {
+        try {
+          const response = await fetch(ResourcePackSystem.resolveAssetUrl(pack, path));
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.arrayBuffer();
+          buffers.push(await ctx.decodeAudioData(data));
+        } catch (error) {
+          console.warn(`Sound override not loaded: ${key}`, error);
+        }
+      }
+      if (buffers.length > 0) {
+        this.resourceSounds.set(key, buffers);
+      }
+    }));
+  }
+
+  private playFirstResourceSound(keys: string[], volume = 1): boolean {
+    const ctx = this.ensureCtx();
+    if (!ctx) return false;
+    const key = keys.find((candidate) => this.resourceSounds.has(candidate));
+    if (!key) return false;
+
+    const buffers = this.resourceSounds.get(key)!;
+    const buffer = buffers[Math.floor(Math.random() * buffers.length)];
+    const source = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    source.buffer = buffer;
+    gain.gain.value = volume;
+    source.connect(gain).connect(this.sfxGain!);
+    source.start();
+    return true;
+  }
+
   playBlockBreak(blockId: number = 0) {
+    const baseId = blockId & 0x3FF;
+    if (this.playFirstResourceSound([`block.break.${baseId}`, 'block.break'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -44,7 +91,6 @@ export class SoundSystem {
     let type: 'stone' | 'wood' | 'grass' | 'sand' = 'stone';
     let volume = 0.4;
 
-    const baseId = blockId & 0x3FF;
     if (baseId === 2 || baseId === 18 || baseId === 161 || baseId === 175 || baseId === 106) {
       type = 'grass';
       duration = 0.12;
@@ -121,6 +167,9 @@ export class SoundSystem {
   }
 
   playBlockPlace(blockId: number = 0) {
+    const baseId = blockId & 0x3FF;
+    if (this.playFirstResourceSound([`block.place.${baseId}`, 'block.place'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -128,7 +177,6 @@ export class SoundSystem {
     let type: 'stone' | 'wood' | 'grass' | 'sand' = 'stone';
     let volume = 0.3;
 
-    const baseId = blockId & 0x3FF;
     if (baseId === 2 || baseId === 18 || baseId === 161 || baseId === 175 || baseId === 106) {
       type = 'grass';
       duration = 0.1;
@@ -207,6 +255,8 @@ export class SoundSystem {
   }
 
   playPickup() {
+    if (this.playFirstResourceSound(['item.pickup'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -224,6 +274,8 @@ export class SoundSystem {
   }
 
   playXP() {
+    if (this.playFirstResourceSound(['entity.experience_orb.pickup'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -240,6 +292,8 @@ export class SoundSystem {
   }
 
   playAdvancement() {
+    if (this.playFirstResourceSound(['ui.advancement'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
     const now = ctx.currentTime;
@@ -268,6 +322,8 @@ export class SoundSystem {
 
 
   playHurt() {
+    if (this.playFirstResourceSound(['entity.player.hurt'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -284,6 +340,8 @@ export class SoundSystem {
   }
 
   playMobHurt() {
+    if (this.playFirstResourceSound(['entity.mob.hurt'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -299,6 +357,8 @@ export class SoundSystem {
   }
 
   playMobDeath() {
+    if (this.playFirstResourceSound(['entity.mob.death'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -315,6 +375,8 @@ export class SoundSystem {
   }
 
   playExplosion() {
+    if (this.playFirstResourceSound(['entity.generic.explode'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -336,6 +398,8 @@ export class SoundSystem {
   }
 
   playLightning() {
+    if (this.playFirstResourceSound(['entity.lightning_bolt.thunder'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -360,6 +424,9 @@ export class SoundSystem {
   }
 
   playStep(blockId: number = 0) {
+    const baseId = blockId & 0x3FF;
+    if (this.playFirstResourceSound([`block.step.${baseId}`, 'block.step'], 0.7)) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -404,6 +471,8 @@ export class SoundSystem {
   }
 
   playEat() {
+    if (this.playFirstResourceSound(['entity.generic.eat'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -424,6 +493,8 @@ export class SoundSystem {
   }
 
   playDrink() {
+    if (this.playFirstResourceSound(['entity.generic.drink'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -441,6 +512,8 @@ export class SoundSystem {
   }
 
   playBurp() {
+    if (this.playFirstResourceSound(['entity.player.burp'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -462,6 +535,8 @@ export class SoundSystem {
   }
 
   playLever() {
+    if (this.playFirstResourceSound(['block.lever.click'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -479,6 +554,8 @@ export class SoundSystem {
   }
 
   playPistonExtend() {
+    if (this.playFirstResourceSound(['block.piston.extend'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -510,6 +587,7 @@ export class SoundSystem {
   }
 
   playPistonRetract() {
+    if (this.playFirstResourceSound(['block.piston.contract'])) return;
     this.playPistonExtend(); // Simplified: same sound but slightly lower pitch or duration
   }
 
@@ -694,6 +772,8 @@ export class SoundSystem {
   }
 
   playMobAmbient(type: string) {
+    if (this.playFirstResourceSound([`entity.${type}.ambient`, 'entity.mob.ambient'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 
@@ -813,6 +893,8 @@ export class SoundSystem {
   }
 
   playCreeperFuse() {
+    if (this.playFirstResourceSound(['entity.creeper.fuse'])) return;
+
     const ctx = this.ensureCtx();
     if (!ctx) return;
 

@@ -1,0 +1,10 @@
+{
+  "pack": {
+    "name": "Default",
+    "description": "Built-in procedural textures and synthesized sounds.",
+    "version": "0.2.0"
+  },
+  "textures": {},
+  "sounds": {},
+  "models": {}
+}

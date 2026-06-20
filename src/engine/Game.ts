@@ -15,6 +15,7 @@ import { ParticleSystem } from '../systems/ParticleSystem';
 import { FluidSystem } from '../systems/FluidSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
 import { SoundSystem } from '../systems/SoundSystem';
+import { ResourcePackSystem } from '../systems/ResourcePackSystem';
 import { SaveSystem, type SaveData } from '../systems/SaveSystem';
 import { RedstoneSystem, type RedstoneEntity } from '../systems/RedstoneSystem';
 import { ProjectileSystem } from '../systems/ProjectileSystem';
@@ -204,6 +205,7 @@ export class Game {
     this.particles = new ParticleSystem(this.renderer.scene);
     this.fluids = new FluidSystem();
     this.sound = new SoundSystem();
+    this.loadResourcePack();
     this.weather = new WeatherSystem(this.renderer.scene, this.sound);
     this.redstone = new RedstoneSystem();
     this.projectiles = new ProjectileSystem(this.renderer.scene);
@@ -269,6 +271,16 @@ export class Game {
 
     this.running = true;
     this.animate();
+  }
+
+  private async loadResourcePack() {
+    const pack = await ResourcePackSystem.loadActivePack();
+    if (!pack) return;
+    await Promise.all([
+      this.atlas.applyResourcePack(pack),
+      this.sound.applyResourcePack(pack),
+    ]);
+    console.info(`Resource pack loaded: ${pack.manifest.pack.name}`);
   }
 
   private handleContainerClick = () => {

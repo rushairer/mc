@@ -385,8 +385,9 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
         <div style={{
           width: '42px',
           height: '42px',
-          border: '2px solid #555',
+          border: state.isBlocking ? '2px solid #f2d675' : '2px solid #555',
           background: 'rgba(55,55,55,0.75)',
+          boxShadow: state.isBlocking ? '0 0 10px rgba(242,214,117,0.65)' : 'none',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -397,6 +398,15 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
           position: 'relative',
           marginRight: '8px',
         }}>
+          {state.isBlocking && (
+            <span style={{
+              position: 'absolute',
+              inset: '5px',
+              border: '2px solid rgba(242,214,117,0.85)',
+              borderRadius: '2px',
+              pointerEvents: 'none',
+            }} />
+          )}
           {offhandItem && ItemRegistry.get(offhandItem.id) ? (
             <>
               <div

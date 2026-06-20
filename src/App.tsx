@@ -60,6 +60,7 @@ const initialGameState: GameState = {
   xpNext: 7,
   activePotionEffects: [],
   portalProgress: 0,
+  isBlocking: false,
   currentDimension: 0,
   bossName: null,
   bossHealth: 0,

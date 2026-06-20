@@ -49,6 +49,8 @@ const FILLED_MAP_ID = 358;
 const WRITABLE_BOOK_ID = 386;
 const WRITTEN_BOOK_ID = 387;
 const EMPTY_MAP_ID = 395;
+const SHIELD_ID = 442;
+const SHIELD_MAX_DURABILITY = 336;
 const WORLD_SPAWN_X = 8;
 const WORLD_SPAWN_Z = 8;
 
@@ -91,6 +93,7 @@ export interface GameState {
   xpNext: number;
   activePotionEffects: ActivePotionEffect[];
   portalProgress: number;
+  isBlocking: boolean;
   lookedAtSignText?: string[] | null;
   currentDimension: number;
   bossName: string | null;
@@ -168,6 +171,7 @@ export class Game {
   private gameTime = 0.05; // 0=sunrise, 0.25=noon, 0.5=sunset, 0.75=midnight
   private damageFlashTimer = 0;
   private swordSwingTimer = 0;
+  private isShieldBlocking = false;
   private eatingTimer = 0;
   private chewSoundTimer = 0;
   private stepTimer = 0;
@@ -1002,7 +1006,8 @@ export class Game {
     }
 
     // Player update
-    this.player.speedMultiplier = this.potionEffects.getSpeedMultiplier();
+    this.updateShieldBlockingState();
+    this.player.speedMultiplier = this.potionEffects.getSpeedMultiplier() * (this.isShieldBlocking ? 0.35 : 1.0);
     if (this.potionEffects.has('levitation') && !this.player.flying && !this.riddenMob) {
       this.player.velocity.y = Math.max(this.player.velocity.y, 3.8);
       this.player.onGround = false;
@@ -2723,8 +2728,80 @@ export class Game {
     }
   }
 
+  private updateShieldBlockingState() {
+    const wantsToBlock = !this.chatOpen && this.openUI === 'none' && this.input.isMouseDown(2);
+    const nextBlocking = wantsToBlock && this.getActiveShieldSlot() !== null;
+    if (nextBlocking !== this.isShieldBlocking) {
+      this.isShieldBlocking = nextBlocking;
+      this.notifyState();
+    }
+  }
+
+  private isShieldStack(stack: ItemStack | null | undefined): stack is ItemStack {
+    if (!stack) return false;
+    const def = ItemRegistry.get(stack.id);
+    return stack.id === SHIELD_ID || def?.name === 'shield' || def?.officialId === 'minecraft:shield';
+  }
+
+  private getActiveShieldSlot(): { stack: ItemStack; source: 'mainhand' | 'offhand' } | null {
+    const selected = this.inventory.getSlot(this.player.selectedSlot);
+    if (this.isShieldStack(selected)) {
+      return { stack: selected, source: 'mainhand' };
+    }
+    const offhand = this.inventory.getOffhand();
+    if (this.isShieldStack(offhand)) {
+      return { stack: offhand, source: 'offhand' };
+    }
+    return null;
+  }
+
+  private damageActiveShield(amount: number) {
+    if (this.gameMode === 'creative') return;
+    const shield = this.getActiveShieldSlot();
+    if (!shield) return;
+
+    shield.stack.durability ??= SHIELD_MAX_DURABILITY;
+    shield.stack.durability -= Math.max(1, Math.ceil(amount));
+
+    if (shield.stack.durability <= 0) {
+      if (shield.source === 'mainhand') {
+        this.inventory.setSlot(this.player.selectedSlot, null);
+      } else {
+        this.inventory.setOffhand(null);
+      }
+      this.sound.playBlockBreak(5);
+    }
+  }
+
+  private canShieldBlock(knockback?: THREE.Vector3): boolean {
+    if (!this.isShieldBlocking || !knockback || knockback.lengthSq() === 0) return false;
+    const directionToDamageSource = knockback.clone().setY(0);
+    const facing = this.player.forward.clone().setY(0);
+    if (directionToDamageSource.lengthSq() === 0 || facing.lengthSq() === 0) return false;
+    directionToDamageSource.normalize().negate();
+    facing.normalize();
+    return facing.dot(directionToDamageSource) > 0.25;
+  }
+
   damagePlayer(amount: number, type: 'mob' | 'fall' | 'drown' | 'starve' | 'wither' | 'magic' | 'fire' | 'lava', knockback?: THREE.Vector3) {
     if (this.gameMode === 'creative') return;
+
+    if (type === 'mob' && this.canShieldBlock(knockback)) {
+      this.damageActiveShield(amount);
+      if (knockback) {
+        this.player.velocity.add(knockback.clone().multiplyScalar(0.25));
+      }
+      this.sound.playBlockPlace(5);
+      this.particles.spawnBlockBreak(
+        this.player.position.x,
+        this.player.position.y + 1,
+        this.player.position.z,
+        0xd8d0b8,
+        10
+      );
+      this.notifyState();
+      return;
+    }
 
     let finalDamage = amount;
     const defense = this.inventory.getTotalArmorDefense();
@@ -2881,6 +2958,7 @@ export class Game {
       xpNext: xpState.next,
       activePotionEffects: this.potionEffects.getEffects(),
       portalProgress: Math.min(1.0, this.portalTimer / (this.gameMode === 'creative' ? 0.5 : 3.0)),
+      isBlocking: this.isShieldBlocking,
       lookedAtSignText: this.lookedAtSignText,
       currentDimension: this.chunks.currentDimension,
       bossName: dragonState.active ? 'Ender Dragon' : (activeWither ? 'Wither' : null),

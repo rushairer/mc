@@ -2109,6 +2109,7 @@ export class Game {
                     // Register redstone component if it is one
                     this.setPlacedBlockMetadata(placePos.x, placePos.y, placePos.z, blockId, facing);
                     this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
+                    this.checkFluidAdjacency(placePos.x, placePos.y, placePos.z);
 
                     if ((blockId & 0x3FF) === 144 && ((blockId >> 10) & 0xF) === 1) {
                       this.checkWitherSpawning(placePos.x, placePos.y, placePos.z);
@@ -2444,6 +2445,7 @@ export class Game {
   private updateFluids(dt: number) {
     this.fluids.update(dt,
       (x, y, z) => this.chunks.getBlock(x, y, z),
+      (x, y, z) => this.chunks.getBlockMeta(x, y, z),
       (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
       (x, y, z, meta, markDirty) => this.chunks.setBlockMeta(x, y, z, meta, markDirty)
     );

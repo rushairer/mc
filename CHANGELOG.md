@@ -6,6 +6,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-06-21
+
+### Added
+- Add a full meta-cellular fluid simulation algorithm for water and lava supporting both spreading and receding/dry-up behaviors.
+- Add infinite water source generation when a block has at least 2 horizontal water source neighbors and a solid/fluid support underneath.
+- Add dynamic fluid-fluid interaction rules (water + lava相遇) resulting in obsidian or cobblestone block transformations.
+
+### Changed
+- Update fluid horizontal flow limits in the Overworld (water flows up to 8 blocks, lava flows up to 4 blocks).
+- Queue neighboring fluid cells when any block is placed or broken to notify nearby fluids of pathways changing.
+
 ## [0.14.0] - 2026-06-21
 
 ### Added

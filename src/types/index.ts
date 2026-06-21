@@ -48,6 +48,7 @@ export interface BlockMetadata {
   cakeBites?: number;
   cauldronFluid?: 'water' | 'lava';
   cauldronLevel?: number;
+  compostLevel?: number;
 }
 
 export interface SerializedBlockMetadata {

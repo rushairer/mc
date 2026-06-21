@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-06-21
+
+### Added
+- Implement Composter gameplay: compostable plant and crop items can be inserted to raise stored compost level, full Composters produce Bone Meal, and compost level persists in block metadata.
+- Render Composters as hollow containers with visible fill height matching their compost level.
+
 ## [0.26.0] - 2026-06-21
 
 ### Added

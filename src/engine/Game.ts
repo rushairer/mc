@@ -1824,6 +1824,11 @@ export class Game {
           return;
         }
 
+        if (this.tryUseComposter(blockPos.x, blockPos.y, blockPos.z, targetName, selectedSlot)) {
+          this.placeCooldown = 0.25;
+          return;
+        }
+
         // Bucket scoop water/lava
         if (heldItemId === 325) { // Empty Bucket
           const isWaterSource = (targetId & 0x3FF) === 9;
@@ -2229,6 +2234,7 @@ export class Game {
       targetName === 'lever' ||
       targetName === 'chest' ||
       targetName === 'barrel' ||
+      targetName === 'composter' ||
       targetName === 'hopper' ||
       targetName === 'bed' ||
       targetName === 'cake' ||
@@ -4382,6 +4388,13 @@ export class Game {
       return;
     }
 
+    if (name === 'composter') {
+      this.chunks.setBlockMeta(x, y, z, {
+        compostLevel: 0,
+      }, true);
+      return;
+    }
+
     if ((blockId & 0x3FF) === 92 || name === 'cake') {
       this.chunks.setBlockMeta(x, y, z, { cakeBites: 0 }, true);
       return;
@@ -4531,6 +4544,109 @@ export class Game {
       const velocity = new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.2, (Math.random() - 0.5) * 0.2);
       this.droppedItems.spawnItem(replacementId, leftover, spawnPos, velocity, 0.5);
     }
+  }
+
+  private tryUseComposter(
+    x: number,
+    y: number,
+    z: number,
+    targetName: string,
+    selectedSlot: ItemStack | null
+  ): boolean {
+    if (targetName !== 'composter') return false;
+
+    const currentMeta = this.chunks.getBlockMeta(x, y, z) ?? {};
+    const level = Math.max(0, Math.min(8, currentMeta.compostLevel ?? 0));
+
+    if (level >= 8) {
+      this.spawnComposterBoneMeal(x, y, z);
+      this.chunks.setBlockMeta(x, y, z, { ...currentMeta, compostLevel: 0 }, true);
+      this.sound.playPickup();
+      this.particles.spawnBlockBreak(x + 0.5, y + 0.85, z + 0.5, 0xf5f5dc, 16);
+      this.notifyState();
+      return true;
+    }
+
+    if (!selectedSlot || !this.isCompostableItem(selectedSlot.id)) {
+      return false;
+    }
+
+    const chance = this.getCompostChance(selectedSlot.id);
+    const accepted = Math.random() < chance;
+    const nextLevel = accepted ? Math.min(8, level + 1) : level;
+
+    this.chunks.setBlockMeta(x, y, z, { ...currentMeta, compostLevel: nextLevel }, true);
+    this.sound.playBlockPlace(3);
+    this.particles.spawnBlockBreak(x + 0.5, y + 0.75, z + 0.5, accepted ? 0x7b5a2e : 0x5d4a2d, accepted ? 12 : 5);
+
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+
+    this.notifyState();
+    return true;
+  }
+
+  private isCompostableItem(itemId: number): boolean {
+    const item = ItemRegistry.get(itemId);
+    if (!item) return false;
+
+    const name = item.name;
+    if (
+      name === 'bone_meal' ||
+      name.includes('bucket') ||
+      name.includes('bottle') ||
+      name.includes('beef') ||
+      name.includes('porkchop') ||
+      name.includes('chicken') ||
+      name.includes('mutton') ||
+      name.includes('rabbit') ||
+      name.includes('fish') ||
+      name.includes('cod') ||
+      name.includes('salmon')
+    ) return false;
+    if (item.category === 'food') return true;
+
+    return (
+      name.includes('seed') ||
+      name.includes('sapling') ||
+      name.includes('leaves') ||
+      name.includes('flower') ||
+      name.includes('grass') ||
+      name.includes('fern') ||
+      name.includes('roots') ||
+      name.includes('mushroom') ||
+      name.includes('kelp') ||
+      name.includes('cactus') ||
+      name.includes('sugar_cane') ||
+      name.includes('bamboo') ||
+      name.includes('wart') ||
+      name.includes('crop') ||
+      name.includes('apple') ||
+      name.includes('melon') ||
+      name.includes('pumpkin') ||
+      name.includes('carrot') ||
+      name.includes('potato') ||
+      name.includes('beetroot') ||
+      name.includes('wheat')
+    );
+  }
+
+  private getCompostChance(itemId: number): number {
+    const name = ItemRegistry.get(itemId)?.name ?? '';
+    if (name.includes('cake') || name.includes('pumpkin_pie')) return 1.0;
+    if (name.includes('bread') || name.includes('baked_potato') || name.includes('hay')) return 0.85;
+    if (name.includes('apple') || name.includes('carrot') || name.includes('potato') || name.includes('beetroot') || name.includes('wheat')) return 0.65;
+    if (name.includes('sapling') || name.includes('seed') || name.includes('grass') || name.includes('leaves')) return 0.3;
+    return 0.5;
+  }
+
+  private spawnComposterBoneMeal(x: number, y: number, z: number) {
+    const boneMealItem = ItemRegistry.getByName('bone_meal');
+    const boneMealId = boneMealItem?.id ?? ((15 << 10) | 351);
+    const dropPos = new THREE.Vector3(x + 0.5, y + 1.0, z + 0.5);
+    const velocity = new THREE.Vector3(0, 0.25, 0);
+    this.droppedItems.spawnItem(boneMealId, 1, dropPos, velocity, 0.35);
   }
 
   private checkWitherSpawning(x: number, y: number, z: number) {

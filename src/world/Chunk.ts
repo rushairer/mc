@@ -459,6 +459,35 @@ export class Chunk {
             continue;
           }
 
+          // Composter
+          if (def.name === 'composter') {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            const shell = [
+              { minX: 0.125, maxX: 0.875, minY: 0, maxY: 0.125, minZ: 0.125, maxZ: 0.875 },
+              { minX: 0.125, maxX: 0.875, minY: 0, maxY: 1, minZ: 0.125, maxZ: 0.25 },
+              { minX: 0.125, maxX: 0.875, minY: 0, maxY: 1, minZ: 0.75, maxZ: 0.875 },
+              { minX: 0.125, maxX: 0.25, minY: 0, maxY: 1, minZ: 0.25, maxZ: 0.75 },
+              { minX: 0.75, maxX: 0.875, minY: 0, maxY: 1, minZ: 0.25, maxZ: 0.75 },
+            ];
+            for (const bounds of shell) {
+              this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome, meta);
+            }
+
+            const level = Math.max(0, Math.min(8, meta?.compostLevel ?? 0));
+            if (level > 0) {
+              const fillY = 0.125 + level * 0.09375;
+              const fillBounds: CuboidBounds = {
+                minX: 0.25, maxX: 0.75,
+                minY: 0.125, maxY: fillY,
+                minZ: 0.25, maxZ: 0.75,
+              };
+              this.addCuboid(target, x, y, z, id, atlas, fillBounds, {}, ['dirt', 'dirt', 'dirt', 'dirt', 'dirt', 'dirt'], false, lightBrightness, biome, meta);
+            }
+            continue;
+          }
+
           // Extended Piston Base
           if ((id & 0x3FF) === 33 || (id & 0x3FF) === 29 || def.name === 'piston' || def.name === 'sticky_piston') {
             const isExtended = meta?.extended === true;

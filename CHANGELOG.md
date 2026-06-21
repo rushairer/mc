@@ -6,6 +6,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-06-21
+
+### Added
+- Implement complete piston block extension mechanics, including block pushing and metadata relocation (so container contents and orientations are correctly preserved when pushed).
+- Implement sticky piston retraction block pulling, including metadata relocation.
+- Implement unified block breaking helper `destroyBlockAt` that automatically cleans up blocks, metadata, redstone registrations, and handles dependency cascades recursively (such as breaking pistons together with their piston heads, doors, crops, and nether wart).
+
+### Changed
+- Refactor `RedstoneSystem` to delegate physical block movements to the game loop.
+- Refactor the player block breaking and explosion routines to use the unified `destroyBlockAt` cascade method.
+
 ## [0.20.0] - 2026-06-21
 
 ### Added

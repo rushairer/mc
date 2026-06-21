@@ -414,24 +414,10 @@ export class RedstoneSystem {
           }
         } else if (neighbor.type === 'piston') {
           if (newSignal > 0 && !neighbor.state) {
-            neighbor.state = true;
-            onComponentChange?.(neighbor);
-            if (triggerSound) triggerSound('piston_extend');
-
-            const pDir = this.getFacingDirection(neighbor.facing);
-            const frontX = neighbor.x + pDir[0];
-            const frontY = neighbor.y + pDir[1];
-            const frontZ = neighbor.z + pDir[2];
-            const pushId = getBlock(frontX, frontY, frontZ);
-
-            if (pushId !== 0 && (pushId & 0x3FF) !== 49 && !BlockRegistry.isFluid(pushId)) {
-              const targetX = frontX + pDir[0];
-              const targetY = frontY + pDir[1];
-              const targetZ = frontZ + pDir[2];
-              if (getBlock(targetX, targetY, targetZ) === 0) {
-                setBlock(targetX, targetY, targetZ, pushId);
-                setBlock(frontX, frontY, frontZ, 0);
-              }
+            if (this.canPistonExtend(neighbor, getBlock)) {
+              neighbor.state = true;
+              onComponentChange?.(neighbor);
+              if (triggerSound) triggerSound('piston_extend');
             }
           } else if (newSignal === 0 && neighbor.state) {
             neighbor.state = false;
@@ -441,6 +427,34 @@ export class RedstoneSystem {
         }
       }
     }
+  }
+
+  private canPistonExtend(
+    piston: RedstoneComponent,
+    getBlock: (x: number, y: number, z: number) => number
+  ): boolean {
+    const pDir = this.getFacingDirection(piston.facing);
+    const frontX = piston.x + pDir[0];
+    const frontY = piston.y + pDir[1];
+    const frontZ = piston.z + pDir[2];
+    const pushId = getBlock(frontX, frontY, frontZ) & 0x3FF;
+
+    if (pushId === 0 || BlockRegistry.isFluid(pushId)) {
+      return true;
+    }
+
+    // Unmovable blocks: Obsidian (49), Bedrock (7), Piston Head (34)
+    if (pushId === 49 || pushId === 7 || pushId === 34) {
+      return false;
+    }
+
+    // Target position must be empty (air or fluid)
+    const targetX = frontX + pDir[0];
+    const targetY = frontY + pDir[1];
+    const targetZ = frontZ + pDir[2];
+    const targetId = getBlock(targetX, targetY, targetZ) & 0x3FF;
+
+    return targetId === 0 || BlockRegistry.isFluid(targetId);
   }
 
   observeBlockChange(x: number, y: number, z: number) {

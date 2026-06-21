@@ -1658,88 +1658,14 @@ export class Game {
           if (isNetworkConnected) {
             this.network.send(PacketType.C2S_BLOCK_BREAK, { x: bp.x, y: bp.y, z: bp.z });
           } else {
-            const isDoor = this.isDoorBlock(blockId);
-
             if (this.gameMode !== 'creative') {
-              // Drop item in 3D world
-              const dropPos = new THREE.Vector3(bp.x + 0.5, bp.y + 0.3, bp.z + 0.5);
-              const velocity = new THREE.Vector3(
-                (Math.random() - 0.5) * 1.5,
-                1.5 + Math.random() * 1.5,
-                (Math.random() - 0.5) * 1.5
-              );
-              if (isDoor) {
-                this.droppedItems.spawnItem(37, 1, dropPos, velocity, 0.5);
-              } else {
-                const blockBase = blockId & 0x3FF;
-                if (blockBase === 59 || blockBase === 141 || blockBase === 142) {
-                  // Crop drops depend on maturity
-                  this.spawnCropDrops(bp.x, bp.y, bp.z, blockId);
-                } else {
-                  const dropId = ItemRegistry.getBlockDropItem(blockId);
-                  if (dropId > 0) {
-                    this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
-                  }
-                }
-              }
-
               // Damage tool
               const heldItemStack = this.inventory.getSlot(this.player.selectedSlot);
               if (heldItemStack && ItemRegistry.isTool(heldItemStack.id)) {
                 this.inventory.damageTool(this.player.selectedSlot);
               }
             }
-
-            if (isDoor) {
-              this.breakDoor(bp.x, bp.y, bp.z);
-            } else {
-              const meta = this.chunks.getBlockMeta(bp.x, bp.y, bp.z);
-              if (meta?.inventory) {
-                for (const slot of meta.inventory) {
-                  if (slot && slot.count > 0) {
-                    const dropPos = new THREE.Vector3(bp.x + 0.5, bp.y + 0.5, bp.z + 0.5);
-                    const velocity = new THREE.Vector3(
-                      (Math.random() - 0.5) * 1.5,
-                      1.5 + Math.random() * 1.5,
-                      (Math.random() - 0.5) * 1.5
-                    );
-                    this.droppedItems.spawnItem(slot.id, slot.count, dropPos, velocity, 0.5);
-                  }
-                }
-              }
-              this.chunks.setBlock(bp.x, bp.y, bp.z, 0);
-              
-              // If breaking the block under a Nether Wart (115), break the Nether Wart above it too
-              const aboveId = this.chunks.getBlock(bp.x, bp.y + 1, bp.z) & 0x3FF;
-              if (aboveId === 115) {
-                const dropId = ItemRegistry.getBlockDropItem(115) ?? 372;
-                this.chunks.setBlock(bp.x, bp.y + 1, bp.z, 0);
-                if (this.gameMode !== 'creative') {
-                  const dropPos = new THREE.Vector3(bp.x + 0.5, bp.y + 1.5, bp.z + 0.5);
-                  const velocity = new THREE.Vector3(
-                    (Math.random() - 0.5) * 1.5,
-                    1.5 + Math.random() * 1.5,
-                    (Math.random() - 0.5) * 1.5
-                  );
-                  this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
-                }
-              }
-
-              // If breaking farmland or the block supporting a crop, destroy the crop above
-              if (aboveId === 59 || aboveId === 141 || aboveId === 142) {
-                const cropBlockId = this.chunks.getBlock(bp.x, bp.y + 1, bp.z);
-                this.spawnCropDrops(bp.x, bp.y + 1, bp.z, cropBlockId);
-                this.chunks.setBlock(bp.x, bp.y + 1, bp.z, 0);
-              }
-
-              this.redstone.unregister(bp.x, bp.y, bp.z);
-              this.chunks.setBlockMeta(bp.x, bp.y, bp.z, null);
-              this.redstone.observeBlockChange(bp.x, bp.y, bp.z);
-            }
-
-            // Fluid check after removal: water should see this cell as air and flow into it.
-            this.checkFluidAdjacency(bp.x, bp.y, bp.z);
-            this.updateFluids(0.4);
+            this.destroyBlockAt(bp.x, bp.y, bp.z, true);
           }
           this.sound.playBlockBreak(blockId);
           this.breakProgress = 0;
@@ -2501,11 +2427,14 @@ export class Game {
         else if (soundType === 'click_on' || soundType === 'click_off') this.sound.playLever();
       },
       (component) => {
-        this.updateRedstoneMetadata(component.x, component.y, component.z, {
-          powered: component.state,
-          signal: component.signal,
-          extended: component.type === 'piston' ? component.state : undefined,
-        });
+        if (component.type === 'piston') {
+          this.handlePistonChange(component);
+        } else {
+          this.updateRedstoneMetadata(component.x, component.y, component.z, {
+            powered: component.state,
+            signal: component.signal,
+          });
+        }
       },
       this.gameTime,
       (x, y, z) => this.chunks.getBlockMeta(x, y, z),
@@ -3221,35 +3150,7 @@ export class Game {
               this.igniteTNT(bx, by, bz);
               continue;
             }
-            const meta = this.chunks.getBlockMeta(bx, by, bz);
-            if (meta?.inventory) {
-              for (const slot of meta.inventory) {
-                if (slot && slot.count > 0) {
-                  const dropPos = new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5);
-                  const velocity = new THREE.Vector3(
-                    (bx + 0.5 - x) * 2.5 + (Math.random() - 0.5) * 1.5,
-                    (by + 0.5 - y) * 2.5 + 2.0 + Math.random() * 2.0,
-                    (bz + 0.5 - z) * 2.5 + (Math.random() - 0.5) * 1.5
-                  );
-                  this.droppedItems.spawnItem(slot.id, slot.count, dropPos, velocity, 0.5);
-                }
-              }
-            }
-            if (this.gameMode !== 'creative') {
-              const dropId = ItemRegistry.getBlockDropItem(blockId);
-              if (dropId > 0 && Math.random() < 0.6) {
-                const dropPos = new THREE.Vector3(bx + 0.5, by + 0.3, bz + 0.5);
-                const velocity = new THREE.Vector3(
-                  (bx + 0.5 - x) * 2.5 + (Math.random() - 0.5) * 1.5,
-                  (by + 0.5 - y) * 2.5 + 2.0 + Math.random() * 2.0,
-                  (bz + 0.5 - z) * 2.5 + (Math.random() - 0.5) * 1.5
-                );
-                this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
-              }
-            }
-            this.chunks.setBlock(bx, by, bz, 0);
-            this.redstone.unregister(bx, by, bz);
-            this.chunks.setBlockMeta(bx, by, bz, null);
+            this.destroyBlockAt(bx, by, bz, true);
           }
         }
       }
@@ -4906,6 +4807,247 @@ export class Game {
       ...patch,
     });
     this.redstone.observeBlockChange(x, y, z);
+  }
+
+  private handlePistonChange(component: any) {
+    const x = component.x;
+    const y = component.y;
+    const z = component.z;
+
+    const blockId = this.chunks.getBlock(x, y, z);
+    const baseId = blockId & 0x3FF;
+    if (baseId !== 33 && baseId !== 29) return; // not a piston/sticky piston
+
+    const meta = this.chunks.getBlockMeta(x, y, z) || {};
+    const facing = meta.facing || component.facing || 'north';
+    const isSticky = baseId === 29;
+    const wasExtended = meta.extended === true;
+    const shouldExtend = component.state === true;
+
+    if (shouldExtend && !wasExtended) {
+      // Extend!
+      const pDir = this.getFacingDirection(facing);
+      const frontX = x + pDir[0];
+      const frontY = y + pDir[1];
+      const frontZ = z + pDir[2];
+
+      const pushId = this.chunks.getBlock(frontX, frontY, frontZ);
+      const pushBase = pushId & 0x3FF;
+
+      if (pushId !== 0 && !BlockRegistry.isFluid(pushId)) {
+        // We have a block to push
+        const targetX = frontX + pDir[0];
+        const targetY = frontY + pDir[1];
+        const targetZ = frontZ + pDir[2];
+
+        // Move the block and its metadata
+        const pushMeta = this.chunks.getBlockMeta(frontX, frontY, frontZ);
+        this.chunks.setBlock(targetX, targetY, targetZ, pushId);
+        this.chunks.setBlockMeta(targetX, targetY, targetZ, pushMeta || null, true);
+
+        // Update redstone system for target block
+        this.redstone.unregister(frontX, frontY, frontZ);
+        const redType = this.getRedstoneType(pushBase);
+        if (redType && pushMeta) {
+          this.redstone.register(targetX, targetY, targetZ, redType, pushMeta.facing || 'north', {
+            signal: pushMeta.signal || 0,
+            state: pushMeta.powered || pushMeta.extended || false,
+          });
+        }
+        this.redstone.observeBlockChange(frontX, frontY, frontZ);
+        this.redstone.observeBlockChange(targetX, targetY, targetZ);
+      }
+
+      // Spawn piston head (ID 34) at frontPos
+      this.chunks.setBlock(frontX, frontY, frontZ, 34);
+      this.chunks.setBlockMeta(frontX, frontY, frontZ, {
+        facing: facing,
+        sticky: isSticky,
+      }, true);
+
+      // Update piston base metadata
+      this.chunks.setBlockMeta(x, y, z, {
+        ...meta,
+        extended: true,
+        powered: true,
+        signal: component.signal,
+        facing,
+      }, true);
+      this.redstone.observeBlockChange(x, y, z);
+
+    } else if (!shouldExtend && wasExtended) {
+      // Retract!
+      const pDir = this.getFacingDirection(facing);
+      const frontX = x + pDir[0];
+      const frontY = y + pDir[1];
+      const frontZ = z + pDir[2];
+
+      // Remove piston head
+      if ((this.chunks.getBlock(frontX, frontY, frontZ) & 0x3FF) === 34) {
+        this.chunks.setBlock(frontX, frontY, frontZ, 0);
+        this.chunks.setBlockMeta(frontX, frontY, frontZ, null);
+        this.redstone.unregister(frontX, frontY, frontZ);
+        this.redstone.observeBlockChange(frontX, frontY, frontZ);
+      }
+
+      if (isSticky) {
+        // Pull the block 2 spaces in front
+        const pullX = x + pDir[0] * 2;
+        const pullY = y + pDir[1] * 2;
+        const pullZ = z + pDir[2] * 2;
+
+        const pullId = this.chunks.getBlock(pullX, pullY, pullZ);
+        const pullBase = pullId & 0x3FF;
+
+        if (pullId !== 0 && pullBase !== 7 && pullBase !== 49 && pullBase !== 34 && !BlockRegistry.isFluid(pullId)) {
+          const pullMeta = this.chunks.getBlockMeta(pullX, pullY, pullZ);
+          this.chunks.setBlock(frontX, frontY, frontZ, pullId);
+          this.chunks.setBlockMeta(frontX, frontY, frontZ, pullMeta || null, true);
+          this.chunks.setBlock(pullX, pullY, pullZ, 0);
+          this.chunks.setBlockMeta(pullX, pullY, pullZ, null);
+
+          // Update redstone system
+          this.redstone.unregister(pullX, pullY, pullZ);
+          const redType = this.getRedstoneType(pullBase);
+          if (redType && pullMeta) {
+            this.redstone.register(frontX, frontY, frontZ, redType, pullMeta.facing || 'north', {
+              signal: pullMeta.signal || 0,
+              state: pullMeta.powered || pullMeta.extended || false,
+            });
+          }
+          this.redstone.observeBlockChange(pullX, pullY, pullZ);
+          this.redstone.observeBlockChange(frontX, frontY, frontZ);
+        }
+      }
+
+      // Update piston base metadata
+      this.chunks.setBlockMeta(x, y, z, {
+        ...meta,
+        extended: false,
+        powered: false,
+        signal: component.signal,
+        facing,
+      }, true);
+      this.redstone.observeBlockChange(x, y, z);
+    }
+  }
+
+  private getFacingDirection(facing: string): [number, number, number] {
+    const dirs: Record<string, [number, number, number]> = {
+      north: [0, 0, -1], south: [0, 0, 1], east: [1, 0, 0], west: [-1, 0, 0],
+      up: [0, 1, 0], down: [0, -1, 0],
+    };
+    return dirs[facing] ?? [0, 0, -1];
+  }
+
+  private getOppositeFacing(facing: string): string {
+    switch (facing) {
+      case 'up': return 'down';
+      case 'down': return 'up';
+      case 'north': return 'south';
+      case 'south': return 'north';
+      case 'east': return 'west';
+      case 'west': return 'east';
+      default: return 'south';
+    }
+  }
+
+  private destroyBlockAt(x: number, y: number, z: number, spawnDrop: boolean = true) {
+    const blockId = this.chunks.getBlock(x, y, z);
+    const baseId = blockId & 0x3FF;
+    if (baseId === 0) return;
+
+    const meta = this.chunks.getBlockMeta(x, y, z);
+
+    // 1. Drop contents if it's a container
+    if (spawnDrop && meta?.inventory) {
+      for (const slot of meta.inventory) {
+        if (slot && slot.count > 0) {
+          const dropPos = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
+          const velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 1.5,
+            1.5 + Math.random() * 1.5,
+            (Math.random() - 0.5) * 1.5
+          );
+          this.droppedItems.spawnItem(slot.id, slot.count, dropPos, velocity, 0.5);
+        }
+      }
+    }
+
+    // 2. Spawn item drop for the block itself
+    if (spawnDrop && this.gameMode !== 'creative') {
+      const dropPos = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
+      const velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 1.5,
+        1.5 + Math.random() * 1.5,
+        (Math.random() - 0.5) * 1.5
+      );
+
+      if (this.isDoorBlock(blockId)) {
+        this.droppedItems.spawnItem(37, 1, dropPos, velocity, 0.5);
+      } else if (baseId === 59 || baseId === 141 || baseId === 142) {
+        this.spawnCropDrops(x, y, z, blockId);
+      } else {
+        const dropId = ItemRegistry.getBlockDropItem(blockId);
+        if (dropId > 0) {
+          this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
+        }
+      }
+    }
+
+    // 3. Set block to air and clear metadata
+    this.chunks.setBlock(x, y, z, 0);
+    this.chunks.setBlockMeta(x, y, z, null);
+    this.redstone.unregister(x, y, z);
+    this.redstone.observeBlockChange(x, y, z);
+
+    // 4. Handle dependencies recursively
+    // Nether wart above
+    const aboveId = this.chunks.getBlock(x, y + 1, z) & 0x3FF;
+    if (aboveId === 115) {
+      this.destroyBlockAt(x, y + 1, z, spawnDrop);
+    }
+    // Crop above
+    if (aboveId === 59 || aboveId === 141 || aboveId === 142) {
+      this.destroyBlockAt(x, y + 1, z, spawnDrop);
+    }
+
+    // Piston Base -> Piston Head
+    if (baseId === 33 || baseId === 29) {
+      if (meta?.extended && meta?.facing) {
+        const pDir = this.getFacingDirection(meta.facing);
+        const hx = x + pDir[0];
+        const hy = y + pDir[1];
+        const hz = z + pDir[2];
+        if ((this.chunks.getBlock(hx, hy, hz) & 0x3FF) === 34) {
+          this.destroyBlockAt(hx, hy, hz, false);
+        }
+      }
+    }
+
+    // Piston Head -> Piston Base
+    if (baseId === 34) {
+      if (meta?.facing) {
+        const oppFacing = this.getOppositeFacing(meta.facing);
+        const oppDir = this.getFacingDirection(oppFacing);
+        const bx = x + oppDir[0];
+        const by = y + oppDir[1];
+        const bz = z + oppDir[2];
+        const baseBlockId = this.chunks.getBlock(bx, by, bz) & 0x3FF;
+        if (baseBlockId === 33 || baseBlockId === 29) {
+          this.destroyBlockAt(bx, by, bz, spawnDrop);
+        }
+      }
+    }
+
+    // If it was a door, break the other part of the door
+    if (this.isDoorBlock(blockId)) {
+      this.breakDoor(x, y, z);
+    }
+
+    // Fluid check after removal
+    this.checkFluidAdjacency(x, y, z);
+    this.updateFluids(0.4);
   }
 
   private restoreRedstoneFromLoadedChunks() {

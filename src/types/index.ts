@@ -44,6 +44,7 @@ export interface BlockMetadata {
   cookTime?: number;
   maxBurnTime?: number;
   sticky?: boolean;
+  bedPart?: 'head' | 'foot';
 }
 
 export interface SerializedBlockMetadata {

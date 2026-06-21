@@ -984,6 +984,49 @@ export class TextureAtlas {
       ctx.fillRect(x + 4, y + 8, 8, 1);
     });
 
+    // bed
+    this.drawTile('bed_head_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#b02e26'; // red blanket
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#ffffff'; // white pillow
+      ctx.fillRect(x + 2, y + 2, s - 4, s / 3);
+    });
+
+    this.drawTile('bed_foot_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#b02e26'; // red blanket
+      ctx.fillRect(x, y, s, s);
+    });
+
+    this.drawTile('bed_head_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#5c4033'; // wood frame
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#b02e26'; // blanket
+      ctx.fillRect(x, y, s, s / 3);
+      ctx.fillStyle = '#ffffff'; // pillow side
+      ctx.fillRect(x + 1, y + s / 3, s / 3, s / 4);
+    });
+
+    this.drawTile('bed_foot_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#5c4033'; // wood frame
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#b02e26'; // blanket
+      ctx.fillRect(x, y, s, s / 3);
+    });
+
+    this.drawTile('bed_head_end', (ctx, x, y, s) => {
+      ctx.fillStyle = '#5c4033'; // wood frame
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#ffffff'; // pillow
+      ctx.fillRect(x, y, s, s / 3);
+    });
+
+    this.drawTile('bed_foot_end', (ctx, x, y, s) => {
+      ctx.fillStyle = '#5c4033'; // wood frame
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#b02e26'; // blanket
+      ctx.fillRect(x, y, s, s / 3);
+    });
+
     // blast furnace
     this.drawTile('blast_furnace_top', (ctx, x, y, s) => {
       ctx.fillStyle = '#4d5154';

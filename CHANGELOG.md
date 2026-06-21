@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-06-21
+
+### Added
+- Implement Bed block placement: placing a Bed places a 2-voxel double block (head and foot parts) aligned to the player's horizontal direction, with proper metadata checks to prevent player collision overlaps or clipping.
+- Implement night-skipping sleep logic: right-clicking a Bed block at night skips time to morning (setting game time to sunrise/0.0), triggering immediate chunk light rebuilds.
+- Implement Bed cascade destruction: destroying either the head or foot part recursively destroys the other half without duplicating item drops.
+- Map Bed block breaks to drop the Bed inventory item (ID 355).
+
 ## [0.22.0] - 2026-06-21
 
 ### Added

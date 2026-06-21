@@ -90,6 +90,7 @@ const FOOD_STATS: Record<string, { hunger: number; saturation: number }> = {
 const BLOCK_DROP_OVERRIDES: Record<number, number | (() => number)> = {
   2: 3,                 // grass -> dirt
   16: 263,              // coal ore -> coal
+  26: 355,              // bed block -> bed item
   56: 264,              // diamond ore -> diamond
   73: 331,              // redstone ore -> redstone dust
   21: (4 << 10) | 351,  // lapis ore -> lapis lazuli (dye metadata 4)

@@ -2030,6 +2030,13 @@ export class Game {
           this.bedSpawnPoint = new THREE.Vector3(blockPos.x + 0.5, blockPos.y + 1, blockPos.z + 0.5);
           this.sound.playBlockPlace(35); // Wool/fabric sound for bed
           this.advancements.checkSleep();
+          if (this.isNight()) {
+            this.gameTime = 0.0;
+            this.addChatMessage('You are now sleeping. Morning has come.');
+            this.notifyState();
+          } else {
+            this.addChatMessage('You can only sleep at night');
+          }
           this.placeCooldown = 0.25;
         } else {
           // Place block
@@ -2131,6 +2138,15 @@ export class Game {
                       this.inventory.removeFromSlot(this.player.selectedSlot);
                     }
                     this.placeCooldown = 0.25;
+                  } else if (blockId === 26 || (blockDef && blockDef.name === 'bed')) {
+                    const placed = this.placeBed(placePos.x, placePos.y, placePos.z, blockId);
+                    if (placed) {
+                      this.sound.playBlockPlace(blockId);
+                      if (this.gameMode !== 'creative') {
+                        this.inventory.removeFromSlot(this.player.selectedSlot);
+                      }
+                      this.placeCooldown = 0.25;
+                    }
                   } else {
                     this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
                     this.sound.playBlockPlace(blockId);
@@ -4589,6 +4605,57 @@ export class Game {
     return true;
   }
 
+  private placeBed(x: number, y: number, z: number, bedBlockId: number): boolean {
+    if (y < 0 || y >= 254) return false;
+
+    const facing = this.getPlayerHorizontalFacing();
+    let dx = 0;
+    let dz = 0;
+    if (facing === 'north') dz = -1;
+    else if (facing === 'south') dz = 1;
+    else if (facing === 'east') dx = 1;
+    else if (facing === 'west') dx = -1;
+
+    const headX = x + dx;
+    const headZ = z + dz;
+
+    // Check if both blocks are empty (0)
+    if (this.chunks.getBlock(x, y, z) !== 0 || this.chunks.getBlock(headX, y, headZ) !== 0) {
+      return false;
+    }
+
+    // Check if players are colliding with either of the bed parts
+    const px = Math.floor(this.player.position.x);
+    const py = Math.floor(this.player.position.y);
+    const pz = Math.floor(this.player.position.z);
+    const py1 = Math.floor(this.player.position.y + 1.5);
+
+    const overlapsFoot = x === px && z === pz && (y === py || y === py1);
+    const overlapsHead = headX === px && headZ === pz && (y === py || y === py1);
+
+    if (overlapsFoot || overlapsHead) {
+      return false;
+    }
+
+    // Set foot part
+    this.chunks.setBlock(x, y, z, bedBlockId);
+    this.chunks.setBlockMeta(x, y, z, {
+      facing,
+      bedPart: 'foot',
+    }, true);
+    this.redstone.observeBlockChange(x, y, z);
+
+    // Set head part
+    this.chunks.setBlock(headX, y, headZ, bedBlockId);
+    this.chunks.setBlockMeta(headX, y, headZ, {
+      facing,
+      bedPart: 'head',
+    }, true);
+    this.redstone.observeBlockChange(headX, y, headZ);
+
+    return true;
+  }
+
   private getDoorBase(x: number, y: number, z: number): { x: number; y: number; z: number } | null {
     const blockId = this.chunks.getBlock(x, y, z);
     if (!this.isDoorBlock(blockId)) return null;
@@ -5133,6 +5200,35 @@ export class Game {
     // If it was a door, break the other part of the door
     if (this.isDoorBlock(blockId)) {
       this.breakDoor(x, y, z);
+    }
+
+    // Bed cascade destruction
+    if (baseId === 26) {
+      if (meta?.facing && meta?.bedPart) {
+        const facing = meta.facing;
+        const part = meta.bedPart;
+        let dx = 0;
+        let dz = 0;
+        if (part === 'head') {
+          // opposite of facing
+          if (facing === 'north') dz = 1;
+          else if (facing === 'south') dz = -1;
+          else if (facing === 'east') dx = -1;
+          else if (facing === 'west') dx = 1;
+        } else {
+          // same as facing
+          if (facing === 'north') dz = -1;
+          else if (facing === 'south') dz = 1;
+          else if (facing === 'east') dx = 1;
+          else if (facing === 'west') dx = -1;
+        }
+        const partnerX = x + dx;
+        const partnerZ = z + dz;
+        const partnerId = this.chunks.getBlock(partnerX, y, partnerZ);
+        if ((partnerId & 0x3FF) === 26) {
+          this.destroyBlockAt(partnerX, y, partnerZ, false);
+        }
+      }
     }
 
     // Fluid check after removal

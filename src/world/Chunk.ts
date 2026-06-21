@@ -396,6 +396,20 @@ export class Chunk {
             continue;
           }
 
+          // Bed Block
+          if ((id & 0x3FF) === 26 || def.name === 'bed') {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            const bounds: CuboidBounds = {
+              minX: 0, maxX: 1,
+              minY: 0, maxY: 0.5625,
+              minZ: 0, maxZ: 1
+            };
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome, meta);
+            continue;
+          }
+
           // Extended Piston Base
           if ((id & 0x3FF) === 33 || (id & 0x3FF) === 29 || def.name === 'piston' || def.name === 'sticky_piston') {
             const isExtended = meta?.extended === true;

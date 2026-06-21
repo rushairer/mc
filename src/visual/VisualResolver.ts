@@ -137,6 +137,36 @@ export const VisualResolver = {
       const frontTex = isLit ? 'blast_furnace_front_lit' : 'blast_furnace_front';
       return 'block:' + getHorizontalFacingTexture(faceName, facing, frontTex, 'blast_furnace_side', 'blast_furnace_top');
     }
+    if (name === 'bed') {
+      const facing = meta?.facing ?? 'north';
+      const part = meta?.bedPart ?? 'foot';
+      const isHead = part === 'head';
+
+      if (faceName === 'top') {
+        return 'block:' + (isHead ? 'bed_head_top' : 'bed_foot_top');
+      }
+      if (faceName === 'bottom') {
+        return 'block:oak_planks';
+      }
+
+      let currentDir: BlockFacing = 'north';
+      if (faceName === 'right') currentDir = 'east';
+      else if (faceName === 'left') currentDir = 'west';
+      else if (faceName === 'front') currentDir = 'south';
+      else if (faceName === 'back') currentDir = 'north';
+
+      if (isHead) {
+        if (currentDir === facing) {
+          return 'block:bed_head_end';
+        }
+        return 'block:bed_head_side';
+      } else {
+        if (currentDir === getOppositeFacing(facing)) {
+          return 'block:bed_foot_end';
+        }
+        return 'block:bed_foot_side';
+      }
+    }
     if (name === 'piston' || name === 'sticky_piston') {
       const facing = meta?.facing ?? 'north';
       const isExtended = meta?.extended === true;

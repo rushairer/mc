@@ -647,6 +647,10 @@ export class Game {
     this.notifyState();
   }
 
+  private isMultiplayerNetworkConnected(): boolean {
+    return this.activeSlot === 'multiplayer' && !!this.network?.isConnected;
+  }
+
   resumeGame() {
     this.openUI = 'none';
     this.input.requestLock();
@@ -1152,7 +1156,7 @@ export class Game {
       this.portalTimer = Math.max(0, this.portalTimer - dt * 2.0);
     }
 
-    const isNetworkConnected = this.network && this.network.isConnected;
+    const isNetworkConnected = this.isMultiplayerNetworkConnected();
 
     if (!isNetworkConnected) {
       // Mob system
@@ -3538,7 +3542,7 @@ export class Game {
       if (trimmed.startsWith('/') && this.activeSlot !== 'multiplayer') {
         const result = this.commands.execute(trimmed);
         this.chatMessages.push(result.message);
-      } else if (this.network && this.network.isConnected) {
+      } else if (this.isMultiplayerNetworkConnected()) {
         this.network.send(PacketType.C2S_CHAT, { text: trimmed });
       } else {
         this.chatMessages.push(`<Player> ${trimmed}`);

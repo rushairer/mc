@@ -1965,6 +1965,9 @@ export class Game {
         } else if (targetName === 'hopper') {
           this.openHopperUI(blockPos.x, blockPos.y, blockPos.z);
           this.placeCooldown = 0.5;
+        } else if ((targetId & 0x3FF) === 92 || targetName === 'cake') {
+          this.eatCakeBlock(blockPos.x, blockPos.y, blockPos.z);
+          this.placeCooldown = 0.25;
         } else if (targetName === 'enchanting_table') {
           this.openEnchantUI();
           this.placeCooldown = 0.5;
@@ -2221,6 +2224,8 @@ export class Game {
       targetName === 'chest' ||
       targetName === 'hopper' ||
       targetName === 'bed' ||
+      targetName === 'cake' ||
+      (targetBlockId & 0x3FF) === 92 ||
       this.isDoorBlock(targetBlockId) ||
       this.isTrapdoorBlock(targetBlockId)
     );
@@ -4353,6 +4358,11 @@ export class Game {
       return;
     }
 
+    if ((blockId & 0x3FF) === 92 || name === 'cake') {
+      this.chunks.setBlockMeta(x, y, z, { cakeBites: 0 }, true);
+      return;
+    }
+
     if (name.includes('trapdoor')) {
       let hingeFacing = facing;
       if (facing === 'up' || facing === 'down') {
@@ -4403,6 +4413,34 @@ export class Game {
     if (this.usesFacingMetadata(blockId)) {
       this.chunks.setBlockMeta(x, y, z, { facing }, true);
     }
+  }
+
+  private eatCakeBlock(x: number, y: number, z: number) {
+    if (this.gameMode !== 'creative' && this.player.hunger >= 20) {
+      return;
+    }
+
+    const currentMeta = this.chunks.getBlockMeta(x, y, z) ?? {};
+    const bites = Math.max(0, Math.min(6, currentMeta.cakeBites ?? 0));
+
+    this.player.hunger = Math.min(20, this.player.hunger + 2);
+    this.player.saturation = Math.min(this.player.hunger, this.player.saturation + 0.4);
+    this.sound.playEat();
+    this.particles.spawnBlockBreak(x + 0.5, y + 0.45, z + 0.5, 0xf5efd7, 10);
+
+    if (bites >= 6) {
+      this.chunks.setBlock(x, y, z, 0);
+      this.chunks.setBlockMeta(x, y, z, null);
+      this.redstone.observeBlockChange(x, y, z);
+      this.checkFluidAdjacency(x, y, z);
+    } else {
+      this.chunks.setBlockMeta(x, y, z, {
+        ...currentMeta,
+        cakeBites: bites + 1,
+      }, true);
+    }
+
+    this.notifyState();
   }
 
   private checkWitherSpawning(x: number, y: number, z: number) {
@@ -5144,6 +5182,8 @@ export class Game {
         this.droppedItems.spawnItem(37, 1, dropPos, velocity, 0.5);
       } else if (baseId === 59 || baseId === 141 || baseId === 142) {
         this.spawnCropDrops(x, y, z, blockId);
+      } else if (baseId === 92) {
+        // Placed cakes are consumed in-world and do not return an item when broken.
       } else {
         const dropId = ItemRegistry.getBlockDropItem(blockId);
         if (dropId > 0) {

@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-06-21
+
+### Added
+- Implement Cake block eating: right-clicking a placed Cake restores hunger, plays eating feedback, persists bite progress in block metadata, and removes the block after the final bite.
+- Render placed Cakes with vanilla-style half-height inset bounds that shrink across bite stages.
+
+### Changed
+- Make placed Cakes behave like vanilla consumable blocks by dropping no item when broken after placement.
+
 ## [0.23.0] - 2026-06-21
 
 ### Added

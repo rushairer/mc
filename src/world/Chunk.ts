@@ -410,6 +410,24 @@ export class Chunk {
             continue;
           }
 
+          // Cake Block
+          if ((id & 0x3FF) === 92 || def.name === 'cake') {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            const bites = Math.max(0, Math.min(6, meta?.cakeBites ?? 0));
+            const bounds: CuboidBounds = {
+              minX: (1 + bites * 2) / 16,
+              maxX: 15 / 16,
+              minY: 0,
+              maxY: 0.5,
+              minZ: 1 / 16,
+              maxZ: 15 / 16,
+            };
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome, meta);
+            continue;
+          }
+
           // Extended Piston Base
           if ((id & 0x3FF) === 33 || (id & 0x3FF) === 29 || def.name === 'piston' || def.name === 'sticky_piston') {
             const isExtended = meta?.extended === true;

@@ -45,6 +45,7 @@ export interface BlockMetadata {
   maxBurnTime?: number;
   sticky?: boolean;
   bedPart?: 'head' | 'foot';
+  cakeBites?: number;
 }
 
 export interface SerializedBlockMetadata {

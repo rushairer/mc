@@ -1960,6 +1960,34 @@ export class TextureAtlas {
       }
     });
 
+    // ladder
+    this.drawTile('ladder', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      
+      // Left and right vertical wood rails
+      ctx.fillStyle = '#8B5A2B';
+      ctx.fillRect(x + 2, y, 2, s);
+      ctx.fillRect(x + 12, y, 2, s);
+      
+      ctx.fillStyle = '#BC9862'; // Highlight
+      ctx.fillRect(x + 2, y, 1, s);
+      ctx.fillRect(x + 12, y, 1, s);
+
+      ctx.fillStyle = '#5C3A21'; // Shadow
+      ctx.fillRect(x + 3, y, 1, s);
+      ctx.fillRect(x + 13, y, 1, s);
+      
+      // Horizontal rungs
+      for (let ry = 2; ry < s; ry += 3) {
+        ctx.fillStyle = '#8B5A2B'; // Base rung
+        ctx.fillRect(x + 4, y + ry, 8, 1);
+        ctx.fillStyle = '#BC9862'; // Top highlight
+        ctx.fillRect(x + 4, y + ry - 1, 8, 1);
+        ctx.fillStyle = '#5C3A21'; // Bottom shadow
+        ctx.fillRect(x + 4, y + ry + 1, 8, 1);
+      }
+    });
+
     // Hardened clay (Terracotta) variations
     const CLAY_COLORS: Record<string, string> = {
       'hardened_clay': '#985e46',

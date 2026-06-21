@@ -120,6 +120,10 @@ export class Player {
       const bodyBlock = chunks.getBlock(px, py + 1, pz);
       const inFluid = BlockRegistry.isFluid(footBlock) || BlockRegistry.isFluid(bodyBlock);
 
+      const baseFoot = footBlock & 0x3FF;
+      const baseBody = bodyBlock & 0x3FF;
+      const inClimbable = baseFoot === 65 || baseFoot === 106 || baseBody === 65 || baseBody === 106;
+
       if (inFluid) {
         // Swimming mode
         this.velocity.x = moveDir.x * speed * 0.5;
@@ -132,6 +136,24 @@ export class Player {
           // Slow drift down (buoyancy)
           this.velocity.y += GRAVITY * 0.15 * dt;
           this.velocity.y = Math.max(-1.5, this.velocity.y);
+        }
+      } else if (inClimbable) {
+        // Climbing mode (ladders and vines)
+        this.velocity.x = moveDir.x * speed * 0.35;
+        this.velocity.z = moveDir.z * speed * 0.35;
+
+        if (input.sneak) {
+          // Sneak/holding onto ladder: vertical lock
+          this.velocity.y = 0;
+        } else if (input.jump || input.forward) {
+          // Climb up
+          this.velocity.y = 2.0;
+        } else if (input.back) {
+          // Climb down
+          this.velocity.y = -2.0;
+        } else {
+          // Slow slide down when not actively inputting vertical motion
+          this.velocity.y = -1.2;
         }
       } else {
         // Walking mode

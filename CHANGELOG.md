@@ -6,6 +6,17 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-06-21
+
+### Added
+- Add functional ladder and vine climbing mechanics with reduced horizontal speed, upward climbing on jump/forward, downward climbing on back, and a sneak-key (Shift) vertical holding state.
+- Add custom flat wall-facing meshing for ladders in `Chunk.ts` based on their placed block face metadata.
+- Add a new procedural pixel-art wood texture for the ladder block in `TextureAtlas.ts`.
+
+### Changed
+- Exclude the ladder block from solid collision checks in `BlockRegistry.ts` so players can walk through and occupy ladder voxels.
+- Auto-resolve ladder placement facing metadata in `Game.ts` when placed on top or bottom block faces by checking neighboring solid walls.
+
 ## [0.13.0] - 2026-06-21
 
 ### Changed

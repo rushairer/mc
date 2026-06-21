@@ -4203,6 +4203,25 @@ export class Game {
       return;
     }
 
+    if (name === 'ladder') {
+      let ladderFacing = facing;
+      if (ladderFacing === 'up' || ladderFacing === 'down') {
+        if (this.chunks.isSolidBlock(x, y, z - 1)) {
+          ladderFacing = 'south';
+        } else if (this.chunks.isSolidBlock(x, y, z + 1)) {
+          ladderFacing = 'north';
+        } else if (this.chunks.isSolidBlock(x - 1, y, z)) {
+          ladderFacing = 'east';
+        } else if (this.chunks.isSolidBlock(x + 1, y, z)) {
+          ladderFacing = 'west';
+        } else {
+          ladderFacing = this.getPlayerHorizontalFacing();
+        }
+      }
+      this.chunks.setBlockMeta(x, y, z, { facing: ladderFacing }, true);
+      return;
+    }
+
     if (name === 'standing_sign' || name === 'standing_banner') {
       const rotation = Math.round(((this.player.yaw + Math.PI) * 16) / (2 * Math.PI)) % 16;
       this.chunks.setBlockMeta(x, y, z, { rotation }, true);
@@ -4315,7 +4334,7 @@ export class Game {
     const def = BlockRegistry.get(blockId);
     if (!def) return false;
     const name = def.name;
-    return name.includes('furnace') || name === 'chest' || name === 'hopper' || name.includes('trapdoor') || name === 'crafting_table' || name.includes('stairs') || name.includes('repeater') || name.includes('piston') || name.includes('door') || name.includes('comparator') || name === 'observer' || name === 'tripwire_hook';
+    return name.includes('furnace') || name === 'chest' || name === 'hopper' || name.includes('trapdoor') || name === 'crafting_table' || name.includes('stairs') || name.includes('repeater') || name.includes('piston') || name.includes('door') || name.includes('comparator') || name === 'observer' || name === 'tripwire_hook' || name === 'ladder';
   }
 
   private isDoorBlock(blockId: number): boolean {

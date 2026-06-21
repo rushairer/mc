@@ -443,13 +443,22 @@ export class Chunk {
             continue;
           }
 
-          // Lily Pad
+                  // Lily Pad
           if (def.name === 'waterlily') {
             const skyLight = this.getSkyLightAt(x, y, z);
             const blockLight = this.getBlockLightAt(x, y, z);
             const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
             const bounds = { minX: 0, maxX: 1, minY: 0, maxY: 0.015, minZ: 0, maxZ: 1 };
             this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome);
+            continue;
+          }
+
+          // Ladder
+          if (def.name === 'ladder') {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            this.addLadder(target, x, y, z, id, meta, atlas, lightBrightness);
             continue;
           }
 
@@ -814,6 +823,28 @@ export class Chunk {
       }
       this.addCuboid(data, x, y, z, blockId, atlas, bounds, {}, undefined, false, lightBrightness);
     }
+  }
+
+  private addLadder(
+    data: ChunkMeshData,
+    x: number, y: number, z: number,
+    blockId: number,
+    meta: any,
+    atlas: { getUV(key: string): { u0: number; v0: number; u1: number; v1: number } },
+    lightBrightness: number
+  ) {
+    const facing = meta?.facing ?? 'north';
+    let bounds: CuboidBounds;
+    if (facing === 'south') {
+      bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 0.05 };
+    } else if (facing === 'north') {
+      bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0.95, maxZ: 1.0 };
+    } else if (facing === 'east') {
+      bounds = { minX: 0, maxX: 0.05, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
+    } else {
+      bounds = { minX: 0.95, maxX: 1.0, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
+    }
+    this.addCuboid(data, x, y, z, blockId, atlas, bounds, {}, undefined, false, lightBrightness);
   }
 
   private addBanner(

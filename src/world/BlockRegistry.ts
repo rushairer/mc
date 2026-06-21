@@ -44,7 +44,7 @@ for (const b of rawBlocks) {
 
   // Determine if transparent, solid, etc.
   const isTransparent = b.transparent || b.boundingBox === 'empty' || b.name === 'torch' || b.name === 'redstone_wire' || b.name.includes('sapling') || b.name.includes('flower') || b.name.includes('glass');
-  const isSolid = b.boundingBox === 'block' && b.name !== 'water' && b.name !== 'lava' && b.name !== 'flowing_water' && b.name !== 'flowing_lava';
+  const isSolid = b.boundingBox === 'block' && b.name !== 'water' && b.name !== 'lava' && b.name !== 'flowing_water' && b.name !== 'flowing_lava' && b.name !== 'ladder';
   const emitLight = b.emitLight ?? 0;
 
   // Determine tool category based on material or name

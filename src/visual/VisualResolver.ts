@@ -1,6 +1,6 @@
 import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
-import type { BlockDef, BlockFacing } from '../types';
+import type { BlockDef, BlockFacing, BlockMetadata } from '../types';
 
 function getOppositeFacing(facing: BlockFacing): BlockFacing {
   switch (facing) {
@@ -78,18 +78,113 @@ function hashColor(name: string): string {
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
 
+function getHorizontalFacingTexture(
+  faceName: VisualFace,
+  facing: BlockFacing,
+  frontTex: string,
+  sideTex: string,
+  topTex: string,
+  bottomTex = topTex
+): string {
+  if (faceName === 'top') return topTex;
+  if (faceName === 'bottom') return bottomTex;
+
+  let currentFacing: BlockFacing = 'north';
+  if (faceName === 'right') currentFacing = 'east';
+  else if (faceName === 'left') currentFacing = 'west';
+  else if (faceName === 'front') currentFacing = 'south';
+  else if (faceName === 'back') currentFacing = 'north';
+
+  if (currentFacing === facing) {
+    return frontTex;
+  }
+  return sideTex;
+}
+
 export const VisualResolver = {
   faceName(face: number): VisualFace {
     return FACE_NAMES[face] ?? 'front';
   },
 
-  getBlockFaceTexture(blockId: number, face: number): string {
+  getBlockFaceTexture(blockId: number, face: number, meta?: BlockMetadata): string {
     const block = BlockRegistry.get(blockId);
     if (!block) return 'block:stone';
 
     const name = block.name;
     const base = baseId(blockId);
     const faceName = this.faceName(face);
+
+    // Directional block face overrides
+    if (name === 'chest') {
+      const facing = meta?.facing ?? 'north';
+      return 'block:' + getHorizontalFacingTexture(faceName, facing, 'chest_front', 'chest_side', 'chest_top');
+    }
+    if (name === 'furnace' || name === 'lit_furnace' || name === 'unlit_furnace') {
+      const facing = meta?.facing ?? 'north';
+      const isLit = name === 'lit_furnace' || (meta && meta.burnTime && meta.burnTime > 0);
+      const frontTex = isLit ? 'furnace_front_lit' : 'furnace_front';
+      return 'block:' + getHorizontalFacingTexture(faceName, facing, frontTex, 'furnace_side', 'furnace_top');
+    }
+    if (name === 'smoker') {
+      const facing = meta?.facing ?? 'north';
+      const isLit = meta && meta.burnTime && meta.burnTime > 0;
+      const frontTex = isLit ? 'smoker_front_lit' : 'smoker_front';
+      return 'block:' + getHorizontalFacingTexture(faceName, facing, frontTex, 'smoker_side', 'smoker_top');
+    }
+    if (name === 'blast_furnace') {
+      const facing = meta?.facing ?? 'north';
+      const isLit = meta && meta.burnTime && meta.burnTime > 0;
+      const frontTex = isLit ? 'blast_furnace_front_lit' : 'blast_furnace_front';
+      return 'block:' + getHorizontalFacingTexture(faceName, facing, frontTex, 'blast_furnace_side', 'blast_furnace_top');
+    }
+    if (name === 'piston' || name === 'sticky_piston') {
+      const facing = meta?.facing ?? 'north';
+      const isExtended = meta?.extended === true;
+      
+      let currentFacing: BlockFacing = 'north';
+      if (faceName === 'top') currentFacing = 'up';
+      else if (faceName === 'bottom') currentFacing = 'down';
+      else if (faceName === 'right') currentFacing = 'east';
+      else if (faceName === 'left') currentFacing = 'west';
+      else if (faceName === 'front') currentFacing = 'south';
+      else if (faceName === 'back') currentFacing = 'north';
+
+      if (currentFacing === facing) {
+        if (isExtended) {
+          return 'block:piston_inner';
+        } else {
+          return name === 'sticky_piston' ? 'block:piston_top_sticky' : 'block:piston_top';
+        }
+      }
+      
+      const oppositeFacing = getOppositeFacing(facing);
+      if (currentFacing === oppositeFacing) {
+        return 'block:piston_bottom';
+      }
+      return 'block:piston_side';
+    }
+    if (name === 'piston_head') {
+      const facing = meta?.facing ?? 'north';
+      const isSticky = meta?.sticky === true;
+      
+      let currentFacing: BlockFacing = 'north';
+      if (faceName === 'top') currentFacing = 'up';
+      else if (faceName === 'bottom') currentFacing = 'down';
+      else if (faceName === 'right') currentFacing = 'east';
+      else if (faceName === 'left') currentFacing = 'west';
+      else if (faceName === 'front') currentFacing = 'south';
+      else if (faceName === 'back') currentFacing = 'north';
+
+      if (currentFacing === facing) {
+        return isSticky ? 'block:piston_top_sticky' : 'block:piston_top';
+      }
+      
+      const oppositeFacing = getOppositeFacing(facing);
+      if (currentFacing === oppositeFacing) {
+        return 'block:piston_bottom';
+      }
+      return 'block:piston_head_side';
+    }
 
     if (base === 2 || name === 'grass') {
       if (faceName === 'top') return 'block:grass_top';

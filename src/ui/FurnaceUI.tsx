@@ -13,11 +13,25 @@ interface FurnaceUIProps {
   onInventoryChange: () => void;
   getItemIconStyle: (id: number, size?: number) => any;
   onDropItem?: (itemId: number, count: number) => void;
+  burnTime?: number;
+  cookTime?: number;
+  maxBurnTime?: number;
 }
 
 const SLOT_SIZE = 48;
 
-export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, furnaceSlots, containerType = 'furnace', onClose, onInventoryChange, getItemIconStyle, onDropItem }) => {
+export const FurnaceUI: React.FC<FurnaceUIProps> = ({ 
+  inventory, 
+  furnaceSlots, 
+  containerType = 'furnace', 
+  onClose, 
+  onInventoryChange, 
+  getItemIconStyle, 
+  onDropItem,
+  burnTime = 0,
+  cookTime = 0,
+  maxBurnTime = 0
+}) => {
   const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [inputSlot, setInputSlot] = useState<ItemStack | null>(furnaceSlots[0]);
   const [fuelSlot, setFuelSlot] = useState<ItemStack | null>(furnaceSlots[1]);
@@ -38,9 +52,20 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, furnaceSlots, c
     furnaceSlots[2] = outputSlot;
     onInventoryChange();
   }, [outputSlot, furnaceSlots, onInventoryChange]);
-  const [isSmelting, setIsSmelting] = useState(false);
-  const [smeltProgress, setSmeltProgress] = useState(0);
-  const [fuelProgress, setFuelProgress] = useState(0);
+
+  // Sync prop changes (from background smelting) into local React states
+  useEffect(() => {
+    setInputSlot(furnaceSlots[0]);
+  }, [furnaceSlots[0]]);
+
+  useEffect(() => {
+    setFuelSlot(furnaceSlots[1]);
+  }, [furnaceSlots[1]]);
+
+  useEffect(() => {
+    setOutputSlot(furnaceSlots[2]);
+  }, [furnaceSlots[2]]);
+
   const [hoveredSlot, setHoveredSlot] = useState<{
     item: ItemStack;
     itemDef: any;
@@ -50,92 +75,13 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, furnaceSlots, c
     type: 'inventory' | 'input' | 'fuel' | 'output';
   } | null>(null);
 
-  // Check if smelting should start
-  useEffect(() => {
-    if (!inputSlot || !fuelSlot) {
-      setIsSmelting(false);
-      return;
-    }
-
-    const recipe = findSmeltingResult(inputSlot.id);
-    if (!recipe) {
-      setIsSmelting(false);
-      return;
-    }
-
-    // Check if input is valid for the specific container type
-    const itemDef = ItemRegistry.get(inputSlot.id);
-    if (!itemDef) {
-      setIsSmelting(false);
-      return;
-    }
-    if (containerType === 'smoker') {
-      const isValid = ItemRegistry.isFood(inputSlot.id) || ItemRegistry.isFood(recipe.output);
-      if (!isValid) {
-        setIsSmelting(false);
-        return;
-      }
-    } else if (containerType === 'blast_furnace') {
-      const isValid = (itemDef.name.includes('ore') || itemDef.name.startsWith('raw_')) && !ItemRegistry.isFood(inputSlot.id);
-      if (!isValid) {
-        setIsSmelting(false);
-        return;
-      }
-    }
-
-    // Check fuel
-    if (!isSmeltingFuel(fuelSlot.id)) {
-      setIsSmelting(false);
-      return;
-    }
-
-    setIsSmelting(true);
-  }, [inputSlot, fuelSlot, containerType]);
-
-  // Smelting progress
-  useEffect(() => {
-    if (!isSmelting) return;
-
-    const interval = setInterval(() => {
-      setSmeltProgress(prev => {
-        const step = (containerType === 'smoker' || containerType === 'blast_furnace') ? 0.1 : 0.05;
-        const next = prev + step; // 20 ticks per second
-        if (next >= 1) {
-          // Smelt complete
-          if (inputSlot) {
-            const recipe = findSmeltingResult(inputSlot.id);
-            if (recipe) {
-              setInputSlot(prev => {
-                if (!prev) return null;
-                const newCount = prev.count - 1;
-                return newCount > 0 ? { ...prev, count: newCount } : null;
-              });
-              setOutputSlot(prev => {
-                if (prev && prev.id === recipe.output) {
-                  return { ...prev, count: prev.count + recipe.outputCount };
-                }
-                return { id: recipe.output, count: recipe.outputCount };
-              });
-              // Consume fuel
-              setFuelSlot(prev => {
-                if (!prev) return null;
-                const baseFuelId = prev.id & 0x3FF;
-                if (baseFuelId === 327) { // Lava bucket -> empty bucket
-                  return { id: 325, count: 1 };
-                }
-                const newCount = prev.count - 1;
-                return newCount > 0 ? { ...prev, count: newCount } : null;
-              });
-            }
-          }
-          return 0;
-        }
-        return next;
-      });
-    }, 50);
-
-    return () => clearInterval(interval);
-  }, [isSmelting, inputSlot, fuelSlot, containerType]);
+  // Calculate cook and fuel progress
+  const inputItem = furnaceSlots[0];
+  const recipe = inputItem ? findSmeltingResult(inputItem.id) : null;
+  const totalCookTime = recipe ? recipe.cookTime : 10;
+  
+  const smeltProgress = totalCookTime > 0 ? Math.min(1, Math.max(0, cookTime / totalCookTime)) : 0;
+  const fuelProgress = (maxBurnTime && maxBurnTime > 0) ? Math.min(1, Math.max(0, burnTime / maxBurnTime)) : 0;
 
   const handleClose = useCallback(() => {
     onClose();

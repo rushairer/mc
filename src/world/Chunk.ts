@@ -382,6 +382,77 @@ export class Chunk {
             continue;
           }
 
+          // Repeaters and Comparators
+          if (def.name.includes('repeater') || def.name.includes('comparator')) {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            const bounds: CuboidBounds = {
+              minX: 0, maxX: 1,
+              minY: 0, maxY: 0.125,
+              minZ: 0, maxZ: 1
+            };
+            this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome, meta);
+            continue;
+          }
+
+          // Extended Piston Base
+          if ((id & 0x3FF) === 33 || (id & 0x3FF) === 29 || def.name === 'piston' || def.name === 'sticky_piston') {
+            const isExtended = meta?.extended === true;
+            if (isExtended) {
+              const skyLight = this.getSkyLightAt(x, y, z);
+              const blockLight = this.getBlockLightAt(x, y, z);
+              const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+              
+              const facing = meta?.facing ?? 'north';
+              let bounds: CuboidBounds;
+              if (facing === 'up') bounds = { minX: 0, maxX: 1, minY: 0, maxY: 0.75, minZ: 0, maxZ: 1 };
+              else if (facing === 'down') bounds = { minX: 0, maxX: 1, minY: 0.25, maxY: 1, minZ: 0, maxZ: 1 };
+              else if (facing === 'north') bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0.25, maxZ: 1 };
+              else if (facing === 'south') bounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 0.75 };
+              else if (facing === 'west') bounds = { minX: 0.25, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
+              else bounds = { minX: 0, maxX: 0.75, minY: 0, maxY: 1, minZ: 0, maxZ: 1 }; // east
+              
+              this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome, meta);
+              continue;
+            }
+          }
+
+          // Piston Head
+          if ((id & 0x3FF) === 34 || def.name === 'piston_head') {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            
+            const facing = meta?.facing ?? 'north';
+            const isSticky = meta?.sticky === true;
+            
+            // 1. Plate bounds (4/16ths thick at the facing end)
+            let plateBounds: CuboidBounds;
+            if (facing === 'up') plateBounds = { minX: 0, maxX: 1, minY: 0.75, maxY: 1, minZ: 0, maxZ: 1 };
+            else if (facing === 'down') plateBounds = { minX: 0, maxX: 1, minY: 0, maxY: 0.25, minZ: 0, maxZ: 1 };
+            else if (facing === 'north') plateBounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 0.25 };
+            else if (facing === 'south') plateBounds = { minX: 0, maxX: 1, minY: 0, maxY: 1, minZ: 0.75, maxZ: 1 };
+            else if (facing === 'west') plateBounds = { minX: 0, maxX: 0.25, minY: 0, maxY: 1, minZ: 0, maxZ: 1 };
+            else plateBounds = { minX: 0.75, maxX: 1, minY: 0, maxY: 1, minZ: 0, maxZ: 1 }; // east
+
+            // 2. Shaft bounds (4/16ths thick, centered, spanning from base to plate)
+            let shaftBounds: CuboidBounds;
+            if (facing === 'up' || facing === 'down') {
+              shaftBounds = { minX: 0.375, maxX: 0.625, minY: facing === 'up' ? 0 : 0.25, maxY: facing === 'up' ? 0.75 : 1, minZ: 0.375, maxZ: 0.625 };
+            } else if (facing === 'north' || facing === 'south') {
+              shaftBounds = { minX: 0.375, maxX: 0.625, minY: 0.375, maxY: 0.625, minZ: facing === 'north' ? 0.25 : 0, maxZ: facing === 'north' ? 1 : 0.75 };
+            } else { // east or west
+              shaftBounds = { minX: facing === 'west' ? 0.25 : 0, maxX: facing === 'west' ? 1 : 0.75, minY: 0.375, maxY: 0.625, minZ: 0.375, maxZ: 0.625 };
+            }
+            
+            // Draw plate
+            this.addCuboid(target, x, y, z, id, atlas, plateBounds, {}, undefined, false, lightBrightness, biome, meta);
+            // Draw shaft
+            this.addCuboid(target, x, y, z, id, atlas, shaftBounds, {}, undefined, false, lightBrightness, biome, meta);
+            continue;
+          }
+
           // Pressure plates
           if (def.name.includes('pressure_plate')) {
             const skyLight = this.getSkyLightAt(x, y, z);
@@ -617,7 +688,7 @@ export class Chunk {
             }
 
             const lightBrightness = this.getAdjustedBrightness(faceSkyLight, faceBlockLight, timeOfDay);
-            this.addFace(target, x, y, z, face, id, atlas, depth, lightBrightness, fluidLevel, getNeighborBlock, biome);
+            this.addFace(target, x, y, z, face, id, atlas, depth, lightBrightness, fluidLevel, getNeighborBlock, biome, meta);
           }
         }
       }
@@ -639,9 +710,10 @@ export class Chunk {
     lightBrightness: number = 1.0,
     fluidLevel: number = 8,
     getNeighborBlock?: (wx: number, wy: number, wz: number) => number,
-    biome: number = 0
+    biome: number = 0,
+    meta?: BlockMetadata
   ) {
-    const texKey = VisualResolver.getBlockFaceTexture(blockId, face);
+    const texKey = VisualResolver.getBlockFaceTexture(blockId, face, meta);
     const uv = atlas.getUV(texKey);
 
     const verts = FACE_QUADS[face];
@@ -1095,7 +1167,8 @@ export class Chunk {
     customTextureKeys?: string[],
     mirrorHorizontal = false,
     lightBrightness: number = 1.0,
-    biome: number = 0
+    biome: number = 0,
+    meta?: BlockMetadata
   ) {
     const faces = getCuboidFaces(bounds);
     const shouldDraw = {
@@ -1125,7 +1198,7 @@ export class Chunk {
       const faceName = FACE_NAMES[faceIndex];
       if (!shouldDraw[faceName]) return;
 
-      const texKey = customTextureKeys ? customTextureKeys[faceIndex] : VisualResolver.getBlockFaceTexture(blockId, faceIndex);
+      const texKey = customTextureKeys ? customTextureKeys[faceIndex] : VisualResolver.getBlockFaceTexture(blockId, faceIndex, meta);
       const uv = atlas.getUV(texKey);
       const baseIdx = data.positions.length / 3;
 

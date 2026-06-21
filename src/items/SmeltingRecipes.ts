@@ -78,3 +78,15 @@ export function isSmeltingFuel(itemId: number): boolean {
 
   return false;
 }
+
+export function getFuelBurnTime(itemId: number): number {
+  const baseId = itemId & 0x3FF;
+  if (baseId === 327) return 1000; // lava bucket
+  if (baseId === 173) return 800;  // coal block
+  if (baseId === 263) return 80;   // coal/charcoal
+  if (baseId === 17 || baseId === 162 || baseId === 5 || baseId === 54 || baseId === 58) return 15; // logs, planks, chest, crafting table
+  if (baseId === 268 || baseId === 269 || baseId === 270 || baseId === 271 || baseId === 290 || baseId === 261 || baseId === 346) return 10; // wooden tools/weapons
+  if (baseId === 280 || baseId === 6) return 5; // stick, sapling
+  return 0;
+}
+

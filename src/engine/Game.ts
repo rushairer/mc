@@ -34,6 +34,7 @@ import { MapSystem } from '../systems/MapSystem';
 import { HopperSystem } from '../systems/HopperSystem';
 import { VillageSystem, type TradeOffer, type VillagerProfession } from '../systems/VillageSystem';
 import { EnderDragonSystem } from '../systems/EnderDragonSystem';
+import { findSmeltingResult, isSmeltingFuel, getFuelBurnTime } from '../items/SmeltingRecipes';
 import { CHUNK_SIZE, PLAYER_HEIGHT, PLAYER_WIDTH, PLAYER_CRAWL_HEIGHT, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
 import type { Enchantment } from '../systems/EnchantSystem';
 import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '../types';
@@ -102,6 +103,9 @@ export interface GameState {
   hopperInventory: (ItemStack | null)[] | null;
   furnaceInventory: (ItemStack | null)[] | null;
   furnaceType: 'furnace' | 'smoker' | 'blast_furnace' | null;
+  furnaceBurnTime?: number;
+  furnaceCookTime?: number;
+  furnaceMaxBurnTime?: number;
   brewingInventory: (ItemStack | null)[] | null;
   tradingOffers: TradeOffer[] | null;
   tradingProfession: VillagerProfession | null;
@@ -221,6 +225,7 @@ export class Game {
   private lightScanTimer = 0;
   private ambientTimer = 0;
   private farmingTickTimer = 0;
+  private furnaceTickTimer = 0;
   private particleScanTimer = 0;
   private ambientParticleSources: { x: number; y: number; z: number; type: 'torch' | 'furnace' | 'enchanting_table' }[] = [];
 
@@ -2516,6 +2521,9 @@ export class Game {
     // Farming simulation (farmland hydration, crop growth)
     this.updateFarming(dt);
 
+    // Smelting simulation
+    this.updateFurnaces(dt);
+
     // Particles
     this.spawnAmbientParticles(dt);
     this.particles.update(dt);
@@ -3645,6 +3653,9 @@ export class Game {
       hopperInventory: this.getOpenHopperInventory(),
       furnaceInventory: this.getOpenFurnaceInventory(),
       furnaceType: this.getOpenFurnaceType(),
+      furnaceBurnTime: this.openFurnacePos ? (this.chunks.getBlockMeta(this.openFurnacePos.x, this.openFurnacePos.y, this.openFurnacePos.z)?.burnTime ?? 0) : 0,
+      furnaceCookTime: this.openFurnacePos ? (this.chunks.getBlockMeta(this.openFurnacePos.x, this.openFurnacePos.y, this.openFurnacePos.z)?.cookTime ?? 0) : 0,
+      furnaceMaxBurnTime: this.openFurnacePos ? (this.chunks.getBlockMeta(this.openFurnacePos.x, this.openFurnacePos.y, this.openFurnacePos.z)?.maxBurnTime ?? 0) : 0,
       brewingInventory: this.getOpenBrewingInventory(),
       tradingOffers: this.tradingProfession ? VillageSystem.getOffers(this.tradingProfession) : null,
       tradingProfession: this.tradingProfession,
@@ -5160,6 +5171,157 @@ export class Game {
             }
           }
         }
+      }
+    }
+  }
+
+  private updateFurnaces(dt: number) {
+    this.furnaceTickTimer += dt;
+    if (this.furnaceTickTimer < 0.1) return;
+    const elapsed = this.furnaceTickTimer;
+    this.furnaceTickTimer = 0;
+
+    for (const chunk of this.chunks.chunks.values()) {
+      for (const [index, meta] of chunk.metadata.entries()) {
+        if (
+          meta.containerType === 'furnace' ||
+          meta.containerType === 'smoker' ||
+          meta.containerType === 'blast_furnace'
+        ) {
+          const temp = index;
+          const x = temp % CHUNK_SIZE;
+          const z = Math.floor((temp % (CHUNK_SIZE * CHUNK_SIZE)) / CHUNK_SIZE);
+          const y = Math.floor(temp / (CHUNK_SIZE * CHUNK_SIZE));
+          
+          this.tickFurnaceMetadata(chunk, index, x, y, z, meta, elapsed);
+        }
+      }
+    }
+  }
+
+  private tickFurnaceMetadata(
+    chunk: any,
+    index: number,
+    x: number,
+    y: number,
+    z: number,
+    meta: BlockMetadata,
+    elapsed: number
+  ) {
+    if (!meta.inventory) return;
+
+    if (meta.burnTime === undefined) meta.burnTime = 0;
+    if (meta.cookTime === undefined) meta.cookTime = 0;
+    if (meta.maxBurnTime === undefined) meta.maxBurnTime = 0;
+
+    const isLit = meta.burnTime > 0;
+    if (isLit) {
+      meta.burnTime = Math.max(0, meta.burnTime - elapsed);
+    }
+
+    const input = meta.inventory[0];
+    const fuel = meta.inventory[1];
+    const output = meta.inventory[2];
+
+    const hasRecipe = input ? findSmeltingResult(input.id) : null;
+    let canCook = false;
+    let recipeOutputId = 0;
+    let recipeOutputCount = 0;
+    let recipeCookTime = 10;
+
+    if (hasRecipe && input) {
+      let typeValid = true;
+      const itemDef = ItemRegistry.get(input.id);
+      if (itemDef) {
+        if (meta.containerType === 'smoker') {
+          typeValid = ItemRegistry.isFood(input.id) || ItemRegistry.isFood(hasRecipe.output);
+        } else if (meta.containerType === 'blast_furnace') {
+          typeValid = (itemDef.name.includes('ore') || itemDef.name.startsWith('raw_')) && !ItemRegistry.isFood(input.id);
+        }
+      } else {
+        typeValid = false;
+      }
+
+      if (typeValid) {
+        recipeOutputId = hasRecipe.output;
+        recipeOutputCount = hasRecipe.outputCount;
+        recipeCookTime = hasRecipe.cookTime;
+
+        if (!output) {
+          canCook = true;
+        } else if (output.id === recipeOutputId && output.count + recipeOutputCount <= 64) {
+          canCook = true;
+        }
+      }
+    }
+
+    let metadataChanged = false;
+
+    // Consume fuel if furnace is unlit but we need to cook
+    if (meta.burnTime === 0 && canCook && fuel && isSmeltingFuel(fuel.id)) {
+      const fuelBurnTime = getFuelBurnTime(fuel.id);
+      if (fuelBurnTime > 0) {
+        meta.burnTime = fuelBurnTime;
+        meta.maxBurnTime = fuelBurnTime;
+
+        const baseFuelId = fuel.id & 0x3FF;
+        if (baseFuelId === 327) { // Lava bucket -> empty bucket
+          meta.inventory[1] = { id: 325, count: 1 };
+        } else {
+          fuel.count--;
+          if (fuel.count <= 0) {
+            meta.inventory[1] = null;
+          }
+        }
+        metadataChanged = true;
+      }
+    }
+
+    const currentlyLit = meta.burnTime > 0;
+
+    if (currentlyLit && canCook && input) {
+      const speed = (meta.containerType === 'smoker' || meta.containerType === 'blast_furnace') ? 2 : 1;
+      meta.cookTime += elapsed * speed;
+
+      if (meta.cookTime >= recipeCookTime) {
+        meta.cookTime = 0;
+        
+        // Consume input
+        input.count--;
+        if (input.count <= 0) {
+          meta.inventory[0] = null;
+        }
+
+        // Produce output
+        if (!output) {
+          meta.inventory[2] = { id: recipeOutputId, count: recipeOutputCount };
+        } else {
+          meta.inventory[2] = { ...output, count: output.count + recipeOutputCount };
+        }
+
+        metadataChanged = true;
+      }
+    } else {
+      if (meta.cookTime > 0) {
+        meta.cookTime = Math.max(0, meta.cookTime - elapsed * 2);
+        metadataChanged = true;
+      }
+    }
+
+    const litStateChanged = currentlyLit !== isLit;
+
+    if (litStateChanged || metadataChanged) {
+      chunk.dirty = true;
+
+      const worldX = chunk.cx * CHUNK_SIZE + x;
+      const worldZ = chunk.cz * CHUNK_SIZE + z;
+      if (
+        this.openFurnacePos &&
+        this.openFurnacePos.x === worldX &&
+        this.openFurnacePos.y === y &&
+        this.openFurnacePos.z === worldZ
+      ) {
+        this.notifyState();
       }
     }
   }

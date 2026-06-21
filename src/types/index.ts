@@ -40,6 +40,10 @@ export interface BlockMetadata {
   fluidLevel?: number; // 1-8: surface height = fluidLevel / 8 (8 = full block)
   signText?: string[];
   rotation?: number;
+  burnTime?: number;
+  cookTime?: number;
+  maxBurnTime?: number;
+  sticky?: boolean;
 }
 
 export interface SerializedBlockMetadata {

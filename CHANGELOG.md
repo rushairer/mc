@@ -6,6 +6,19 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-06-21
+
+### Added
+- Add directional block face rendering and custom textures for chests, furnaces (inactive and active), smokers (inactive and active), blast furnaces (inactive and active), normal pistons, sticky pistons, and piston heads.
+- Add procedural chunk-mesh generation for extended piston bases and composite piston heads (split plate and shaft bounds).
+- Implement background smelting simulation in `Game.ts` that ticks furnaces, smokers, and blast furnaces, updating cook times and fuel burn states even when the container UI is closed.
+- Support smelting fuel lava bucket consumption, returning an empty bucket to the fuel slot when consumed.
+- Support 2x double-speed smelting rates for Smoker and Blast Furnace blocks in the simulation loop.
+
+### Changed
+- Refactor `FurnaceUI` to synchronize and render smelting progress directly from chunk metadata parameters (`burnTime`, `cookTime`, and `maxBurnTime`) instead of simulating progress locally in React state.
+- Add `sticky` flag to `BlockMetadata` to control sticky vs regular piston head visual resolves.
+
 ## [0.19.0] - 2026-06-21
 
 ### Added

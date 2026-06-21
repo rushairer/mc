@@ -827,7 +827,7 @@ export class TextureAtlas {
       ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
     });
 
-    this.drawTile('chest_side', (ctx, x, y, s) => {
+    this.drawTile('chest_front', (ctx, x, y, s) => {
       ctx.fillStyle = '#9A6126';
       ctx.fillRect(x, y, s, s);
       ctx.fillStyle = '#6F4318';
@@ -839,6 +839,18 @@ export class TextureAtlas {
       ctx.fillRect(x + 6, y + 6, 4, 4);
       ctx.fillStyle = '#3B2410';
       ctx.fillRect(x + 7, y + 8, 2, 1);
+      ctx.strokeStyle = '#3B2410';
+      ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+    });
+
+    this.drawTile('chest_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#9A6126';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#6F4318';
+      ctx.fillRect(x, y + 4, s, 1);
+      ctx.fillRect(x, y + 12, s, 1);
+      ctx.fillRect(x + 2, y, 1, s);
+      ctx.fillRect(x + 13, y, 1, s);
       ctx.strokeStyle = '#3B2410';
       ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
     });
@@ -897,13 +909,205 @@ export class TextureAtlas {
       ctx.fillRect(x + 2, y + 2, s - 4, s - 4);
     });
 
-    this.drawTile('furnace_side', (ctx, x, y, s) => {
+    this.drawTile('furnace_front', (ctx, x, y, s) => {
       ctx.fillStyle = '#888888';
       ctx.fillRect(x, y, s, s);
       ctx.fillStyle = '#555555';
       ctx.fillRect(x + 4, y + 5, 8, 8);
       ctx.fillStyle = '#333333';
       ctx.fillRect(x + 5, y + 6, 6, 6);
+    });
+
+    this.drawTile('furnace_front_lit', (ctx, x, y, s) => {
+      ctx.fillStyle = '#888888';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#555555';
+      ctx.fillRect(x + 4, y + 5, 8, 8);
+      ctx.fillStyle = '#d85a16'; // orange fire
+      ctx.fillRect(x + 5, y + 6, 6, 6);
+      ctx.fillStyle = '#ffaa00'; // yellow inner fire
+      ctx.fillRect(x + 6, y + 7, 4, 4);
+    });
+
+    this.drawTile('furnace_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#888888';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#777777';
+      ctx.fillRect(x + 2, y + 3, 2, 2);
+      ctx.fillRect(x + 10, y + 11, 2, 2);
+      ctx.fillRect(x + 12, y + 4, 2, 2);
+    });
+
+    // smoker
+    this.drawTile('smoker_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#5c4531'; // dark wood logs
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#3a2f26';
+      ctx.strokeRect(x + 2, y + 2, s - 4, s - 4);
+      ctx.fillStyle = '#222222'; // grate metal
+      ctx.fillRect(x + 4, y + 4, s - 8, s - 8);
+      ctx.fillStyle = '#444444'; // bars
+      ctx.fillRect(x + 5, y + 6, s - 10, 1);
+      ctx.fillRect(x + 5, y + 8, s - 10, 1);
+      ctx.fillRect(x + 5, y + 10, s - 10, 1);
+    });
+
+    this.drawTile('smoker_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#5c4531';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#423326';
+      ctx.fillRect(x, y + 3, s, 2);
+      ctx.fillRect(x, y + 10, s, 2);
+    });
+
+    this.drawTile('smoker_front', (ctx, x, y, s) => {
+      ctx.fillStyle = '#5c4531';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#333333';
+      ctx.fillRect(x + 3, y + 3, s - 6, s - 6);
+      ctx.fillStyle = '#555555';
+      ctx.fillRect(x + 4, y + 5, 8, 1);
+      ctx.fillRect(x + 4, y + 8, 8, 1);
+    });
+
+    this.drawTile('smoker_front_lit', (ctx, x, y, s) => {
+      ctx.fillStyle = '#5c4531';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#333333';
+      ctx.fillRect(x + 3, y + 3, s - 6, s - 6);
+      ctx.fillStyle = '#d85a16';
+      ctx.fillRect(x + 5, y + 6, 6, 4);
+      ctx.fillStyle = '#ffaa00';
+      ctx.fillRect(x + 6, y + 7, 4, 2);
+      ctx.fillStyle = '#555555';
+      ctx.fillRect(x + 4, y + 5, 8, 1);
+      ctx.fillRect(x + 4, y + 8, 8, 1);
+    });
+
+    // blast furnace
+    this.drawTile('blast_furnace_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#4d5154';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#333538';
+      ctx.strokeRect(x + 1.5, y + 1.5, s - 3, s - 3);
+      ctx.fillStyle = '#1a1b1c';
+      ctx.fillRect(x + 6, y + 6, 4, 4);
+    });
+
+    this.drawTile('blast_furnace_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#4d5154';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#333538';
+      ctx.fillRect(x + 2, y, 1, s);
+      ctx.fillRect(x + s - 3, y, 1, s);
+      ctx.fillRect(x, y + 2, s, 1);
+      ctx.fillRect(x, y + s - 3, s, 1);
+      ctx.fillStyle = '#787d82';
+      ctx.fillRect(x + 2, y + 2, 1, 1);
+      ctx.fillRect(x + s - 3, y + 2, 1, 1);
+      ctx.fillRect(x + 2, y + s - 3, 1, 1);
+      ctx.fillRect(x + s - 3, y + s - 3, 1, 1);
+    });
+
+    this.drawTile('blast_furnace_front', (ctx, x, y, s) => {
+      ctx.fillStyle = '#4d5154';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#333538';
+      ctx.strokeRect(x + 1.5, y + 1.5, s - 3, s - 3);
+      ctx.fillStyle = '#222325';
+      ctx.beginPath();
+      ctx.arc(x + 8, y + 11, 4, Math.PI, 0, false);
+      ctx.fill();
+    });
+
+    this.drawTile('blast_furnace_front_lit', (ctx, x, y, s) => {
+      ctx.fillStyle = '#4d5154';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#333538';
+      ctx.strokeRect(x + 1.5, y + 1.5, s - 3, s - 3);
+      ctx.fillStyle = '#d85a16';
+      ctx.beginPath();
+      ctx.arc(x + 8, y + 11, 4, Math.PI, 0, false);
+      ctx.fill();
+      ctx.fillStyle = '#ffaa00';
+      ctx.beginPath();
+      ctx.arc(x + 8, y + 11, 2.5, Math.PI, 0, false);
+      ctx.fill();
+    });
+
+    // piston
+    this.drawTile('piston_top', (ctx, x, y, s) => {
+      ctx.fillStyle = '#b8864c';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#8b5a2b';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 1.5, y + 1.5, s - 3, s - 3);
+      ctx.strokeRect(x + 4.5, y + 4.5, s - 9, s - 9);
+      ctx.fillStyle = '#777777';
+      ctx.fillRect(x + 2, y + 2, 2, 2);
+      ctx.fillRect(x + s - 4, y + 2, 2, 2);
+      ctx.fillRect(x + 2, y + s - 4, 2, 2);
+      ctx.fillRect(x + s - 4, y + s - 4, 2, 2);
+    });
+
+    this.drawTile('piston_top_sticky', (ctx, x, y, s) => {
+      ctx.fillStyle = '#b8864c';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#8b5a2b';
+      ctx.strokeRect(x + 1.5, y + 1.5, s - 3, s - 3);
+      ctx.fillStyle = '#777777';
+      ctx.fillRect(x + 2, y + 2, 2, 2);
+      ctx.fillRect(x + s - 4, y + 2, 2, 2);
+      ctx.fillRect(x + 2, y + s - 4, 2, 2);
+      ctx.fillRect(x + s - 4, y + s - 4, 2, 2);
+      ctx.fillStyle = 'rgba(70, 180, 70, 0.75)';
+      ctx.fillRect(x + 4, y + 4, s - 8, s - 8);
+      ctx.fillStyle = 'rgba(100, 220, 100, 0.9)';
+      ctx.fillRect(x + 6, y + 6, 4, 4);
+    });
+
+    this.drawTile('piston_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#888888';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#555555';
+      ctx.fillRect(x, y, s, 3);
+      ctx.fillRect(x, y + s - 3, s, 3);
+      ctx.fillRect(x, y, 3, s);
+      ctx.fillRect(x + s - 3, y, 3, s);
+      ctx.fillRect(x + 5, y + 5, 6, 6);
+    });
+
+    this.drawTile('piston_bottom', (ctx, x, y, s) => {
+      ctx.fillStyle = '#555555';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#333333';
+      ctx.strokeRect(x + 1.5, y + 1.5, s - 3, s - 3);
+      ctx.fillStyle = '#777777';
+      ctx.fillRect(x + 6, y + 6, 4, 4);
+    });
+
+    this.drawTile('piston_inner', (ctx, x, y, s) => {
+      ctx.fillStyle = '#333333';
+      ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#222222';
+      ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+      ctx.fillStyle = '#aaaaaa';
+      ctx.fillRect(x + 5, y + 5, 6, 6);
+      ctx.fillStyle = '#777777';
+      ctx.fillRect(x + 6, y + 6, 4, 4);
+    });
+
+    this.drawTile('piston_head_side', (ctx, x, y, s) => {
+      ctx.fillStyle = '#888888';
+      ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#b8864c';
+      ctx.fillRect(x, y, s, 4);
+      ctx.fillStyle = '#8b5a2b';
+      ctx.fillRect(x, y + 3, s, 1);
+      ctx.fillStyle = '#555555';
+      ctx.fillRect(x + 5, y + 4, 6, s - 4);
+      ctx.fillStyle = '#aaaaaa';
+      ctx.fillRect(x + 6, y + 4, 4, s - 4);
     });
 
     // hopper

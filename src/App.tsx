@@ -509,6 +509,9 @@ export const App: React.FC = () => {
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
           onDropItem={handleDropItem}
+          burnTime={gameState.furnaceBurnTime ?? 0}
+          cookTime={gameState.furnaceCookTime ?? 0}
+          maxBurnTime={gameState.furnaceMaxBurnTime ?? 0}
         />
       )}
 

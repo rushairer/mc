@@ -428,6 +428,37 @@ export class Chunk {
             continue;
           }
 
+          // Cauldron
+          if ((id & 0x3FF) === 118 || def.name.includes('cauldron')) {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            const shell = [
+              { minX: 0.125, maxX: 0.875, minY: 0, maxY: 0.1875, minZ: 0.125, maxZ: 0.875 },
+              { minX: 0.125, maxX: 0.875, minY: 0, maxY: 1, minZ: 0.125, maxZ: 0.25 },
+              { minX: 0.125, maxX: 0.875, minY: 0, maxY: 1, minZ: 0.75, maxZ: 0.875 },
+              { minX: 0.125, maxX: 0.25, minY: 0, maxY: 1, minZ: 0.25, maxZ: 0.75 },
+              { minX: 0.75, maxX: 0.875, minY: 0, maxY: 1, minZ: 0.25, maxZ: 0.75 },
+            ];
+            for (const bounds of shell) {
+              this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome, meta);
+            }
+
+            const fluid = meta?.cauldronFluid ?? (def.name === 'water_cauldron' ? 'water' : def.name === 'lava_cauldron' ? 'lava' : null);
+            if (fluid) {
+              const fluidLevel = Math.max(1, Math.min(3, meta?.cauldronLevel ?? 3));
+              const surfaceY = 0.3125 + fluidLevel * 0.15625;
+              const fluidBounds: CuboidBounds = {
+                minX: 0.25, maxX: 0.75,
+                minY: surfaceY - 0.015625, maxY: surfaceY,
+                minZ: 0.25, maxZ: 0.75,
+              };
+              const tex = fluid === 'water' ? 'water' : 'lava';
+              this.addCuboid(target, x, y, z, id, atlas, fluidBounds, {}, [tex, tex, tex, tex, tex, tex], false, lightBrightness, biome, meta);
+            }
+            continue;
+          }
+
           // Extended Piston Base
           if ((id & 0x3FF) === 33 || (id & 0x3FF) === 29 || def.name === 'piston' || def.name === 'sticky_piston') {
             const isExtended = meta?.extended === true;

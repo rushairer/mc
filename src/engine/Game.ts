@@ -1819,6 +1819,11 @@ export class Game {
         const targetDef = BlockRegistry.get(targetId);
         const targetName = targetDef?.name ?? '';
 
+        if (this.tryUseCauldronWithBucket(blockPos.x, blockPos.y, blockPos.z, targetName, heldItemId, selectedSlot)) {
+          this.placeCooldown = 0.25;
+          return;
+        }
+
         // Bucket scoop water/lava
         if (heldItemId === 325) { // Empty Bucket
           const isWaterSource = (targetId & 0x3FF) === 9;
@@ -4370,6 +4375,13 @@ export class Game {
       return;
     }
 
+    if (name === 'cauldron') {
+      this.chunks.setBlockMeta(x, y, z, {
+        cauldronLevel: 0,
+      }, true);
+      return;
+    }
+
     if ((blockId & 0x3FF) === 92 || name === 'cake') {
       this.chunks.setBlockMeta(x, y, z, { cakeBites: 0 }, true);
       return;
@@ -4453,6 +4465,72 @@ export class Game {
     }
 
     this.notifyState();
+  }
+
+  private tryUseCauldronWithBucket(
+    x: number,
+    y: number,
+    z: number,
+    targetName: string,
+    heldItemId: number,
+    selectedSlot: ItemStack | null
+  ): boolean {
+    const isEmptyCauldron = targetName === 'cauldron';
+    const isWaterCauldron = targetName === 'water_cauldron';
+    const isLavaCauldron = targetName === 'lava_cauldron';
+    if (!isEmptyCauldron && !isWaterCauldron && !isLavaCauldron) return false;
+
+    if (isEmptyCauldron && (heldItemId === 326 || heldItemId === 327)) {
+      const fluid = heldItemId === 326 ? 'water' : 'lava';
+      const filledDef = BlockRegistry.getByName(fluid === 'water' ? 'water_cauldron' : 'lava_cauldron');
+      if (!filledDef) return false;
+
+      this.chunks.setBlock(x, y, z, filledDef.id);
+      this.chunks.setBlockMeta(x, y, z, {
+        cauldronFluid: fluid,
+        cauldronLevel: 3,
+      }, true);
+      this.redstone.observeBlockChange(x, y, z);
+      this.sound.playBucketEmpty();
+      this.replaceHeldBucketAfterUse(selectedSlot, 325);
+      this.notifyState();
+      return true;
+    }
+
+    if (heldItemId === 325 && (isWaterCauldron || isLavaCauldron)) {
+      const filledBucketId = isWaterCauldron ? 326 : 327;
+      this.chunks.setBlock(x, y, z, 118);
+      this.chunks.setBlockMeta(x, y, z, { cauldronLevel: 0 }, true);
+      this.redstone.observeBlockChange(x, y, z);
+      this.sound.playBucketFill();
+      this.replaceHeldBucketAfterUse(selectedSlot, filledBucketId);
+      this.notifyState();
+      return true;
+    }
+
+    if (heldItemId === 325 || heldItemId === 326 || heldItemId === 327) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private replaceHeldBucketAfterUse(selectedSlot: ItemStack | null, replacementId: number) {
+    if (this.gameMode === 'creative' || !selectedSlot) return;
+
+    if (selectedSlot.count <= 1) {
+      this.inventory.setSlot(this.player.selectedSlot, { id: replacementId, count: 1 });
+      return;
+    }
+
+    selectedSlot.count -= 1;
+    this.inventory.setSlot(this.player.selectedSlot, selectedSlot);
+    const leftover = this.inventory.addItem(replacementId, 1);
+    if (leftover > 0) {
+      const spawnPos = this.player.eyePosition.clone().sub(new THREE.Vector3(0, 0.2, 0));
+      const velocity = new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.2, (Math.random() - 0.5) * 0.2);
+      this.droppedItems.spawnItem(replacementId, leftover, spawnPos, velocity, 0.5);
+    }
   }
 
   private checkWitherSpawning(x: number, y: number, z: number) {
@@ -5178,6 +5256,7 @@ export class Game {
     if (baseId === 0) return;
 
     const meta = this.chunks.getBlockMeta(x, y, z);
+    const def = BlockRegistry.get(blockId);
 
     // 1. Drop contents if it's a container
     if (spawnDrop && meta?.inventory) {
@@ -5209,6 +5288,8 @@ export class Game {
         this.spawnCropDrops(x, y, z, blockId);
       } else if (baseId === 92) {
         // Placed cakes are consumed in-world and do not return an item when broken.
+      } else if (baseId === 118 || def?.name.includes('cauldron')) {
+        this.droppedItems.spawnItem(380, 1, dropPos, velocity, 0.5);
       } else {
         const dropId = ItemRegistry.getBlockDropItem(blockId);
         if (dropId > 0) {

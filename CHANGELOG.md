@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-06-21
+
+### Added
+- Implement Cauldron bucket interactions: water and lava buckets fill empty Cauldrons, and empty buckets collect full water or lava Cauldrons back into bucket items.
+- Render Cauldrons as hollow containers with visible water or lava surfaces for filled states.
+
+### Fixed
+- Make all Cauldron states drop the Cauldron item instead of state-specific block IDs when broken.
+
 ## [0.25.0] - 2026-06-21
 
 ### Added

@@ -46,6 +46,8 @@ export interface BlockMetadata {
   sticky?: boolean;
   bedPart?: 'head' | 'foot';
   cakeBites?: number;
+  cauldronFluid?: 'water' | 'lava';
+  cauldronLevel?: number;
 }
 
 export interface SerializedBlockMetadata {

@@ -96,6 +96,7 @@ const BLOCK_DROP_OVERRIDES: Record<number, number | (() => number)> = {
   21: (4 << 10) | 351,  // lapis ore -> lapis lazuli (dye metadata 4)
   13: () => Math.random() < 0.1 ? 318 : 13, // gravel -> flint (10%) or gravel
   82: 337,              // clay block -> clay ball
+  118: 380,             // cauldron block -> cauldron item
 };
 
 // Vanilla has several inventory items whose item ID differs from the block ID

@@ -41,6 +41,7 @@ const initialGameState: GameState = {
   openUI: 'none',
   inventory: null as any,
   chestInventory: null,
+  chestTitleKey: 'chest',
   hopperInventory: null,
   furnaceInventory: null,
   furnaceType: null,
@@ -535,6 +536,7 @@ export const App: React.FC = () => {
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
           onDropItem={handleDropItem}
+          titleKey={gameState.chestTitleKey}
         />
       )}
 

@@ -11,6 +11,7 @@ interface ChestUIProps {
   onInventoryChange: () => void;
   getItemIconStyle: (id: number, size?: number) => any;
   onDropItem?: (itemId: number, count: number) => void;
+  titleKey?: 'chest' | 'doubleChest' | 'barrel';
 }
 
 const SLOT_SIZE = 48;
@@ -54,6 +55,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
   onInventoryChange,
   getItemIconStyle,
   onDropItem,
+  titleKey,
 }) => {
   const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
@@ -310,7 +312,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
 
         <div style={{ marginBottom: '16px' }}>
           <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>
-            {chestSlots.length === 54 ? t('doubleChest') : t('chest')}
+            {t(titleKey ?? (chestSlots.length === 54 ? 'doubleChest' : 'chest'))}
           </div>
           <div style={{
             display: 'grid',

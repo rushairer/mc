@@ -100,6 +100,7 @@ export interface GameState {
   openUI: UIType;
   inventory: Inventory;
   chestInventory: (ItemStack | null)[] | null;
+  chestTitleKey: 'chest' | 'doubleChest' | 'barrel';
   hopperInventory: (ItemStack | null)[] | null;
   furnaceInventory: (ItemStack | null)[] | null;
   furnaceType: 'furnace' | 'smoker' | 'blast_furnace' | null;
@@ -1959,7 +1960,7 @@ export class Game {
         } else if (targetName === 'crafting_table') {
           this.openCraftingTableUI();
           this.placeCooldown = 0.5;
-        } else if (targetName === 'chest') {
+        } else if (targetName === 'chest' || targetName === 'barrel') {
           this.openChestUI(blockPos.x, blockPos.y, blockPos.z);
           this.placeCooldown = 0.5;
         } else if (targetName === 'hopper') {
@@ -2222,6 +2223,7 @@ export class Game {
       targetName === 'brewing_stand' ||
       targetName === 'lever' ||
       targetName === 'chest' ||
+      targetName === 'barrel' ||
       targetName === 'hopper' ||
       targetName === 'bed' ||
       targetName === 'cake' ||
@@ -3576,6 +3578,7 @@ export class Game {
       openUI: this.openUI,
       inventory: this.inventory,
       chestInventory: this.getOpenChestInventory(),
+      chestTitleKey: this.getOpenChestTitleKey(),
       hopperInventory: this.getOpenHopperInventory(),
       furnaceInventory: this.getOpenFurnaceInventory(),
       furnaceType: this.getOpenFurnaceType(),
@@ -4324,6 +4327,15 @@ export class Game {
       return;
     }
 
+    if (name === 'barrel') {
+      this.chunks.setBlockMeta(x, y, z, {
+        facing,
+        containerType: 'barrel',
+        inventory: new Array(27).fill(null),
+      }, true);
+      return;
+    }
+
     if (name === 'hopper') {
       let hopperFacing: BlockFacing = 'down';
       if (facing !== 'up' && facing !== 'down') {
@@ -4778,16 +4790,17 @@ export class Game {
   private ensureChestMetadata(x: number, y: number, z: number): BlockMetadata | null {
     const blockId = this.chunks.getBlock(x, y, z);
     const def = BlockRegistry.get(blockId);
-    if (!def || def.name !== 'chest') return null;
+    if (!def || (def.name !== 'chest' && def.name !== 'barrel')) return null;
 
     const current = this.chunks.getBlockMeta(x, y, z);
-    if (current?.containerType === 'chest' && current.inventory) {
+    const expectedType = def.name === 'barrel' ? 'barrel' : 'chest';
+    if (current?.containerType === expectedType && current.inventory) {
       return current;
     }
 
     const metadata: BlockMetadata = {
       ...current,
-      containerType: 'chest',
+      containerType: expectedType,
       inventory: new Array(27).fill(null),
     };
     this.chunks.setBlockMeta(x, y, z, metadata);
@@ -4893,6 +4906,18 @@ export class Game {
 
     const metadata = this.ensureChestMetadata(x, y, z);
     return metadata?.inventory ?? null;
+  }
+
+  private getOpenChestTitleKey(): 'chest' | 'doubleChest' | 'barrel' {
+    if (!this.openChestPos) return 'chest';
+
+    const x = this.openChestPos.x;
+    const y = this.openChestPos.y;
+    const z = this.openChestPos.z;
+    const blockId = this.chunks.getBlock(x, y, z);
+    const def = BlockRegistry.get(blockId);
+    if (def?.name === 'barrel') return 'barrel';
+    return this.getDoubleChestPartners(x, y, z) ? 'doubleChest' : 'chest';
   }
 
   private getDoubleChestPartners(x: number, y: number, z: number): { leftPos: THREE.Vector3; rightPos: THREE.Vector3 } | null {

@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-06-21
+
+### Added
+- Implement Barrel container behavior: right-clicking a placed Barrel opens a 27-slot storage UI, persists inventory in block metadata, and drops stored items when broken.
+- Add localized Barrel UI titles in English, Simplified Chinese, and Traditional Chinese.
+
 ## [0.24.0] - 2026-06-21
 
 ### Added

@@ -505,6 +505,47 @@ export class Chunk {
             continue;
           }
 
+          // Campfire
+          if (def.name === 'campfire' || def.name === 'soul_campfire') {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            const logTexture = def.name === 'soul_campfire' ? 'block:soul_campfire' : 'block:campfire';
+            const coalTexture = def.name === 'soul_campfire' ? 'block:soul_sand' : 'block:coal_block';
+            const logTextures = [logTexture, logTexture, logTexture, logTexture, logTexture, logTexture];
+            const coalTextures = [coalTexture, coalTexture, coalTexture, coalTexture, coalTexture, coalTexture];
+            const parts: CuboidBounds[] = [
+              { minX: 0.125, maxX: 0.875, minY: 0, maxY: 0.1875, minZ: 0.125, maxZ: 0.3125 },
+              { minX: 0.125, maxX: 0.875, minY: 0, maxY: 0.1875, minZ: 0.6875, maxZ: 0.875 },
+              { minX: 0.125, maxX: 0.3125, minY: 0.125, maxY: 0.3125, minZ: 0.125, maxZ: 0.875 },
+              { minX: 0.6875, maxX: 0.875, minY: 0.125, maxY: 0.3125, minZ: 0.125, maxZ: 0.875 },
+            ];
+            for (const bounds of parts) {
+              this.addCuboid(target, x, y, z, id, atlas, bounds, {}, logTextures, false, lightBrightness, biome, meta);
+            }
+            this.addCuboid(target, x, y, z, id, atlas, {
+              minX: 0.25, maxX: 0.75,
+              minY: 0.0625, maxY: 0.1875,
+              minZ: 0.25, maxZ: 0.75,
+            }, {}, coalTextures, false, lightBrightness, biome, meta);
+
+            const foodSlots = meta?.campfireItems ?? [];
+            const slotBounds: CuboidBounds[] = [
+              { minX: 0.1875, maxX: 0.4375, minY: 0.3125, maxY: 0.34375, minZ: 0.1875, maxZ: 0.4375 },
+              { minX: 0.5625, maxX: 0.8125, minY: 0.3125, maxY: 0.34375, minZ: 0.1875, maxZ: 0.4375 },
+              { minX: 0.1875, maxX: 0.4375, minY: 0.3125, maxY: 0.34375, minZ: 0.5625, maxZ: 0.8125 },
+              { minX: 0.5625, maxX: 0.8125, minY: 0.3125, maxY: 0.34375, minZ: 0.5625, maxZ: 0.8125 },
+            ];
+            for (let i = 0; i < Math.min(4, foodSlots.length); i++) {
+              const item = foodSlots[i];
+              if (!item) continue;
+              const tex = VisualResolver.getItemIconKey(item.id);
+              const itemTextures = [tex, tex, tex, tex, tex, tex];
+              this.addCuboid(target, x, y, z, id, atlas, slotBounds[i], {}, itemTextures, false, lightBrightness, biome, meta);
+            }
+            continue;
+          }
+
           // Extended Piston Base
           if ((id & 0x3FF) === 33 || (id & 0x3FF) === 29 || def.name === 'piston' || def.name === 'sticky_piston') {
             const isExtended = meta?.extended === true;

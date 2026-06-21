@@ -70,6 +70,7 @@ const BOW_MIN_SPEED = 7;
 const BOW_MAX_SPEED = 30;
 const WORLD_SPAWN_X = 8;
 const WORLD_SPAWN_Z = 8;
+const CAMPFIRE_COOK_TIME = 30;
 
 export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause' | 'end_poem' | 'sign_edit' | 'advancements' | 'map' | 'book';
 
@@ -1982,6 +1983,10 @@ export class Game {
         } else if (targetName === 'bell') {
           this.ringBell(blockPos.x, blockPos.y, blockPos.z);
           this.placeCooldown = 0.35;
+        } else if (targetName === 'campfire' || targetName === 'soul_campfire') {
+          if (this.tryUseCampfire(blockPos.x, blockPos.y, blockPos.z, selectedSlot)) {
+            this.placeCooldown = 0.25;
+          }
         } else if (targetName === 'enchanting_table') {
           this.openEnchantUI();
           this.placeCooldown = 0.5;
@@ -2491,6 +2496,7 @@ export class Game {
 
     // Smelting simulation
     this.updateFurnaces(dt);
+    this.updateCampfires(dt);
 
     // Particles
     this.spawnAmbientParticles(dt);
@@ -4399,6 +4405,15 @@ export class Game {
       return;
     }
 
+    if (name === 'campfire' || name === 'soul_campfire') {
+      this.chunks.setBlockMeta(x, y, z, {
+        facing,
+        campfireItems: new Array(4).fill(null),
+        campfireCookTimes: new Array(4).fill(0),
+      }, true);
+      return;
+    }
+
     if ((blockId & 0x3FF) === 92 || name === 'cake') {
       this.chunks.setBlockMeta(x, y, z, { cakeBites: 0 }, true);
       return;
@@ -4657,6 +4672,100 @@ export class Game {
     this.sound.playBell();
     this.particles.spawnBlockBreak(x + 0.5, y + 0.55, z + 0.5, 0xf5c542, 18);
     this.notifyState();
+  }
+
+  private tryUseCampfire(
+    x: number,
+    y: number,
+    z: number,
+    selectedSlot: ItemStack | null
+  ): boolean {
+    if (!selectedSlot) return false;
+
+    const recipe = findSmeltingResult(selectedSlot.id);
+    if (!recipe || !ItemRegistry.isFood(recipe.output)) return false;
+
+    const currentMeta = this.chunks.getBlockMeta(x, y, z) ?? {};
+    const campfireItems = [...(currentMeta.campfireItems ?? new Array(4).fill(null))].slice(0, 4);
+    const cookTimes = [...(currentMeta.campfireCookTimes ?? new Array(4).fill(0))].slice(0, 4);
+    while (campfireItems.length < 4) campfireItems.push(null);
+    while (cookTimes.length < 4) cookTimes.push(0);
+
+    const slotIndex = campfireItems.findIndex((item) => !item);
+    if (slotIndex === -1) return true;
+
+    campfireItems[slotIndex] = { id: selectedSlot.id, count: 1 };
+    cookTimes[slotIndex] = 0;
+
+    this.chunks.setBlockMeta(x, y, z, {
+      ...currentMeta,
+      campfireItems,
+      campfireCookTimes: cookTimes,
+    }, true);
+
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+
+    this.sound.playBlockPlace(this.chunks.getBlock(x, y, z));
+    this.particles.spawnBlockBreak(x + 0.5, y + 0.35, z + 0.5, 0xffa34d, 8);
+    this.notifyState();
+    return true;
+  }
+
+  private updateCampfires(dt: number) {
+    if (dt <= 0) return;
+
+    for (const chunk of this.chunks.chunks.values()) {
+      for (const [index, meta] of chunk.metadata.entries()) {
+        const campfireItems = meta.campfireItems;
+        if (!campfireItems || campfireItems.length === 0) continue;
+
+        const blockId = chunk.data[index];
+        const def = BlockRegistry.get(blockId);
+        if (!def || (def.name !== 'campfire' && def.name !== 'soul_campfire')) continue;
+
+        const cookTimes = [...(meta.campfireCookTimes ?? new Array(4).fill(0))].slice(0, 4);
+        while (cookTimes.length < 4) cookTimes.push(0);
+
+        let changed = false;
+        const x = index % CHUNK_SIZE;
+        const z = Math.floor((index % (CHUNK_SIZE * CHUNK_SIZE)) / CHUNK_SIZE);
+        const y = Math.floor(index / (CHUNK_SIZE * CHUNK_SIZE));
+        const worldX = chunk.cx * CHUNK_SIZE + x;
+        const worldZ = chunk.cz * CHUNK_SIZE + z;
+
+        for (let i = 0; i < Math.min(4, campfireItems.length); i++) {
+          const item = campfireItems[i];
+          if (!item) {
+            cookTimes[i] = 0;
+            continue;
+          }
+
+          const recipe = findSmeltingResult(item.id);
+          if (!recipe || !ItemRegistry.isFood(recipe.output)) continue;
+
+          cookTimes[i] += dt;
+          changed = true;
+
+          if (cookTimes[i] >= CAMPFIRE_COOK_TIME) {
+            const dropPos = new THREE.Vector3(worldX + 0.5, y + 0.45, worldZ + 0.5);
+            const velocity = new THREE.Vector3((Math.random() - 0.5) * 0.35, 0.35, (Math.random() - 0.5) * 0.35);
+            this.droppedItems.spawnItem(recipe.output, recipe.outputCount, dropPos, velocity, 0.25);
+            this.xp.spawnXP(recipe.xp, dropPos.clone().add(new THREE.Vector3(0, 0.15, 0)));
+            this.sound.playPickup();
+            this.particles.spawnBlockBreak(worldX + 0.5, y + 0.35, worldZ + 0.5, 0xffc05a, 10);
+            campfireItems[i] = null;
+            cookTimes[i] = 0;
+          }
+        }
+
+        if (changed) {
+          meta.campfireCookTimes = cookTimes;
+          chunk.dirty = true;
+        }
+      }
+    }
   }
 
   private checkWitherSpawning(x: number, y: number, z: number) {
@@ -5393,6 +5502,20 @@ export class Game {
             (Math.random() - 0.5) * 1.5,
             1.5 + Math.random() * 1.5,
             (Math.random() - 0.5) * 1.5
+          );
+          this.droppedItems.spawnItem(slot.id, slot.count, dropPos, velocity, 0.5);
+        }
+      }
+    }
+
+    if (spawnDrop && meta?.campfireItems) {
+      for (const slot of meta.campfireItems) {
+        if (slot && slot.count > 0) {
+          const dropPos = new THREE.Vector3(x + 0.5, y + 0.35, z + 0.5);
+          const velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 1.0,
+            1.0 + Math.random(),
+            (Math.random() - 0.5) * 1.0
           );
           this.droppedItems.spawnItem(slot.id, slot.count, dropPos, velocity, 0.5);
         }

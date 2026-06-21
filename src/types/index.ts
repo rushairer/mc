@@ -49,6 +49,8 @@ export interface BlockMetadata {
   cauldronFluid?: 'water' | 'lava';
   cauldronLevel?: number;
   compostLevel?: number;
+  campfireItems?: (ItemStack | null)[];
+  campfireCookTimes?: number[];
 }
 
 export interface SerializedBlockMetadata {

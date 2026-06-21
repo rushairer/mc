@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-06-21
+
+### Added
+- Implement Campfire cooking: right-clicking raw cookable food onto Campfires or Soul Campfires stores up to four items, cooks them over time, drops the cooked output with XP, and persists progress in block metadata.
+- Render Campfires as low log-and-coal assemblies with visible food items placed on top while cooking.
+
 ## [0.28.0] - 2026-06-21
 
 ### Added

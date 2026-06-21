@@ -2,12 +2,13 @@ import React, { useState, useCallback, useEffect } from 'react';
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { Inventory } from '../player/Inventory';
-import { findSmeltingResult } from '../items/SmeltingRecipes';
+import { findSmeltingResult, isSmeltingFuel } from '../items/SmeltingRecipes';
 import { useI18n } from '../i18n';
 
 interface FurnaceUIProps {
   inventory: Inventory;
   furnaceSlots: (ItemStack | null)[];
+  containerType?: 'furnace' | 'smoker' | 'blast_furnace';
   onClose: () => void;
   onInventoryChange: () => void;
   getItemIconStyle: (id: number, size?: number) => any;
@@ -16,7 +17,7 @@ interface FurnaceUIProps {
 
 const SLOT_SIZE = 48;
 
-export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, furnaceSlots, onClose, onInventoryChange, getItemIconStyle, onDropItem }) => {
+export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, furnaceSlots, containerType = 'furnace', onClose, onInventoryChange, getItemIconStyle, onDropItem }) => {
   const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [inputSlot, setInputSlot] = useState<ItemStack | null>(furnaceSlots[0]);
   const [fuelSlot, setFuelSlot] = useState<ItemStack | null>(furnaceSlots[1]);
@@ -62,16 +63,34 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, furnaceSlots, o
       return;
     }
 
+    // Check if input is valid for the specific container type
+    const itemDef = ItemRegistry.get(inputSlot.id);
+    if (!itemDef) {
+      setIsSmelting(false);
+      return;
+    }
+    if (containerType === 'smoker') {
+      const isValid = ItemRegistry.isFood(inputSlot.id) || ItemRegistry.isFood(recipe.output);
+      if (!isValid) {
+        setIsSmelting(false);
+        return;
+      }
+    } else if (containerType === 'blast_furnace') {
+      const isValid = (itemDef.name.includes('ore') || itemDef.name.startsWith('raw_')) && !ItemRegistry.isFood(inputSlot.id);
+      if (!isValid) {
+        setIsSmelting(false);
+        return;
+      }
+    }
+
     // Check fuel
-    const baseFuelId = fuelSlot.id & 0x3FF;
-    const isFuel = baseFuelId === 263 || baseFuelId === 5 || baseFuelId === 17;
-    if (!isFuel) {
+    if (!isSmeltingFuel(fuelSlot.id)) {
       setIsSmelting(false);
       return;
     }
 
     setIsSmelting(true);
-  }, [inputSlot, fuelSlot]);
+  }, [inputSlot, fuelSlot, containerType]);
 
   // Smelting progress
   useEffect(() => {
@@ -79,7 +98,8 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, furnaceSlots, o
 
     const interval = setInterval(() => {
       setSmeltProgress(prev => {
-        const next = prev + 0.05; // 20 ticks per second
+        const step = (containerType === 'smoker' || containerType === 'blast_furnace') ? 0.1 : 0.05;
+        const next = prev + step; // 20 ticks per second
         if (next >= 1) {
           // Smelt complete
           if (inputSlot) {
@@ -99,6 +119,10 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, furnaceSlots, o
               // Consume fuel
               setFuelSlot(prev => {
                 if (!prev) return null;
+                const baseFuelId = prev.id & 0x3FF;
+                if (baseFuelId === 327) { // Lava bucket -> empty bucket
+                  return { id: 325, count: 1 };
+                }
                 const newCount = prev.count - 1;
                 return newCount > 0 ? { ...prev, count: newCount } : null;
               });
@@ -111,7 +135,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, furnaceSlots, o
     }, 50);
 
     return () => clearInterval(interval);
-  }, [isSmelting, inputSlot, fuelSlot]);
+  }, [isSmelting, inputSlot, fuelSlot, containerType]);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -267,7 +291,9 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, furnaceSlots, o
         >
           X
         </button>
-        <div style={{ fontSize: '14px', marginBottom: '12px', color: '#aaa' }}>{t('furnace')}</div>
+        <div style={{ fontSize: '14px', marginBottom: '12px', color: '#aaa' }}>
+          {containerType === 'smoker' ? t('smoker') : (containerType === 'blast_furnace' ? t('blastFurnace') : t('furnace'))}
+        </div>
 
         {/* Input → Output */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
@@ -335,15 +361,29 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({ inventory, furnaceSlots, o
                 onClick={() => {
                   if (!item) return;
                   const recipe = findSmeltingResult(item.id);
-                  const baseItemId = item.id & 0x3FF;
-                  const isFuel = baseItemId === 263 || baseItemId === 5 || baseItemId === 17;
+                  const isFuel = isSmeltingFuel(item.id);
 
                   setHoveredSlot(null);
 
                   if (recipe && !inputSlot) {
-                    setInputSlot({ id: item.id, count: 1 });
-                    inventory.removeFromSlot(i);
-                    onInventoryChange();
+                    // Check if input is valid for the specific container type
+                    const itemDef = ItemRegistry.get(item.id);
+                    let isValid = true;
+                    if (itemDef) {
+                      if (containerType === 'smoker') {
+                        isValid = ItemRegistry.isFood(item.id) || ItemRegistry.isFood(recipe.output);
+                      } else if (containerType === 'blast_furnace') {
+                        isValid = (itemDef.name.includes('ore') || itemDef.name.startsWith('raw_')) && !ItemRegistry.isFood(item.id);
+                      }
+                    } else {
+                      isValid = false;
+                    }
+
+                    if (isValid) {
+                      setInputSlot({ id: item.id, count: 1 });
+                      inventory.removeFromSlot(i);
+                      onInventoryChange();
+                    }
                   } else if (isFuel && !fuelSlot) {
                     setFuelSlot({ id: item.id, count: 1 });
                     inventory.removeFromSlot(i);

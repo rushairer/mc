@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-06-21
+
+### Added
+- Add Smoker and Blast Furnace blocks support in the smelting UI with metadata-driven container types.
+- Add double-speed (2x) smelting processing for Smoker and Blast Furnace blocks.
+- Add item type filtering constraints: Smoker only processes food items, and Blast Furnace only processes ores and raw metals.
+- Add expanded fuel verification system and lava bucket fuel support which leaves behind an empty bucket upon consumption.
+- Add missing vanilla smelting recipes (raw iron, raw gold, raw copper, chicken, mutton, salmon, cod, potato, smooth stone, nether brick).
+
 ## [0.16.0] - 2026-06-21
 
 ### Added

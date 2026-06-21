@@ -43,6 +43,7 @@ const initialGameState: GameState = {
   chestInventory: null,
   hopperInventory: null,
   furnaceInventory: null,
+  furnaceType: null,
   brewingInventory: null,
   tradingOffers: null,
   tradingProfession: null,
@@ -503,6 +504,7 @@ export const App: React.FC = () => {
         <FurnaceUI
           inventory={gameState.inventory}
           furnaceSlots={gameState.furnaceInventory}
+          containerType={gameState.furnaceType || 'furnace'}
           onClose={handleCloseUI}
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}

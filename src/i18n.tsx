@@ -67,6 +67,8 @@ export interface TranslationsSchema {
   creativeSearchPlaceholder: string;
   creativeNoResults: string;
   furnace: string;
+  smoker: string;
+  blastFurnace: string;
   input: string;
   fuel: string;
   output: string;
@@ -141,6 +143,8 @@ export interface TranslationsSchema {
   block_diamond_block: string;
   block_crafting_table: string;
   block_furnace: string;
+  block_smoker: string;
+  block_blast_furnace: string;
   block_glass: string;
   block_snow_block: string;
   block_ice: string;
@@ -265,6 +269,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     creativeSearchPlaceholder: 'Search items...',
     creativeNoResults: 'No matching items',
     furnace: 'Furnace',
+    smoker: 'Smoker',
+    blastFurnace: 'Blast Furnace',
     input: 'Input',
     fuel: 'Fuel',
     output: 'Output',
@@ -341,6 +347,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     block_diamond_block: 'Diamond Block',
     block_crafting_table: 'Crafting Table',
     block_furnace: 'Furnace',
+    block_smoker: 'Smoker',
+    block_blast_furnace: 'Blast Furnace',
     block_glass: 'Glass',
     block_snow_block: 'Snow Block',
     block_ice: 'Ice',
@@ -461,6 +469,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     creativeSearchPlaceholder: '搜索物品...',
     creativeNoResults: '没有匹配的物品',
     furnace: '熔炉',
+    smoker: '烟熏炉',
+    blastFurnace: '高炉',
     input: '输入',
     fuel: '燃料',
     output: '输出',
@@ -537,6 +547,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     block_diamond_block: '钻石块',
     block_crafting_table: '工作台',
     block_furnace: '熔炉',
+    block_smoker: '烟熏炉',
+    block_blast_furnace: '高炉',
     block_glass: '玻璃',
     block_snow_block: '雪块',
     block_ice: '冰',
@@ -657,6 +669,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     creativeSearchPlaceholder: '搜尋物品...',
     creativeNoResults: '沒有匹配的物品',
     furnace: '熔爐',
+    smoker: '煙燻爐',
+    blastFurnace: '高爐',
     input: '輸入',
     fuel: '燃料',
     output: '輸出',
@@ -733,6 +747,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     block_diamond_block: '鑽石塊',
     block_crafting_table: '工作台',
     block_furnace: '熔爐',
+    block_smoker: '煙燻爐',
+    block_blast_furnace: '高爐',
     block_glass: '玻璃',
     block_snow_block: '雪塊',
     block_ice: '冰',

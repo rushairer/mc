@@ -101,6 +101,7 @@ export interface GameState {
   chestInventory: (ItemStack | null)[] | null;
   hopperInventory: (ItemStack | null)[] | null;
   furnaceInventory: (ItemStack | null)[] | null;
+  furnaceType: 'furnace' | 'smoker' | 'blast_furnace' | null;
   brewingInventory: (ItemStack | null)[] | null;
   tradingOffers: TradeOffer[] | null;
   tradingProfession: VillagerProfession | null;
@@ -1929,8 +1930,8 @@ export class Game {
           return;
         }
 
-        // Right-click furnace
-        if (targetName.includes('furnace')) {
+        // Right-click furnace / smoker / blast furnace
+        if (targetName.includes('furnace') || targetName === 'smoker' || targetName === 'blast_furnace') {
           this.openFurnaceUI(blockPos.x, blockPos.y, blockPos.z);
           this.placeCooldown = 0.5;
         } else if (targetName === 'crafting_table') {
@@ -3415,6 +3416,7 @@ export class Game {
       chestInventory: this.getOpenChestInventory(),
       hopperInventory: this.getOpenHopperInventory(),
       furnaceInventory: this.getOpenFurnaceInventory(),
+      furnaceType: this.getOpenFurnaceType(),
       brewingInventory: this.getOpenBrewingInventory(),
       tradingOffers: this.tradingProfession ? VillageSystem.getOffers(this.tradingProfession) : null,
       tradingProfession: this.tradingProfession,
@@ -4173,10 +4175,11 @@ export class Game {
       return;
     }
 
-    if (name.includes('furnace')) {
+    if (name.includes('furnace') || name === 'smoker' || name === 'blast_furnace') {
+      const containerType = name === 'smoker' ? 'smoker' : (name === 'blast_furnace' ? 'blast_furnace' : 'furnace');
       this.chunks.setBlockMeta(x, y, z, {
         facing,
-        containerType: 'furnace',
+        containerType: containerType as any,
         inventory: new Array(3).fill(null),
       }, true);
       return;
@@ -4338,7 +4341,7 @@ export class Game {
     const def = BlockRegistry.get(blockId);
     if (!def) return false;
     const name = def.name;
-    return name.includes('furnace') || name === 'chest' || name === 'hopper' || name.includes('trapdoor') || name === 'crafting_table' || name.includes('stairs') || name.includes('repeater') || name.includes('piston') || name.includes('door') || name.includes('comparator') || name === 'observer' || name === 'tripwire_hook' || name === 'ladder';
+    return name.includes('furnace') || name === 'smoker' || name === 'blast_furnace' || name === 'chest' || name === 'hopper' || name.includes('trapdoor') || name === 'crafting_table' || name.includes('stairs') || name.includes('repeater') || name.includes('piston') || name.includes('door') || name.includes('comparator') || name === 'observer' || name === 'tripwire_hook' || name === 'ladder';
   }
 
   private isDoorBlock(blockId: number): boolean {
@@ -4564,16 +4567,17 @@ export class Game {
   private ensureFurnaceMetadata(x: number, y: number, z: number): BlockMetadata | null {
     const blockId = this.chunks.getBlock(x, y, z);
     const def = BlockRegistry.get(blockId);
-    if (!def || !def.name.includes('furnace')) return null;
+    if (!def || (!def.name.includes('furnace') && def.name !== 'smoker' && def.name !== 'blast_furnace')) return null;
 
+    const expectedType = def.name === 'smoker' ? 'smoker' : (def.name === 'blast_furnace' ? 'blast_furnace' : 'furnace');
     const current = this.chunks.getBlockMeta(x, y, z);
-    if (current?.containerType === 'furnace' && current.inventory) {
+    if (current?.containerType === expectedType && current.inventory) {
       return current;
     }
 
     const metadata: BlockMetadata = {
       ...current,
-      containerType: 'furnace',
+      containerType: expectedType as any,
       inventory: new Array(3).fill(null), // 0: input, 1: fuel, 2: output
     };
     this.chunks.setBlockMeta(x, y, z, metadata);
@@ -4630,6 +4634,17 @@ export class Game {
       this.openFurnacePos.z
     );
     return metadata?.inventory ?? null;
+  }
+
+  private getOpenFurnaceType(): 'furnace' | 'smoker' | 'blast_furnace' | null {
+    if (!this.openFurnacePos) return null;
+
+    const metadata = this.ensureFurnaceMetadata(
+      this.openFurnacePos.x,
+      this.openFurnacePos.y,
+      this.openFurnacePos.z
+    );
+    return (metadata?.containerType as 'furnace' | 'smoker' | 'blast_furnace') ?? null;
   }
 
   private getOpenBrewingInventory(): (ItemStack | null)[] | null {

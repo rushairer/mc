@@ -45,6 +45,7 @@ export interface TranslationsSchema {
   controlJump: string;
   controlSprint: string;
   controlFly: string;
+  controlFlyVertical: string;
   controlOffhand: string;
   controlLook: string;
   controlBreak: string;
@@ -249,8 +250,9 @@ export const translations: Record<Locale, TranslationsSchema> = {
     controlsTitle: 'Controls & Instructions',
     controlMove: 'W / A / S / D — Move',
     controlJump: 'Space — Jump',
-    controlSprint: 'Shift — Sprint',
+    controlSprint: 'Control — Sprint',
     controlFly: 'Double Space — Toggle Fly (Creative mode only)',
+    controlFlyVertical: 'Space / Shift — Fly up / Fly down',
     controlOffhand: 'F — Swap main hand and offhand',
     controlLook: 'Mouse — Look around',
     controlBreak: 'Left Click — Break block / Attack mob',
@@ -300,13 +302,13 @@ export const translations: Record<Locale, TranslationsSchema> = {
     flying: 'Flying: {flying}',
     yes: 'yes',
     no: 'no',
-    debugFooter: 'F3: Debug | F: Fly | LMB: Break | RMB: Place',
+    debugFooter: 'F3: Debug | Double Space: Fly | F: Offhand | LMB: Break | RMB: Place',
     splashTexts: [
       'Also try Terraria!',
       'TypeScript powered!',
       'Gemini powered!',
       'Invulnerable in Creative!',
-      'Fly with F key!',
+      'Double-tap Space to fly!',
       'Craft and survive!',
       'Minecraft in React!',
       'Infinite worlds!',
@@ -451,8 +453,9 @@ export const translations: Record<Locale, TranslationsSchema> = {
     controlsTitle: '控制与说明',
     controlMove: 'W / A / S / D — 移动',
     controlJump: '空格键 — 跳跃',
-    controlSprint: 'Shift键 — 疾跑',
+    controlSprint: 'Control键 — 疾跑',
     controlFly: '双击空格键 — 切换飞行 (仅限创造模式)',
+    controlFlyVertical: '空格键 / Shift键 — 向上飞 / 向下飞',
     controlOffhand: 'F键 — 交换主手与副手物品',
     controlLook: '鼠标 — 环顾四周',
     controlBreak: '左键单击 — 破坏方块 / 攻击怪物',
@@ -502,13 +505,13 @@ export const translations: Record<Locale, TranslationsSchema> = {
     flying: '飞行中: {flying}',
     yes: '是',
     no: '否',
-    debugFooter: 'F3: 调试 | F: 飞行 | 左键: 破坏 | 右键: 放置',
+    debugFooter: 'F3: 调试 | 双击空格: 飞行 | F: 副手 | 左键: 破坏 | 右键: 放置',
     splashTexts: [
       '也试试泰拉瑞亚吧！',
       '由 TypeScript 驱动！',
       '由 Gemini 驱动！',
       '在创造模式中无敌！',
-      '按 F 键飞行！',
+      '双击空格键飞行！',
       '合成与生存！',
       'React 中的我的世界！',
       '无限的世界！',
@@ -653,8 +656,9 @@ export const translations: Record<Locale, TranslationsSchema> = {
     controlsTitle: '控制與說明',
     controlMove: 'W / A / S / D — 移動',
     controlJump: '空格鍵 — 跳躍',
-    controlSprint: 'Shift鍵 — 疾跑',
+    controlSprint: 'Control鍵 — 疾跑',
     controlFly: '雙擊空格鍵 — 切換飛行 (僅限創造模式)',
+    controlFlyVertical: '空格鍵 / Shift鍵 — 向上飛 / 向下飛',
     controlOffhand: 'F鍵 — 交換主手與副手物品',
     controlLook: '滑鼠 — 環顧四周',
     controlBreak: '左鍵單擊 — 破壞方塊 / 攻擊怪物',
@@ -704,13 +708,13 @@ export const translations: Record<Locale, TranslationsSchema> = {
     flying: '飛行中: {flying}',
     yes: '是',
     no: '否',
-    debugFooter: 'F3: 調試 | F: 飛行 | 左鍵: 破壞 | 右鍵: 放置',
+    debugFooter: 'F3: 調試 | 雙擊空格: 飛行 | F: 副手 | 左鍵: 破壞 | 右鍵: 放置',
     splashTexts: [
       '也試試泰拉瑞亞吧！',
       '由 TypeScript 驅動！',
       '由 Gemini 驅動！',
       '在創造模式中無敵！',
-      '按 F 鍵飛行！',
+      '雙擊空格鍵飛行！',
       '合成與生存！',
       'React 中的我的世界！',
       '無限的世界！',

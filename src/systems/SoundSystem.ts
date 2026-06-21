@@ -273,6 +273,46 @@ export class SoundSystem {
     osc.stop(ctx.currentTime + 0.08);
   }
 
+  playBowShoot(power = 1) {
+    if (this.playFirstResourceSound(['entity.arrow.shoot', 'item.crossbow.shoot'], 0.8)) return;
+
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const twang = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    const clamped = Math.max(0.15, Math.min(1, power));
+
+    twang.type = 'triangle';
+    twang.frequency.setValueAtTime(220 + clamped * 120, now);
+    twang.frequency.exponentialRampToValueAtTime(90 + clamped * 40, now + 0.16);
+    filter.type = 'bandpass';
+    filter.frequency.value = 900 + clamped * 700;
+    filter.Q.value = 1.2;
+    gain.gain.setValueAtTime(0.18 + clamped * 0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+    twang.connect(filter).connect(gain).connect(this.sfxGain!);
+    twang.start(now);
+    twang.stop(now + 0.18);
+
+    const bufferSize = Math.floor(ctx.sampleRate * 0.08);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize) * 0.08 * clamped;
+    }
+    const hiss = ctx.createBufferSource();
+    const hissFilter = ctx.createBiquadFilter();
+    hiss.buffer = buffer;
+    hissFilter.type = 'highpass';
+    hissFilter.frequency.value = 1800;
+    hiss.connect(hissFilter).connect(this.sfxGain!);
+    hiss.start(now);
+  }
+
   playXP() {
     if (this.playFirstResourceSound(['entity.experience_orb.pickup'])) return;
 

@@ -11,7 +11,7 @@ export interface ItemDef {
   displayName: string;
   maxStackSize: number;
   category: 'block' | 'tool' | 'food' | 'material' | 'armor';
-  toolType?: 'pickaxe' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'spear';
+  toolType?: 'pickaxe' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'spear' | 'bow' | 'crossbow' | 'fishing_rod' | 'trident' | 'mace' | 'brush';
   toolMaterial?: 'wood' | 'stone' | 'iron' | 'gold' | 'diamond' | 'copper' | 'netherite';
   durability?: number;
   damage?: number;
@@ -193,9 +193,9 @@ for (const item of rawItems) {
       }
     } else if (name === 'bow' || name === 'crossbow' || name === 'trident' || name === 'mace' || name === 'brush' || name === 'fishing_rod') {
       category = 'tool';
-      toolType = 'sword'; // generic usable-tool bucket for durability and basic interaction checks
+      toolType = name === 'trident' ? 'trident' : name;
       durability = item.maxDurability ?? (name === 'fishing_rod' ? 64 : 384);
-      damage = 1;
+      damage = name === 'trident' ? 9 : name === 'mace' ? 6 : 1;
     } else if (name.endsWith('_helmet') || name.endsWith('_chestplate') || name.endsWith('_leggings') || name.endsWith('_boots')) {
       category = 'armor';
       if (name.endsWith('_helmet')) armorSlot = 'helmet';

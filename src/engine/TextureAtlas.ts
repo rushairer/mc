@@ -2632,9 +2632,14 @@ export class TextureAtlas {
     for (const item of ItemRegistry.all()) {
       const key = item.name;
       if (!this.tileIndex.has(key)) {
-        if (item.category === 'tool' && item.toolType && item.toolMaterial) {
+        if (
+          item.category === 'tool' &&
+          item.toolType &&
+          item.toolMaterial &&
+          ['pickaxe', 'axe', 'shovel', 'sword', 'hoe', 'spear'].includes(item.toolType)
+        ) {
           const mat = item.toolMaterial === 'gold' ? 'gold' : item.toolMaterial;
-          drawTool(key, item.toolType, mat);
+          drawTool(key, item.toolType as 'pickaxe' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'spear', mat);
         } else if (item.category === 'armor' && item.armorSlot) {
           const parts = item.name.split('_');
           const mat = parts[0] === 'gold' ? 'gold' : parts[0];
@@ -2647,7 +2652,85 @@ export class TextureAtlas {
             const name = item.name;
             ctx.fillStyle = colors.hex;
 
-            if (name.includes('ingot')) {
+            if (name === 'bow' || name === 'crossbow') {
+              ctx.strokeStyle = '#6b3f1d';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(x + 10, y + 2);
+              ctx.quadraticCurveTo(x + 15, y + 8, x + 10, y + 14);
+              ctx.stroke();
+              ctx.strokeStyle = '#f0e6c8';
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(x + 9, y + 2);
+              ctx.lineTo(x + 9, y + 14);
+              ctx.stroke();
+              ctx.fillStyle = '#4a2a12';
+              ctx.fillRect(x + 7, y + 7, 5, 2);
+              if (name === 'crossbow') {
+                ctx.fillRect(x + 4, y + 7, 8, 2);
+                ctx.fillRect(x + 6, y + 10, 2, 4);
+              }
+            } else if (name === 'arrow' || name === 'spectral_arrow' || name === 'tipped_arrow') {
+              ctx.strokeStyle = '#8b5a2b';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(x + 4, y + 12);
+              ctx.lineTo(x + 12, y + 4);
+              ctx.stroke();
+              ctx.fillStyle = name === 'spectral_arrow' ? '#fff08a' : '#d8d8d8';
+              ctx.fillRect(x + 11, y + 3, 3, 3);
+              ctx.fillStyle = name === 'tipped_arrow' ? '#aa66ff' : '#ffffff';
+              ctx.fillRect(x + 3, y + 11, 3, 2);
+              ctx.fillRect(x + 4, y + 13, 2, 2);
+            } else if (name === 'fishing_rod') {
+              ctx.strokeStyle = '#5a3518';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(x + 4, y + 14);
+              ctx.lineTo(x + 11, y + 2);
+              ctx.stroke();
+              ctx.strokeStyle = '#dedede';
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(x + 11, y + 3);
+              ctx.quadraticCurveTo(x + 14, y + 8, x + 11, y + 12);
+              ctx.stroke();
+              ctx.fillStyle = '#ff3333';
+              ctx.fillRect(x + 10, y + 11, 3, 3);
+            } else if (name === 'trident') {
+              ctx.strokeStyle = '#9fb7c4';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(x + 5, y + 14);
+              ctx.lineTo(x + 10, y + 4);
+              ctx.stroke();
+              ctx.strokeStyle = '#5c7684';
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(x + 10, y + 4);
+              ctx.lineTo(x + 10, y + 1);
+              ctx.moveTo(x + 10, y + 4);
+              ctx.lineTo(x + 7, y + 2);
+              ctx.moveTo(x + 10, y + 4);
+              ctx.lineTo(x + 13, y + 2);
+              ctx.stroke();
+            } else if (name === 'snowball' || name === 'egg' || name === 'ender_pearl' || name === 'eye_of_ender') {
+              const orbColor = name === 'snowball' ? '#f4fbff' : name === 'egg' ? '#f2ead6' : name === 'eye_of_ender' ? '#2faa72' : '#2aa884';
+              ctx.fillStyle = orbColor;
+              ctx.fillRect(x + 5, y + 4, 6, 2);
+              ctx.fillRect(x + 4, y + 6, 8, 5);
+              ctx.fillRect(x + 5, y + 11, 6, 2);
+              ctx.fillStyle = 'rgba(255,255,255,0.45)';
+              ctx.fillRect(x + 6, y + 5, 2, 1);
+              if (name === 'eye_of_ender') {
+                ctx.fillStyle = '#111111';
+                ctx.fillRect(x + 7, y + 7, 2, 2);
+                ctx.fillStyle = '#f1d76a';
+                ctx.fillRect(x + 6, y + 6, 1, 1);
+                ctx.fillRect(x + 9, y + 9, 1, 1);
+              }
+            } else if (name.includes('ingot')) {
               ctx.fillRect(x + 4, y + 5, 8, 5);
               ctx.fillStyle = 'rgba(255,255,255,0.35)';
               ctx.fillRect(x + 5, y + 5, 5, 1);

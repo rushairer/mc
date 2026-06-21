@@ -533,12 +533,23 @@ export class ProjectileSystem {
     this.projectiles.delete(id);
   }
 
-  private createArrowMesh(): THREE.Mesh {
-    // Simple arrow: thin elongated box
-    const geo = new THREE.BoxGeometry(0.05, 0.05, 0.5);
-    const mat = new THREE.MeshLambertMaterial({ color: 0x8B6914 });
-    const mesh = new THREE.Mesh(geo, mat);
-    return mesh;
+  private createArrowMesh(): THREE.Group {
+    const group = new THREE.Group();
+    const shaftMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+    const headMat = new THREE.MeshLambertMaterial({ color: 0xd8d8d8 });
+    const featherMat = new THREE.MeshLambertMaterial({ color: 0xf7f7f7 });
+
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.46), shaftMat);
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.12, 4), headMat);
+    const featherA = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.02, 0.07), featherMat);
+    const featherB = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.11, 0.07), featherMat);
+
+    head.rotation.x = Math.PI / 2;
+    head.position.z = -0.29;
+    featherA.position.z = 0.25;
+    featherB.position.z = 0.25;
+    group.add(shaft, head, featherA, featherB);
+    return group;
   }
 
   dispose() {

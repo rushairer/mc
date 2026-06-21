@@ -135,7 +135,7 @@ export class Player {
       this.velocity.x = moveDir.x * speed * 2;
       this.velocity.z = moveDir.z * speed * 2;
       if (input.jump) this.velocity.y = speed * 1.5;
-      else if (input.forward && input.jump) this.velocity.y = speed;
+      else if (input.sneak) this.velocity.y = -speed * 1.5;
       else this.velocity.y *= 0.8;
     } else {
       // Fluid or Walking mode
@@ -692,6 +692,7 @@ export class Player {
 
     const itemDef = ItemRegistry.get(itemId);
     if (!itemDef) return null;
+    const name = itemDef.name;
 
     if (VisualResolver.getItemVisualKind(itemId) === 'block') {
       const placeBlockId = ItemRegistry.getPlaceBlockId(itemId) ?? itemId;
@@ -700,6 +701,68 @@ export class Player {
       const mat = new THREE.MeshLambertMaterial({ color });
       const mesh = new THREE.Mesh(geo, mat);
       group.add(mesh);
+    } else if (itemDef.toolType === 'bow' || itemDef.toolType === 'crossbow') {
+      const woodMat = new THREE.MeshLambertMaterial({ color: 0x6b3f1d });
+      const stringMat = new THREE.MeshLambertMaterial({ color: 0xe8e0c8 });
+      const upperLimb = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.24, 0.035), woodMat);
+      const lowerLimb = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.24, 0.035), woodMat);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.12, 0.045), woodMat);
+      const string = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.46, 0.018), stringMat);
+
+      upperLimb.position.set(0.05, 0.16, 0);
+      lowerLimb.position.set(0.05, -0.16, 0);
+      upperLimb.rotation.z = -0.28;
+      lowerLimb.rotation.z = 0.28;
+      string.position.set(-0.08, 0, 0);
+
+      group.add(upperLimb, lowerLimb, grip, string);
+
+      if (itemDef.toolType === 'crossbow') {
+        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.28, 0.04), woodMat);
+        const arms = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.035, 0.035), woodMat);
+        stock.rotation.z = Math.PI / 2;
+        arms.position.set(0.02, 0.08, 0);
+        group.add(stock, arms);
+      }
+
+      group.rotation.set(Math.PI / 2.8, -Math.PI / 5, Math.PI / 10);
+    } else if (name === 'arrow' || name === 'spectral_arrow' || name === 'tipped_arrow') {
+      const shaftMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+      const headMat = new THREE.MeshLambertMaterial({ color: name === 'spectral_arrow' ? 0xfff08a : 0xd8d8d8 });
+      const featherMat = new THREE.MeshLambertMaterial({ color: name === 'tipped_arrow' ? 0xaa66ff : 0xffffff });
+      const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.32, 0.025), shaftMat);
+      const head = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.09, 4), headMat);
+      const featherA = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.035, 0.012), featherMat);
+      const featherB = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.035, 0.07), featherMat);
+      head.position.y = 0.2;
+      featherA.position.y = -0.18;
+      featherB.position.y = -0.18;
+      group.add(shaft, head, featherA, featherB);
+      group.rotation.set(Math.PI / 3, -Math.PI / 4, 0);
+    } else if (itemDef.toolType === 'fishing_rod') {
+      const rodMat = new THREE.MeshLambertMaterial({ color: 0x5a3518 });
+      const lineMat = new THREE.MeshLambertMaterial({ color: 0xdedede });
+      const rod = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.5, 0.025), rodMat);
+      const line = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.28, 0.012), lineMat);
+      const bobber = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.055, 0.055), new THREE.MeshLambertMaterial({ color: 0xff3333 }));
+      rod.rotation.z = -0.25;
+      line.position.set(0.09, -0.02, 0);
+      line.rotation.z = 0.35;
+      bobber.position.set(0.14, -0.18, 0);
+      group.add(rod, line, bobber);
+      group.rotation.set(Math.PI / 3, -Math.PI / 4, 0);
+    } else if (itemDef.toolType === 'trident') {
+      const metal = new THREE.MeshLambertMaterial({ color: 0x9fb7c4 });
+      const darkMetal = new THREE.MeshLambertMaterial({ color: 0x5c7684 });
+      const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.5, 0.035), metal);
+      const center = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.18, 0.028), darkMetal);
+      const left = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.14, 0.024), darkMetal);
+      const right = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.14, 0.024), darkMetal);
+      center.position.y = 0.32;
+      left.position.set(-0.07, 0.29, 0);
+      right.position.set(0.07, 0.29, 0);
+      group.add(shaft, center, left, right);
+      group.rotation.set(Math.PI / 3, -Math.PI / 4, 0);
     } else if (itemDef.category === 'tool' && itemDef.toolType) {
       const matColor = getMaterialColor(itemDef.toolMaterial ?? 'wood');
 
@@ -749,7 +812,6 @@ export class Player {
     } else {
       // Food or Material
       let color = 0x8B4513; // default stick/brown
-      const name = itemDef.name;
       if (name.includes('coal') || name.includes('charcoal')) color = 0x222222;
       else if (name.includes('iron_ingot') || name.includes('iron_nugget')) color = 0xD8D8D8;
       else if (name.includes('gold_ingot') || name.includes('gold_nugget')) color = 0xFFD700;

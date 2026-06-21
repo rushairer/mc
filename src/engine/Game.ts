@@ -418,6 +418,20 @@ export class Game {
           mesh.rotation.set(0, 0, 0); // Reset default rotation
         } else if (itemDef.category === 'tool') {
           // Align tool handle inside hand (lowered to y = -0.56)
+          if (itemDef.toolType === 'bow' || itemDef.toolType === 'crossbow') {
+            slot.position.set(-0.02, -0.58, -0.08);
+            slot.rotation.set(-Math.PI / 12, Math.PI / 5, -Math.PI / 10);
+            mesh.rotation.set(Math.PI / 2.4, -Math.PI / 9, Math.PI / 12);
+            return;
+          }
+
+          if (itemDef.toolType === 'fishing_rod' || itemDef.toolType === 'trident') {
+            slot.position.set(0.02, -0.57, -0.06);
+            slot.rotation.set(Math.PI / 8, Math.PI / 5, -Math.PI / 10);
+            mesh.rotation.set(Math.PI / 2.8, -Math.PI / 5, Math.PI / 12);
+            return;
+          }
+
           slot.position.set(0.02, -0.56, -0.05);
           slot.rotation.set(0, 0, 0);
 
@@ -3325,12 +3339,17 @@ export class Game {
     return def?.name === 'bow' || def?.officialId === 'minecraft:bow';
   }
 
-  private getArrowItemId(): number {
-    return ItemRegistry.getByName('arrow')?.id ?? 262;
+  private getBowAmmoItemId(): number | null {
+    const arrowNames = ['arrow', 'spectral_arrow', 'tipped_arrow'];
+    for (const name of arrowNames) {
+      const id = ItemRegistry.getByName(name)?.id;
+      if (id !== undefined && this.inventory.countItem(id) > 0) return id;
+    }
+    return null;
   }
 
   private canUseBow(): boolean {
-    return this.gameMode === 'creative' || this.inventory.countItem(this.getArrowItemId()) > 0;
+    return this.gameMode === 'creative' || this.getBowAmmoItemId() !== null;
   }
 
   private getBowPower(chargeTime: number): number {
@@ -3377,9 +3396,14 @@ export class Game {
     }
 
     const power = this.getBowPower(chargeTime);
-    const arrowId = this.getArrowItemId();
     if (this.gameMode !== 'creative') {
-      this.inventory.removeItem(arrowId, 1);
+      const ammoId = this.getBowAmmoItemId();
+      if (ammoId === null) {
+        this.notifyState();
+        return;
+      }
+      this.inventory.removeItem(ammoId, 1);
+      this.inventory.damageTool(this.player.selectedSlot);
     }
 
     this.projectiles.shootArrow(
@@ -3389,7 +3413,7 @@ export class Game {
       Math.max(1, BOW_BASE_DAMAGE * power),
       THREE.MathUtils.lerp(BOW_MIN_SPEED, BOW_MAX_SPEED, power)
     );
-    this.sound.playHurt();
+    this.sound.playBowShoot(power);
     this.swordSwingTimer = Math.max(0.2, 0.9 * power);
     this.notifyState();
   }

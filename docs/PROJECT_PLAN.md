@@ -66,6 +66,12 @@ The gap with vanilla Minecraft is now less about the existence of a block world 
 - No worker pipeline for generation/meshing.
 - Docs mention systems that are only simplified or scaffolded; this roadmap should stay updated with each milestone.
 
+### Multiplayer
+
+- A real Node.js WebSocket server exists and can be started with `npm run server`; the default client multiplayer address is `ws://localhost:8080`.
+- The verified baseline covers server startup, WebSocket join acknowledgement, player movement, chat, chunk requests, basic block edits, mobs, drops, projectiles, time, and weather sync.
+- Multiplayer remains experimental rather than full survival parity: bows and other right-click item actions are not fully routed through the server yet, and inventory, durability, health/death, containers, dimensions, world persistence, reconnect handling, and public `wss://` deployment need incremental hardening.
+
 ## Staged Plan
 
 ### Stage 1 - System Consistency And Baseline QA
@@ -178,6 +184,23 @@ Acceptance:
 
 - 12 chunk render distance is playable on target desktop browsers.
 - Chunk loading no longer causes major frame spikes during walking/flying.
+
+### Stage 8 - Multiplayer Hardening
+
+Goal: turn the current experimental WebSocket mode into a dependable small-server experience.
+
+- Add C2S item-use and charge-release packets for bows, throwable items, fishing rods, tridents, fireworks, shields, food, and buckets.
+- Make the server authoritative for inventory changes, durability, drops, pickups, hunger, health, damage, death, respawn, and XP.
+- Persist standalone server worlds, including chunks, block metadata, containers, mobs, dropped items, and player data.
+- Add robust connection UX: connecting state, failures, disconnects, reconnects, and clearer server address guidance.
+- Document local, LAN, and public deployment, including reverse-proxy `wss://` setup for HTTPS-hosted clients.
+- Add a two-client smoke checklist for join, visibility, chat, block edits, mob combat, and projectile hits.
+
+Acceptance:
+
+- Two browser clients can join the same server, see each other, chat, edit blocks, fight mobs, and use bows without local/server divergence.
+- Restarting the standalone server can restore the saved world and player state.
+- Public deployments have a documented `wss://` path that works from an HTTPS client.
 
 ## Commit Policy
 

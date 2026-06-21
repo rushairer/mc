@@ -13,9 +13,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### Changed
 - Bow firing now supports normal, spectral, and tipped arrows as ammo, consumes bow durability in Survival mode, and uses a distinct shoot feedback instead of the player hurt sound.
 - Creative flight help text now documents double-space to toggle flight and Space/Shift for vertical flight; F is documented only as the offhand swap key.
+- Document the current multiplayer status as an experimental WebSocket mode: local/server join, movement, chat, chunks, basic block edits, mobs, drops, and weather/time sync are present, while full authoritative survival gameplay and item actions still need incremental work.
 
 ### Fixed
 - Fix flying descent so holding Shift while flying moves the player downward.
+- Fix singleplayer local simulation being paused by the in-memory mock connection, which caused arrows, mobs, drops, and damage updates to appear stuck.
 
 ## [0.29.0] - 2026-06-21
 

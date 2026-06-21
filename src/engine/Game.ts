@@ -655,6 +655,7 @@ export class Game {
 
   closeUI() {
     if (this.openUI === 'chest') {
+      this.saveOpenChestInventory();
       this.openChestPos = null;
     } else if (this.openUI === 'hopper') {
       this.openHopperPos = null;
@@ -3498,6 +3499,9 @@ export class Game {
   }
 
   private notifyState() {
+    if (this.openUI === 'chest') {
+      this.saveOpenChestInventory();
+    }
     this.player.updateArmorMesh(this.inventory.armor);
     this.updateFpArmArmor();
 
@@ -4746,12 +4750,98 @@ export class Game {
   private getOpenChestInventory(): (ItemStack | null)[] | null {
     if (!this.openChestPos) return null;
 
-    const metadata = this.ensureChestMetadata(
-      this.openChestPos.x,
-      this.openChestPos.y,
-      this.openChestPos.z
-    );
+    const x = this.openChestPos.x;
+    const y = this.openChestPos.y;
+    const z = this.openChestPos.z;
+
+    const partners = this.getDoubleChestPartners(x, y, z);
+    if (partners) {
+      const leftMeta = this.ensureChestMetadata(partners.leftPos.x, partners.leftPos.y, partners.leftPos.z);
+      const rightMeta = this.ensureChestMetadata(partners.rightPos.x, partners.rightPos.y, partners.rightPos.z);
+      if (!leftMeta || !rightMeta) return null;
+
+      const leftInv = leftMeta.inventory || new Array(27).fill(null);
+      const rightInv = rightMeta.inventory || new Array(27).fill(null);
+
+      const merged = [...leftInv, ...rightInv];
+
+      return new Proxy(merged, {
+        set: (target, property, value) => {
+          const index = Number(property);
+          if (!isNaN(index)) {
+            target[index] = value;
+            if (index < 27) {
+              leftInv[index] = value;
+              leftMeta.inventory = leftInv;
+              this.chunks.setBlockMeta(partners.leftPos.x, partners.leftPos.y, partners.leftPos.z, leftMeta, true);
+            } else {
+              rightInv[index - 27] = value;
+              rightMeta.inventory = rightInv;
+              this.chunks.setBlockMeta(partners.rightPos.x, partners.rightPos.y, partners.rightPos.z, rightMeta, true);
+            }
+            return true;
+          }
+          return Reflect.set(target, property, value);
+        }
+      });
+    }
+
+    const metadata = this.ensureChestMetadata(x, y, z);
     return metadata?.inventory ?? null;
+  }
+
+  private getDoubleChestPartners(x: number, y: number, z: number): { leftPos: THREE.Vector3; rightPos: THREE.Vector3 } | null {
+    const blockId = this.chunks.getBlock(x, y, z);
+    const def = BlockRegistry.get(blockId);
+    if (!def || def.name !== 'chest') return null;
+
+    const neighbors = [
+      { x: x + 1, y, z },
+      { x: x - 1, y, z },
+      { x, y, z: z + 1 },
+      { x, y, z: z - 1 },
+    ];
+
+    for (const n of neighbors) {
+      const nid = this.chunks.getBlock(n.x, n.y, n.z);
+      const ndef = BlockRegistry.get(nid);
+      if (ndef && ndef.name === 'chest') {
+        const pos1 = new THREE.Vector3(x, y, z);
+        const pos2 = new THREE.Vector3(n.x, n.y, n.z);
+
+        if (x === n.x) {
+          if (z < n.z) return { leftPos: pos1, rightPos: pos2 };
+          return { leftPos: pos2, rightPos: pos1 };
+        } else {
+          if (x < n.x) return { leftPos: pos1, rightPos: pos2 };
+          return { leftPos: pos2, rightPos: pos1 };
+        }
+      }
+    }
+    return null;
+  }
+
+  private saveOpenChestInventory() {
+    if (!this.openChestPos) return;
+
+    const x = this.openChestPos.x;
+    const y = this.openChestPos.y;
+    const z = this.openChestPos.z;
+
+    const partners = this.getDoubleChestPartners(x, y, z);
+    if (partners) {
+      const leftMeta = this.ensureChestMetadata(partners.leftPos.x, partners.leftPos.y, partners.leftPos.z);
+      const rightMeta = this.ensureChestMetadata(partners.rightPos.x, partners.rightPos.y, partners.rightPos.z);
+      if (leftMeta && rightMeta) {
+        this.chunks.setBlockMeta(partners.leftPos.x, partners.leftPos.y, partners.leftPos.z, leftMeta, true);
+        this.chunks.setBlockMeta(partners.rightPos.x, partners.rightPos.y, partners.rightPos.z, rightMeta, true);
+      }
+    } else {
+      const metadata = this.ensureChestMetadata(x, y, z);
+      if (metadata) {
+        this.chunks.setBlockMeta(x, y, z, metadata, true);
+      }
+    }
   }
 
   private getOpenHopperInventory(): (ItemStack | null)[] | null {

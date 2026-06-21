@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-06-21
+
+### Added
+- Implement double chest merging: placing two single chest blocks adjacent horizontally merges their inventories into a single 54-slot UI container (represented by a Proxy and synchronized to IndexedDB on UI changes).
+- Add new translations for `"doubleChest"` key in English, Simplified Chinese, and Traditional Chinese.
+
+### Changed
+- Refactor `ChestUI` React component to dynamically support variable slots lengths and render the appropriate title.
+
 ## [0.21.0] - 2026-06-21
 
 ### Added

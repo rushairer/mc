@@ -14,7 +14,6 @@ interface ChestUIProps {
 }
 
 const SLOT_SIZE = 48;
-const CHEST_SIZE = 27;
 
 type SlotTarget =
   | { type: 'chest'; index: number }
@@ -310,13 +309,15 @@ export const ChestUI: React.FC<ChestUIProps> = ({
         </button>
 
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('chest')}</div>
+          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>
+            {chestSlots.length === 54 ? t('doubleChest') : t('chest')}
+          </div>
           <div style={{
             display: 'grid',
             gridTemplateColumns: `repeat(9, ${SLOT_SIZE}px)`,
             gap: '2px',
           }}>
-            {Array.from({ length: CHEST_SIZE }, (_, i) =>
+            {Array.from({ length: chestSlots.length }, (_, i) =>
               renderSlot(chestSlots[i] ?? null, { type: 'chest', index: i }, () => handleSlotClick({ type: 'chest', index: i }))
             )}
           </div>

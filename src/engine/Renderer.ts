@@ -22,6 +22,7 @@ export class Renderer {
   private stars!: THREE.Points;
   private starMaterial!: THREE.PointsMaterial;
   private cloudsMesh!: THREE.InstancedMesh;
+  private cloudMaterial!: THREE.MeshBasicMaterial;
   private cloudDriftX = 0;
   private cloudActiveCells: [number, number][] = [];
   private lastT = 0;
@@ -275,14 +276,15 @@ export class Renderer {
       }
     }
 
-    const cloudMat = new THREE.MeshLambertMaterial({
-      color: 0xffffff,
+    this.cloudMaterial = new THREE.MeshBasicMaterial({
+      color: 0xf4fbff,
       transparent: true,
-      opacity: 0.8,
-      depthWrite: false
+      opacity: 0.72,
+      depthWrite: false,
+      fog: false
     });
 
-    this.cloudsMesh = new THREE.InstancedMesh(boxGeo, cloudMat, activeCells.length);
+    this.cloudsMesh = new THREE.InstancedMesh(boxGeo, this.cloudMaterial, activeCells.length);
     this.cloudActiveCells = activeCells;
     this.scene.add(this.cloudsMesh);
   }
@@ -320,6 +322,19 @@ export class Renderer {
     }
     if (this.starMaterial) {
       this.starMaterial.opacity = starOpacity;
+    }
+
+    if (this.cloudMaterial) {
+      const sunY = Math.sin(t * Math.PI * 2);
+      const cloudBrightness = Math.max(0, sunY);
+      const cloudDayColor = new THREE.Color(0xf4fbff);
+      const cloudSunsetColor = new THREE.Color(0xffd6b0);
+      const cloudNightColor = new THREE.Color(0x45506a);
+      const cloudColor = cloudBrightness > 0
+        ? new THREE.Color().lerpColors(cloudSunsetColor, cloudDayColor, Math.min(1, cloudBrightness / 0.35))
+        : cloudNightColor;
+      this.cloudMaterial.color.copy(cloudColor);
+      this.cloudMaterial.opacity = THREE.MathUtils.lerp(0.42, 0.72, cloudBrightness);
     }
 
     // Cloud drift and wrapping around player camera horizontally
@@ -568,4 +583,3 @@ export class Renderer {
     this.renderer.dispose();
   }
 }
-

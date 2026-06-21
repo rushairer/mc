@@ -622,7 +622,7 @@ export class Game {
       }
     }
 
-    if (!this.network.isConnected) {
+    if (this.activeSlot !== 'multiplayer' && !this.network.isConnected) {
       this.network.connect('mock://local', 'Player', this.gameMode, this.activeSlot);
     }
 
@@ -3511,19 +3511,18 @@ export class Game {
   submitChat(message: string) {
     const trimmed = message.trim();
     if (trimmed) {
-      if (this.network && this.network.isConnected) {
+      if (trimmed.startsWith('/') && this.activeSlot !== 'multiplayer') {
+        const result = this.commands.execute(trimmed);
+        this.chatMessages.push(result.message);
+      } else if (this.network && this.network.isConnected) {
         this.network.send(PacketType.C2S_CHAT, { text: trimmed });
       } else {
-        if (trimmed.startsWith('/')) {
-          const result = this.commands.execute(trimmed);
-          this.chatMessages.push(result.message);
-        } else {
-          this.chatMessages.push(`<Player> ${trimmed}`);
-        }
-        // Keep only last 50 messages
-        if (this.chatMessages.length > 50) {
-          this.chatMessages = this.chatMessages.slice(-50);
-        }
+        this.chatMessages.push(`<Player> ${trimmed}`);
+      }
+
+      // Keep only last 50 messages
+      if (this.chatMessages.length > 50) {
+        this.chatMessages = this.chatMessages.slice(-50);
       }
     }
     this.chatOpen = false;

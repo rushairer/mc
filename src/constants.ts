@@ -15,6 +15,8 @@ export const PLAYER_HEIGHT = 1.8;
 export const PLAYER_EYE_HEIGHT = 1.62;
 export const PLAYER_SNEAK_HEIGHT = 1.5;
 export const PLAYER_SNEAK_EYE_HEIGHT = 1.27;
+export const PLAYER_CRAWL_HEIGHT = 0.6;
+export const PLAYER_CRAWL_EYE_HEIGHT = 0.5;
 export const SNEAK_SPEED_MULTIPLIER = 0.3;
 export const MAX_REACH = 4.5;
 

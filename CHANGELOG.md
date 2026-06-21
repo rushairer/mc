@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-06-21
+
+### Added
+- Add functional player crawling state (height = 0.6, eye height = 0.5) triggered automatically when a player is in a 1-block high space.
+- Scale the third-person player model Y-axis when crawling to visualize the flat stance.
+
 ## [0.15.0] - 2026-06-21
 
 ### Added

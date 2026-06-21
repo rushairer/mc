@@ -34,7 +34,7 @@ import { MapSystem } from '../systems/MapSystem';
 import { HopperSystem } from '../systems/HopperSystem';
 import { VillageSystem, type TradeOffer, type VillagerProfession } from '../systems/VillageSystem';
 import { EnderDragonSystem } from '../systems/EnderDragonSystem';
-import { CHUNK_SIZE, PLAYER_HEIGHT, PLAYER_WIDTH, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
+import { CHUNK_SIZE, PLAYER_HEIGHT, PLAYER_WIDTH, PLAYER_CRAWL_HEIGHT, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
 import type { Enchantment } from '../systems/EnchantSystem';
 import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '../types';
 import { NetworkClient } from '../server/NetworkClient';
@@ -1411,7 +1411,9 @@ export class Game {
       this.fpArmGroup.visible = false;
       this.player.mesh.visible = true;
       this.player.mesh.position.copy(this.player.position);
-      this.player.mesh.scale.y = this.player.isSneaking ? this.player.height / PLAYER_HEIGHT : 1;
+      this.player.mesh.scale.y = this.player.isCrawling
+        ? PLAYER_CRAWL_HEIGHT / PLAYER_HEIGHT
+        : (this.player.isSneaking ? this.player.height / PLAYER_HEIGHT : 1);
       this.player.mesh.rotation.y = this.player.yaw + Math.PI;
 
       const head = this.player.mesh.getObjectByName('head');

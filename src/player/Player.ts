@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import {
   GRAVITY, JUMP_VELOCITY, WALK_SPEED, SPRINT_SPEED,
   PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_EYE_HEIGHT, PLAYER_SNEAK_HEIGHT,
-  PLAYER_SNEAK_EYE_HEIGHT, SNEAK_SPEED_MULTIPLIER, MAX_REACH
+  PLAYER_SNEAK_EYE_HEIGHT, PLAYER_CRAWL_HEIGHT, PLAYER_CRAWL_EYE_HEIGHT,
+  SNEAK_SPEED_MULTIPLIER, MAX_REACH
 } from '../constants';
 import { ChunkManager } from '../world/ChunkManager';
 import { BlockRegistry } from '../world/BlockRegistry';
@@ -22,6 +23,7 @@ export class Player {
   oxygen = 15.0; // oxygen in seconds (15 seconds max)
   flying = false;
   isSneaking = false;
+  isCrawling = false;
   speedMultiplier = 1;
   mesh: THREE.Group;
 
@@ -51,10 +53,12 @@ export class Player {
   }
 
   get height(): number {
+    if (this.isCrawling) return PLAYER_CRAWL_HEIGHT;
     return this.isSneaking ? PLAYER_SNEAK_HEIGHT : PLAYER_HEIGHT;
   }
 
   get eyeHeight(): number {
+    if (this.isCrawling) return PLAYER_CRAWL_EYE_HEIGHT;
     return this.isSneaking ? PLAYER_SNEAK_EYE_HEIGHT : PLAYER_EYE_HEIGHT;
   }
 
@@ -95,13 +99,36 @@ export class Player {
     // Fly toggle
     if (input.fly) this.flying = !this.flying;
 
-    this.isSneaking = input.sneak && !this.flying;
-    if (!this.isSneaking && this.checkCollision(chunks)) {
-      this.isSneaking = true;
+    this.isCrawling = false;
+    this.isSneaking = false;
+
+    if (!this.flying) {
+      const wantSneak = input.sneak;
+
+      // Check collision state to determine stance (crawling > sneaking > standing)
+      if (this.checkCollision(chunks)) {
+        // Standing collides, force sneak
+        this.isSneaking = true;
+        // If sneaking still collides, force crawl
+        if (this.checkCollision(chunks)) {
+          this.isSneaking = false;
+          this.isCrawling = true;
+        }
+      } else if (wantSneak) {
+        // Player manually wants to sneak
+        this.isSneaking = true;
+        if (this.checkCollision(chunks)) {
+          this.isSneaking = false;
+        }
+      }
     }
-    const wantsSprint = input.sprint && !this.isSneaking;
-    const sneakMultiplier = this.isSneaking ? SNEAK_SPEED_MULTIPLIER : 1;
-    const speed = (wantsSprint ? SPRINT_SPEED : WALK_SPEED) * this.speedMultiplier * sneakMultiplier;
+
+    const wantsSprint = input.sprint && !this.isSneaking && !this.isCrawling;
+    let speedMultiplier = 1.0;
+    if (this.isCrawling || this.isSneaking) {
+      speedMultiplier = SNEAK_SPEED_MULTIPLIER;
+    }
+    const speed = (wantsSprint ? SPRINT_SPEED : WALK_SPEED) * this.speedMultiplier * speedMultiplier;
 
     if (this.flying) {
       // Flying mode

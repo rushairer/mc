@@ -525,6 +525,108 @@ export class TextureAtlas {
       ctx.fillRect(x + 4, y + 2, 3, 2);
     });
 
+    // ─── Farmland & Crops ───
+
+    // farmland (dry) - dirt with horizontal furrow lines
+    this.drawTile('farmland', (ctx, x, y, s) => {
+      ctx.fillStyle = '#8B6914';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 35; i++) {
+        const px = x + Math.random() * s;
+        const py = y + Math.random() * s;
+        const r = 120 + Math.random() * 40 | 0;
+        const g = 80 + Math.random() * 30 | 0;
+        const b = 20 + Math.random() * 20 | 0;
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(px | 0, py | 0, 2, 2);
+      }
+      // Furrow lines on top
+      ctx.fillStyle = 'rgba(60, 35, 10, 0.6)';
+      for (let row = 2; row < s; row += 4) {
+        ctx.fillRect(x, y + row, s, 1);
+      }
+    });
+
+    // farmland_moist - darker, richer soil with furrow lines
+    this.drawTile('farmland_moist', (ctx, x, y, s) => {
+      ctx.fillStyle = '#553311';
+      ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 35; i++) {
+        const px = x + Math.random() * s;
+        const py = y + Math.random() * s;
+        const r = 60 + Math.random() * 30 | 0;
+        const g = 35 + Math.random() * 20 | 0;
+        const b = 10 + Math.random() * 15 | 0;
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(px | 0, py | 0, 2, 2);
+      }
+      ctx.fillStyle = 'rgba(30, 15, 5, 0.5)';
+      for (let row = 2; row < s; row += 4) {
+        ctx.fillRect(x, y + row, s, 1);
+      }
+    });
+
+    // wheat stages 0-7
+    for (let stage = 0; stage < 8; stage++) {
+      this.drawTile(`wheat_stage${stage}`, (ctx, x, y, s) => {
+        ctx.clearRect(x, y, s, s);
+        const height = 3 + Math.floor(stage * 13 / 7); // 3px to 16px
+        const stemColor = stage < 6 ? '#3A8A15' : (stage < 7 ? '#8B8A15' : '#CCAA33');
+        const headColor = stage >= 5 ? (stage < 7 ? '#AAAA22' : '#EEDD44') : null;
+        // Draw stems
+        for (let col = 2; col < s; col += 4) {
+          ctx.fillStyle = stemColor;
+          ctx.fillRect(x + col, y + (s - height), 1, height);
+        }
+        // Draw wheat heads at maturity
+        if (headColor && stage >= 5) {
+          ctx.fillStyle = headColor;
+          for (let col = 1; col < s; col += 4) {
+            ctx.fillRect(x + col, y + (s - height), 3, Math.min(3, Math.floor(height / 3)));
+          }
+        }
+      });
+    }
+
+    // carrot stages 0-7
+    for (let stage = 0; stage < 8; stage++) {
+      this.drawTile(`carrots_stage${stage}`, (ctx, x, y, s) => {
+        ctx.clearRect(x, y, s, s);
+        const height = 3 + Math.floor(stage * 13 / 7);
+        // Green leafy tops
+        ctx.fillStyle = stage < 4 ? '#2A7A10' : '#3A8A15';
+        for (let col = 2; col < s; col += 4) {
+          ctx.fillRect(x + col, y + (s - height), 2, height - (stage >= 6 ? 3 : 0));
+        }
+        // Orange carrot root visible at later stages
+        if (stage >= 4) {
+          ctx.fillStyle = '#E87020';
+          for (let col = 2; col < s; col += 4) {
+            ctx.fillRect(x + col, y + s - 3, 2, 3);
+          }
+        }
+      });
+    }
+
+    // potato stages 0-7
+    for (let stage = 0; stage < 8; stage++) {
+      this.drawTile(`potatoes_stage${stage}`, (ctx, x, y, s) => {
+        ctx.clearRect(x, y, s, s);
+        const height = 3 + Math.floor(stage * 13 / 7);
+        // Green leafy tops
+        ctx.fillStyle = stage < 4 ? '#2A7A10' : '#3A8A15';
+        for (let col = 2; col < s; col += 4) {
+          ctx.fillRect(x + col, y + (s - height), 2, height - (stage >= 6 ? 2 : 0));
+        }
+        // White flowers at maturity (stage 7)
+        if (stage === 7) {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(x + 3, y + (s - height), 2, 2);
+          ctx.fillRect(x + 10, y + (s - height) + 1, 2, 2);
+        }
+      });
+    }
+
     this.drawTile('blue_orchid', (ctx, x, y, s) => {
       ctx.fillStyle = '#2A6B10';
       ctx.fillRect(x + 7, y + 5, 2, 11);
@@ -1414,6 +1516,28 @@ export class TextureAtlas {
       ctx.fillRect(x + 4, y + 9, 2, 2);
       ctx.fillRect(x + 7, y + 6, 2, 2);
       ctx.fillRect(x + 10, y + 10, 2, 2);
+    });
+
+    // carrot item
+    this.drawTile('carrot', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#E87020';
+      ctx.fillRect(x + 6, y + 4, 3, 10);
+      ctx.fillRect(x + 7, y + 14, 1, 2);
+      ctx.fillStyle = '#3A8A15';
+      ctx.fillRect(x + 5, y + 2, 5, 3);
+    });
+
+    // potato item
+    this.drawTile('potato', (ctx, x, y, s) => {
+      ctx.clearRect(x, y, s, s);
+      ctx.fillStyle = '#C8A848';
+      ctx.beginPath();
+      ctx.ellipse(x + 8, y + 9, 5, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#B89838';
+      ctx.fillRect(x + 5, y + 7, 2, 2);
+      ctx.fillRect(x + 9, y + 10, 2, 2);
     });
 
     // bucket
@@ -2342,6 +2466,15 @@ export class TextureAtlas {
     this.aliasTile('icon:block:log', 'oak_log_icon');
     this.aliasTile('icon:block:planks', 'oak_planks_icon');
     this.aliasTile('icon:block:leaves', 'oak_leaves_icon');
+
+    // Farmland & Crop icon aliases
+    this.aliasTile('icon:block:farmland', 'farmland');
+    this.aliasTile('icon:block:wheat', 'wheat');
+    this.aliasTile('icon:block:carrots', 'carrot');
+    this.aliasTile('icon:block:potatoes', 'potato');
+    this.aliasTile('item:wheat_seeds', 'seeds');
+    this.aliasTile('item:carrot', 'carrot');
+    this.aliasTile('item:potato', 'potato');
 
     // Rails
     this.drawTile('rail', (ctx, x, y, s) => {

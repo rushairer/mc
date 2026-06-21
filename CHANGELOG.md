@@ -6,6 +6,20 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-06-21
+
+### Added
+- Add farmland block (ID 60) with procedural dry and moist textures featuring horizontal furrow lines.
+- Add hoe right-click interaction to till dirt and grass blocks into farmland, with automatic water proximity detection for initial moisture.
+- Add farmland hydration system: moisture level (0-7) stored in block metadata, automatically updated by random ticks based on nearby water sources within a 9×2×9 area.
+- Add farmland decay: dry farmland without crops reverts to dirt; solid blocks placed on farmland also cause reversion.
+- Add crop placement restrictions: wheat seeds, carrots, and potatoes can only be planted on farmland blocks.
+- Add procedural multi-stage textures for wheat (stages 0-7), carrots (stages 0-7), and potatoes (stages 0-7) with visually distinct growth progression.
+- Add crop growth random tick system: crops grow faster on hydrated farmland (25% chance) vs dry farmland (10% chance) per tick.
+- Add crop-specific drop logic: mature wheat drops 1 wheat + 1-3 seeds; mature carrots/potatoes drop 1-4 items; immature crops drop 1 seed/item.
+- Add crop destruction cascade: breaking farmland or the block below a crop destroys the crop and spawns appropriate drops.
+- Add carrot and potato procedural item icons for inventory display.
+
 ## [0.18.0] - 2026-06-21
 
 ### Added

@@ -129,6 +129,29 @@ export const VisualResolver = {
     if (name.includes('cobblestone')) return 'block:cobblestone';
     if (name.includes('stone_brick')) return 'block:stone_bricks';
     if (name === 'stone' || name.includes('stone')) return 'block:stone';
+    // Farmland
+    if (base === 60 || name === 'farmland') {
+      if (faceName === 'top') {
+        const moisture = metadata(blockId) & 0x7;
+        return moisture > 0 ? 'block:farmland_moist' : 'block:farmland';
+      }
+      return 'block:dirt';
+    }
+
+    // Crops
+    if (base === 59 || name === 'wheat') {
+      const age = metadata(blockId) & 0x7;
+      return `block:wheat_stage${age}`;
+    }
+    if (base === 141 || name === 'carrots') {
+      const age = metadata(blockId) & 0x7;
+      return `block:carrots_stage${age}`;
+    }
+    if (base === 142 || name === 'potatoes') {
+      const age = metadata(blockId) & 0x7;
+      return `block:potatoes_stage${age}`;
+    }
+
     if (name === 'dirt' || name.includes('dirt')) return 'block:dirt';
     if (name.includes('gravel')) return 'block:gravel';
     if (name.includes('glass')) return 'block:glass';
@@ -207,6 +230,10 @@ export const VisualResolver = {
     if (!block) return 'icon:block:stone';
     const base = baseId(blockId);
     if (base === 2 || block.name === 'grass') return 'icon:block:grass';
+    if (base === 60 || block.name === 'farmland') return 'icon:block:farmland';
+    if (base === 59 || block.name === 'wheat') return 'icon:block:wheat';
+    if (base === 141 || block.name === 'carrots') return 'icon:block:carrots';
+    if (base === 142 || block.name === 'potatoes') return 'icon:block:potatoes';
     if (block.name.includes('planks')) {
       return `icon:block:${materialPrefix(woodMaterialFromName(block.name) ?? 'oak')}_planks`;
     }
@@ -248,6 +275,8 @@ export const VisualResolver = {
     const colors: Record<string, string> = {
       stone: '#8c8c8c',
       dirt: '#8b5e34',
+      farmland: '#7a5a2e',
+      farmland_moist: '#4a3018',
       grass_top: '#5b8c32',
       grass_side: '#6f7f35',
       water: '#2f67c7',

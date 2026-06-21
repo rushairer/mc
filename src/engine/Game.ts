@@ -220,6 +220,7 @@ export class Game {
   private lastLightRebuildTime = -1;
   private lightScanTimer = 0;
   private ambientTimer = 0;
+  private farmingTickTimer = 0;
   private particleScanTimer = 0;
   private ambientParticleSources: { x: number; y: number; z: number; type: 'torch' | 'furnace' | 'enchanting_table' }[] = [];
 
@@ -1665,9 +1666,15 @@ export class Game {
               if (isDoor) {
                 this.droppedItems.spawnItem(37, 1, dropPos, velocity, 0.5);
               } else {
-                const dropId = ItemRegistry.getBlockDropItem(blockId);
-                if (dropId > 0) {
-                  this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
+                const blockBase = blockId & 0x3FF;
+                if (blockBase === 59 || blockBase === 141 || blockBase === 142) {
+                  // Crop drops depend on maturity
+                  this.spawnCropDrops(bp.x, bp.y, bp.z, blockId);
+                } else {
+                  const dropId = ItemRegistry.getBlockDropItem(blockId);
+                  if (dropId > 0) {
+                    this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
+                  }
                 }
               }
 
@@ -1711,6 +1718,13 @@ export class Game {
                   );
                   this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
                 }
+              }
+
+              // If breaking farmland or the block supporting a crop, destroy the crop above
+              if (aboveId === 59 || aboveId === 141 || aboveId === 142) {
+                const cropBlockId = this.chunks.getBlock(bp.x, bp.y + 1, bp.z);
+                this.spawnCropDrops(bp.x, bp.y + 1, bp.z, cropBlockId);
+                this.chunks.setBlock(bp.x, bp.y + 1, bp.z, 0);
               }
 
               this.redstone.unregister(bp.x, bp.y, bp.z);
@@ -1975,6 +1989,23 @@ export class Game {
           }
         }
 
+        // Hoe tilling: convert dirt/grass to farmland
+        if (heldItemDef && heldItemDef.toolType === 'hoe') {
+          const targetBase = targetId & 0x3FF;
+          if (targetBase === 3 || targetBase === 2) { // dirt or grass
+            const moisture = this.isWaterNearby(blockPos.x, blockPos.y, blockPos.z) ? 7 : 0;
+            const farmlandId = (moisture << 10) | 60;
+            this.chunks.setBlock(blockPos.x, blockPos.y, blockPos.z, farmlandId);
+            this.chunks.setBlockMeta(blockPos.x, blockPos.y, blockPos.z, null);
+            this.sound.playBlockPlace(3); // dirt sound
+            if (this.gameMode !== 'creative') {
+              this.inventory.damageTool(this.player.selectedSlot);
+            }
+            this.placeCooldown = 0.25;
+            return;
+          }
+        }
+
         if ((targetId & 0x3FF) === END_PORTAL_FRAME_ID && heldItemId === ENDER_EYE_ID) {
           const activated = this.useEnderEyeOnPortalFrame(blockPos.x, blockPos.y, blockPos.z);
           if (activated) {
@@ -2098,6 +2129,14 @@ export class Game {
                   const blockBelow = this.chunks.getBlock(placePos.x, placePos.y - 1, placePos.z) & 0x3FF;
                   if (blockBelow !== 88) {
                     return; // Fail placement: Nether Wart can only be placed on Soul Sand
+                  }
+                }
+                // Crops can only be placed on farmland
+                const cropBaseId = blockId & 0x3FF;
+                if (cropBaseId === 59 || cropBaseId === 141 || cropBaseId === 142) {
+                  const blockBelow = this.chunks.getBlock(placePos.x, placePos.y - 1, placePos.z) & 0x3FF;
+                  if (blockBelow !== 60) {
+                    return; // Fail placement: crops can only be planted on farmland
                   }
                 }
                 let facing: BlockFacing = 'north';
@@ -2474,6 +2513,9 @@ export class Game {
     // Hopper simulation
     this.hoppers.update(dt);
 
+    // Farming simulation (farmland hydration, crop growth)
+    this.updateFarming(dt);
+
     // Particles
     this.spawnAmbientParticles(dt);
     this.particles.update(dt);
@@ -2511,6 +2553,133 @@ export class Game {
       (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
       (x, y, z, meta, markDirty) => this.chunks.setBlockMeta(x, y, z, meta, markDirty)
     );
+  }
+
+  private isWaterNearby(x: number, y: number, z: number): boolean {
+    for (let dx = -4; dx <= 4; dx++) {
+      for (let dy = 0; dy <= 1; dy++) {
+        for (let dz = -4; dz <= 4; dz++) {
+          const id = this.chunks.getBlock(x + dx, y + dy, z + dz) & 0x3FF;
+          if (id === 8 || id === 9) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private spawnCropDrops(x: number, y: number, z: number, blockId: number) {
+    if (this.gameMode === 'creative') return;
+    const base = blockId & 0x3FF;
+    const age = (blockId >> 10) & 0x7;
+    const dropPos = new THREE.Vector3(x + 0.5, y + 0.3, z + 0.5);
+    const velocity = new THREE.Vector3(
+      (Math.random() - 0.5) * 1.5,
+      1.5 + Math.random() * 1.5,
+      (Math.random() - 0.5) * 1.5
+    );
+
+    if (base === 59) { // Wheat
+      if (age === 7) {
+        this.droppedItems.spawnItem(296, 1, dropPos.clone(), velocity.clone(), 0.5); // wheat item
+        const seedCount = 1 + Math.floor(Math.random() * 3); // 1-3 seeds
+        this.droppedItems.spawnItem(295, seedCount, dropPos.clone(), velocity.clone(), 0.5);
+      } else {
+        this.droppedItems.spawnItem(295, 1, dropPos.clone(), velocity.clone(), 0.5); // 1 seed
+      }
+    } else if (base === 141) { // Carrots
+      if (age === 7) {
+        const count = 1 + Math.floor(Math.random() * 4); // 1-4
+        this.droppedItems.spawnItem(391, count, dropPos.clone(), velocity.clone(), 0.5);
+      } else {
+        this.droppedItems.spawnItem(391, 1, dropPos.clone(), velocity.clone(), 0.5);
+      }
+    } else if (base === 142) { // Potatoes
+      if (age === 7) {
+        const count = 1 + Math.floor(Math.random() * 4); // 1-4
+        this.droppedItems.spawnItem(392, count, dropPos.clone(), velocity.clone(), 0.5);
+      } else {
+        this.droppedItems.spawnItem(392, 1, dropPos.clone(), velocity.clone(), 0.5);
+      }
+    }
+  }
+
+  private updateFarming(dt: number) {
+    this.farmingTickTimer += dt;
+    if (this.farmingTickTimer < 1.0) return;
+    this.farmingTickTimer = 0;
+
+    const px = Math.floor(this.player.position.x);
+    const py = Math.floor(this.player.position.y);
+    const pz = Math.floor(this.player.position.z);
+
+    // Random tick: sample 15 random blocks near player
+    for (let i = 0; i < 15; i++) {
+      const rx = px + Math.floor(Math.random() * 32) - 16;
+      const ry = Math.max(1, Math.min(254, py + Math.floor(Math.random() * 16) - 8));
+      const rz = pz + Math.floor(Math.random() * 32) - 16;
+
+      const blockId = this.chunks.getBlock(rx, ry, rz);
+      const base = blockId & 0x3FF;
+
+      // Farmland hydration and decay
+      if (base === 60) {
+        const moisture = (blockId >> 10) & 0x7;
+        const hasWater = this.isWaterNearby(rx, ry, rz);
+
+        if (hasWater) {
+          if (moisture < 7) {
+            this.chunks.setBlock(rx, ry, rz, (7 << 10) | 60);
+          }
+        } else {
+          if (moisture > 0) {
+            const newMoisture = moisture - 1;
+            this.chunks.setBlock(rx, ry, rz, (newMoisture << 10) | 60);
+          } else {
+            // Check if there's a crop on top
+            const aboveBase = this.chunks.getBlock(rx, ry + 1, rz) & 0x3FF;
+            if (aboveBase !== 59 && aboveBase !== 141 && aboveBase !== 142) {
+              // No crop above: revert to dirt
+              this.chunks.setBlock(rx, ry, rz, 3);
+            }
+          }
+        }
+
+        // If a solid non-crop block is placed on farmland, revert to dirt
+        const aboveId = this.chunks.getBlock(rx, ry + 1, rz);
+        const aboveBase = aboveId & 0x3FF;
+        if (aboveBase !== 0 && aboveBase !== 59 && aboveBase !== 141 && aboveBase !== 142) {
+          const aboveDef = BlockRegistry.get(aboveId);
+          if (aboveDef && aboveDef.solid) {
+            // Solid block on top → destroy farmland
+            this.chunks.setBlock(rx, ry, rz, 3);
+            // Also destroy any crop that was between (shouldn't normally exist)
+          }
+        }
+      }
+
+      // Crop growth
+      if (base === 59 || base === 141 || base === 142) {
+        const age = (blockId >> 10) & 0x7;
+        if (age < 7) {
+          // Check if farmland below
+          const belowId = this.chunks.getBlock(rx, ry - 1, rz);
+          const belowBase = belowId & 0x3FF;
+          if (belowBase === 60) {
+            const moisture = (belowId >> 10) & 0x7;
+            // Growth chance: higher if moist
+            const growthChance = moisture > 0 ? 0.25 : 0.10;
+            if (Math.random() < growthChance) {
+              const newAge = age + 1;
+              this.chunks.setBlock(rx, ry, rz, (newAge << 10) | base);
+            }
+          } else {
+            // No farmland below: destroy crop
+            this.spawnCropDrops(rx, ry, rz, blockId);
+            this.chunks.setBlock(rx, ry, rz, 0);
+          }
+        }
+      }
+    }
   }
 
   private tryUseHeldReadableItem(slot: ItemStack): boolean {

@@ -917,6 +917,7 @@ export class Game {
 
     // UI open: skip game input
     if (this.openUI !== 'none') {
+      this.input.consumeSpaceDoubleTap();
       if (this.bowChargeActive) {
         this.bowChargeActive = false;
         this.bowChargeTimer = 0;
@@ -1053,6 +1054,11 @@ export class Game {
     if (this.potionEffects.has('levitation') && !this.player.flying && !this.riddenMob) {
       this.player.velocity.y = Math.max(this.player.velocity.y, 3.8);
       this.player.onGround = false;
+    }
+    const doubleTappedSpace = this.input.consumeSpaceDoubleTap();
+    if (doubleTappedSpace && !this.chatOpen && this.gameMode === 'creative') {
+      this.player.flying = !this.player.flying;
+      this.notifyState();
     }
     const mouseDelta = this.input.consumeMouseDelta();
     this.player.update(dt, {
@@ -1309,13 +1315,6 @@ export class Game {
       this.input.keys.clear();
       this.input.mouseButtons.clear();
       document.exitPointerLock();
-      this.notifyState();
-    }
-
-    // G key → fly toggle (creative mode only); F follows vanilla offhand swapping.
-    if (!this.chatOpen && this.input.isKeyDown('g') && this.gameMode === 'creative') {
-      this.player.flying = !this.player.flying;
-      this.input.keys.delete('g');
       this.notifyState();
     }
 

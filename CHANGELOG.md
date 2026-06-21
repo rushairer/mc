@@ -6,6 +6,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-06-21
+
+### Changed
+- Change the creative-mode flying toggle from the `G` key to double-tapping the spacebar to align with vanilla Minecraft control conventions and resolve a shortcut conflict with offhand swapping (`F`).
+
 ## [0.12.0] - 2026-06-20
 
 ### Added

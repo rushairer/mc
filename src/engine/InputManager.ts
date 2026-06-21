@@ -6,6 +6,8 @@ export class InputManager {
   scrollDelta = 0;
   locked = false;
   hasEverLocked = false;
+  private lastSpacePressTime = 0;
+  private spaceDoubleTapped = false;
 
   constructor(private canvas: HTMLCanvasElement) {
     document.addEventListener('keydown', this.onKeyDown);
@@ -61,9 +63,22 @@ export class InputManager {
     return false;
   }
 
+  consumeSpaceDoubleTap(): boolean {
+    const tapped = this.spaceDoubleTapped;
+    this.spaceDoubleTapped = false;
+    return tapped;
+  }
+
   private onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'F5') {
       e.preventDefault();
+    }
+    if (e.key === ' ' && !e.repeat) {
+      const now = performance.now();
+      if (now - this.lastSpacePressTime < 300) {
+        this.spaceDoubleTapped = true;
+      }
+      this.lastSpacePressTime = now;
     }
     this.keys.add(e.key.toLowerCase());
   };

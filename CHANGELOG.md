@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-06-21
+
+### Added
+- Implement Bell interaction: right-clicking a Bell plays a resonant bell sound with visual feedback.
+- Render Bells with a smaller hanging body and support shape instead of a full-block placeholder.
+
 ## [0.27.0] - 2026-06-21
 
 ### Added

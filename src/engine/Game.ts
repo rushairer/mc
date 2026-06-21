@@ -1979,6 +1979,9 @@ export class Game {
         } else if ((targetId & 0x3FF) === 92 || targetName === 'cake') {
           this.eatCakeBlock(blockPos.x, blockPos.y, blockPos.z);
           this.placeCooldown = 0.25;
+        } else if (targetName === 'bell') {
+          this.ringBell(blockPos.x, blockPos.y, blockPos.z);
+          this.placeCooldown = 0.35;
         } else if (targetName === 'enchanting_table') {
           this.openEnchantUI();
           this.placeCooldown = 0.5;
@@ -2238,6 +2241,7 @@ export class Game {
       targetName === 'hopper' ||
       targetName === 'bed' ||
       targetName === 'cake' ||
+      targetName === 'bell' ||
       (targetBlockId & 0x3FF) === 92 ||
       this.isDoorBlock(targetBlockId) ||
       this.isTrapdoorBlock(targetBlockId)
@@ -4647,6 +4651,12 @@ export class Game {
     const dropPos = new THREE.Vector3(x + 0.5, y + 1.0, z + 0.5);
     const velocity = new THREE.Vector3(0, 0.25, 0);
     this.droppedItems.spawnItem(boneMealId, 1, dropPos, velocity, 0.35);
+  }
+
+  private ringBell(x: number, y: number, z: number) {
+    this.sound.playBell();
+    this.particles.spawnBlockBreak(x + 0.5, y + 0.55, z + 0.5, 0xf5c542, 18);
+    this.notifyState();
   }
 
   private checkWitherSpawning(x: number, y: number, z: number) {

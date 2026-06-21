@@ -488,6 +488,23 @@ export class Chunk {
             continue;
           }
 
+          // Bell
+          if (def.name === 'bell') {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            const parts = [
+              { minX: 0.25, maxX: 0.75, minY: 0.875, maxY: 1.0, minZ: 0.25, maxZ: 0.75 },
+              { minX: 0.4375, maxX: 0.5625, minY: 0.6875, maxY: 0.875, minZ: 0.4375, maxZ: 0.5625 },
+              { minX: 0.25, maxX: 0.75, minY: 0.25, maxY: 0.6875, minZ: 0.25, maxZ: 0.75 },
+              { minX: 0.1875, maxX: 0.8125, minY: 0.1875, maxY: 0.3125, minZ: 0.1875, maxZ: 0.8125 },
+            ];
+            for (const bounds of parts) {
+              this.addCuboid(target, x, y, z, id, atlas, bounds, {}, undefined, false, lightBrightness, biome, meta);
+            }
+            continue;
+          }
+
           // Extended Piston Base
           if ((id & 0x3FF) === 33 || (id & 0x3FF) === 29 || def.name === 'piston' || def.name === 'sticky_piston') {
             const isExtended = meta?.extended === true;

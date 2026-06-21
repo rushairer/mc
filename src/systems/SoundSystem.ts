@@ -553,6 +553,35 @@ export class SoundSystem {
     osc.stop(ctx.currentTime + 0.08);
   }
 
+  playBell() {
+    if (this.playFirstResourceSound(['block.bell.use', 'block.bell.resonate'])) return;
+
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.35, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 1.2);
+    gain.connect(this.sfxGain!);
+
+    for (const [freq, delay, volume] of [
+      [740, 0, 0.75],
+      [1110, 0.01, 0.35],
+      [1480, 0.02, 0.2],
+    ] as const) {
+      const osc = ctx.createOscillator();
+      const partialGain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + delay);
+      partialGain.gain.setValueAtTime(volume, now + delay);
+      partialGain.gain.exponentialRampToValueAtTime(0.01, now + 1.15);
+      osc.connect(partialGain).connect(gain);
+      osc.start(now + delay);
+      osc.stop(now + 1.2);
+    }
+  }
+
   playBucketFill() {
     if (this.playFirstResourceSound(['item.bucket.fill'])) return;
 

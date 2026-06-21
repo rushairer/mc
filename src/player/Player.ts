@@ -349,7 +349,7 @@ export class Player {
   /**
    * Raycast from camera to find block in reach
    */
-  raycast(chunks: ChunkManager): { blockPos: THREE.Vector3; faceNormal: THREE.Vector3 } | null {
+  raycast(chunks: ChunkManager, includeFluids: boolean = false): { blockPos: THREE.Vector3; faceNormal: THREE.Vector3 } | null {
     const origin = this.eyePosition;
     const dir = this.forward;
 
@@ -367,7 +367,10 @@ export class Player {
       if (bx === prevBlock.x && by === prevBlock.y && bz === prevBlock.z) continue;
 
       const blockId = chunks.getBlock(bx, by, bz);
-      if (blockId !== 0 && chunks.isSolidBlock(bx, by, bz)) {
+      const isSolid = blockId !== 0 && chunks.isSolidBlock(bx, by, bz);
+      const isFluid = blockId !== 0 && includeFluids && BlockRegistry.isFluid(blockId);
+
+      if (isSolid || isFluid) {
         const faceNormal = new THREE.Vector3(
           prevBlock.x - bx,
           prevBlock.y - by,

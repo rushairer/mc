@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-06-21
+
+### Added
+- Add bucket pickup and placement mechanics for water and lava source blocks.
+- Add raycasting support for fluids, targeting water and lava blocks only when holding a bucket (empty bucket, water bucket, or lava bucket).
+- Add inventory hotbar updating and stack overflow drop logic when scooping fluids with a stacked empty bucket.
+- Add synthesised procedural Web Audio API sound effects for filling (`playBucketFill`) and emptying (`playBucketEmpty`) buckets.
+
 ## [0.17.0] - 2026-06-21
 
 ### Added

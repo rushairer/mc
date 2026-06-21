@@ -1479,7 +1479,10 @@ export class Game {
     this.renderer.camera.rotation.x = this.player.pitch;
 
     // Raycast
-    this.targetBlock = this.player.raycast(this.chunks);
+    const heldSlot = this.inventory.getSlot(this.player.selectedSlot);
+    const localHeldItemId = heldSlot?.id ?? 0;
+    const isHoldingBucket = localHeldItemId === 325 || localHeldItemId === 326 || localHeldItemId === 327;
+    this.targetBlock = this.player.raycast(this.chunks, isHoldingBucket);
     this.updateHighlight();
 
     const prevSignText = this.lookedAtSignText;
@@ -1868,6 +1871,62 @@ export class Game {
         const targetId = this.chunks.getBlock(blockPos.x, blockPos.y, blockPos.z);
         const targetDef = BlockRegistry.get(targetId);
         const targetName = targetDef?.name ?? '';
+
+        // Bucket scoop water/lava
+        if (heldItemId === 325) { // Empty Bucket
+          const isWaterSource = (targetId & 0x3FF) === 9;
+          const isLavaSource = (targetId & 0x3FF) === 11;
+          if (isWaterSource || isLavaSource) {
+            const filledBucketId = isWaterSource ? 326 : 327;
+            this.chunks.setBlock(blockPos.x, blockPos.y, blockPos.z, 0);
+            this.chunks.setBlockMeta(blockPos.x, blockPos.y, blockPos.z, null);
+            this.fluids.addSource(blockPos.x, blockPos.y, blockPos.z);
+            this.sound.playBucketFill();
+
+            if (this.gameMode !== 'creative') {
+              if (selectedSlot && selectedSlot.count === 1) {
+                this.inventory.setSlot(this.player.selectedSlot, { id: filledBucketId, count: 1 });
+              } else if (selectedSlot) {
+                selectedSlot.count -= 1;
+                this.inventory.setSlot(this.player.selectedSlot, selectedSlot);
+                const leftover = this.inventory.addItem(filledBucketId, 1);
+                if (leftover > 0) {
+                  const spawnPos = this.player.eyePosition.clone().sub(new THREE.Vector3(0, 0.2, 0));
+                  const velocity = new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.2, (Math.random() - 0.5) * 0.2);
+                  this.droppedItems.spawnItem(filledBucketId, 1, spawnPos, velocity, 0.5);
+                }
+              }
+              this.notifyState();
+            }
+            this.placeCooldown = 0.25;
+            return;
+          }
+        }
+
+        // Bucket place water/lava
+        if (heldItemId === 326 || heldItemId === 327) { // Water or Lava Bucket
+          const placePos = blockPos.clone().add(faceNormal);
+          const fluidBlockId = heldItemId === 326 ? 9 : 11;
+
+          const currentBlock = this.chunks.getBlock(placePos.x, placePos.y, placePos.z);
+          const isReplaceable = currentBlock === 0 || BlockRegistry.isFluid(currentBlock) || currentBlock === 31 || currentBlock === 37 || currentBlock === 38; // air, fluid, grass, flowers
+          
+          if (isReplaceable) {
+            this.chunks.setBlock(placePos.x, placePos.y, placePos.z, fluidBlockId);
+            this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, {
+              fluidLevel: 8
+            });
+            this.fluids.addSource(placePos.x, placePos.y, placePos.z, fluidBlockId);
+            this.sound.playBucketEmpty();
+
+            if (this.gameMode !== 'creative') {
+              this.inventory.setSlot(this.player.selectedSlot, { id: 325, count: 1 });
+              this.notifyState();
+            }
+            this.placeCooldown = 0.25;
+            return;
+          }
+        }
 
         const heldItemDef = ItemRegistry.get(heldItemId);
         const isBoatItem = heldItemDef && heldItemDef.name.includes('boat');

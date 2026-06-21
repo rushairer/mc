@@ -553,6 +553,64 @@ export class SoundSystem {
     osc.stop(ctx.currentTime + 0.08);
   }
 
+  playBucketFill() {
+    if (this.playFirstResourceSound(['item.bucket.fill'])) return;
+
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+
+    const bufferSize = ctx.sampleRate * 0.25; // 0.25s
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1000, ctx.currentTime);
+    filter.Q.setValueAtTime(5, ctx.currentTime);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+
+    noise.connect(filter).connect(gain).connect(this.sfxGain!);
+    noise.start();
+  }
+
+  playBucketEmpty() {
+    if (this.playFirstResourceSound(['item.bucket.empty'])) return;
+
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+
+    const bufferSize = ctx.sampleRate * 0.35; // 0.35s
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(400, ctx.currentTime);
+    filter.Q.setValueAtTime(3, ctx.currentTime);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+
+    noise.connect(filter).connect(gain).connect(this.sfxGain!);
+    noise.start();
+  }
+
   playPistonExtend() {
     if (this.playFirstResourceSound(['block.piston.extend'])) return;
 

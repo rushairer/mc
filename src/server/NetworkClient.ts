@@ -195,11 +195,8 @@ export class NetworkClient {
         this.game.player.health = health;
         this.game.player.hunger = hunger;
         this.game.player.oxygen = oxygen;
-        this.game.gameState.health = health;
-        this.game.gameState.hunger = hunger;
-        this.game.gameState.oxygen = oxygen;
-        this.game.gameState.xpLevel = level;
-        this.game.gameState.xpProgress = xpProgress;
+        this.game.xp.setProgress(level, xpProgress);
+        this.game.notifyState();
         break;
       }
 
@@ -290,7 +287,7 @@ export class NetworkClient {
 
       case PacketType.S2C_DROPPED_ITEM_DESPAWN: {
         const { id } = packet.payload;
-        this.game.droppedItems.removeDroppedItem(id);
+        this.game.droppedItems.removeItem(id);
         break;
       }
 
@@ -349,14 +346,14 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_SOUND: {
-        const { type, x, y, z } = packet.payload;
-        if (type === 'break') this.game.sound.playBreak(1);
-        else if (type === 'place') this.game.sound.playPlace(1);
+        const { type } = packet.payload;
+        if (type === 'break') this.game.sound.playBlockBreak(1);
+        else if (type === 'place') this.game.sound.playBlockPlace(1);
         else if (type === 'hurt') this.game.sound.playHurt();
-        else if (type === 'hit') this.game.sound.playHit();
+        else if (type === 'hit') this.game.sound.playMobHurt();
         else if (type === 'pickup') this.game.sound.playPickup();
         else if (type === 'xp') this.game.sound.playXP();
-        else if (type === 'explode') this.game.sound.playExplode();
+        else if (type === 'explode') this.game.sound.playExplosion();
         break;
       }
 

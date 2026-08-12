@@ -4,6 +4,7 @@ import { Chunk } from './Chunk';
 import { BlockRegistry } from './BlockRegistry';
 import { VillageSystem } from '../systems/VillageSystem';
 import type { ItemStack } from '../types';
+import { coordinateRandom } from '../engine/DeterministicRandom';
 
 export enum BiomeType {
   Plains = 0,
@@ -2010,9 +2011,6 @@ export class WorldGen {
   }
 
   private pseudoRandom(x: number, y: number, z: number): number {
-    let h = (x * 374761393 + y * 668265263 + z * 1274126177 + this.seed) | 0;
-    h = (h ^ (h >> 13)) * 1274126177;
-    h = h ^ (h >> 16);
-    return (h & 0x7fffffff) / 0x7fffffff;
+    return coordinateRandom(this.seed, x, y, z);
   }
 }

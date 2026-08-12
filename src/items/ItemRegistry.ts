@@ -1,6 +1,7 @@
 import { BlockRegistry } from '../world/BlockRegistry';
 import rawItems from './data/items.json';
 import type { DataPackItem } from '../systems/DataPackTypes';
+import { inferItemBehaviorId } from '../world/BehaviorIds';
 
 export interface ItemDef {
   id: number; // internal runtime ID: legacy packed ID or generated bridge ID
@@ -21,6 +22,7 @@ export interface ItemDef {
   armorSlot?: 'helmet' | 'chestplate' | 'leggings' | 'boots';
   armorDefense?: number;
   placeBlockId?: number;
+  behaviorId?: string;
 }
 
 // ─── Tool Material Stats ───
@@ -252,6 +254,7 @@ for (const item of rawItems) {
       armorSlot,
       armorDefense,
       placeBlockId: ITEM_PLACE_BLOCK_OVERRIDES[id] ?? (isBlock ? id : undefined),
+      behaviorId: inferItemBehaviorId(name) ?? (category === 'food' ? 'minecraft:food' : undefined),
     };
     items.set(id, itemDef);
     itemsByOfficialId.set(itemOfficialId, itemDef);
@@ -291,6 +294,7 @@ export const ItemRegistry = {
         armorSlot: item.armorSlot,
         armorDefense: item.armorDefense,
         placeBlockId: item.placeBlockId,
+        behaviorId: item.behaviorId ?? inferItemBehaviorId(item.name) ?? (item.category === 'food' ? 'minecraft:food' : undefined),
       };
       items.set(itemDef.id, itemDef);
       itemsByOfficialId.set(itemDef.officialId, itemDef);

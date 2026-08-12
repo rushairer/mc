@@ -1053,8 +1053,14 @@ export class SoundSystem {
         (this.activeAmbientOsc as any).stop();
       } catch (e) {}
     }
-    if (this.ctx) {
-      this.ctx.close();
+    const ctx = this.ctx;
+    this.ctx = null;
+    this.masterGain = null;
+    this.musicGain = null;
+    this.sfxGain = null;
+    this.initialized = false;
+    if (ctx && ctx.state !== 'closed') {
+      void ctx.close().catch(() => {});
     }
   }
 }

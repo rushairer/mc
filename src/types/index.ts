@@ -17,11 +17,43 @@ export interface BlockDef {
   baseId?: number;
   metadata?: number;
   displayName?: string;
+  stateSchema?: BlockStateSchema;
+  collisionShapes?: BlockCollisionShape[];
+  tags?: string[];
+  lootTable?: string;
+  behaviorId?: string;
 }
 
 export type BlockFacing = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
 
+export type BlockStateValue = string | number | boolean;
+export type BlockStateProperties = Record<string, BlockStateValue>;
+
+export interface BlockStatePropertySchema {
+  values: readonly BlockStateValue[];
+  defaultValue: BlockStateValue;
+}
+
+export interface BlockStateSchema {
+  properties: Record<string, BlockStatePropertySchema>;
+}
+
+export interface BlockState {
+  baseId: number;
+  packedId: number;
+  legacyMetadata: number;
+  officialId?: string;
+  name: string;
+  properties: BlockStateProperties;
+}
+
+export interface BlockCollisionShape {
+  min: [number, number, number];
+  max: [number, number, number];
+}
+
 export interface BlockMetadata {
+  blockState?: BlockStateProperties;
   facing?: BlockFacing;
   redstoneType?: 'wire' | 'torch' | 'repeater' | 'piston' | 'lever' | 'button' | 'comparator' | 'observer' | 'daylight_detector' | 'pressure_plate' | 'tripwire_hook' | 'tripwire';
   containerType?: 'chest' | 'barrel' | 'hopper' | 'furnace' | 'smoker' | 'blast_furnace' | 'brewing_stand';
@@ -51,6 +83,7 @@ export interface BlockMetadata {
   compostLevel?: number;
   campfireItems?: (ItemStack | null)[];
   campfireCookTimes?: number[];
+  campfireCookDueTicks?: number[];
 }
 
 export interface SerializedBlockMetadata {
@@ -88,6 +121,7 @@ export interface ItemStack {
   id: number;
   count: number;
   durability?: number;
+  chargedProjectileId?: number;
   customName?: string;
   enchantments?: { id: 'sharpness' | 'efficiency' | 'protection' | 'unbreaking'; level: number }[];
   potion?: {

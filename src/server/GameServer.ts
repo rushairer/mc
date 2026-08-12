@@ -8,6 +8,7 @@ import { ItemRegistry } from '../items/ItemRegistry';
 import { MOB_DEFS, Mob, type MobType } from '../entities/Mob';
 import { CHUNK_SIZE, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
 import type { ItemStack, BlockMetadata } from '../types';
+import { SAVE_SCHEMA_VERSION, SaveSystem, type SaveData } from '../systems/SaveSystem';
 
 const WORLD_SPAWN_X = 8;
 const WORLD_SPAWN_Z = 8;
@@ -286,15 +287,16 @@ export class GameServer {
   async saveWorldLocal(slot: string) {
     if (typeof window === 'undefined' || typeof indexedDB === 'undefined') return;
     
-    // Dynamically request SaveSystem so it does not fail load under pure node
-    const { SaveSystem } = await import('../systems/SaveSystem');
-    
     // We only have one local player on the device
     const localSession = Array.from(this.players.values())[0];
     if (!localSession) return;
 
     // Serialize chunks
-    const chunkList: any[] = [];
+    const dimensions: Record<0 | 1 | 2, { chunks: any[]; mobs: any[] }> = {
+      0: { chunks: [], mobs: [] },
+      1: { chunks: [], mobs: [] },
+      2: { chunks: [], mobs: [] },
+    };
     const collectChunks = (chunksMap: Map<string, Chunk>, dim: number) => {
       for (const chunk of chunksMap.values()) {
         const metadataArray = Array.from(chunk.metadata.entries()).map(([index, meta]) => ({
@@ -302,12 +304,11 @@ export class GameServer {
           metadata: { ...meta }
         }));
 
-        chunkList.push({
+        dimensions[dim as 0 | 1 | 2].chunks.push({
           cx: chunk.cx,
           cz: chunk.cz,
           data: chunk.data,
           metadata: metadataArray,
-          dimension: dim
         });
       }
     };
@@ -317,22 +318,23 @@ export class GameServer {
     collectChunks(this.endChunks, 2);
 
     // Serialize mobs
-    const mobList: any[] = [];
     for (const mob of this.mobs.values()) {
-      mobList.push({
+      const dimension = (mob.dimension === 1 ? 1 : mob.dimension === 2 ? 2 : 0) as 0 | 1 | 2;
+      dimensions[dimension].mobs.push({
         type: mob.type,
         x: mob.position.x,
         y: mob.position.y,
         z: mob.position.z,
         health: mob.health,
-        dimension: mob.dimension,
+        dimension,
         isBaby: mob.isBaby,
         isTamed: mob.isTamed,
         isSitting: mob.isSitting
       });
     }
 
-    const saveData = {
+    const saveData: SaveData = {
+      schemaVersion: SAVE_SCHEMA_VERSION,
       player: {
         x: localSession.x,
         y: localSession.y,
@@ -345,7 +347,7 @@ export class GameServer {
         xpLevel: localSession.xpLevel,
         xpCurrent: localSession.xpCurrent,
         activePotionEffects: [],
-        currentDimension: localSession.dimension
+        currentDimension: localSession.dimension === 1 ? 1 : localSession.dimension === 2 ? 2 : 0
       },
       inventory: {
         slots: localSession.inventory,
@@ -353,8 +355,7 @@ export class GameServer {
         offhand: localSession.offhand
       },
       seed: this.seed,
-      chunks: chunkList,
-      mobs: mobList,
+      dimensions,
       timestamp: Date.now()
     };
 
@@ -370,7 +371,6 @@ export class GameServer {
     if (typeof window === 'undefined' || typeof indexedDB === 'undefined') return;
 
     try {
-      const { SaveSystem } = await import('../systems/SaveSystem');
       const hasSave = await SaveSystem.hasSave(slot);
       if (!hasSave) return;
 
@@ -396,7 +396,7 @@ export class GameServer {
       let migratedLegacySpawn = false;
       if (
         this.shouldMigrateLegacySpawn(session.x, session.z, session.dimension) ||
-        this.isSavedSpawnColumnStale(data.chunks, session.x, session.z, session.dimension) ||
+        this.isSavedSpawnColumnStale(data.dimensions[0]?.chunks, session.x, session.z, session.dimension) ||
         this.isDamagedSpawnSave(session.x, session.y, session.z, session.health, session.dimension)
       ) {
         const spawn = this.findSafeWorldSpawnPosition();
@@ -418,37 +418,36 @@ export class GameServer {
       this.endChunks.clear();
 
       // Deserialise chunks
-      for (const cData of data.chunks) {
-        if (migratedLegacySpawn && this.isChunkNearSession(cData.cx, cData.cz, cData.dimension ?? 0, session)) {
-          continue;
-        }
+      for (const dimension of [0, 1, 2] as const) {
+        for (const cData of data.dimensions[dimension]?.chunks ?? []) {
+          if (migratedLegacySpawn && this.isChunkNearSession(cData.cx, cData.cz, dimension, session)) continue;
 
-        const chunk = new Chunk(cData.cx, cData.cz);
-        chunk.data.set(cData.data);
+          const chunk = new Chunk(cData.cx, cData.cz);
+          chunk.data.set(cData.data);
         
-        if (cData.metadata) {
-          for (const m of cData.metadata) {
-            chunk.metadata.set(m.index, { ...m.metadata });
+          if (cData.metadata) {
+            for (const m of cData.metadata) {
+              chunk.metadata.set(m.index, { ...m.metadata });
+            }
           }
-        }
         
-        const dim = cData.dimension ?? 0;
-        if (dim === 0) this.overworldChunks.set(`${chunk.cx},${chunk.cz}`, chunk);
-        else if (dim === 1) this.netherChunks.set(`${chunk.cx},${chunk.cz}`, chunk);
-        else if (dim === 2) this.endChunks.set(`${chunk.cx},${chunk.cz}`, chunk);
+          if (dimension === 0) this.overworldChunks.set(`${chunk.cx},${chunk.cz}`, chunk);
+          else if (dimension === 1) this.netherChunks.set(`${chunk.cx},${chunk.cz}`, chunk);
+          else this.endChunks.set(`${chunk.cx},${chunk.cz}`, chunk);
+        }
       }
 
       // Deserialise mobs
       this.mobs.clear();
 
-      if (data.mobs) {
-        for (const mData of data.mobs) {
+      for (const dimension of [0, 1, 2] as const) {
+        for (const mData of data.dimensions[dimension]?.mobs ?? []) {
           this.spawnMob(
             mData.type,
             mData.x,
             mData.y,
             mData.z,
-            mData.dimension ?? 0,
+            dimension,
             mData.isBaby,
             mData.isTamed,
             mData.isSitting
@@ -518,7 +517,7 @@ export class GameServer {
   }
 
   private isSavedSpawnColumnStale(
-    chunks: { cx: number; cz: number; data: Uint16Array; dimension?: number }[] | undefined,
+    chunks: { cx: number; cz: number; data: Uint16Array }[] | undefined,
     x: number,
     z: number,
     dimension: number
@@ -533,7 +532,7 @@ export class GameServer {
 
     const cx = Math.floor(wx / CHUNK_SIZE);
     const cz = Math.floor(wz / CHUNK_SIZE);
-    const chunk = chunks.find((c) => c.cx === cx && c.cz === cz && (c.dimension ?? 0) === 0);
+    const chunk = chunks.find((c) => c.cx === cx && c.cz === cz);
     if (!chunk) return false;
 
     const lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;

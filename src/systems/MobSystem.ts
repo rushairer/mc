@@ -5,10 +5,10 @@ import { BlockRegistry } from '../world/BlockRegistry';
 import { VillageSystem, type VillagerProfession } from './VillageSystem';
 import type { WorldGen } from '../world/WorldGen';
 import { BiomeType } from '../world/WorldGen';
-import type { SerializedMob } from './SaveSystem';
+import { MAX_RESTORED_MOBS_PER_DIMENSION, type SerializedMob } from './SaveSystem';
 import type { EndGenerator } from '../world/EndGenerator';
 
-const MAX_MOBS = 40;
+const MAX_MOBS = 24;
 const SPAWN_INTERVAL = 2.0; // seconds between spawn attempts
 const SPAWN_RANGE = 24;     // blocks from player to attempt spawning
 const DESPAWN_RANGE = 80;
@@ -161,15 +161,14 @@ export class MobSystem {
 
           // Spawn baby
           const baby = this.spawnMob(mobA.def.type, midPos.x, midPos.y, midPos.z);
-          baby.isBaby = true;
-          baby.babyAge = BABY_GROW_SECONDS;
-          if ((mobA.def.type === 'wolf' || mobA.def.type === 'cat') && mobA.isTamed && mobB.isTamed) {
-            baby.isTamed = true;
-            baby.isSitting = false;
-          }
-
-          if (onMobBreed) {
-            onMobBreed(mobA.def.type, midPos);
+          if (baby) {
+            baby.isBaby = true;
+            baby.babyAge = BABY_GROW_SECONDS;
+            if ((mobA.def.type === 'wolf' || mobA.def.type === 'cat') && mobA.isTamed && mobB.isTamed) {
+              baby.isTamed = true;
+              baby.isSitting = false;
+            }
+            if (onMobBreed) onMobBreed(mobA.def.type, midPos);
           }
         } else if (dist < 8.0) {
           // Attract towards each other
@@ -318,11 +317,10 @@ export class MobSystem {
     }
   }
 
-  spawnMob(type: MobType, x: number, y: number, z: number, size?: number, profession?: VillagerProfession): Mob {
+  spawnMob(type: MobType, x: number, y: number, z: number, size?: number, profession?: VillagerProfession): Mob | null {
+    const atRuntimeCap = this.mobs.size >= MAX_RESTORED_MOBS_PER_DIMENSION && type !== 'wither';
+    if ((this.difficulty === 'peaceful' && MOB_DEFS[type].hostile) || atRuntimeCap) return null;
     const mob = new Mob(type, x, y, z, size, profession);
-    if (this.difficulty === 'peaceful' && mob.def.hostile) {
-      return mob; // Return but don't add to map/scene so it gets discarded
-    }
     this.mobs.set(mob.id, mob);
     this.scene.add(mob.mesh);
     return mob;
@@ -355,7 +353,7 @@ export class MobSystem {
     this.dispose();
     if (!savedMobs) return;
 
-    for (const saved of savedMobs) {
+    for (const saved of savedMobs.slice(0, MAX_RESTORED_MOBS_PER_DIMENSION)) {
       if (saved.dimension !== undefined && saved.dimension !== dimension) continue;
       if (!MOB_DEFS[saved.type]) continue;
 
@@ -363,6 +361,7 @@ export class MobSystem {
         ? saved.villagerProfession
         : undefined;
       const mob = this.spawnMob(saved.type, saved.x, saved.y, saved.z, saved.size, profession);
+      if (!mob) continue;
       mob.isBaby = !!saved.isBaby;
       mob.babyAge = Math.max(0, saved.babyAge ?? 0);
       mob.loveTimer = Math.max(0, saved.loveTimer ?? 0);
@@ -391,14 +390,23 @@ export class MobSystem {
     const villages = VillageSystem.getNearbyVillages(worldGen, playerPos.x, playerPos.z, 96);
     for (const village of villages) {
       if (this.spawnedVillages.has(village.id)) continue;
+      let blockedByCap = false;
       for (const point of village.spawnPoints) {
+        if (this.mobs.size >= MAX_RESTORED_MOBS_PER_DIMENSION) {
+          blockedByCap = true;
+          break;
+        }
         const x = Math.floor(point.x);
         const y = Math.floor(point.y);
         const z = Math.floor(point.z);
+        const existing = Array.from(this.mobs.values()).some((mob) =>
+          mob.def.type === 'villager' && mob.position.distanceTo(new THREE.Vector3(point.x, point.y, point.z)) < 2.2
+        );
+        if (existing) continue;
         if (getBlock(x, y, z) !== 0 || getBlock(x, y + 1, z) !== 0) continue;
         this.spawnMob('villager', point.x, point.y, point.z, undefined, village.profession);
       }
-      this.spawnedVillages.add(village.id);
+      if (!blockedByCap) this.spawnedVillages.add(village.id);
     }
   }
 
@@ -535,16 +543,25 @@ export class MobSystem {
         ? [[-3, 0, -3], [3, 0, 3], [0, 5, 2]]
         : [[-2, 0, -2], [2, 4, 2], [0, 12, 0]];
 
+      let blockedByCap = false;
       for (const [dx, dy, dz] of offsets) {
+        if (this.mobs.size >= MAX_RESTORED_MOBS_PER_DIMENSION) {
+          blockedByCap = true;
+          break;
+        }
         const x = Math.floor(spawn.x + dx);
         const y = Math.floor(spawn.y + dy);
         const z = Math.floor(spawn.z + dz);
+        const existing = Array.from(this.mobs.values()).some((mob) =>
+          mob.def.type === 'pillager' && mob.position.distanceTo(new THREE.Vector3(x + 0.5, y, z + 0.5)) < 2.2
+        );
+        if (existing) continue;
         if (getBlock(x, y, z) !== 0 || getBlock(x, y + 1, z) !== 0) continue;
         if (getBlock(x, y - 1, z) === 0) continue;
         this.spawnMob('pillager', x + 0.5, y, z + 0.5);
       }
 
-      this.spawnedIllagerStructures.add(spawn.id);
+      if (!blockedByCap) this.spawnedIllagerStructures.add(spawn.id);
     }
   }
 
@@ -556,6 +573,7 @@ export class MobSystem {
     const spawns = endGenerator.getNearbyShulkerSpawns(playerPos.x, playerPos.z, 96);
     for (const spawn of spawns) {
       if (this.spawnedEndCities.has(spawn.id)) continue;
+      if (this.mobs.size >= MAX_RESTORED_MOBS_PER_DIMENSION) continue;
 
       const x = Math.floor(spawn.x);
       const y = Math.floor(spawn.y);

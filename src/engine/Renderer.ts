@@ -77,7 +77,7 @@ export class Renderer {
     // Moon directional light (dim blue)
     this.moonLight = new THREE.DirectionalLight(0x8888ff, 0.0);
     this.moonLight.position.set(-100, 200, -100);
-    this.moonLight.castShadow = true;
+    this.moonLight.castShadow = false;
     this.moonLight.shadow.mapSize.width = 1024;
     this.moonLight.shadow.mapSize.height = 1024;
     this.moonLight.shadow.camera.near = 0.5;

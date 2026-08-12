@@ -1,295 +1,221 @@
+import { WORLD_HEIGHT } from '../constants';
 import { BlockRegistry } from '../world/BlockRegistry';
 import type { BlockMetadata } from '../types';
 
-interface Coord {
+export interface FluidTickPosition {
   x: number;
   y: number;
   z: number;
 }
 
+export interface FluidTickAccess {
+  getBlock(x: number, y: number, z: number): number;
+  getBlockMeta(x: number, y: number, z: number): BlockMetadata | undefined;
+  setBlock(x: number, y: number, z: number, id: number): void;
+  setBlockMeta(x: number, y: number, z: number, meta: BlockMetadata | null, markDirty?: boolean): void;
+}
+
+export interface FluidTickResult {
+  changed: boolean;
+  next: FluidTickPosition[];
+  delayTicks: number;
+}
+
+/** Stateless fluid rules. Pending work lives in the shared world TickScheduler. */
 export class FluidSystem {
-  private queue: Coord[] = [];
-  private queuedKeys: Set<string> = new Set();
-  private tickTimer = 0;
-  private tickInterval = 0.25; // seconds between fluid ticks
+  processTick(x: number, y: number, z: number, access: FluidTickAccess): FluidTickResult {
+    if (y < 0 || y >= WORLD_HEIGHT) return { changed: false, next: [], delayTicks: 5 };
 
-  /** Called when a water/lava block is placed or updated. */
-  addSource(x: number, y: number, z: number, type?: number) {
-    this.enqueue(x, y, z);
-    // Also enqueue neighbors to update immediately
-    this.enqueue(x - 1, y, z);
-    this.enqueue(x + 1, y, z);
-    this.enqueue(x, y - 1, z);
-    this.enqueue(x, y + 1, z);
-    this.enqueue(x, y, z - 1);
-    this.enqueue(x, y, z + 1);
-  }
-
-  private enqueue(x: number, y: number, z: number) {
-    const key = `${x},${y},${z}`;
-    if (!this.queuedKeys.has(key)) {
-      this.queue.push({ x, y, z });
-      this.queuedKeys.add(key);
-    }
-  }
-
-  update(
-    dt: number,
-    getBlock: (x: number, y: number, z: number) => number,
-    getBlockMeta: (x: number, y: number, z: number) => BlockMetadata | undefined,
-    setBlock: (x: number, y: number, z: number, id: number) => void,
-    setBlockMeta: (x: number, y: number, z: number, meta: BlockMetadata | null, markDirty?: boolean) => void
-  ) {
-    this.tickTimer += dt;
-    if (this.tickTimer < this.tickInterval) return;
-    this.tickTimer = 0;
-
-    const maxProcess = Math.min(this.queue.length, 250);
-    if (maxProcess === 0) return;
-
-    // Pop coordinate batch
-    const batch = this.queue.splice(0, maxProcess);
-    for (const coord of batch) {
-      const key = `${coord.x},${coord.y},${coord.z}`;
-      this.queuedKeys.delete(key);
-    }
-
-    const nextQueue: Coord[] = [];
-    const nextQueuedKeys: Set<string> = new Set();
-
+    const next = new Map<string, FluidTickPosition>();
     const enqueueNext = (nx: number, ny: number, nz: number) => {
-      const key = `${nx},${ny},${nz}`;
-      if (!this.queuedKeys.has(key) && !nextQueuedKeys.has(key)) {
-        nextQueue.push({ x: nx, y: ny, z: nz });
-        nextQueuedKeys.add(key);
-      }
+      if (ny < 0 || ny >= WORLD_HEIGHT) return;
+      const position = { x: Math.floor(nx), y: Math.floor(ny), z: Math.floor(nz) };
+      next.set(`${position.x},${position.y},${position.z}`, position);
+    };
+    let changed = false;
+    const setBlock = (sx: number, sy: number, sz: number, id: number) => {
+      if (access.getBlock(sx, sy, sz) === id) return;
+      access.setBlock(sx, sy, sz, id);
+      changed = true;
     };
 
-    for (const { x, y, z } of batch) {
-      const block = getBlock(x, y, z);
-      const baseId = block & 0x3FF;
+    const block = access.getBlock(x, y, z);
+    const baseId = block & 0x3FF;
+    const isWater = baseId === 8 || baseId === 9;
+    const isLava = baseId === 10 || baseId === 11;
+    const isAir = baseId === 0;
+    if (!isWater && !isLava && !isAir) return { changed: false, next: [], delayTicks: 5 };
 
-      const isWater = baseId === 8 || baseId === 9;
-      const isLava = baseId === 10 || baseId === 11;
-      const isAir = baseId === 0;
+    let fluidType: 'water' | 'lava' | null = null;
+    let currentLevel = 0;
+    let isSource = false;
 
-      // We only simulate fluids and air cells that fluids can flow into
-      if (!isWater && !isLava && !isAir) continue;
+    if (isWater) {
+      fluidType = 'water';
+      isSource = baseId === 9;
+      currentLevel = isSource ? 8 : (access.getBlockMeta(x, y, z)?.fluidLevel ?? 7);
+    } else if (isLava) {
+      fluidType = 'lava';
+      isSource = baseId === 11;
+      currentLevel = isSource ? 8 : (access.getBlockMeta(x, y, z)?.fluidLevel ?? 4);
+    }
 
-      let fluidType: 'water' | 'lava' | null = null;
-      let curL = 0; // 0 to 8
-      let isSource = false;
-
-      if (isWater) {
-        fluidType = 'water';
-        isSource = baseId === 9;
-        const meta = getBlockMeta(x, y, z);
-        curL = isSource ? 8 : (meta?.fluidLevel ?? 7);
-      } else if (isLava) {
-        fluidType = 'lava';
-        isSource = baseId === 11;
-        const meta = getBlockMeta(x, y, z);
-        curL = isSource ? 8 : (meta?.fluidLevel ?? 4);
-      }
-
-      // Check fluid-fluid interaction first
-      if (fluidType) {
-        const reacted = this.handleFluidInteraction(x, y, z, fluidType, getBlock, setBlock);
-        if (reacted) {
-          // Block was transformed to solid (e.g. cobblestone/obsidian)
-          enqueueNext(x, y - 1, z);
-          enqueueNext(x, y + 1, z);
-          enqueueNext(x - 1, y, z);
-          enqueueNext(x + 1, y, z);
-          enqueueNext(x, y, z - 1);
-          enqueueNext(x, y, z + 1);
-          continue;
-        }
-      }
-
-      if (isSource) {
-        // Source blocks are stable, just try to spread to neighbors
-        this.spreadFromSource(x, y, z, fluidType!, getBlock, enqueueNext);
-        continue;
-      }
-
-      // Flowing fluid or air block: calculate target state
-      const result = this.calculateTargetLevel(x, y, z, getBlock, getBlockMeta);
-      const tgtL = result.level;
-      const tgtType = result.type;
-
-      if (tgtL !== curL || (tgtL > 0 && tgtType !== fluidType)) {
-        if (tgtL === 0) {
-          // Dry up
-          setBlock(x, y, z, 0);
-          setBlockMeta(x, y, z, null);
-        } else {
-          // Flowing fluid update
-          const flowId = tgtType === 'water' ? 8 : 10;
-          const sourceId = tgtType === 'water' ? 9 : 11;
-          const finalId = (tgtL === 8) ? sourceId : flowId;
-
-          setBlock(x, y, z, finalId);
-          setBlockMeta(x, y, z, { fluidLevel: tgtL }, true);
-        }
-
-        // Notify neighbors of state change
-        enqueueNext(x, y - 1, z);
-        enqueueNext(x, y + 1, z);
-        enqueueNext(x - 1, y, z);
-        enqueueNext(x + 1, y, z);
-        enqueueNext(x, y, z - 1);
-        enqueueNext(x, y, z + 1);
-      } else if (tgtL > 0) {
-        // State remains same, try to spread further
-        this.spreadFromFlowing(x, y, z, tgtType, tgtL, getBlock, enqueueNext);
+    if (fluidType) {
+      const reacted = this.handleFluidInteraction(x, y, z, fluidType, access.getBlock, setBlock);
+      if (reacted) {
+        this.enqueueNeighbors(x, y, z, enqueueNext);
+        return {
+          changed,
+          next: Array.from(next.values()),
+          delayTicks: fluidType === 'lava' ? 10 : 5,
+        };
       }
     }
 
-    // Re-enqueue for subsequent meta-ticks
-    for (const coord of nextQueue) {
-      this.enqueue(coord.x, coord.y, coord.z);
+    if (isSource) {
+      this.spreadFromSource(x, y, z, access.getBlock, enqueueNext);
+      return {
+        changed,
+        next: Array.from(next.values()),
+        delayTicks: fluidType === 'lava' ? 10 : 5,
+      };
     }
+
+    const target = this.calculateTargetLevel(x, y, z, access.getBlock, access.getBlockMeta);
+    if (target.level !== currentLevel || (target.level > 0 && target.type !== fluidType)) {
+      if (target.level === 0) {
+        setBlock(x, y, z, 0);
+        access.setBlockMeta(x, y, z, null);
+      } else {
+        const flowId = target.type === 'water' ? 8 : 10;
+        const sourceId = target.type === 'water' ? 9 : 11;
+        setBlock(x, y, z, target.level === 8 ? sourceId : flowId);
+        access.setBlockMeta(x, y, z, { fluidLevel: target.level }, true);
+      }
+      this.enqueueNeighbors(x, y, z, enqueueNext);
+    } else if (target.level > 0) {
+      this.spreadFromFlowing(x, y, z, target.type, target.level, access.getBlock, enqueueNext);
+    }
+
+    return {
+      changed,
+      next: Array.from(next.values()),
+      delayTicks: target.type === 'lava' ? 10 : 5,
+    };
+  }
+
+  private enqueueNeighbors(
+    x: number,
+    y: number,
+    z: number,
+    enqueue: (x: number, y: number, z: number) => void,
+  ) {
+    enqueue(x, y - 1, z);
+    enqueue(x, y + 1, z);
+    enqueue(x - 1, y, z);
+    enqueue(x + 1, y, z);
+    enqueue(x, y, z - 1);
+    enqueue(x, y, z + 1);
   }
 
   private handleFluidInteraction(
-    x: number, y: number, z: number,
+    x: number,
+    y: number,
+    z: number,
     type: 'water' | 'lava',
     getBlock: (x: number, y: number, z: number) => number,
-    setBlock: (x: number, y: number, z: number, id: number) => void
+    setBlock: (x: number, y: number, z: number, id: number) => void,
   ): boolean {
-    const dirs = [[0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
-    for (const [dx, dy, dz] of dirs) {
-      const neighbor = getBlock(x + dx, y + dy, z + dz);
-      const neighBase = neighbor & 0x3FF;
-
-      if (type === 'water') {
-        if (neighBase === 10 || neighBase === 11) {
-          // Water + Lava source = Obsidian (49)
-          // Water + Flowing Lava = Cobblestone (4)
-          const isSource = neighBase === 11;
-          setBlock(x + dx, y + dy, z + dz, isSource ? 49 : 4);
-        }
-      } else {
-        if (neighBase === 8 || neighBase === 9) {
-          // Lava + Water source/flowing = Stone (1) if flowing from above, otherwise Cobblestone (4)
-          const isTop = dy === -1; // water neighbor is below lava
-          setBlock(x, y, z, isTop ? 1 : 4);
-          return true; // we are transformed, stop processing
-        }
+    const directions = [[0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
+    for (const [dx, dy, dz] of directions) {
+      const neighborBaseId = getBlock(x + dx, y + dy, z + dz) & 0x3FF;
+      if (type === 'water' && (neighborBaseId === 10 || neighborBaseId === 11)) {
+        setBlock(x + dx, y + dy, z + dz, neighborBaseId === 11 ? 49 : 4);
+      } else if (type === 'lava' && (neighborBaseId === 8 || neighborBaseId === 9)) {
+        setBlock(x, y, z, dy === -1 ? 1 : 4);
+        return true;
       }
     }
     return false;
   }
 
   private calculateTargetLevel(
-    x: number, y: number, z: number,
+    x: number,
+    y: number,
+    z: number,
     getBlock: (x: number, y: number, z: number) => number,
-    getBlockMeta: (x: number, y: number, z: number) => BlockMetadata | undefined
+    getBlockMeta: (x: number, y: number, z: number) => BlockMetadata | undefined,
   ): { level: number; type: 'water' | 'lava' } {
-    // 1. Flow down from above first
     const aboveId = getBlock(x, y + 1, z) & 0x3FF;
-    if (aboveId === 8 || aboveId === 9) {
-      return { level: 8, type: 'water' };
-    }
-    if (aboveId === 10 || aboveId === 11) {
-      return { level: 8, type: 'lava' };
-    }
+    if (aboveId === 8 || aboveId === 9) return { level: 8, type: 'water' };
+    if (aboveId === 10 || aboveId === 11) return { level: 8, type: 'lava' };
 
-    // 2. Flow horizontally from neighbors
-    let maxWaterL = 0;
-    let maxLavaL = 0;
+    let maxWaterLevel = 0;
+    let maxLavaLevel = 0;
     let sourceWaterCount = 0;
-
-    const dirs = [[-1, 0, 0], [1, 0, 0], [0, 0, -1], [0, 0, 1]];
-    for (const [dx, , dz] of dirs) {
+    const directions = [[-1, 0, 0], [1, 0, 0], [0, 0, -1], [0, 0, 1]];
+    for (const [dx, , dz] of directions) {
       const id = getBlock(x + dx, y, z + dz);
       const baseId = id & 0x3FF;
-      const meta = getBlockMeta(x + dx, y, z + dz);
-
+      const metadata = getBlockMeta(x + dx, y, z + dz);
       if (baseId === 8 || baseId === 9) {
-        const lvl = baseId === 9 ? 8 : (meta?.fluidLevel ?? 1);
-        if (lvl > maxWaterL) maxWaterL = lvl;
-        if (lvl === 8) sourceWaterCount++;
+        const level = baseId === 9 ? 8 : (metadata?.fluidLevel ?? 1);
+        maxWaterLevel = Math.max(maxWaterLevel, level);
+        if (level === 8) sourceWaterCount++;
       } else if (baseId === 10 || baseId === 11) {
-        const lvl = baseId === 11 ? 8 : (meta?.fluidLevel ?? 1);
-        if (lvl > maxLavaL) maxLavaL = lvl;
+        const level = baseId === 11 ? 8 : (metadata?.fluidLevel ?? 1);
+        maxLavaLevel = Math.max(maxLavaLevel, level);
       }
     }
 
-    let waterTgt = Math.max(0, maxWaterL - 1);
-    let lavaTgt = Math.max(0, maxLavaL - 2); // Lava flows shorter (4 blocks max) in Overworld
-
-    // 3. Infinite water source rule (only for water)
+    let waterTarget = Math.max(0, maxWaterLevel - 1);
+    const lavaTarget = Math.max(0, maxLavaLevel - 2);
     if (sourceWaterCount >= 2) {
       const belowId = getBlock(x, y - 1, z) & 0x3FF;
-      const belowSolid = BlockRegistry.isSolid(getBlock(x, y - 1, z));
-      const belowWater = belowId === 8 || belowId === 9;
-      if (belowSolid || belowWater) {
-        waterTgt = 8;
+      if (BlockRegistry.isSolid(getBlock(x, y - 1, z)) || belowId === 8 || belowId === 9) {
+        waterTarget = 8;
       }
     }
 
-    if (waterTgt >= lavaTgt && waterTgt > 0) {
-      return { level: waterTgt, type: 'water' };
-    } else if (lavaTgt > 0) {
-      return { level: lavaTgt, type: 'lava' };
-    }
-
+    if (waterTarget >= lavaTarget && waterTarget > 0) return { level: waterTarget, type: 'water' };
+    if (lavaTarget > 0) return { level: lavaTarget, type: 'lava' };
     return { level: 0, type: 'water' };
   }
 
   private spreadFromSource(
-    x: number, y: number, z: number,
-    type: 'water' | 'lava',
+    x: number,
+    y: number,
+    z: number,
     getBlock: (x: number, y: number, z: number) => number,
-    enqueueNext: (nx: number, ny: number, nz: number) => void
+    enqueueNext: (x: number, y: number, z: number) => void,
   ) {
-    // Flow down
     const belowId = getBlock(x, y - 1, z) & 0x3FF;
-    if (belowId === 0 || BlockRegistry.isFluid(belowId)) {
-      enqueueNext(x, y - 1, z);
-    }
-
-    // Flow horizontally
-    const dirs = [[-1, 0, 0], [1, 0, 0], [0, 0, -1], [0, 0, 1]];
-    for (const [dx, , dz] of dirs) {
+    if (belowId === 0 || BlockRegistry.isFluid(belowId)) enqueueNext(x, y - 1, z);
+    for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
       const id = getBlock(x + dx, y, z + dz) & 0x3FF;
-      if (id === 0 || BlockRegistry.isFluid(id)) {
-        enqueueNext(x + dx, y, z + dz);
-      }
+      if (id === 0 || BlockRegistry.isFluid(id)) enqueueNext(x + dx, y, z + dz);
     }
   }
 
   private spreadFromFlowing(
-    x: number, y: number, z: number,
+    x: number,
+    y: number,
+    z: number,
     type: 'water' | 'lava',
     level: number,
     getBlock: (x: number, y: number, z: number) => number,
-    enqueueNext: (nx: number, ny: number, nz: number) => void
+    enqueueNext: (x: number, y: number, z: number) => void,
   ) {
-    // Flow down
     const belowId = getBlock(x, y - 1, z) & 0x3FF;
     if (belowId === 0 || BlockRegistry.isFluid(belowId)) {
       enqueueNext(x, y - 1, z);
       return;
     }
-
-    // Flow horizontally
     const step = type === 'water' ? 1 : 2;
-    if (level > step) {
-      const dirs = [[-1, 0, 0], [1, 0, 0], [0, 0, -1], [0, 0, 1]];
-      for (const [dx, , dz] of dirs) {
-        const id = getBlock(x + dx, y, z + dz) & 0x3FF;
-        if (id === 0 || BlockRegistry.isFluid(id)) {
-          enqueueNext(x + dx, y, z + dz);
-        }
-      }
+    if (level <= step) return;
+    for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      const id = getBlock(x + dx, y, z + dz) & 0x3FF;
+      if (id === 0 || BlockRegistry.isFluid(id)) enqueueNext(x + dx, y, z + dz);
     }
-  }
-
-  clear() {
-    this.queue = [];
-    this.queuedKeys.clear();
   }
 }

@@ -11,13 +11,21 @@ import { ItemRegistry } from '../items/ItemRegistry';
 import { SurvivalSystem } from '../systems/SurvivalSystem';
 import { MobSystem } from '../systems/MobSystem';
 import { Mob } from '../entities/Mob';
+import { shouldTameEntity } from '../entities/EntityInteractionRules';
 import { ParticleSystem } from '../systems/ParticleSystem';
 import { FluidSystem } from '../systems/FluidSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
 import { SoundSystem } from '../systems/SoundSystem';
 import { ResourcePackSystem } from '../systems/ResourcePackSystem';
 import { DataPackSystem } from '../systems/DataPackSystem';
-import { SaveSystem, type SaveData } from '../systems/SaveSystem';
+import {
+  SAVE_SCHEMA_VERSION,
+  SaveSystem,
+  type SaveData,
+  type SaveDimensionId,
+  type SavedChunk,
+  type SerializedMob,
+} from '../systems/SaveSystem';
 import { RedstoneSystem, type RedstoneEntity } from '../systems/RedstoneSystem';
 import { ProjectileSystem, type ProjectileType } from '../systems/ProjectileSystem';
 import { CommandSystem } from '../systems/CommandSystem';
@@ -40,6 +48,18 @@ import type { Enchantment } from '../systems/EnchantSystem';
 import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '../types';
 import { NetworkClient } from '../server/NetworkClient';
 import { PacketType } from '../server/NetworkProtocol';
+import { coordinateRandom } from './DeterministicRandom';
+import { TickScheduler, type ScheduledTick } from '../systems/TickScheduler';
+import {
+  BehaviorRegistry,
+  type BlockInteractionContext,
+  type BlockPosition,
+  type EntityInteractionContext,
+  type ItemInteractionContext,
+  type ItemUseStopReason,
+  type WorldContext,
+} from '../world/BehaviorRegistry';
+import type { WorldTickPayload, WorldTickType } from '../world/WorldTick';
 
 const HONEY_BOTTLE_ID = 454;
 const GLASS_BOTTLE_ID = 374;
@@ -68,9 +88,10 @@ const BOW_MIN_RELEASE_TIME = 0.15;
 const BOW_BASE_DAMAGE = 6;
 const BOW_MIN_SPEED = 7;
 const BOW_MAX_SPEED = 30;
+const CROSSBOW_CHARGE_TIME = 1.25;
 const WORLD_SPAWN_X = 8;
 const WORLD_SPAWN_Z = 8;
-const CAMPFIRE_COOK_TIME = 30;
+const CAMPFIRE_COOK_TICKS = 30 * 20;
 
 export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause' | 'end_poem' | 'sign_edit' | 'advancements' | 'map' | 'book';
 
@@ -81,6 +102,16 @@ type FishingBobberState = {
   phase: 'flying' | 'waiting' | 'hooked';
   waitTimer: number;
   hookedTimer: number;
+};
+
+type GameBlockInteractionContext = BlockInteractionContext;
+type GameItemInteractionContext = ItemInteractionContext;
+type GameEntityInteractionContext = EntityInteractionContext<Mob | Vehicle>;
+type ActiveItemUse = {
+  itemId: number;
+  slotIndex: number;
+  elapsedSeconds: number;
+  stackSnapshot: ItemStack;
 };
 
 export interface GameState {
@@ -204,6 +235,7 @@ export class Game {
   private seed = 12345;
   private gameTime = 0.05; // 0=sunrise, 0.25=noon, 0.5=sunset, 0.75=midnight
   private damageFlashTimer = 0;
+  private spawnProtectionTimer = 0;
   private swordSwingTimer = 0;
   private attackCooldownTimer = 0;
   private attackCooldownDuration = 0.625;
@@ -213,6 +245,7 @@ export class Game {
   private fishingBobber: FishingBobberState | null = null;
   private eatingTimer = 0;
   private chewSoundTimer = 0;
+  private activeItemUse: ActiveItemUse | null = null;
   private stepTimer = 0;
   private perspectiveMode: 'first' | 'third' = 'first';
   private container: HTMLElement;
@@ -226,10 +259,18 @@ export class Game {
   private lastLightRebuildTime = -1;
   private lightScanTimer = 0;
   private ambientTimer = 0;
-  private farmingTickTimer = 0;
+  private farmingTickAccumulator = 0;
+  private farmingSimulationSequence = 0;
   private furnaceTickTimer = 0;
   private particleScanTimer = 0;
   private ambientParticleSources: { x: number; y: number; z: number; type: 'torch' | 'furnace' | 'enchanting_table' }[] = [];
+  private savedMobsByDimension: Partial<Record<SaveDimensionId, SerializedMob[]>> = {};
+  private worldTickScheduler = new TickScheduler<WorldTickType, WorldTickPayload>(20);
+  private behaviors = new BehaviorRegistry<
+    GameBlockInteractionContext,
+    GameItemInteractionContext,
+    GameEntityInteractionContext
+  >();
 
   activeSlot: string = 'world_1';
 
@@ -314,6 +355,7 @@ export class Game {
 
     this.gamerules = new GameRuleSystem();
     this.advancements = new AdvancementSystem(this.sound);
+    this.registerBehaviors();
     this.syncGamerulesToSystems();
 
     this.running = true;
@@ -335,6 +377,530 @@ export class Game {
     if (!pack) return;
     DataPackSystem.apply(pack);
     console.info(`Data pack loaded: ${pack.manifest.pack.name}`);
+  }
+
+  private registerBehaviors() {
+    this.behaviors.registerBlock(['cauldron', 'water_cauldron', 'lava_cauldron'], {
+      id: 'minecraft:cauldron',
+      interact: ({ position, block, heldItem }) => ({
+        handled: this.tryUseCauldronWithBucket(
+          position.x,
+          position.y,
+          position.z,
+          block.name,
+          heldItem?.id ?? 0,
+          heldItem,
+        ),
+        cooldown: 0.25,
+      }),
+    });
+    this.behaviors.registerBlock('composter', {
+      id: 'minecraft:composter',
+      interact: ({ position, block, heldItem }) => ({
+        handled: this.tryUseComposter(position.x, position.y, position.z, block.name, heldItem),
+        cooldown: 0.25,
+      }),
+    });
+    this.behaviors.registerBlock('cake', {
+      id: 'minecraft:cake',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.eatCakeBlock(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
+    this.behaviors.registerBlock('bell', {
+      id: 'minecraft:bell',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.ringBell(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.35 };
+      },
+    });
+    this.behaviors.registerBlock(['campfire', 'soul_campfire'], {
+      id: 'minecraft:campfire',
+      interact: ({ position, heldItem }) => ({
+        handled: this.tryUseCampfire(position.x, position.y, position.z, heldItem),
+        cooldown: 0.25,
+      }),
+      scheduledTick: (_world, position, reason) => {
+        if (reason === 'campfire_cook') {
+          this.completeCampfireCooking(position.x, position.y, position.z);
+        }
+      },
+    });
+
+    this.behaviors.registerBlock(['furnace', 'lit_furnace', 'smoker', 'blast_furnace'], {
+      id: 'minecraft:furnace',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.openFurnaceUI(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    this.behaviors.registerBlock('crafting_table', {
+      id: 'minecraft:crafting_table',
+      preventsItemUse: true,
+      interact: () => {
+        this.openCraftingTableUI();
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    this.behaviors.registerBlock(['chest', 'barrel'], {
+      id: 'minecraft:storage',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.openChestUI(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    this.behaviors.registerBlock('hopper', {
+      id: 'minecraft:hopper',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.openHopperUI(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    this.behaviors.registerBlock('enchanting_table', {
+      id: 'minecraft:enchanting_table',
+      preventsItemUse: true,
+      interact: () => {
+        this.openEnchantUI();
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    this.behaviors.registerBlock(['anvil', 'chipped_anvil', 'damaged_anvil'], {
+      id: 'minecraft:anvil',
+      preventsItemUse: true,
+      interact: () => {
+        this.openAnvilUI();
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    this.behaviors.registerBlock('brewing_stand', {
+      id: 'minecraft:brewing_stand',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.openBrewingUI(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    this.behaviors.registerBlock('wooden_door', {
+      id: 'minecraft:door',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.toggleDoor(position.x, position.y, position.z);
+        this.sound.playLever();
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
+    this.behaviors.registerBlock('trapdoor', {
+      id: 'minecraft:trapdoor',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.toggleTrapdoor(position.x, position.y, position.z);
+        this.sound.playLever();
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
+    this.behaviors.registerBlock(['daylight_detector', 'daylight_detector_inverted'], {
+      id: 'minecraft:daylight_detector',
+      preventsItemUse: true,
+      interact: ({ position, blockId }) => {
+        this.toggleDaylightDetector(position.x, position.y, position.z, blockId);
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
+    this.behaviors.registerBlock(['comparator', 'unpowered_comparator', 'powered_comparator'], {
+      id: 'minecraft:comparator',
+      preventsItemUse: true,
+      interact: ({ position, blockId }) => {
+        this.toggleComparatorMode(position.x, position.y, position.z, blockId);
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
+    this.behaviors.registerBlock('lever', {
+      id: 'minecraft:lever',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        const powered = this.redstone.toggleLever(position.x, position.y, position.z);
+        this.updateRedstoneMetadata(position.x, position.y, position.z, {
+          powered,
+          signal: powered ? 15 : 0,
+        });
+        this.sound.playLever();
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
+    this.behaviors.registerBlock('tnt', {
+      id: 'minecraft:tnt',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.igniteTNT(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
+    this.behaviors.registerBlock('bed', {
+      id: 'minecraft:bed',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.useBed(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
+
+    this.behaviors.registerItem(['map', 'filled_map', 'writable_book', 'written_book'], {
+      id: 'minecraft:readable',
+      use: ({ stack }) => ({ handled: this.tryUseHeldReadableItem(stack), cooldown: 0.35 }),
+    });
+    this.behaviors.registerItem('bow', {
+      id: 'minecraft:bow',
+      canStartUse: () => this.canUseBow(),
+      startUse: () => {
+        this.bowChargeActive = true;
+        this.bowChargeTimer = 0;
+        this.breakProgress = 0;
+        this.breakingBlockPos = null;
+        this.lastFrameWasBreaking = false;
+        this.notifyState();
+        return { handled: true };
+      },
+      continueUse: (_context, progress) => {
+        this.bowChargeTimer = progress.elapsedSeconds;
+        return { handled: true };
+      },
+      stopUse: (_context, progress) => {
+        if (progress.reason === 'released') {
+          this.releaseBowCharge(progress.stillSelected);
+        } else {
+          this.bowChargeActive = false;
+          this.bowChargeTimer = 0;
+          this.notifyState();
+        }
+        return { handled: true };
+      },
+    });
+    this.behaviors.registerItem('crossbow', {
+      id: 'minecraft:crossbow',
+      use: ({ stack }) => ({ handled: this.fireLoadedCrossbow(stack), cooldown: 0.5 }),
+      canStartUse: ({ stack }) => !stack.chargedProjectileId && this.canUseBow(),
+      startUse: () => {
+        this.bowChargeActive = true;
+        this.bowChargeTimer = 0;
+        this.breakProgress = 0;
+        this.breakingBlockPos = null;
+        this.lastFrameWasBreaking = false;
+        this.notifyState();
+        return { handled: true };
+      },
+      continueUse: ({ stack }, progress) => {
+        this.bowChargeTimer = progress.elapsedSeconds / CROSSBOW_CHARGE_TIME * BOW_FULL_CHARGE_TIME;
+        if (progress.elapsedSeconds < CROSSBOW_CHARGE_TIME) return { handled: true };
+
+        const projectileId = this.getBowAmmoItemId() ?? ItemRegistry.getByName('arrow')?.id ?? 262;
+        if (this.gameMode !== 'creative') {
+          if (!this.inventory.removeItem(projectileId, 1)) {
+            return { handled: true, completed: true };
+          }
+        }
+        stack.chargedProjectileId = projectileId;
+        this.bowChargeActive = false;
+        this.bowChargeTimer = 0;
+        this.sound.playLever();
+        this.notifyState();
+        return { handled: true, completed: true, cooldown: 0.2 };
+      },
+      stopUse: (_context, progress) => {
+        this.bowChargeActive = false;
+        this.bowChargeTimer = 0;
+        if (progress.reason !== 'completed') this.notifyState();
+        return { handled: true };
+      },
+    });
+    this.behaviors.registerItem('shield', {
+      id: 'minecraft:shield',
+      startUse: () => ({ handled: true }),
+      continueUse: () => ({ handled: true }),
+      stopUse: () => ({ handled: true }),
+    });
+    this.behaviors.registerItem('food', {
+      id: 'minecraft:food',
+      canStartUse: ({ stack }) => this.canConsumeFood(stack),
+      startUse: () => {
+        this.eatingTimer = 0;
+        this.chewSoundTimer = 0;
+        return { handled: true };
+      },
+      continueUse: ({ stack }, progress) => this.continueFoodUse(stack, progress.deltaSeconds),
+      stopUse: () => {
+        this.resetConsumptionProgress();
+        return { handled: true };
+      },
+    });
+    this.behaviors.registerItem('potion', {
+      id: 'minecraft:potion',
+      canStartUse: ({ stack }) => stack.id === 373 && !!stack.potion?.effect,
+      startUse: () => {
+        this.eatingTimer = 0;
+        this.chewSoundTimer = 0;
+        return { handled: true };
+      },
+      continueUse: ({ stack }, progress) => this.continuePotionUse(stack, progress.deltaSeconds),
+      stopUse: () => {
+        this.resetConsumptionProgress();
+        return { handled: true };
+      },
+    });
+    this.behaviors.registerItem(['bucket', 'water_bucket', 'lava_bucket'], {
+      id: 'minecraft:bucket',
+      use: ({ stack, target }) => ({ handled: this.tryUseBucket(stack, target), cooldown: 0.25 }),
+    });
+    this.behaviors.registerItem('boat', {
+      id: 'minecraft:boat',
+      use: ({ stack, target }) => ({ handled: this.tryPlaceBoat(stack, target), cooldown: 0.5 }),
+    });
+    this.behaviors.registerItem('minecart', {
+      id: 'minecraft:minecart',
+      use: ({ stack, target }) => ({ handled: this.tryPlaceMinecart(stack, target), cooldown: 0.5 }),
+    });
+    this.behaviors.registerItem('flint_and_steel', {
+      id: 'minecraft:flint_and_steel',
+      use: ({ target }) => ({ handled: this.tryUseFlintAndSteel(target), cooldown: 0.25 }),
+    });
+    this.behaviors.registerItem('wooden_hoe', {
+      id: 'minecraft:hoe',
+      use: ({ target }) => ({ handled: this.tryTillFarmland(target), cooldown: 0.25 }),
+    });
+    this.behaviors.registerItem('fishing_rod', {
+      id: 'minecraft:fishing_rod',
+      use: ({ stack }) => ({ handled: this.tryUseFishingRod(stack.id), cooldown: 0.35 }),
+    });
+    this.behaviors.registerItem(['snowball', 'egg', 'ender_pearl', 'trident', 'fireworks', 'firework_rocket'], {
+      id: 'minecraft:throwable',
+      use: ({ stack }) => ({
+        handled: this.tryThrowHeldProjectile(stack.id),
+        cooldown: stack.id === ENDER_PEARL_ID
+          ? 0.8
+          : stack.id === TRIDENT_ID
+            ? 0.7
+            : stack.id === FIREWORK_ROCKET_ID || stack.id === MODERN_FIREWORK_ROCKET_ID
+              ? 0.4
+              : 0.35,
+      }),
+    });
+    this.behaviors.registerItem('ender_eye', {
+      id: 'minecraft:ender_eye',
+      use: ({ target }) => {
+        if (target && (target.blockId & 0x3FF) === END_PORTAL_FRAME_ID) {
+          const { x, y, z } = target.position;
+          const activated = this.useEnderEyeOnPortalFrame(x, y, z);
+          if (activated) {
+            this.sound.playBlockPlace(END_PORTAL_FRAME_ID);
+            if (this.gameMode !== 'creative') {
+              this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+            }
+          } else {
+            this.sound.playLever();
+          }
+          return { handled: true, cooldown: 0.25 };
+        }
+
+        this.throwEnderEye();
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+
+    this.behaviors.registerEntity(['vehicle:boat', 'vehicle:minecart'], {
+      id: 'minecraft:vehicle_mount',
+      interact: ({ target }) => {
+        if (!(target instanceof Vehicle) || this.riddenVehicle || this.riddenMob) {
+          return { handled: false };
+        }
+        this.riddenVehicle = target;
+        target.isRidden = true;
+        this.sound.playLever();
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    this.behaviors.registerEntity(
+      ['mob:cow', 'mob:pig', 'mob:sheep', 'mob:chicken', 'mob:villager', 'mob:wolf', 'mob:cat', 'mob:horse'],
+      {
+        id: 'minecraft:mob_interaction',
+        interact: ({ target, heldItem }) => target instanceof Mob
+          ? this.tryInteractMob(target, heldItem)
+          : { handled: false },
+      },
+    );
+  }
+
+  private getTargetBlockInteractionContext(heldItem: ItemStack | null): GameBlockInteractionContext | undefined {
+    if (!this.targetBlock) return undefined;
+
+    const { blockPos, faceNormal } = this.targetBlock;
+    const blockId = this.chunks.getBlock(blockPos.x, blockPos.y, blockPos.z);
+    const block = BlockRegistry.get(blockId);
+    if (!block) return undefined;
+
+    return {
+      position: { x: blockPos.x, y: blockPos.y, z: blockPos.z },
+      face: faceNormal.x > 0
+        ? 'east'
+        : faceNormal.x < 0
+          ? 'west'
+          : faceNormal.y > 0
+            ? 'up'
+            : faceNormal.y < 0
+              ? 'down'
+              : faceNormal.z > 0
+                ? 'south'
+                : 'north',
+      blockId,
+      block,
+      heldItem,
+    };
+  }
+
+  private consumeInteractionItem() {
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+  }
+
+  private spawnMobInteractionParticles(mob: Mob, color: number, count: number) {
+    this.particles.spawnBlockBreak(
+      mob.position.x,
+      mob.position.y + mob.height,
+      mob.position.z,
+      color,
+      count,
+    );
+  }
+
+  private tryInteractMob(target: Mob, heldItem: ItemStack | null) {
+    const heldItemId = heldItem?.id ?? 0;
+
+    if (target.def.type === 'villager') {
+      this.openTradingUI(target.villagerProfession);
+      return { handled: true, cooldown: 0.5 };
+    }
+
+    const shouldFeedForBreeding =
+      target.isAttractedBy(heldItemId) &&
+      !(target.def.type === 'wolf' && target.isTamed && target.health < 20) &&
+      !(target.def.type === 'cat' && target.isTamed && target.health < target.def.health);
+
+    if (shouldFeedForBreeding && target.isBaby) {
+      target.babyAge = Math.max(0, target.babyAge - 6);
+      this.spawnMobInteractionParticles(target, 0x55ff55, 12);
+      this.sound.playEat();
+      this.consumeInteractionItem();
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    if (shouldFeedForBreeding && target.canEnterLoveMode(heldItemId)) {
+      target.loveTimer = 30;
+      this.spawnMobInteractionParticles(target, 0xff5555, 15);
+      this.sound.playEat();
+      this.consumeInteractionItem();
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    if (target.def.type === 'wolf') {
+      if (!target.isTamed && heldItemId === 352) {
+        this.sound.playEat();
+        this.consumeInteractionItem();
+        if (shouldTameEntity(
+          this.seed,
+          this.worldTickScheduler.getCurrentTick(),
+          target.id,
+          heldItemId,
+        )) {
+          target.isTamed = true;
+          target.isSitting = true;
+          target.health = 20;
+          this.spawnMobInteractionParticles(target, 0xff5555, 15);
+        } else {
+          this.spawnMobInteractionParticles(target, 0x555555, 8);
+        }
+        return { handled: true, cooldown: 0.25 };
+      }
+
+      if (target.isTamed) {
+        if (heldItemId === 352 && target.health < 20) {
+          target.health = Math.min(20, target.health + 4);
+          this.sound.playEat();
+          this.consumeInteractionItem();
+          this.spawnMobInteractionParticles(target, 0x55ff55, 8);
+        } else {
+          target.isSitting = !target.isSitting;
+          this.sound.playLever();
+        }
+        return { handled: true, cooldown: 0.25 };
+      }
+    }
+
+    if (target.def.type === 'cat') {
+      if (!target.isTamed && heldItemId === RAW_FISH_ID) {
+        this.sound.playEat();
+        this.consumeInteractionItem();
+        if (shouldTameEntity(
+          this.seed,
+          this.worldTickScheduler.getCurrentTick(),
+          target.id,
+          heldItemId,
+        )) {
+          target.isTamed = true;
+          target.isSitting = true;
+          this.spawnMobInteractionParticles(target, 0xff5555, 15);
+        } else {
+          this.spawnMobInteractionParticles(target, 0x555555, 8);
+        }
+        return { handled: true, cooldown: 0.25 };
+      }
+
+      if (target.isTamed) {
+        if (heldItemId === RAW_FISH_ID && target.health < target.def.health) {
+          target.health = Math.min(target.def.health, target.health + 4);
+          this.sound.playEat();
+          this.consumeInteractionItem();
+          this.spawnMobInteractionParticles(target, 0x55ff55, 8);
+        } else {
+          target.isSitting = !target.isSitting;
+          this.sound.playLever();
+        }
+        return { handled: true, cooldown: 0.25 };
+      }
+    }
+
+    if (target.def.type === 'horse') {
+      this.riddenMob = target;
+      target.isRidden = true;
+      target.isSitting = false;
+      this.sound.playLever();
+      return { handled: true, cooldown: 0.5 };
+    }
+
+    return { handled: false };
+  }
+
+  private tryInteractTargetEntity() {
+    const heldItem = this.inventory.getSlot(this.player.selectedSlot);
+    const targetVehicle = this.vehicles.getVehicleInRay(this.player.eyePosition, this.player.forward, 4.5);
+    if (targetVehicle) {
+      const result = this.behaviors.interactEntity(`vehicle:${targetVehicle.type}`, {
+        target: targetVehicle,
+        heldItem,
+      });
+      if (result?.handled) return result;
+    }
+
+    const targetMob = this.mobs.getMobInRay(this.player.eyePosition, this.player.forward, 4.5);
+    if (!targetMob) return undefined;
+    return this.behaviors.interactEntity(`mob:${targetMob.def.type}`, {
+      target: targetMob,
+      heldItem,
+    });
   }
 
   private handleContainerClick = () => {
@@ -636,8 +1202,10 @@ export class Game {
       }
     }
 
-    if (this.activeSlot !== 'multiplayer' && !this.network.isConnected) {
-      this.network.connect('mock://local', 'Player', this.gameMode, this.activeSlot);
+    // Single-player owns its local simulation. The in-memory server uses a
+    // separate world snapshot and must not overwrite a save that was just loaded.
+    if (this.activeSlot !== 'multiplayer' && this.network.isConnected) {
+      this.network.disconnect();
     }
 
     this.openUI = 'none';
@@ -755,6 +1323,7 @@ export class Game {
     this.player.hunger = 20;
     this.player.saturation = 20;
     this.player.flying = false;
+    this.spawnProtectionTimer = 3;
     this.player.resolveStuck(this.chunks);
     this.survival.resetFall();
     this.potionEffects.clear();
@@ -876,6 +1445,7 @@ export class Game {
       this.notifyState();
     }
     this.lockCooldown = Math.max(0, this.lockCooldown - dt);
+    this.spawnProtectionTimer = Math.max(0, this.spawnProtectionTimer - dt);
     this.updateFishingBobber(dt);
 
     // Game time (day/night cycle)
@@ -946,10 +1516,7 @@ export class Game {
     // UI open: skip game input
     if (this.openUI !== 'none') {
       this.input.consumeSpaceDoubleTap();
-      if (this.bowChargeActive) {
-        this.bowChargeActive = false;
-        this.bowChargeTimer = 0;
-      }
+      this.stopActiveItemUse('cancelled');
       this.particles.update(dt);
       this.mobs.update(dt, this.player.position, this.isNight(),
         (x, y, z) => this.chunks.getBlock(x, y, z),
@@ -1531,7 +2098,16 @@ export class Game {
       this.notifyState();
     }
 
-    const bowInputActive = this.updateBowCharging(dt);
+    if (!this.chatOpen && this.input.isMouseDown(2) && this.placeCooldown <= 0) {
+      const entityResult = this.tryInteractTargetEntity();
+      if (entityResult?.handled) {
+        this.stopActiveItemUse('blocked');
+        this.placeCooldown = entityResult.cooldown ?? 0.25;
+        return;
+      }
+    }
+
+    const continuousItemUseActive = this.updateContinuousItemUse(dt);
 
     // ─── Left click: attack mobs OR break blocks ───
     const selectedItemStack = this.inventory.getSlot(this.player.selectedSlot);
@@ -1701,385 +2277,37 @@ export class Game {
     }
 
     // ─── Right click: place block / interact ───
-    if (!bowInputActive && !this.chatOpen && this.input.isMouseDown(2) && this.placeCooldown <= 0) {
-      // Vehicle mount/ride check
-      const targetVehicle = this.vehicles.getVehicleInRay(this.player.eyePosition, this.player.forward, 4.5);
-      if (targetVehicle && !this.riddenVehicle && !this.riddenMob) {
-        this.riddenVehicle = targetVehicle;
-        targetVehicle.isRidden = true;
-        this.sound.playLever(); // mount sound
-        this.placeCooldown = 0.5;
+    if (!continuousItemUseActive && !this.chatOpen && this.input.isMouseDown(2) && this.placeCooldown <= 0) {
+      const selectedSlot = this.inventory.getSlot(this.player.selectedSlot);
+      const heldItemId = selectedSlot?.id ?? 0;
+      const heldItemDef = ItemRegistry.get(heldItemId);
+      const targetInteraction = this.getTargetBlockInteractionContext(selectedSlot);
+
+      const blockBehaviorResult = targetInteraction
+        ? this.behaviors.interactBlock(targetInteraction)
+        : undefined;
+      if (blockBehaviorResult?.handled) {
+        this.placeCooldown = blockBehaviorResult.cooldown ?? 0.25;
         return;
       }
 
-      const targetMob = this.mobs.getMobInRay(this.player.eyePosition, this.player.forward, 4.5);
-      if (targetMob) {
-        const slot = this.inventory.getSlot(this.player.selectedSlot);
-        const heldItemId = slot?.id ?? 0;
-
-        if (targetMob.def.type === 'villager') {
-          this.openTradingUI(targetMob.villagerProfession);
-          this.placeCooldown = 0.5;
-          return;
-        }
-
-        const shouldFeedForBreeding =
-          targetMob.isAttractedBy(heldItemId) &&
-          !(targetMob.def.type === 'wolf' && targetMob.isTamed && targetMob.health < 20) &&
-          !(targetMob.def.type === 'cat' && targetMob.isTamed && targetMob.health < targetMob.def.health);
-
-        // Breeding animals and speeding up baby growth
-        if (shouldFeedForBreeding) {
-          if (targetMob.isBaby) {
-            targetMob.babyAge = Math.max(0, targetMob.babyAge - 6.0); // 10% faster
-            this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0x55ff55, 12);
-            this.sound.playEat();
-            if (this.gameMode !== 'creative') {
-              this.inventory.removeFromSlot(this.player.selectedSlot, 1);
-            }
-            this.placeCooldown = 0.25;
-            return;
-          } else if (targetMob.canEnterLoveMode(heldItemId)) {
-            targetMob.loveTimer = 30.0;
-            this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0xff5555, 15);
-            this.sound.playEat();
-            if (this.gameMode !== 'creative') {
-              this.inventory.removeFromSlot(this.player.selectedSlot, 1);
-            }
-            this.placeCooldown = 0.25;
-            return;
-          }
-        }
-
-        // Wolf interaction
-        if (targetMob.def.type === 'wolf') {
-          if (!targetMob.isTamed && heldItemId === 352) { // Bone
-            this.sound.playEat();
-            if (this.gameMode !== 'creative') {
-              this.inventory.removeFromSlot(this.player.selectedSlot, 1);
-            }
-            if (Math.random() < 0.33) {
-              targetMob.isTamed = true;
-              targetMob.isSitting = true;
-              targetMob.health = 20; // Tamed max health is 20
-              this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0xff5555, 15);
-            } else {
-              this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0x555555, 8);
-            }
-            this.placeCooldown = 0.25;
-            return;
-          } else if (targetMob.isTamed) {
-            if (heldItemId === 352 && targetMob.health < 20) {
-              targetMob.health = Math.min(20, targetMob.health + 4);
-              this.sound.playEat();
-              if (this.gameMode !== 'creative') {
-                this.inventory.removeFromSlot(this.player.selectedSlot, 1);
-              }
-              this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0x55ff55, 8);
-            } else {
-              targetMob.isSitting = !targetMob.isSitting;
-              this.sound.playLever();
-            }
-            this.placeCooldown = 0.25;
-            return;
-          }
-        }
-
-        // Cat interaction
-        if (targetMob.def.type === 'cat') {
-          if (!targetMob.isTamed && heldItemId === 349) { // Raw Fish
-            this.sound.playEat();
-            if (this.gameMode !== 'creative') {
-              this.inventory.removeFromSlot(this.player.selectedSlot, 1);
-            }
-            if (Math.random() < 0.33) {
-              targetMob.isTamed = true;
-              targetMob.isSitting = true;
-              this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0xff5555, 15);
-            } else {
-              this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0x555555, 8);
-            }
-            this.placeCooldown = 0.25;
-            return;
-          } else if (targetMob.isTamed) {
-            if (heldItemId === 349 && targetMob.health < targetMob.def.health) {
-              targetMob.health = Math.min(targetMob.def.health, targetMob.health + 4);
-              this.sound.playEat();
-              if (this.gameMode !== 'creative') {
-                this.inventory.removeFromSlot(this.player.selectedSlot, 1);
-              }
-              this.particles.spawnBlockBreak(targetMob.position.x, targetMob.position.y + targetMob.height, targetMob.position.z, 0x55ff55, 8);
-            } else {
-              targetMob.isSitting = !targetMob.isSitting;
-              this.sound.playLever();
-            }
-            this.placeCooldown = 0.25;
-            return;
-          }
-        }
-
-        // Horse riding
-        if (targetMob.def.type === 'horse') {
-          this.riddenMob = targetMob;
-          targetMob.isRidden = true;
-          targetMob.isSitting = false;
-          this.sound.playLever(); // mount sound
-          this.placeCooldown = 0.5;
+      if (selectedSlot && heldItemDef) {
+        const itemResult = this.behaviors.useItem({
+          item: heldItemDef,
+          stack: selectedSlot,
+          target: targetInteraction,
+        });
+        if (itemResult?.handled) {
+          this.placeCooldown = itemResult.cooldown ?? 0.25;
           return;
         }
       }
 
-      const selectedSlot = this.inventory.getSlot(this.player.selectedSlot);
-      const heldItemId = selectedSlot?.id ?? 0;
-
       if (this.targetBlock) {
         const { blockPos, faceNormal } = this.targetBlock;
-        const targetId = this.chunks.getBlock(blockPos.x, blockPos.y, blockPos.z);
-        const targetDef = BlockRegistry.get(targetId);
-        const targetName = targetDef?.name ?? '';
 
-        if (this.tryUseCauldronWithBucket(blockPos.x, blockPos.y, blockPos.z, targetName, heldItemId, selectedSlot)) {
-          this.placeCooldown = 0.25;
-          return;
-        }
-
-        if (this.tryUseComposter(blockPos.x, blockPos.y, blockPos.z, targetName, selectedSlot)) {
-          this.placeCooldown = 0.25;
-          return;
-        }
-
-        // Bucket scoop water/lava
-        if (heldItemId === 325) { // Empty Bucket
-          const isWaterSource = (targetId & 0x3FF) === 9;
-          const isLavaSource = (targetId & 0x3FF) === 11;
-          if (isWaterSource || isLavaSource) {
-            const filledBucketId = isWaterSource ? 326 : 327;
-            this.chunks.setBlock(blockPos.x, blockPos.y, blockPos.z, 0);
-            this.chunks.setBlockMeta(blockPos.x, blockPos.y, blockPos.z, null);
-            this.fluids.addSource(blockPos.x, blockPos.y, blockPos.z);
-            this.sound.playBucketFill();
-
-            if (this.gameMode !== 'creative') {
-              if (selectedSlot && selectedSlot.count === 1) {
-                this.inventory.setSlot(this.player.selectedSlot, { id: filledBucketId, count: 1 });
-              } else if (selectedSlot) {
-                selectedSlot.count -= 1;
-                this.inventory.setSlot(this.player.selectedSlot, selectedSlot);
-                const leftover = this.inventory.addItem(filledBucketId, 1);
-                if (leftover > 0) {
-                  const spawnPos = this.player.eyePosition.clone().sub(new THREE.Vector3(0, 0.2, 0));
-                  const velocity = new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.2, (Math.random() - 0.5) * 0.2);
-                  this.droppedItems.spawnItem(filledBucketId, 1, spawnPos, velocity, 0.5);
-                }
-              }
-              this.notifyState();
-            }
-            this.placeCooldown = 0.25;
-            return;
-          }
-        }
-
-        // Bucket place water/lava
-        if (heldItemId === 326 || heldItemId === 327) { // Water or Lava Bucket
-          const placePos = blockPos.clone().add(faceNormal);
-          const fluidBlockId = heldItemId === 326 ? 9 : 11;
-
-          const currentBlock = this.chunks.getBlock(placePos.x, placePos.y, placePos.z);
-          const isReplaceable = currentBlock === 0 || BlockRegistry.isFluid(currentBlock) || currentBlock === 31 || currentBlock === 37 || currentBlock === 38; // air, fluid, grass, flowers
-          
-          if (isReplaceable) {
-            this.chunks.setBlock(placePos.x, placePos.y, placePos.z, fluidBlockId);
-            this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, {
-              fluidLevel: 8
-            });
-            this.fluids.addSource(placePos.x, placePos.y, placePos.z, fluidBlockId);
-            this.sound.playBucketEmpty();
-
-            if (this.gameMode !== 'creative') {
-              this.inventory.setSlot(this.player.selectedSlot, { id: 325, count: 1 });
-              this.notifyState();
-            }
-            this.placeCooldown = 0.25;
-            return;
-          }
-        }
-
-        const heldItemDef = ItemRegistry.get(heldItemId);
-        const isBoatItem = heldItemDef && heldItemDef.name.includes('boat');
-        const isMinecartItem = heldItemDef && heldItemDef.name.includes('minecart');
-
-        if (isBoatItem) {
-          const placePos = blockPos.clone().add(faceNormal).add(new THREE.Vector3(0.5, 0.2, 0.5));
-          this.vehicles.spawnVehicle('boat', placePos);
-          this.sound.playBlockPlace(5); // Planks/wood sound for boat
-          if (this.gameMode !== 'creative') {
-            this.inventory.removeFromSlot(this.player.selectedSlot, 1);
-          }
-          this.placeCooldown = 0.5;
-          return;
-        }
-
-        if (isMinecartItem) {
-          const isTargetRail = BlockRegistry.isRail(targetId);
-          if (isTargetRail) {
-            const placePos = blockPos.clone().add(new THREE.Vector3(0.5, 0.05, 0.5));
-            this.vehicles.spawnVehicle('minecart', placePos);
-            this.sound.playBlockPlace(1); // Stone/metal sound for minecart
-            if (this.gameMode !== 'creative') {
-              this.inventory.removeFromSlot(this.player.selectedSlot, 1);
-            }
-            this.placeCooldown = 0.5;
-            return;
-          }
-        }
-
-        if (heldItemId === 259) { // Flint and Steel
-          const placePos = blockPos.clone().add(faceNormal);
-          const dimGen = this.chunks.dimensionGen;
-          const result = dimGen.findAndActivatePortalFrame(
-            (x, y, z) => this.chunks.getBlock(x, y, z),
-            (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
-            placePos.x, placePos.y, placePos.z
-          );
-          if (result) {
-            this.sound.playBlockPlace(0); // flint sound (stone category)
-            if (this.gameMode !== 'creative') {
-              this.inventory.damageTool(this.player.selectedSlot);
-            }
-            this.placeCooldown = 0.25;
-            return;
-          }
-        }
-
-        // Hoe tilling: convert dirt/grass to farmland
-        if (heldItemDef && heldItemDef.toolType === 'hoe') {
-          const targetBase = targetId & 0x3FF;
-          if (targetBase === 3 || targetBase === 2) { // dirt or grass
-            const moisture = this.isWaterNearby(blockPos.x, blockPos.y, blockPos.z) ? 7 : 0;
-            const farmlandId = (moisture << 10) | 60;
-            this.chunks.setBlock(blockPos.x, blockPos.y, blockPos.z, farmlandId);
-            this.chunks.setBlockMeta(blockPos.x, blockPos.y, blockPos.z, null);
-            this.sound.playBlockPlace(3); // dirt sound
-            if (this.gameMode !== 'creative') {
-              this.inventory.damageTool(this.player.selectedSlot);
-            }
-            this.placeCooldown = 0.25;
-            return;
-          }
-        }
-
-        if ((targetId & 0x3FF) === END_PORTAL_FRAME_ID && heldItemId === ENDER_EYE_ID) {
-          const activated = this.useEnderEyeOnPortalFrame(blockPos.x, blockPos.y, blockPos.z);
-          if (activated) {
-            this.sound.playBlockPlace(END_PORTAL_FRAME_ID);
-            if (this.gameMode !== 'creative') {
-              this.inventory.removeFromSlot(this.player.selectedSlot, 1);
-            }
-          } else {
-            this.sound.playLever();
-          }
-          this.placeCooldown = 0.25;
-          return;
-        }
-
-        // Right-click furnace / smoker / blast furnace
-        if (targetName.includes('furnace') || targetName === 'smoker' || targetName === 'blast_furnace') {
-          this.openFurnaceUI(blockPos.x, blockPos.y, blockPos.z);
-          this.placeCooldown = 0.5;
-        } else if (targetName === 'crafting_table') {
-          this.openCraftingTableUI();
-          this.placeCooldown = 0.5;
-        } else if (targetName === 'chest' || targetName === 'barrel') {
-          this.openChestUI(blockPos.x, blockPos.y, blockPos.z);
-          this.placeCooldown = 0.5;
-        } else if (targetName === 'hopper') {
-          this.openHopperUI(blockPos.x, blockPos.y, blockPos.z);
-          this.placeCooldown = 0.5;
-        } else if ((targetId & 0x3FF) === 92 || targetName === 'cake') {
-          this.eatCakeBlock(blockPos.x, blockPos.y, blockPos.z);
-          this.placeCooldown = 0.25;
-        } else if (targetName === 'bell') {
-          this.ringBell(blockPos.x, blockPos.y, blockPos.z);
-          this.placeCooldown = 0.35;
-        } else if (targetName === 'campfire' || targetName === 'soul_campfire') {
-          if (this.tryUseCampfire(blockPos.x, blockPos.y, blockPos.z, selectedSlot)) {
-            this.placeCooldown = 0.25;
-          }
-        } else if (targetName === 'enchanting_table') {
-          this.openEnchantUI();
-          this.placeCooldown = 0.5;
-        } else if (targetName.includes('anvil')) {
-          this.openAnvilUI();
-          this.placeCooldown = 0.5;
-        } else if (targetName === 'brewing_stand') {
-          this.openBrewingUI(blockPos.x, blockPos.y, blockPos.z);
-          this.placeCooldown = 0.5;
-        } else if (this.isDoorBlock(targetId)) {
-          this.toggleDoor(blockPos.x, blockPos.y, blockPos.z);
-          this.sound.playLever();
-          this.placeCooldown = 0.25;
-        } else if (this.isTrapdoorBlock(targetId)) {
-          this.toggleTrapdoor(blockPos.x, blockPos.y, blockPos.z);
-          this.sound.playLever();
-          this.placeCooldown = 0.25;
-        } else if (targetName === 'daylight_detector' || targetName === 'daylight_detector_inverted') {
-          const isNormal = targetId === 151 || (targetId & 0x3FF) === 151;
-          const newBaseId = isNormal ? 178 : 151;
-          const metaVal = (targetId >> 10) & 0xF;
-          const newPackedId = (metaVal << 10) | newBaseId;
-          const currentMeta = this.chunks.getBlockMeta(blockPos.x, blockPos.y, blockPos.z);
-          this.chunks.setBlock(blockPos.x, blockPos.y, blockPos.z, newPackedId);
-          this.chunks.setBlockMeta(blockPos.x, blockPos.y, blockPos.z, {
-            ...currentMeta,
-            facing: 'up',
-            redstoneType: 'daylight_detector',
-          }, true);
-
-          this.redstone.register(blockPos.x, blockPos.y, blockPos.z, 'daylight_detector', 'up');
-          this.sound.playLever();
-          this.placeCooldown = 0.25;
-        } else if (targetName === 'unpowered_comparator' || targetName === 'powered_comparator') {
-          const metaVal = (targetId >> 10) & 0x7;
-          const newMeta = metaVal < 4 ? metaVal + 4 : metaVal - 4;
-          const newPackedId = (newMeta << 10) | (targetId & 0x3FF);
-          const currentMeta = this.chunks.getBlockMeta(blockPos.x, blockPos.y, blockPos.z);
-          this.chunks.setBlock(blockPos.x, blockPos.y, blockPos.z, newPackedId);
-          this.chunks.setBlockMeta(blockPos.x, blockPos.y, blockPos.z, {
-            ...currentMeta,
-            facing: currentMeta?.facing ?? 'north',
-            redstoneType: 'comparator',
-            open: newMeta >= 4,
-          }, true);
-
-          this.sound.playLever();
-          this.placeCooldown = 0.25;
-        } else if (targetName === 'lever') {
-          const powered = this.redstone.toggleLever(blockPos.x, blockPos.y, blockPos.z);
-          this.updateRedstoneMetadata(blockPos.x, blockPos.y, blockPos.z, {
-            powered,
-            signal: powered ? 15 : 0,
-          });
-          this.sound.playLever();
-          this.placeCooldown = 0.25;
-        } else if (targetName === 'tnt') {
-          // Ignite TNT
-          this.igniteTNT(blockPos.x, blockPos.y, blockPos.z);
-          this.placeCooldown = 0.25;
-        } else if (targetName === 'bed') {
-          // Bed: set spawn point
-          this.bedSpawnPoint = new THREE.Vector3(blockPos.x + 0.5, blockPos.y + 1, blockPos.z + 0.5);
-          this.sound.playBlockPlace(35); // Wool/fabric sound for bed
-          this.advancements.checkSleep();
-          if (this.isNight()) {
-            this.gameTime = 0.0;
-            this.addChatMessage('You are now sleeping. Morning has come.');
-            this.notifyState();
-          } else {
-            this.addChatMessage('You can only sleep at night');
-          }
-          this.placeCooldown = 0.25;
-        } else {
-          // Place block
+        // Place block when neither the target block nor the held item claimed the interaction.
+        {
           const placePos = blockPos.clone().add(faceNormal);
           const px = Math.floor(this.player.position.x);
           const py = Math.floor(this.player.position.y);
@@ -2206,7 +2434,7 @@ export class Game {
 
                     // If placing water/lava, start fluid simulation
                     if (BlockRegistry.isFluid(blockId)) {
-                      this.fluids.addSource(placePos.x, placePos.y, placePos.z, blockId);
+                      this.scheduleFluidNeighborhood(placePos.x, placePos.y, placePos.z);
                     }
 
                     if (blockId === 63 || blockId === 68) {
@@ -2223,148 +2451,6 @@ export class Game {
         }
       }
 
-      if (selectedSlot && this.tryUseHeldReadableItem(selectedSlot)) {
-        this.placeCooldown = 0.35;
-        return;
-      }
-
-      if (this.tryUseFishingRod(heldItemId)) {
-        return;
-      }
-
-      if (this.tryThrowHeldProjectile(heldItemId)) {
-        return;
-      }
-
-      if (heldItemId === ENDER_EYE_ID && this.placeCooldown <= 0) {
-        this.throwEnderEye();
-      }
-    }
-
-    // ─── Food Eating ───
-    const foodSlotStack = this.inventory.getSlot(this.player.selectedSlot);
-    const isHoldingFood = foodSlotStack && ItemRegistry.isFood(foodSlotStack.id);
-    const isGoldenApple = foodSlotStack && (foodSlotStack.id & 0x3FF) === 322;
-    const isHoneyBottle = foodSlotStack?.id === HONEY_BOTTLE_ID;
-    const canEat = isHoldingFood && (this.player.hunger < 20 || isGoldenApple || isHoneyBottle);
-
-    const targetBlockId = this.targetBlock ? this.chunks.getBlock(this.targetBlock.blockPos.x, this.targetBlock.blockPos.y, this.targetBlock.blockPos.z) : 0;
-    const targetDef = targetBlockId ? BlockRegistry.get(targetBlockId) : null;
-    const targetName = targetDef?.name ?? '';
-    const pointingAtInteractive = this.targetBlock && (
-      targetName.includes('furnace') ||
-      targetName === 'crafting_table' ||
-      targetName === 'enchanting_table' ||
-      targetName.includes('anvil') ||
-      targetName === 'brewing_stand' ||
-      targetName === 'lever' ||
-      targetName === 'chest' ||
-      targetName === 'barrel' ||
-      targetName === 'composter' ||
-      targetName === 'hopper' ||
-      targetName === 'bed' ||
-      targetName === 'cake' ||
-      targetName === 'bell' ||
-      (targetBlockId & 0x3FF) === 92 ||
-      this.isDoorBlock(targetBlockId) ||
-      this.isTrapdoorBlock(targetBlockId)
-    );
-
-    const isHoldingPotion = foodSlotStack?.id === 373 && !!foodSlotStack.potion?.effect;
-    if (!this.chatOpen && this.input.isMouseDown(2) && isHoldingPotion && !pointingAtInteractive) {
-      this.eatingTimer += dt;
-      this.chewSoundTimer += dt;
-
-      if (this.chewSoundTimer >= 0.35) {
-        this.chewSoundTimer = 0;
-        this.sound.playDrink();
-      }
-
-      if (this.eatingTimer >= 1.6) {
-        const potion = foodSlotStack.potion?.effect;
-        if (potion) {
-          this.potionEffects.apply(
-            potion,
-            (amount) => { this.player.health = Math.min(20, this.player.health + amount); }
-          );
-          this.sound.playBurp();
-          this.inventory.setSlot(this.player.selectedSlot, { id: 374, count: 1 });
-          this.notifyState();
-        }
-        this.eatingTimer = 0;
-        this.chewSoundTimer = 0;
-        this.placeCooldown = 0.5;
-      }
-    } else if (!this.chatOpen && this.input.isMouseDown(2) && canEat && !pointingAtInteractive) {
-      this.eatingTimer += dt;
-      this.chewSoundTimer += dt;
-
-      if (this.chewSoundTimer >= 0.25) {
-        this.chewSoundTimer = 0;
-        this.sound.playEat();
-
-        let foodColor = 0xC0A080;
-        const baseFoodId = foodSlotStack.id & 0x3FF;
-        if (baseFoodId === 260) foodColor = 0xFF0000;
-        else if (baseFoodId === 363 || baseFoodId === 364) foodColor = 0xA04040;
-        else if (baseFoodId === 322) foodColor = 0xFFD700; // Gold particles!
-        else if (foodSlotStack.id === HONEY_BOTTLE_ID) foodColor = 0xE8A300;
-
-        const front = this.player.eyePosition.clone().add(this.player.forward.multiplyScalar(0.4));
-        this.particles.spawnBlockBreak(front.x, front.y, front.z, foodColor);
-      }
-
-      if (this.eatingTimer >= 1.6) {
-        const foodDef = ItemRegistry.get(foodSlotStack.id);
-        if (foodDef) {
-          this.player.hunger = Math.min(20, this.player.hunger + (foodDef.hungerRestore ?? 0));
-          this.player.saturation = Math.min(this.player.hunger, this.player.saturation + (foodDef.saturationRestore ?? 0));
-
-          // Golden Apple / Enchanted Golden Apple status effects
-          const baseFoodId = foodSlotStack.id & 0x3FF;
-          if (baseFoodId === 322) {
-            const isEnchanted = (foodSlotStack.id >> 10) === 1;
-            if (isEnchanted) {
-              // Enchanted Golden Apple: Regeneration II (20s), Fire Resistance (5m)
-              this.potionEffects.apply({ id: 'regeneration', level: 2, duration: 20 }, (amount) => {
-                this.player.health = Math.min(20, this.player.health + amount);
-              });
-              this.potionEffects.apply({ id: 'fire_resistance', level: 1, duration: 300 }, () => {});
-              this.player.health = 20; // Instant full heal
-            } else {
-              // Regular Golden Apple: Regeneration I (5s)
-              this.potionEffects.apply({ id: 'regeneration', level: 1, duration: 5 }, (amount) => {
-                this.player.health = Math.min(20, this.player.health + amount);
-              });
-            }
-          }
-
-          if (foodSlotStack.id === HONEY_BOTTLE_ID) {
-            this.potionEffects.remove('poison');
-          }
-
-          this.sound.playBurp();
-          if (this.gameMode !== 'creative') {
-            if (foodSlotStack.id === HONEY_BOTTLE_ID) {
-              if (foodSlotStack.count <= 1) {
-                this.inventory.setSlot(this.player.selectedSlot, { id: GLASS_BOTTLE_ID, count: 1 });
-              } else {
-                this.inventory.removeFromSlot(this.player.selectedSlot);
-                this.inventory.addItem(GLASS_BOTTLE_ID, 1);
-              }
-            } else {
-              this.inventory.removeFromSlot(this.player.selectedSlot);
-            }
-          }
-          this.notifyState();
-        }
-        this.eatingTimer = 0;
-        this.chewSoundTimer = 0;
-        this.placeCooldown = 0.5;
-      }
-    } else {
-      this.eatingTimer = 0;
-      this.chewSoundTimer = 0;
     }
 
     // ─── Footsteps ───
@@ -2462,6 +2548,10 @@ export class Game {
       return;
     }
 
+    const worldTickResult = this.worldTickScheduler.advance(dt);
+    const worldTicks = worldTickResult.steps;
+    this.processScheduledWorldTicks(worldTickResult.due);
+
     // Redstone simulation
     const entitiesList: RedstoneEntity[] = [
       { pos: this.player.position, type: 'player' as const, width: 0.6 }
@@ -2500,21 +2590,18 @@ export class Game {
       },
       this.gameTime,
       (x, y, z) => this.chunks.getBlockMeta(x, y, z),
-      entitiesList
+      entitiesList,
+      worldTicks,
     );
-
-    // Fluid simulation
-    this.updateFluids(dt);
 
     // Hopper simulation
     this.hoppers.update(dt);
 
     // Farming simulation (farmland hydration, crop growth)
-    this.updateFarming(dt);
+    this.updateFarming(worldTicks);
 
     // Smelting simulation
     this.updateFurnaces(dt);
-    this.updateCampfires(dt);
 
     // Particles
     this.spawnAmbientParticles(dt);
@@ -2546,13 +2633,180 @@ export class Game {
     this.notifyState();
   };
 
-  private updateFluids(dt: number) {
-    this.fluids.update(dt,
-      (x, y, z) => this.chunks.getBlock(x, y, z),
-      (x, y, z) => this.chunks.getBlockMeta(x, y, z),
-      (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
-      (x, y, z, meta, markDirty) => this.chunks.setBlockMeta(x, y, z, meta, markDirty)
+  private scheduleWorldTick(
+    type: WorldTickType,
+    x: number,
+    y: number,
+    z: number,
+    delayTicks: number,
+    reason: string,
+    dimension = this.chunks.currentDimension,
+    source?: BlockPosition,
+  ) {
+    if (y < 0 || y >= WORLD_HEIGHT) return;
+    this.worldTickScheduler.schedule({
+      type,
+      x,
+      y,
+      z,
+      dimension,
+      delayTicks,
+      priority: type === 'neighbor_update' ? 'high' : 'normal',
+      payload: {
+        reason,
+        sourceX: source?.x,
+        sourceY: source?.y,
+        sourceZ: source?.z,
+      },
+    });
+  }
+
+  private scheduleFluidNeighborhood(
+    x: number,
+    y: number,
+    z: number,
+    delayTicks = 5,
+    dimension = this.chunks.currentDimension,
+  ) {
+    for (const [dx, dy, dz] of [[0, 0, 0], [0, -1, 0], [0, 1, 0], [-1, 0, 0], [1, 0, 0], [0, 0, -1], [0, 0, 1]]) {
+      this.scheduleWorldTick('fluid', x + dx, y + dy, z + dz, delayTicks, 'fluid_neighbor', dimension);
+    }
+  }
+
+  private scheduleNeighborUpdates(
+    x: number,
+    y: number,
+    z: number,
+    dimension = this.chunks.currentDimension,
+  ) {
+    const source = { x, y, z };
+    for (const [dx, dy, dz] of [[0, 0, 0], [0, -1, 0], [0, 1, 0], [-1, 0, 0], [1, 0, 0], [0, 0, -1], [0, 0, 1]]) {
+      this.scheduleWorldTick(
+        'neighbor_update',
+        x + dx,
+        y + dy,
+        z + dz,
+        1,
+        'block_changed',
+        dimension,
+        source,
+      );
+    }
+  }
+
+  public onBlockChanged(
+    x: number,
+    y: number,
+    z: number,
+    previousId: number,
+    nextId: number,
+    dimension: Dimension,
+  ) {
+    if (previousId === nextId) return;
+    const previousName = BlockRegistry.get(previousId)?.name;
+    const nextName = BlockRegistry.get(nextId)?.name;
+    if (
+      (previousName === 'campfire' || previousName === 'soul_campfire')
+      && nextName !== 'campfire'
+      && nextName !== 'soul_campfire'
+    ) {
+      this.worldTickScheduler.cancel('block_event', x, y, z, dimension);
+    }
+    this.scheduleNeighborUpdates(x, y, z, dimension);
+    this.scheduleFluidNeighborhood(x, y, z, 5, dimension);
+  }
+
+  private processScheduledWorldTicks(ticks: ScheduledTick<WorldTickType, WorldTickPayload>[]) {
+    for (const tick of ticks) {
+      if (tick.dimension !== this.chunks.currentDimension || !this.isWorldPositionLoaded(tick.x, tick.y, tick.z)) {
+        this.scheduleWorldTick(
+          tick.type,
+          tick.x,
+          tick.y,
+          tick.z,
+          20,
+          tick.payload?.reason ?? 'deferred_unloaded_tick',
+          tick.dimension as Dimension,
+          this.tickSourcePosition(tick.payload),
+        );
+        continue;
+      }
+
+      if (tick.type === 'fluid') {
+        const result = this.fluids.processTick(tick.x, tick.y, tick.z, {
+          getBlock: (x, y, z) => this.chunks.getBlock(x, y, z),
+          getBlockMeta: (x, y, z) => this.chunks.getBlockMeta(x, y, z),
+          setBlock: (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
+          setBlockMeta: (x, y, z, metadata, markDirty) => this.chunks.setBlockMeta(x, y, z, metadata, markDirty),
+        });
+        for (const next of result.next) {
+          this.scheduleWorldTick(
+            'fluid',
+            next.x,
+            next.y,
+            next.z,
+            result.delayTicks,
+            'fluid_propagation',
+            tick.dimension as Dimension,
+          );
+        }
+        continue;
+      }
+
+      if (tick.type === 'neighbor_update') {
+        this.redstone.observeBlockChange(tick.x, tick.y, tick.z);
+        const blockId = this.chunks.getBlock(tick.x, tick.y, tick.z);
+        if (BlockRegistry.isFluid(blockId)) {
+          this.scheduleWorldTick('fluid', tick.x, tick.y, tick.z, 5, 'neighbor_update', tick.dimension as Dimension);
+        }
+        this.checkFluidAdjacency(tick.x, tick.y, tick.z);
+      }
+
+      this.dispatchScheduledBlockBehavior(tick);
+    }
+  }
+
+  private dispatchScheduledBlockBehavior(tick: ScheduledTick<WorldTickType, WorldTickPayload>) {
+    const blockId = this.chunks.getBlock(tick.x, tick.y, tick.z);
+    const block = BlockRegistry.get(blockId);
+    const behavior = block ? this.behaviors.getBlockBehavior(block) : undefined;
+    if (!behavior?.scheduledTick) return;
+    const position = { x: tick.x, y: tick.y, z: tick.z };
+    behavior.scheduledTick(
+      this.createWorldContext(tick.dimension as Dimension),
+      position,
+      tick.payload?.reason ?? tick.type,
     );
+  }
+
+  private createWorldContext(dimension: Dimension): WorldContext {
+    return {
+      dimension,
+      getBlock: ({ x, y, z }) => this.chunks.getBlock(x, y, z),
+      getBlockState: ({ x, y, z }) => this.chunks.getBlockState(x, y, z),
+      getBlockMetadata: ({ x, y, z }) => this.chunks.getBlockMeta(x, y, z),
+      setBlock: ({ x, y, z }, blockId) => this.chunks.setBlock(x, y, z, blockId),
+      setBlockStateProperties: ({ x, y, z }, properties) => this.chunks.setBlockStateProperties(x, y, z, properties),
+      setBlockMetadata: ({ x, y, z }, metadata) => this.chunks.setBlockMeta(x, y, z, metadata, true),
+      scheduleTick: ({ x, y, z }, delayTicks, reason) => {
+        this.scheduleWorldTick('block_event', x, y, z, delayTicks, reason, dimension);
+      },
+    };
+  }
+
+  private tickSourcePosition(payload?: WorldTickPayload): BlockPosition | undefined {
+    if (
+      !payload
+      || !Number.isFinite(payload.sourceX)
+      || !Number.isFinite(payload.sourceY)
+      || !Number.isFinite(payload.sourceZ)
+    ) return undefined;
+    return { x: payload.sourceX!, y: payload.sourceY!, z: payload.sourceZ! };
+  }
+
+  private isWorldPositionLoaded(x: number, y: number, z: number): boolean {
+    if (y < 0 || y >= WORLD_HEIGHT) return false;
+    return !!this.chunks.getChunk(Math.floor(x / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE));
   }
 
   private isWaterNearby(x: number, y: number, z: number): boolean {
@@ -2603,10 +2857,16 @@ export class Game {
     }
   }
 
-  private updateFarming(dt: number) {
-    this.farmingTickTimer += dt;
-    if (this.farmingTickTimer < 1.0) return;
-    this.farmingTickTimer = 0;
+  private updateFarming(worldTicks: number) {
+    this.farmingTickAccumulator += worldTicks;
+    while (this.farmingTickAccumulator >= 20) {
+      this.farmingTickAccumulator -= 20;
+      this.farmingSimulationSequence++;
+      this.runFarmingTick(this.farmingSimulationSequence);
+    }
+  }
+
+  private runFarmingTick(sequence: number) {
 
     const px = Math.floor(this.player.position.x);
     const py = Math.floor(this.player.position.y);
@@ -2614,9 +2874,9 @@ export class Game {
 
     // Random tick: sample 15 random blocks near player
     for (let i = 0; i < 15; i++) {
-      const rx = px + Math.floor(Math.random() * 32) - 16;
-      const ry = Math.max(1, Math.min(254, py + Math.floor(Math.random() * 16) - 8));
-      const rz = pz + Math.floor(Math.random() * 32) - 16;
+      const rx = px + Math.floor(coordinateRandom(this.seed, sequence, i, 11) * 32) - 16;
+      const ry = Math.max(1, Math.min(254, py + Math.floor(coordinateRandom(this.seed, sequence, i, 23) * 16) - 8));
+      const rz = pz + Math.floor(coordinateRandom(this.seed, sequence, i, 37) * 32) - 16;
 
       const blockId = this.chunks.getBlock(rx, ry, rz);
       const base = blockId & 0x3FF;
@@ -2668,7 +2928,7 @@ export class Game {
             const moisture = (belowId >> 10) & 0x7;
             // Growth chance: higher if moist
             const growthChance = moisture > 0 ? 0.25 : 0.10;
-            if (Math.random() < growthChance) {
+            if (coordinateRandom(this.seed, sequence, i, 53) < growthChance) {
               const newAge = age + 1;
               this.chunks.setBlock(rx, ry, rz, (newAge << 10) | base);
             }
@@ -2680,6 +2940,227 @@ export class Game {
         }
       }
     }
+  }
+
+  private getAdjacentBlockPosition(target: BlockInteractionContext): BlockPosition | null {
+    if (!target.face) return null;
+
+    const offsets: Record<BlockFacing, BlockPosition> = {
+      east: { x: 1, y: 0, z: 0 },
+      west: { x: -1, y: 0, z: 0 },
+      up: { x: 0, y: 1, z: 0 },
+      down: { x: 0, y: -1, z: 0 },
+      south: { x: 0, y: 0, z: 1 },
+      north: { x: 0, y: 0, z: -1 },
+    };
+    const offset = offsets[target.face];
+    return {
+      x: target.position.x + offset.x,
+      y: target.position.y + offset.y,
+      z: target.position.z + offset.z,
+    };
+  }
+
+  private tryUseBucket(stack: ItemStack, target?: BlockInteractionContext): boolean {
+    if (!target) return false;
+
+    if (stack.id === 325) {
+      const targetBaseId = target.blockId & 0x3FF;
+      if (targetBaseId !== 9 && targetBaseId !== 11) return false;
+
+      const filledBucketId = targetBaseId === 9 ? 326 : 327;
+      const { x, y, z } = target.position;
+      this.chunks.setBlock(x, y, z, 0);
+      this.chunks.setBlockMeta(x, y, z, null);
+      this.scheduleFluidNeighborhood(x, y, z);
+      this.sound.playBucketFill();
+      this.replaceHeldBucketAfterUse(stack, filledBucketId);
+      this.notifyState();
+      return true;
+    }
+
+    if (stack.id !== 326 && stack.id !== 327) return false;
+    const placePosition = this.getAdjacentBlockPosition(target);
+    if (!placePosition) return false;
+
+    const currentBlock = this.chunks.getBlock(placePosition.x, placePosition.y, placePosition.z);
+    const isReplaceable = currentBlock === 0 ||
+      BlockRegistry.isFluid(currentBlock) ||
+      currentBlock === 31 ||
+      currentBlock === 37 ||
+      currentBlock === 38;
+    if (!isReplaceable) return false;
+
+    const fluidBlockId = stack.id === 326 ? 9 : 11;
+    this.chunks.setBlock(placePosition.x, placePosition.y, placePosition.z, fluidBlockId);
+    this.chunks.setBlockMeta(placePosition.x, placePosition.y, placePosition.z, { fluidLevel: 8 });
+    this.scheduleFluidNeighborhood(placePosition.x, placePosition.y, placePosition.z);
+    this.sound.playBucketEmpty();
+    this.replaceHeldBucketAfterUse(stack, 325);
+    this.notifyState();
+    return true;
+  }
+
+  private tryPlaceBoat(_stack: ItemStack, target?: BlockInteractionContext): boolean {
+    if (!target) return false;
+    const position = this.getAdjacentBlockPosition(target);
+    if (!position) return false;
+
+    this.vehicles.spawnVehicle('boat', new THREE.Vector3(position.x + 0.5, position.y + 0.2, position.z + 0.5));
+    this.sound.playBlockPlace(5);
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+    return true;
+  }
+
+  private tryPlaceMinecart(_stack: ItemStack, target?: BlockInteractionContext): boolean {
+    if (!target || !BlockRegistry.isRail(target.blockId)) return false;
+    const { x, y, z } = target.position;
+
+    this.vehicles.spawnVehicle('minecart', new THREE.Vector3(x + 0.5, y + 0.05, z + 0.5));
+    this.sound.playBlockPlace(1);
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+    return true;
+  }
+
+  private tryUseFlintAndSteel(target?: BlockInteractionContext): boolean {
+    if (!target) return false;
+    const position = this.getAdjacentBlockPosition(target);
+    if (!position) return false;
+
+    const activated = this.chunks.dimensionGen.findAndActivatePortalFrame(
+      (x, y, z) => this.chunks.getBlock(x, y, z),
+      (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
+      position.x,
+      position.y,
+      position.z,
+    );
+    if (!activated) return false;
+
+    this.sound.playBlockPlace(0);
+    if (this.gameMode !== 'creative') {
+      this.inventory.damageTool(this.player.selectedSlot);
+    }
+    return true;
+  }
+
+  private tryTillFarmland(target?: BlockInteractionContext): boolean {
+    if (!target) return false;
+    const targetBaseId = target.blockId & 0x3FF;
+    if (targetBaseId !== 2 && targetBaseId !== 3) return false;
+
+    const { x, y, z } = target.position;
+    const moisture = this.isWaterNearby(x, y, z) ? 7 : 0;
+    this.chunks.setBlock(x, y, z, (moisture << 10) | 60);
+    this.chunks.setBlockMeta(x, y, z, null);
+    this.sound.playBlockPlace(3);
+    if (this.gameMode !== 'creative') {
+      this.inventory.damageTool(this.player.selectedSlot);
+    }
+    return true;
+  }
+
+  private resetConsumptionProgress() {
+    this.eatingTimer = 0;
+    this.chewSoundTimer = 0;
+  }
+
+  private canConsumeFood(stack: ItemStack): boolean {
+    if (!ItemRegistry.isFood(stack.id)) return false;
+    const isGoldenApple = (stack.id & 0x3FF) === 322;
+    return this.player.hunger < 20 || isGoldenApple || stack.id === HONEY_BOTTLE_ID;
+  }
+
+  private continuePotionUse(stack: ItemStack, dt: number) {
+    const potion = stack.potion?.effect;
+    if (!potion) return { handled: false };
+
+    this.eatingTimer += dt;
+    this.chewSoundTimer += dt;
+    if (this.chewSoundTimer >= 0.35) {
+      this.chewSoundTimer = 0;
+      this.sound.playDrink();
+    }
+    if (this.eatingTimer < 1.6) return { handled: true };
+
+    this.potionEffects.apply(
+      potion,
+      (amount) => { this.player.health = Math.min(20, this.player.health + amount); },
+    );
+    this.sound.playBurp();
+    if (this.gameMode !== 'creative') {
+      this.inventory.setSlot(this.player.selectedSlot, { id: GLASS_BOTTLE_ID, count: 1 });
+    }
+    this.notifyState();
+    return { handled: true, completed: true, cooldown: 0.5 };
+  }
+
+  private continueFoodUse(stack: ItemStack, dt: number) {
+    const foodDef = ItemRegistry.get(stack.id);
+    if (!foodDef || !this.canConsumeFood(stack)) return { handled: false };
+
+    this.eatingTimer += dt;
+    this.chewSoundTimer += dt;
+    if (this.chewSoundTimer >= 0.25) {
+      this.chewSoundTimer = 0;
+      this.sound.playEat();
+
+      let foodColor = 0xc0a080;
+      const baseFoodId = stack.id & 0x3FF;
+      if (baseFoodId === 260) foodColor = 0xff0000;
+      else if (baseFoodId === 363 || baseFoodId === 364) foodColor = 0xa04040;
+      else if (baseFoodId === 322) foodColor = 0xffd700;
+      else if (stack.id === HONEY_BOTTLE_ID) foodColor = 0xe8a300;
+
+      const front = this.player.eyePosition.clone().add(this.player.forward.multiplyScalar(0.4));
+      this.particles.spawnBlockBreak(front.x, front.y, front.z, foodColor);
+    }
+    if (this.eatingTimer < 1.6) return { handled: true };
+
+    this.player.hunger = Math.min(20, this.player.hunger + (foodDef.hungerRestore ?? 0));
+    this.player.saturation = Math.min(
+      this.player.hunger,
+      this.player.saturation + (foodDef.saturationRestore ?? 0),
+    );
+
+    const baseFoodId = stack.id & 0x3FF;
+    if (baseFoodId === 322) {
+      const isEnchanted = (stack.id >> 10) === 1;
+      if (isEnchanted) {
+        this.potionEffects.apply({ id: 'regeneration', level: 2, duration: 20 }, (amount) => {
+          this.player.health = Math.min(20, this.player.health + amount);
+        });
+        this.potionEffects.apply({ id: 'fire_resistance', level: 1, duration: 300 }, () => {});
+        this.player.health = 20;
+      } else {
+        this.potionEffects.apply({ id: 'regeneration', level: 1, duration: 5 }, (amount) => {
+          this.player.health = Math.min(20, this.player.health + amount);
+        });
+      }
+    }
+
+    if (stack.id === HONEY_BOTTLE_ID) {
+      this.potionEffects.remove('poison');
+    }
+
+    this.sound.playBurp();
+    if (this.gameMode !== 'creative') {
+      if (stack.id === HONEY_BOTTLE_ID) {
+        if (stack.count <= 1) {
+          this.inventory.setSlot(this.player.selectedSlot, { id: GLASS_BOTTLE_ID, count: 1 });
+        } else {
+          this.inventory.removeFromSlot(this.player.selectedSlot);
+          this.inventory.addItem(GLASS_BOTTLE_ID, 1);
+        }
+      } else {
+        this.inventory.removeFromSlot(this.player.selectedSlot);
+      }
+    }
+    this.notifyState();
+    return { handled: true, completed: true, cooldown: 0.5 };
   }
 
   private tryUseHeldReadableItem(slot: ItemStack): boolean {
@@ -3120,9 +3601,11 @@ export class Game {
       this.sound.playBlockBreak(1);
       if (fromPlayer && Math.random() < 0.125) {
         const chick = this.mobs.spawnMob('chicken', pos.x, pos.y + 0.1, pos.z);
-        chick.isBaby = true;
-        chick.babyAge = 240;
-        chick.mesh.scale.setScalar(0.5);
+        if (chick) {
+          chick.isBaby = true;
+          chick.babyAge = 240;
+          chick.mesh.scale.setScalar(0.5);
+        }
       }
       return;
     }
@@ -3276,7 +3759,7 @@ export class Game {
       const nz = z + dz;
       const nb = this.chunks.getBlock(nx, ny, nz);
       if (BlockRegistry.isFluid(nb)) {
-        this.fluids.addSource(nx, ny, nz, nb);
+        this.scheduleWorldTick('fluid', nx, ny, nz, 5, 'adjacent_block_change');
       }
     }
   }
@@ -3340,7 +3823,7 @@ export class Game {
   private isBowStack(stack: ItemStack | null | undefined): stack is ItemStack {
     if (!stack) return false;
     const def = ItemRegistry.get(stack.id);
-    return def?.name === 'bow' || def?.officialId === 'minecraft:bow';
+    return def?.behaviorId === 'minecraft:bow';
   }
 
   private getBowAmmoItemId(): number | null {
@@ -3361,32 +3844,91 @@ export class Game {
     return Math.min(1, (normalized * normalized + normalized * 2) / 3);
   }
 
-  private updateBowCharging(dt: number): boolean {
+  private getItemInteractionContext(stack: ItemStack): GameItemInteractionContext | null {
+    const item = ItemRegistry.get(stack.id);
+    if (!item) return null;
+    return {
+      item,
+      stack,
+      target: this.getTargetBlockInteractionContext(stack),
+    };
+  }
+
+  private stopActiveItemUse(reason: ItemUseStopReason): boolean {
+    const active = this.activeItemUse;
+    if (!active) return false;
+    this.activeItemUse = null;
+
     const selected = this.inventory.getSlot(this.player.selectedSlot);
+    const stillSelected = this.player.selectedSlot === active.slotIndex && selected?.id === active.itemId;
+    const stack = stillSelected && selected ? selected : active.stackSnapshot;
+    const context = this.getItemInteractionContext(stack);
+    if (!context) return false;
+
+    const result = this.behaviors.stopItemUse(context, {
+      deltaSeconds: 0,
+      elapsedSeconds: active.elapsedSeconds,
+      reason,
+      stillSelected,
+    });
+    if (result?.cooldown !== undefined) {
+      this.placeCooldown = Math.max(this.placeCooldown, result.cooldown);
+    }
+    return result?.handled ?? false;
+  }
+
+  private updateContinuousItemUse(dt: number): boolean {
+    const selected = this.inventory.getSlot(this.player.selectedSlot);
+    const context = selected ? this.getItemInteractionContext(selected) : null;
+    const behavior = context ? this.behaviors.getItemBehavior(context.item) : undefined;
+    const targetPreventsUse = context?.target
+      ? this.behaviors.preventsItemUse(context.target)
+      : false;
     const rightDown = !this.chatOpen && this.openUI === 'none' && this.input.isMouseDown(2);
-    const canKeepUsingBow = rightDown && this.isBowStack(selected);
+    const canContinue = !!context && !!behavior?.continueUse && rightDown && !targetPreventsUse;
 
-    if (!canKeepUsingBow) {
-      if (this.bowChargeActive) {
-        this.releaseBowCharge(this.isBowStack(selected));
-        return true;
-      }
-      return false;
+    if (this.activeItemUse && (
+      !canContinue ||
+      !selected ||
+      selected.id !== this.activeItemUse.itemId ||
+      this.player.selectedSlot !== this.activeItemUse.slotIndex
+    )) {
+      const reason: ItemUseStopReason = !rightDown
+        ? 'released'
+        : targetPreventsUse
+          ? 'blocked'
+          : 'switched';
+      this.stopActiveItemUse(reason);
     }
 
-    if (!this.bowChargeActive) {
-      if (!this.canUseBow()) return false;
-      this.bowChargeActive = true;
-      this.bowChargeTimer = 0;
-      this.breakProgress = 0;
-      this.breakingBlockPos = null;
-      this.lastFrameWasBreaking = false;
-      this.notifyState();
-      return true;
+    if (!canContinue || !context || !selected || !behavior?.continueUse) return false;
+
+    if (!this.activeItemUse) {
+      if (!this.behaviors.canStartItemUse(context)) return false;
+      const startResult = this.behaviors.startItemUse(context) ?? { handled: true };
+      if (!startResult.handled) return false;
+      this.activeItemUse = {
+        itemId: selected.id,
+        slotIndex: this.player.selectedSlot,
+        elapsedSeconds: 0,
+        stackSnapshot: structuredClone(selected),
+      };
     }
 
-    this.bowChargeTimer += dt;
-    return true;
+    const activeUse = this.activeItemUse;
+    if (!activeUse) return false;
+    activeUse.elapsedSeconds += dt;
+    const result = this.behaviors.continueItemUse(context, {
+      deltaSeconds: dt,
+      elapsedSeconds: activeUse.elapsedSeconds,
+    }) ?? { handled: false };
+    if (result.cooldown !== undefined) {
+      this.placeCooldown = Math.max(this.placeCooldown, result.cooldown);
+    }
+    if (result.completed) {
+      this.stopActiveItemUse('completed');
+    }
+    return result.handled;
   }
 
   private releaseBowCharge(stillHoldingBow: boolean) {
@@ -3422,10 +3964,30 @@ export class Game {
     this.notifyState();
   }
 
+  private fireLoadedCrossbow(stack: ItemStack): boolean {
+    if (!stack.chargedProjectileId) return false;
+
+    this.projectiles.shootArrow(
+      this.player.eyePosition.clone(),
+      this.player.forward.clone(),
+      true,
+      9,
+      32,
+    );
+    delete stack.chargedProjectileId;
+    if (this.gameMode !== 'creative') {
+      this.inventory.damageTool(this.player.selectedSlot);
+    }
+    this.sound.playBowShoot(1);
+    this.swordSwingTimer = Math.max(this.swordSwingTimer, 0.35);
+    this.notifyState();
+    return true;
+  }
+
   private isShieldStack(stack: ItemStack | null | undefined): stack is ItemStack {
     if (!stack) return false;
     const def = ItemRegistry.get(stack.id);
-    return stack.id === SHIELD_ID || def?.name === 'shield' || def?.officialId === 'minecraft:shield';
+    return stack.id === SHIELD_ID || def?.behaviorId === 'minecraft:shield';
   }
 
   private getActiveShieldSlot(): { stack: ItemStack; source: 'mainhand' | 'offhand' } | null {
@@ -3469,7 +4031,7 @@ export class Game {
   }
 
   damagePlayer(amount: number, type: 'mob' | 'fall' | 'drown' | 'starve' | 'wither' | 'magic' | 'fire' | 'lava', knockback?: THREE.Vector3) {
-    if (this.gameMode === 'creative') return;
+    if (this.gameMode === 'creative' || this.spawnProtectionTimer > 0) return;
 
     if (type === 'mob' && this.canShieldBlock(knockback)) {
       this.damageActiveShield(amount);
@@ -3701,7 +4263,8 @@ export class Game {
       targetZ = Math.floor(targetZ * 8);
     }
 
-    // 2. Safely unload old dimension meshes
+    // 2. Preserve entities and safely unload old dimension meshes
+    this.snapshotCurrentDimensionMobs();
     this.chunks.unloadAllMeshes();
     this.mobs.dispose();
     this.riddenVehicle = null;
@@ -3719,6 +4282,7 @@ export class Game {
 
     // 6. Refresh chunks around player immediately
     this.chunks.update(this.player.position.x, this.player.position.z);
+    this.restoreCurrentDimensionMobs();
     this.player.resolveStuck(this.chunks);
 
     // Play portal teleport sound
@@ -3728,6 +4292,7 @@ export class Game {
   }
 
   private teleportToEnd() {
+    this.snapshotCurrentDimensionMobs();
     this.chunks.unloadAllMeshes();
     this.mobs.dispose();
     this.riddenVehicle = null;
@@ -3738,6 +4303,7 @@ export class Game {
     this.player.velocity.set(0, 0, 0);
 
     this.chunks.update(this.player.position.x, this.player.position.z);
+    this.restoreCurrentDimensionMobs();
     this.player.resolveStuck(this.chunks);
 
     this.sound.playPickup();
@@ -3746,6 +4312,7 @@ export class Game {
   }
 
   private teleportFromEndToOverworld() {
+    this.snapshotCurrentDimensionMobs();
     this.chunks.unloadAllMeshes();
     this.mobs.dispose();
     this.riddenVehicle = null;
@@ -3757,6 +4324,7 @@ export class Game {
     this.player.velocity.set(0, 0, 0);
 
     this.chunks.update(this.player.position.x, this.player.position.z);
+    this.restoreCurrentDimensionMobs();
     this.player.resolveStuck(this.chunks);
 
     this.sound.playPickup();
@@ -3826,36 +4394,39 @@ export class Game {
   }
 
   private async saveGame() {
-    const chunkData: SaveData['chunks'] = [];
+    this.snapshotCurrentDimensionMobs();
+    const dimensions: SaveData['dimensions'] = {
+      0: { chunks: [], mobs: [...(this.savedMobsByDimension[0] ?? [])] },
+      1: { chunks: [], mobs: [...(this.savedMobsByDimension[1] ?? [])] },
+      2: { chunks: [], mobs: [...(this.savedMobsByDimension[2] ?? [])] },
+    };
     for (const [, chunk] of this.chunks.overworldChunks) {
-      chunkData.push({
+      dimensions[0]!.chunks.push({
         cx: chunk.cx,
         cz: chunk.cz,
         data: new Uint16Array(chunk.data),
         metadata: chunk.serializeMetadata(),
-        dimension: 0,
       });
     }
     for (const [, chunk] of this.chunks.netherChunks) {
-      chunkData.push({
+      dimensions[1]!.chunks.push({
         cx: chunk.cx,
         cz: chunk.cz,
         data: new Uint16Array(chunk.data),
         metadata: chunk.serializeMetadata(),
-        dimension: 1,
       });
     }
     for (const [, chunk] of this.chunks.endChunks) {
-      chunkData.push({
+      dimensions[2]!.chunks.push({
         cx: chunk.cx,
         cz: chunk.cz,
         data: new Uint16Array(chunk.data),
         metadata: chunk.serializeMetadata(),
-        dimension: 2,
       });
     }
 
     const saveData: SaveData = {
+      schemaVersion: SAVE_SCHEMA_VERSION,
       player: {
         x: this.player.position.x,
         y: this.player.position.y,
@@ -3879,12 +4450,13 @@ export class Game {
         offhand: this.inventory.getOffhand(),
       },
       seed: this.seed,
-      chunks: chunkData,
-      mobs: this.mobs.serialize(this.chunks.currentDimension),
+      dimensions,
       endDragonDefeated: this.enderDragon.getState().defeated,
       endDragonHealth: this.enderDragon.getHealthForSave(),
       gamerules: this.gamerules.toJSON(),
       advancements: this.advancements.getUnlockedList(),
+      simulationTick: this.worldTickScheduler.getCurrentTick(),
+      scheduledBlockTicks: this.worldTickScheduler.getPendingTicks(),
       timestamp: Date.now(),
     };
 
@@ -3920,7 +4492,7 @@ export class Game {
       let migratedLegacySpawn = false;
       if (
         this.shouldMigrateLegacySpawn(data.player.x, data.player.z, this.chunks.currentDimension) ||
-        this.isSavedSpawnColumnStale(data.chunks, data.player.x, data.player.z, this.chunks.currentDimension) ||
+        this.isSavedSpawnColumnStale(data.dimensions[0]?.chunks, data.player.x, data.player.z, this.chunks.currentDimension) ||
         this.isDamagedSpawnSave(data.player.x, data.player.y, data.player.z, data.player.health, this.chunks.currentDimension)
       ) {
         this.player.position.copy(this.findSafeWorldSpawnPosition());
@@ -3936,6 +4508,9 @@ export class Game {
         data.player.xpTotal ?? 0
       );
       this.potionEffects.setEffects(data.player.activePotionEffects);
+      this.worldTickScheduler.restore(data.simulationTick ?? 0, data.scheduledBlockTicks ?? []);
+      this.farmingSimulationSequence = Math.floor((data.simulationTick ?? 0) / 20);
+      this.farmingTickAccumulator = (data.simulationTick ?? 0) % 20;
       this.enderDragon.restore(data.endDragonDefeated ?? false, data.endDragonHealth);
 
       if ((data as any).gamerules) {
@@ -3968,17 +4543,22 @@ export class Game {
         ]);
       }
 
-      if (data.chunks) {
-        this.chunks.overworldChunks.clear();
-        this.chunks.netherChunks.clear();
-        this.chunks.endChunks.clear();
-        for (const chunk of data.chunks) {
-          if (migratedLegacySpawn && this.isChunkNearPlayerSpawn(chunk.cx, chunk.cz, chunk.dimension ?? 0)) {
-            continue;
-          }
-          this.chunks.restoreChunk(chunk.cx, chunk.cz, chunk.data, chunk.metadata, chunk.dimension ?? 0);
+      this.chunks.overworldChunks.clear();
+      this.chunks.netherChunks.clear();
+      this.chunks.endChunks.clear();
+      for (const dimension of [0, 1, 2] as const) {
+        for (const chunk of data.dimensions[dimension]?.chunks ?? []) {
+          if (migratedLegacySpawn && this.isChunkNearPlayerSpawn(chunk.cx, chunk.cz, dimension)) continue;
+          this.chunks.restoreChunk(chunk.cx, chunk.cz, chunk.data, chunk.metadata, dimension);
         }
       }
+      this.restoreScheduledCampfireTicks();
+
+      this.savedMobsByDimension = {
+        0: [...(data.dimensions[0]?.mobs ?? [])],
+        1: [...(data.dimensions[1]?.mobs ?? [])],
+        2: [...(data.dimensions[2]?.mobs ?? [])],
+      };
 
       if (migratedLegacySpawn) {
         this.chunks.update(this.player.position.x, this.player.position.z);
@@ -3987,10 +4567,16 @@ export class Game {
 
       this.restoreRedstoneFromLoadedChunks();
       this.chunks.update(this.player.position.x, this.player.position.z);
-      this.mobs.restore(data.mobs, this.chunks.currentDimension);
+      this.restoreCurrentDimensionMobs();
       this.player.resolveStuck(this.chunks);
+      this.spawnProtectionTimer = 3;
 
-      console.log('Game loaded from save');
+      if (data.recovery?.recovered && data.recovery.warnings.length) {
+        console.warn('Save recovered with warnings:', data.recovery.warnings);
+      } else if (data.recovery?.warnings.length) {
+        console.info('Save migrated:', data.recovery.warnings);
+      }
+      console.log(`Game loaded from save schema v${data.schemaVersion}`);
       this.notifyState();
     } catch (e) {
       console.warn('Load failed:', e);
@@ -4015,7 +4601,7 @@ export class Game {
     return Math.abs(cx - spawnChunkX) <= RENDER_DISTANCE + 1 && Math.abs(cz - spawnChunkZ) <= RENDER_DISTANCE + 1;
   }
 
-  private isSavedSpawnColumnStale(chunks: SaveData['chunks'] | undefined, x: number, z: number, dimension: Dimension): boolean {
+  private isSavedSpawnColumnStale(chunks: SavedChunk[] | undefined, x: number, z: number, dimension: Dimension): boolean {
     if (!chunks || dimension !== Dimension.Overworld) return false;
     if (Math.hypot(x - WORLD_SPAWN_X, z - WORLD_SPAWN_Z) > 32) return false;
 
@@ -4026,7 +4612,7 @@ export class Game {
 
     const cx = Math.floor(wx / CHUNK_SIZE);
     const cz = Math.floor(wz / CHUNK_SIZE);
-    const chunk = chunks.find((c) => c.cx === cx && c.cz === cz && (c.dimension ?? 0) === Dimension.Overworld);
+    const chunk = chunks.find((c) => c.cx === cx && c.cz === cz);
     if (!chunk) return false;
 
     const lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
@@ -4053,6 +4639,16 @@ export class Game {
     }
 
     return Math.max(this.chunks.getWorldGen().getTerrainHeight(wx, wz), SEA_LEVEL + 1);
+  }
+
+  private snapshotCurrentDimensionMobs() {
+    const dimension = this.chunks.currentDimension as SaveDimensionId;
+    this.savedMobsByDimension[dimension] = this.mobs.serialize(dimension);
+  }
+
+  private restoreCurrentDimensionMobs() {
+    const dimension = this.chunks.currentDimension as SaveDimensionId;
+    this.mobs.restore(this.savedMobsByDimension[dimension], dimension);
   }
 
   completeEndPoem() {
@@ -4183,10 +4779,7 @@ export class Game {
   }
 
   private pseudoRandom(x: number, y: number, z: number): number {
-    let h = (x * 374761393 + y * 668265263 + z * 1274126177 + this.seed) | 0;
-    h = (h ^ (h >> 13)) * 1274126177;
-    h = h ^ (h >> 16);
-    return (h & 0x7fffffff) / 0x7fffffff;
+    return coordinateRandom(this.seed, x, y, z);
   }
 
   private positiveMod(value: number, mod: number): number {
@@ -4715,20 +5308,25 @@ export class Game {
     const currentMeta = this.chunks.getBlockMeta(x, y, z) ?? {};
     const campfireItems = [...(currentMeta.campfireItems ?? new Array(4).fill(null))].slice(0, 4);
     const cookTimes = [...(currentMeta.campfireCookTimes ?? new Array(4).fill(0))].slice(0, 4);
+    const dueTicks = [...(currentMeta.campfireCookDueTicks ?? new Array(4).fill(0))].slice(0, 4);
     while (campfireItems.length < 4) campfireItems.push(null);
     while (cookTimes.length < 4) cookTimes.push(0);
+    while (dueTicks.length < 4) dueTicks.push(0);
 
     const slotIndex = campfireItems.findIndex((item) => !item);
     if (slotIndex === -1) return true;
 
     campfireItems[slotIndex] = { id: selectedSlot.id, count: 1 };
     cookTimes[slotIndex] = 0;
+    dueTicks[slotIndex] = this.worldTickScheduler.getCurrentTick() + CAMPFIRE_COOK_TICKS;
 
     this.chunks.setBlockMeta(x, y, z, {
       ...currentMeta,
       campfireItems,
       campfireCookTimes: cookTimes,
+      campfireCookDueTicks: dueTicks,
     }, true);
+    this.scheduleWorldTick('block_event', x, y, z, CAMPFIRE_COOK_TICKS, 'campfire_cook');
 
     if (this.gameMode !== 'creative') {
       this.inventory.removeFromSlot(this.player.selectedSlot, 1);
@@ -4740,56 +5338,120 @@ export class Game {
     return true;
   }
 
-  private updateCampfires(dt: number) {
-    if (dt <= 0) return;
+  private completeCampfireCooking(x: number, y: number, z: number) {
+    const blockName = BlockRegistry.get(this.chunks.getBlock(x, y, z))?.name;
+    if (blockName !== 'campfire' && blockName !== 'soul_campfire') return;
 
-    for (const chunk of this.chunks.chunks.values()) {
-      for (const [index, meta] of chunk.metadata.entries()) {
-        const campfireItems = meta.campfireItems;
-        if (!campfireItems || campfireItems.length === 0) continue;
+    const metadata = this.chunks.getBlockMeta(x, y, z) ?? {};
+    const items = [...(metadata.campfireItems ?? new Array(4).fill(null))].slice(0, 4);
+    const cookTimes = [...(metadata.campfireCookTimes ?? new Array(4).fill(0))].slice(0, 4);
+    const dueTicks = [...(metadata.campfireCookDueTicks ?? new Array(4).fill(0))].slice(0, 4);
+    while (items.length < 4) items.push(null);
+    while (cookTimes.length < 4) cookTimes.push(0);
+    while (dueTicks.length < 4) dueTicks.push(0);
 
-        const blockId = chunk.data[index];
-        const def = BlockRegistry.get(blockId);
-        if (!def || (def.name !== 'campfire' && def.name !== 'soul_campfire')) continue;
+    const currentTick = this.worldTickScheduler.getCurrentTick();
+    let nextDueTick = Number.POSITIVE_INFINITY;
+    let changed = false;
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
+      if (!item) {
+        cookTimes[index] = 0;
+        dueTicks[index] = 0;
+        continue;
+      }
+      if (!Number.isFinite(dueTicks[index]) || dueTicks[index] <= 0) {
+        dueTicks[index] = currentTick + CAMPFIRE_COOK_TICKS;
+      }
+      if (dueTicks[index] > currentTick) {
+        nextDueTick = Math.min(nextDueTick, dueTicks[index]);
+        continue;
+      }
 
-        const cookTimes = [...(meta.campfireCookTimes ?? new Array(4).fill(0))].slice(0, 4);
-        while (cookTimes.length < 4) cookTimes.push(0);
+      const recipe = findSmeltingResult(item.id);
+      if (recipe && ItemRegistry.isFood(recipe.output)) {
+        const dropPosition = new THREE.Vector3(x + 0.5, y + 0.45, z + 0.5);
+        const velocity = new THREE.Vector3(
+          (coordinateRandom(this.seed, currentTick, index, 71) - 0.5) * 0.35,
+          0.35,
+          (coordinateRandom(this.seed, currentTick, index, 83) - 0.5) * 0.35,
+        );
+        this.droppedItems.spawnItem(recipe.output, recipe.outputCount, dropPosition, velocity, 0.25);
+        this.xp.spawnXP(recipe.xp, dropPosition.clone().add(new THREE.Vector3(0, 0.15, 0)));
+        this.sound.playPickup();
+        this.particles.spawnBlockBreak(x + 0.5, y + 0.35, z + 0.5, 0xffc05a, 10);
+      }
+      items[index] = null;
+      cookTimes[index] = 0;
+      dueTicks[index] = 0;
+      changed = true;
+    }
 
-        let changed = false;
-        const x = index % CHUNK_SIZE;
-        const z = Math.floor((index % (CHUNK_SIZE * CHUNK_SIZE)) / CHUNK_SIZE);
-        const y = Math.floor(index / (CHUNK_SIZE * CHUNK_SIZE));
-        const worldX = chunk.cx * CHUNK_SIZE + x;
-        const worldZ = chunk.cz * CHUNK_SIZE + z;
+    if (Number.isFinite(nextDueTick)) {
+      this.scheduleWorldTick('block_event', x, y, z, nextDueTick - currentTick, 'campfire_cook');
+    }
+    if (changed || metadata.campfireCookDueTicks === undefined) {
+      this.chunks.setBlockMeta(x, y, z, {
+        ...metadata,
+        campfireItems: items,
+        campfireCookTimes: cookTimes,
+        campfireCookDueTicks: dueTicks,
+      }, true);
+      this.notifyState();
+    }
+  }
 
-        for (let i = 0; i < Math.min(4, campfireItems.length); i++) {
-          const item = campfireItems[i];
-          if (!item) {
-            cookTimes[i] = 0;
-            continue;
+  private restoreScheduledCampfireTicks() {
+    const currentTick = this.worldTickScheduler.getCurrentTick();
+    const dimensionChunks = [
+      [Dimension.Overworld, this.chunks.overworldChunks],
+      [Dimension.Nether, this.chunks.netherChunks],
+      [Dimension.End, this.chunks.endChunks],
+    ] as const;
+
+    for (const [dimension, chunks] of dimensionChunks) {
+      for (const chunk of chunks.values()) {
+        for (const [index, metadata] of chunk.metadata.entries()) {
+          const items = metadata.campfireItems;
+          if (!items?.some(Boolean)) continue;
+          const blockName = BlockRegistry.get(chunk.data[index])?.name;
+          if (blockName !== 'campfire' && blockName !== 'soul_campfire') continue;
+
+          const cookTimes = [...(metadata.campfireCookTimes ?? new Array(4).fill(0))].slice(0, 4);
+          const dueTicks = [...(metadata.campfireCookDueTicks ?? new Array(4).fill(0))].slice(0, 4);
+          while (cookTimes.length < 4) cookTimes.push(0);
+          while (dueTicks.length < 4) dueTicks.push(0);
+
+          let earliestDueTick = Number.POSITIVE_INFINITY;
+          for (let slot = 0; slot < 4; slot++) {
+            if (!items[slot]) {
+              dueTicks[slot] = 0;
+              continue;
+            }
+            if (!Number.isFinite(dueTicks[slot]) || dueTicks[slot] <= currentTick) {
+              const elapsedTicks = Math.max(0, Math.floor((cookTimes[slot] ?? 0) * 20));
+              dueTicks[slot] = currentTick + Math.max(1, CAMPFIRE_COOK_TICKS - elapsedTicks);
+            }
+            earliestDueTick = Math.min(earliestDueTick, dueTicks[slot]);
           }
 
-          const recipe = findSmeltingResult(item.id);
-          if (!recipe || !ItemRegistry.isFood(recipe.output)) continue;
-
-          cookTimes[i] += dt;
-          changed = true;
-
-          if (cookTimes[i] >= CAMPFIRE_COOK_TIME) {
-            const dropPos = new THREE.Vector3(worldX + 0.5, y + 0.45, worldZ + 0.5);
-            const velocity = new THREE.Vector3((Math.random() - 0.5) * 0.35, 0.35, (Math.random() - 0.5) * 0.35);
-            this.droppedItems.spawnItem(recipe.output, recipe.outputCount, dropPos, velocity, 0.25);
-            this.xp.spawnXP(recipe.xp, dropPos.clone().add(new THREE.Vector3(0, 0.15, 0)));
-            this.sound.playPickup();
-            this.particles.spawnBlockBreak(worldX + 0.5, y + 0.35, worldZ + 0.5, 0xffc05a, 10);
-            campfireItems[i] = null;
-            cookTimes[i] = 0;
+          metadata.campfireCookDueTicks = dueTicks;
+          const localX = index % CHUNK_SIZE;
+          const localZ = Math.floor((index % (CHUNK_SIZE * CHUNK_SIZE)) / CHUNK_SIZE);
+          const y = Math.floor(index / (CHUNK_SIZE * CHUNK_SIZE));
+          const worldX = chunk.cx * CHUNK_SIZE + localX;
+          const worldZ = chunk.cz * CHUNK_SIZE + localZ;
+          if (Number.isFinite(earliestDueTick)) {
+            this.scheduleWorldTick(
+              'block_event',
+              worldX,
+              y,
+              worldZ,
+              earliestDueTick - currentTick,
+              'campfire_cook',
+              dimension,
+            );
           }
-        }
-
-        if (changed) {
-          meta.campfireCookTimes = cookTimes;
-          chunk.dirty = true;
         }
       }
     }
@@ -5062,6 +5724,53 @@ export class Game {
       return { x, y: y - 1, z };
     }
     return { x, y, z };
+  }
+
+  private toggleDaylightDetector(x: number, y: number, z: number, blockId: number) {
+    const isNormal = blockId === 151 || (blockId & 0x3FF) === 151;
+    const newBaseId = isNormal ? 178 : 151;
+    const metaVal = (blockId >> 10) & 0xF;
+    const newPackedId = (metaVal << 10) | newBaseId;
+    const currentMeta = this.chunks.getBlockMeta(x, y, z);
+
+    this.chunks.setBlock(x, y, z, newPackedId);
+    this.chunks.setBlockMeta(x, y, z, {
+      ...currentMeta,
+      facing: 'up',
+      redstoneType: 'daylight_detector',
+    }, true);
+    this.redstone.register(x, y, z, 'daylight_detector', 'up');
+    this.sound.playLever();
+  }
+
+  private toggleComparatorMode(x: number, y: number, z: number, blockId: number) {
+    const metaVal = (blockId >> 10) & 0x7;
+    const newMeta = metaVal < 4 ? metaVal + 4 : metaVal - 4;
+    const newPackedId = (newMeta << 10) | (blockId & 0x3FF);
+    const currentMeta = this.chunks.getBlockMeta(x, y, z);
+
+    this.chunks.setBlock(x, y, z, newPackedId);
+    this.chunks.setBlockMeta(x, y, z, {
+      ...currentMeta,
+      facing: currentMeta?.facing ?? 'north',
+      redstoneType: 'comparator',
+      open: newMeta >= 4,
+    }, true);
+    this.sound.playLever();
+  }
+
+  private useBed(x: number, y: number, z: number) {
+    this.bedSpawnPoint = new THREE.Vector3(x + 0.5, y + 1, z + 0.5);
+    this.sound.playBlockPlace(35);
+    this.advancements.checkSleep();
+
+    if (this.isNight()) {
+      this.gameTime = 0.0;
+      this.addChatMessage('You are now sleeping. Morning has come.');
+      this.notifyState();
+    } else {
+      this.addChatMessage('You can only sleep at night');
+    }
   }
 
   private toggleDoor(x: number, y: number, z: number) {
@@ -5655,7 +6364,6 @@ export class Game {
 
     // Fluid check after removal
     this.checkFluidAdjacency(x, y, z);
-    this.updateFluids(0.4);
   }
 
   private restoreRedstoneFromLoadedChunks() {

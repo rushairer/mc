@@ -148,7 +148,10 @@ export class Mob {
     this.mesh = this.createMesh();
     this.mesh.traverse(child => {
       if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
+        // Detailed per-limb shadow-map rendering scales poorly with mob count.
+        // Keep world lighting on entities; a Minecraft-style blob shadow can be
+        // added as a single cheap primitive in the presentation-parity phase.
+        child.castShadow = false;
         child.receiveShadow = true;
       }
     });

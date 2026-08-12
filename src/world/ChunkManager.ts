@@ -4,7 +4,8 @@ import { WorldGen } from './WorldGen';
 import { BlockRegistry } from './BlockRegistry';
 import { CHUNK_SIZE, WORLD_HEIGHT, RENDER_DISTANCE } from '../constants';
 import { TextureAtlas } from '../engine/TextureAtlas';
-import type { BlockMetadata, SerializedBlockMetadata } from '../types';
+import type { BlockMetadata, BlockState, BlockStateProperties, SerializedBlockMetadata } from '../types';
+import { mergeBlockStateMetadata } from './BlockState';
 import { Dimension, DimensionGenerator } from './DimensionGenerator';
 
 export class ChunkManager {
@@ -186,6 +187,8 @@ export class ChunkManager {
 
     let lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     let lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const previousId = chunk.getBlock(lx, wy, lz);
+    if (previousId === id) return;
     chunk.setBlock(lx, wy, lz, id);
 
     // Mark neighbor chunks as dirty if on boundary
@@ -197,6 +200,7 @@ export class ChunkManager {
     // Recompute light for this chunk and rebuild
     this.computeChunkLight(chunk);
     this.rebuildChunkMesh(chunk);
+    this.game?.onBlockChanged?.(Math.floor(wx), Math.floor(wy), Math.floor(wz), previousId, id, this.currentDimension);
   }
 
   getBlockMeta(wx: number, wy: number, wz: number): BlockMetadata | undefined {
@@ -208,6 +212,17 @@ export class ChunkManager {
     const lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     const lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     return chunk.getBlockMeta(lx, wy, lz);
+  }
+
+  getBlockState(wx: number, wy: number, wz: number): BlockState | undefined {
+    const id = this.getBlock(wx, wy, wz);
+    return id === 0 ? undefined : BlockRegistry.resolveState(id, this.getBlockMeta(wx, wy, wz));
+  }
+
+  setBlockStateProperties(wx: number, wy: number, wz: number, properties: BlockStateProperties) {
+    if (this.getBlock(wx, wy, wz) === 0) return;
+    const metadata = mergeBlockStateMetadata(this.getBlockMeta(wx, wy, wz), properties);
+    this.setBlockMeta(wx, wy, wz, metadata, true);
   }
 
   isSolidBlock(wx: number, wy: number, wz: number): boolean {

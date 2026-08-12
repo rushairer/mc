@@ -2,8 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-const officialRoot = process.argv[2] ?? 'scripts/tmp-minecraft-official/extract/assets/minecraft';
-const reportPath = process.argv[3] ?? 'docs/VANILLA_26_2_COVERAGE.md';
+const TARGET_VERSION = process.env.MINECRAFT_TARGET_VERSION ?? '1.20.1';
+const cacheDir = path.join('scripts/tmp-minecraft-official', TARGET_VERSION);
+const officialRoot = process.argv[2] ?? path.join(cacheDir, 'extract/assets/minecraft');
+const reportPath = process.argv[3] ?? 'docs/VANILLA_1_20_1_COVERAGE.md';
 
 async function downloadJson(url, file) {
   const response = await fetch(url);
@@ -20,19 +22,18 @@ async function downloadFile(url, file) {
 }
 
 async function ensureOfficialRoot(root) {
-  if (fs.existsSync(path.join(root, 'items')) && fs.existsSync(path.join(root, 'blockstates'))) return;
+  if (fs.existsSync(path.join(root, 'models/item')) && fs.existsSync(path.join(root, 'blockstates'))) return;
 
-  const cacheDir = 'scripts/tmp-minecraft-official';
   const manifestPath = path.join(cacheDir, 'version_manifest_v2.json');
-  const versionPath = path.join(cacheDir, 'latest.json');
+  const versionPath = path.join(cacheDir, `${TARGET_VERSION}.json`);
   const clientPath = path.join(cacheDir, 'client.jar');
 
   await downloadJson('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json', manifestPath);
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  const latest = manifest.versions.find((version) => version.id === manifest.latest.release);
-  if (!latest) throw new Error(`Unable to find latest release ${manifest.latest.release}`);
+  const target = manifest.versions.find((version) => version.id === TARGET_VERSION);
+  if (!target) throw new Error(`Unable to find target release ${TARGET_VERSION}`);
 
-  await downloadJson(latest.url, versionPath);
+  await downloadJson(target.url, versionPath);
   const version = JSON.parse(fs.readFileSync(versionPath, 'utf8'));
   await downloadFile(version.downloads.client.url, clientPath);
 
@@ -41,7 +42,6 @@ async function ensureOfficialRoot(root) {
   execFileSync('unzip', [
     '-q',
     clientPath,
-    'assets/minecraft/items/*.json',
     'assets/minecraft/blockstates/*.json',
     'assets/minecraft/models/item/*.json',
     '-d',
@@ -91,7 +91,9 @@ const normalize = (name) => name
   .replace(/^mutton$/, 'raw_mutton')
   .replace(/^rabbit$/, 'raw_rabbit')
   .replace(/^porkchop$/, 'raw_porkchop')
-  .replace(/^carrot_on_a_stick$/, 'carrot_on_a_stick');
+  .replace(/^carrot_on_a_stick$/, 'carrot_on_a_stick')
+  .replace(/^iron_chain$/, 'chain')
+  .replace(/^turtle_scute$/, 'scute');
 
 const titleCase = (name) => normalize(name)
   .split('_')
@@ -103,7 +105,7 @@ const listJsonNames = (dir) => fs.readdirSync(path.join(officialRoot, dir))
   .map((file) => file.replace(/\.json$/, ''))
   .sort();
 
-const officialItems = listJsonNames('items');
+const officialItems = listJsonNames('models/item');
 const officialBlocks = listJsonNames('blockstates');
 
 const repoItemNames = new Set(items.map((item) => normalize(item.name)));
@@ -116,6 +118,10 @@ const ignoredGeneratedItemModels = [
   /_brushing_[0-9]$/,
   /_throwing$/,
   /_in_hand$/,
+  /_trim$/,
+  /^(clock|compass|recovery_compass|light)_[0-9]+$/,
+  /^template_/,
+  /^(amethyst_bud|broken_elytra|bundle_filled|crossbow_arrow|crossbow_firework|fishing_rod_cast|generated|handheld|handheld_rod|shield_blocking|tooting_goat_horn)$/,
 ];
 
 const filteredOfficialItems = officialItems.filter((name) =>
@@ -131,9 +137,9 @@ const missingNonBlockItems = nonBlockOfficialItems.filter((name) => !repoItemNam
 const blockItemMissingImplementation = missingItems.filter((name) => officialBlocks.includes(name));
 
 const lines = [
-  '# Vanilla Java 26.2 Coverage Audit',
+  `# Vanilla Java ${TARGET_VERSION} Coverage Audit`,
   '',
-  'Generated from the official Mojang version manifest and the Java 26.2 client jar.',
+  `Generated from the official Mojang version manifest and the Java ${TARGET_VERSION} client jar.`,
   '',
   `- Official item definitions: ${officialItems.length}`,
   `- Official item definitions after generated model filtering: ${filteredOfficialItems.length}`,
@@ -163,6 +169,7 @@ const lines = [
 fs.mkdirSync(path.dirname(reportPath), { recursive: true });
 fs.writeFileSync(reportPath, `${lines.join('\n')}\n`);
 
+console.log(`Target Minecraft Java: ${TARGET_VERSION}`);
 console.log(`Official Java items: ${officialItems.length}`);
 console.log(`Filtered official items: ${filteredOfficialItems.length}`);
 console.log(`Repo item definitions: ${items.length}`);

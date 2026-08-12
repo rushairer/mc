@@ -7,10 +7,14 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "test": "npm run test:unit",
+    "test:unit": "tsx --test tests/**/*.test.ts",
+    "check": "npm run test:unit && tsc --noEmit && vite build",
     "generate:visual-map": "node scripts/generate-visual-map.mjs",
     "generate:assets": "node scripts/generate-procedural-assets.mjs",
     "audit:items": "node scripts/audit-items-world.mjs",
     "audit:vanilla": "node scripts/audit-vanilla-coverage.mjs",
+    "audit:parity": "node scripts/audit-parity.mjs",
     "server": "tsx src/server/standalone.ts"
   },
   "dependencies": {

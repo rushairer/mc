@@ -7,15 +7,31 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 
 ### Added
+- Add a deterministic, persisted 20 TPS world scheduler for neighbor updates, fluid propagation, and block events.
+- Add save schema v3 with automatic v2 migration and validation, deduplication, dimension scoping, and recovery of pending block ticks.
+- Add stable `behaviorId` bindings to block and item definitions, including data-pack overrides and automatic compatibility mappings for existing registry entries.
+- Add block, item, and entity behavior registry interfaces; Cauldrons, Composters, Cakes, Bells, Campfires, supported passive mobs, pets, villagers, and rideable entities now use shared interaction dispatchers.
+- Add a continuous item-use lifecycle with explicit start, progress, completion, release, interruption, and item-switch callbacks.
+- Add loadable Crossbows with Survival ammo consumption, persisted loaded-projectile state, durability loss, and dedicated firing behavior.
 - Add dedicated fallback item icons and held-item models for Bow, Crossbow, Arrow variants, Fishing Rod, Trident, Snowball, Egg, Ender Pearl, and Eye of Ender instead of generic flat item placeholders.
 - Add a procedural bow-shot sound with resource-pack hooks for `entity.arrow.shoot` and `item.crossbow.shoot`.
 
 ### Changed
+- Route workstations, containers, wooden doors and trapdoors, Beds, redstone controls, Buckets, Boats, Minecarts, Hoes, maps and books, Fishing Rods, throwable items, and Eyes of Ender through the shared behavior dispatcher.
+- Route Bow charging, Shield use, food eating, potion drinking, animal breeding and growth, pet taming/healing/sitting, villager trading, and entity riding through behavior lifecycles.
+- Make wolf and cat taming rolls replayable from the world seed, simulation tick, entity, and held item.
+- Let block behaviors explicitly decide whether a failed interaction suppresses fallback food or potion use, replacing the duplicated interactive-block name list.
+- Drive water and lava updates from scheduled world ticks instead of a frame-time queue, preserving pending propagation across saves and unloaded dimensions.
+- Schedule Campfire cooking by per-slot completion ticks instead of scanning every loaded block-metadata entry each frame; existing cooking progress is converted automatically when an older save loads.
 - Bow firing now supports normal, spectral, and tipped arrows as ammo, consumes bow durability in Survival mode, and uses a distinct shoot feedback instead of the player hurt sound.
 - Creative flight help text now documents double-space to toggle flight and Space/Shift for vertical flight; F is documented only as the offhand swap key.
 - Document the current multiplayer status as an experimental WebSocket mode: local/server join, movement, chat, chunks, basic block edits, mobs, drops, and weather/time sync are present, while full authoritative survival gameplay and item actions still need incremental work.
 
 ### Fixed
+- Preserve block-before-item interaction priority for registered workstations and controls, and stop bare-hand interaction from opening Iron Doors or Iron Trapdoors.
+- Preserve entity-before-item interaction priority so food used to breed or tame a targeted mob is not eaten by the player, and cancel active use when a block or entity claims the interaction.
+- Keep a consumed Potion stack unchanged in Creative mode instead of replacing it with a Glass Bottle.
+- Process full redstone simulation for every catch-up tick so Observer pulses and signal propagation do not become frame-rate dependent.
 - Fix flying descent so holding Shift while flying moves the player downward.
 - Fix singleplayer local simulation being paused by the in-memory mock connection, which caused arrows, mobs, drops, and damage updates to appear stuck.
 

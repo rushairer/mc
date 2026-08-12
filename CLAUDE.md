@@ -39,7 +39,7 @@
 
 ### 当前阶段
 
-**阶段 4: 渲染与体验** — 参见 `docs/DEVELOPMENT_ROADMAP.md` 阶段 4 详细任务列表
+**Java 1.20.1 对等重建 · 阶段 1 收尾 / 阶段 2 行为底座** — 旧阶段 1–5 只作为历史里程碑，不再代表 1:1 完成度。开发顺序与验收口径以 `docs/DEVELOPMENT_ROADMAP.md` 顶部的“对等重建计划”和 `docs/parity-manifest.json` 为准。
 
 ### 重要提示
 

@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "target": {
+    "edition": "java",
+    "version": "1.20.1",
+    "scope": "gameplay-and-presentation",
+    "protocolCompatible": false,
+    "seedExact": false
+  },
+  "axes": {
+    "definitions": {
+      "state": "partial",
+      "evidence": ["npm run audit:vanilla", "npm run audit:items"]
+    },
+    "visualModels": {
+      "state": "partial",
+      "evidence": ["npm run audit:items", "all current visuals are generated rather than model-parity verified"]
+    },
+    "behavior": {
+      "state": "partial",
+      "evidence": ["system-specific acceptance tests are required before a feature can be complete"]
+    },
+    "automatedAcceptance": {
+      "state": "partial",
+      "evidence": ["npm run test:unit", "npm run check"]
+    }
+  },
+  "inventory": {
+    "baseBlockDefinitions": 1251,
+    "baseItemDefinitions": 722,
+    "implementedMobTypes": 24,
+    "implementedBiomes": 11,
+    "implementedEnchantments": 4,
+    "implementedPotionEffects": 7,
+    "implementedAdvancements": 10
+  },
+  "systems": {
+    "saveMigration": { "definitions": "complete", "visualModels": "not-applicable", "behavior": "partial", "automatedAcceptance": "partial" },
+    "blockStateFoundation": { "definitions": "partial", "visualModels": "not-applicable", "behavior": "partial", "automatedAcceptance": "partial" },
+    "tickScheduler": { "definitions": "complete", "visualModels": "not-applicable", "behavior": "complete", "automatedAcceptance": "partial" },
+    "behaviorRegistry": { "definitions": "complete", "visualModels": "not-applicable", "behavior": "partial", "automatedAcceptance": "partial" },
+    "worldGeneration": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "blocks": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "itemsAndCrafting": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "mobs": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "combatAndProgression": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "redstone": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "audioAndUi": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "multiplayer": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" }
+  },
+  "releaseGates": {
+    "unitTests": "required",
+    "typeCheck": "required",
+    "productionBuild": "required",
+    "browserSmoke": "required",
+    "newWorldInteractiveSecondsMax": 10,
+    "targetFpsAt1080pRenderDistance8": 60,
+    "longRunMinutes": 30,
+    "unboundedEntityGrowthAllowed": false,
+    "consoleErrorsAllowed": false
+  },
+  "latestValidation": {
+    "date": "2026-08-13",
+    "scenario": "phase2.6-entity-and-continuous-item-behavior-old-save-browser-smoke",
+    "loadedChunks": 113,
+    "activeMobs": 24,
+    "worldInteractiveMilliseconds": 10391,
+    "observedFpsSamples": [77, 20, 85, 76, 19, 90, 69],
+    "interactiveTargetMet": false,
+    "fpsTargetMet": false,
+    "consoleErrors": 0,
+    "consoleWarnings": 0,
+    "automatedLongRunCompleted": false,
+    "twoClientSmokeCompleted": false
+  }
+}

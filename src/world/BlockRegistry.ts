@@ -1,6 +1,9 @@
 import type { BlockDef } from '../types';
 import type { DataPackBlock } from '../systems/DataPackTypes';
 import rawBlocks from '../items/data/blocks.json';
+import { createBlockStateSchema, getDefaultBlockState, resolveBlockState } from './BlockState';
+import type { BlockMetadata, BlockState, BlockStateProperties } from '../types';
+import { inferBlockBehaviorId } from './BehaviorIds';
 
 const blocks: Map<number, BlockDef> = new Map();
 const blocksByOfficialId: Map<string, BlockDef> = new Map();
@@ -119,6 +122,8 @@ for (const b of rawBlocks) {
       baseId: runtimeId,
       metadata: 0,
       displayName: b.displayName,
+      stateSchema: createBlockStateSchema(b.name),
+      behaviorId: inferBlockBehaviorId(b.name),
     });
 
     for (const v of b.variations) {
@@ -140,6 +145,8 @@ for (const b of rawBlocks) {
         baseId: runtimeId,
         metadata: v.metadata,
         displayName: v.displayName,
+        stateSchema: createBlockStateSchema(vName),
+        behaviorId: inferBlockBehaviorId(vName),
       });
     }
   } else {
@@ -160,6 +167,8 @@ for (const b of rawBlocks) {
       baseId: runtimeId,
       metadata: 0,
       displayName: b.displayName,
+      stateSchema: createBlockStateSchema(b.name),
+      behaviorId: inferBlockBehaviorId(b.name),
     });
   }
 }
@@ -197,6 +206,8 @@ export const BlockRegistry = {
         baseId: block.baseId ?? block.id,
         metadata: block.metadata ?? 0,
         displayName: block.displayName,
+        stateSchema: createBlockStateSchema(block.name),
+        behaviorId: block.behaviorId ?? inferBlockBehaviorId(block.name),
       };
       registerBlock(blockDef);
     }
@@ -204,6 +215,15 @@ export const BlockRegistry = {
 
   get(id: number): BlockDef | undefined {
     return blocks.get(id) ?? blocks.get(id & 0x3FF);
+  },
+
+  getDefaultState(id: number): BlockStateProperties {
+    return getDefaultBlockState(this.get(id)?.stateSchema);
+  },
+
+  resolveState(id: number, metadata?: BlockMetadata): BlockState | undefined {
+    const block = this.get(id);
+    return block ? resolveBlockState(block, id, metadata) : undefined;
   },
 
   isTransparent(id: number): boolean {

@@ -4,6 +4,7 @@ import { BlockRegistry } from './BlockRegistry';
 import { VisualResolver } from '../visual/VisualResolver';
 import type { BlockMetadata, ChunkMeshData, SerializedBlockMetadata } from '../types';
 import { BiomeType } from './WorldGen';
+import { synchronizeBlockMetadata } from './BlockState';
 // Biome Grass Colors
 const BIOME_GRASS_COLORS: Record<number, [number, number, number]> = {
   [BiomeType.Plains]: [0.57, 0.76, 0.34],
@@ -99,7 +100,8 @@ export class Chunk {
     }
     const index = this.getIndex(x, y, z);
     if (metadata && Object.keys(metadata).length > 0) {
-      this.metadata.set(index, { ...metadata });
+      const blockId = this.data[index];
+      this.metadata.set(index, synchronizeBlockMetadata(BlockRegistry.get(blockId), blockId, metadata));
     } else {
       this.metadata.delete(index);
     }
@@ -123,7 +125,8 @@ export class Chunk {
     for (const entry of serialized) {
       if (!entry || entry.index < 0 || entry.index >= maxIndex || !entry.metadata) continue;
       if (this.data[entry.index] === 0) continue;
-      this.metadata.set(entry.index, { ...entry.metadata });
+      const blockId = this.data[entry.index];
+      this.metadata.set(entry.index, synchronizeBlockMetadata(BlockRegistry.get(blockId), blockId, entry.metadata));
     }
     this.dirty = true;
   }

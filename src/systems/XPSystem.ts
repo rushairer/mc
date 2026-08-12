@@ -142,6 +142,16 @@ export class XPSystem {
     }
   }
 
+  setProgress(level: number, progress: number) {
+    this.level = Math.max(0, Math.floor(level));
+    const normalizedProgress = Number.isFinite(progress) ? Math.min(1, Math.max(0, progress)) : 0;
+    this.current = Math.min(
+      this.getXPForNextLevel(this.level) - 1,
+      Math.floor(this.getXPForNextLevel(this.level) * normalizedProgress),
+    );
+    this.total = Math.max(this.total, this.current);
+  }
+
   reset() {
     this.level = 0;
     this.current = 0;

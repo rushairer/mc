@@ -8,6 +8,7 @@
 import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
 import type { BlockFacing } from '../types';
+import { TickScheduler } from './TickScheduler';
 
 export interface RedstoneEntity {
   pos: { x: number; y: number; z: number };
@@ -41,8 +42,7 @@ const LEVER_ID = 34;    // lever block ID (placeholder)
 
 export class RedstoneSystem {
   private components: Map<string, RedstoneComponent> = new Map();
-  private tickTimer = 0;
-  private tickInterval = 0.1; // 10 ticks/sec (simplified from vanilla's 20)
+  private tickScheduler = new TickScheduler<'redstone'>(20);
 
   static key(x: number, y: number, z: number): string {
     return `${x},${y},${z}`;
@@ -84,11 +84,12 @@ export class RedstoneSystem {
     onComponentChange?: (component: RedstoneComponent) => void,
     gameTime: number = 0,
     getBlockMeta?: (x: number, y: number, z: number) => any,
-    entities: RedstoneEntity[] = []
+    entities: RedstoneEntity[] = [],
+    fixedSteps?: number,
   ) {
-    this.tickTimer += dt;
-    if (this.tickTimer < this.tickInterval) return;
-    this.tickTimer = 0;
+    const steps = fixedSteps ?? this.tickScheduler.advance(dt).steps;
+    if (steps === 0) return;
+    for (let fixedTick = 0; fixedTick < steps; fixedTick++) {
 
     // Reset all signals except sources
     for (const comp of this.components.values()) {
@@ -109,7 +110,6 @@ export class RedstoneSystem {
         onComponentChange?.(comp);
       }
     }
-
     // Tick sources first
     for (const comp of this.components.values()) {
       if (comp.type === 'torch') {
@@ -359,6 +359,7 @@ export class RedstoneSystem {
         }
       }
     }
+    }
   }
 
   private propagate(
@@ -588,5 +589,6 @@ export class RedstoneSystem {
 
   dispose() {
     this.components.clear();
+    this.tickScheduler.clear();
   }
 }

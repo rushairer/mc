@@ -364,7 +364,7 @@ export class Chunk {
           }
 
           // Slabs
-          if (def.name.includes('slab') && !def.name.includes('double')) {
+          if (def.name.includes('slab') && !def.name.includes('double') && meta?.slabHalf !== 'double') {
             const skyLight = this.getSkyLightAt(x, y, z);
             const blockLight = this.getBlockLightAt(x, y, z);
             const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);

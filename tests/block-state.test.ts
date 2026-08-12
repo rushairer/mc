@@ -101,3 +101,15 @@ test('synchronizes legacy door fields into persisted canonical properties', () =
     powered: false,
   });
 });
+
+test('preserves modern double slab state through legacy metadata synchronization', () => {
+  const definition = block('oak_slab', 30527);
+  const metadata = synchronizeBlockMetadata(definition, definition.id, {
+    slabHalf: 'double',
+  });
+
+  assert.deepEqual(metadata.blockState, {
+    type: 'double',
+    waterlogged: false,
+  });
+});

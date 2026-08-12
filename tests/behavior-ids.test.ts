@@ -39,4 +39,6 @@ test('vanilla registry definitions expose inferred behavior references', () => {
   assert.equal(ItemRegistry.getByName('trident')?.behaviorId, 'minecraft:throwable');
   assert.equal(ItemRegistry.getByName('crossbow')?.behaviorId, 'minecraft:crossbow');
   assert.equal(ItemRegistry.getByName('bread')?.behaviorId, 'minecraft:food');
+  assert.equal(ItemRegistry.getByName('stone')?.behaviorId, 'minecraft:block_item');
+  assert.equal(ItemRegistry.getByName('wheat_seeds')?.behaviorId, 'minecraft:block_item');
 });

@@ -66,7 +66,7 @@ export interface BlockMetadata {
   powered?: boolean;
   signal?: number;
   extended?: boolean;
-  slabHalf?: 'top' | 'bottom';
+  slabHalf?: 'top' | 'bottom' | 'double';
   stairFacing?: BlockFacing;
   fenceConnections?: boolean[]; // [north, south, east, west]
   fluidLevel?: number; // 1-8: surface height = fluidLevel / 8 (8 = full block)

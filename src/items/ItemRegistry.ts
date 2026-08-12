@@ -235,6 +235,7 @@ for (const item of rawItems) {
       }
     }
 
+    const placeBlockId = ITEM_PLACE_BLOCK_OVERRIDES[id] ?? (isBlock ? id : undefined);
     const itemDef = {
       id,
       officialId: itemOfficialId,
@@ -253,8 +254,10 @@ for (const item of rawItems) {
       saturationRestore,
       armorSlot,
       armorDefense,
-      placeBlockId: ITEM_PLACE_BLOCK_OVERRIDES[id] ?? (isBlock ? id : undefined),
-      behaviorId: inferItemBehaviorId(name) ?? (category === 'food' ? 'minecraft:food' : undefined),
+      placeBlockId,
+      behaviorId: inferItemBehaviorId(name)
+        ?? (category === 'food' ? 'minecraft:food' : undefined)
+        ?? (placeBlockId !== undefined ? 'minecraft:block_item' : undefined),
     };
     items.set(id, itemDef);
     itemsByOfficialId.set(itemOfficialId, itemDef);
@@ -294,7 +297,10 @@ export const ItemRegistry = {
         armorSlot: item.armorSlot,
         armorDefense: item.armorDefense,
         placeBlockId: item.placeBlockId,
-        behaviorId: item.behaviorId ?? inferItemBehaviorId(item.name) ?? (item.category === 'food' ? 'minecraft:food' : undefined),
+        behaviorId: item.behaviorId
+          ?? inferItemBehaviorId(item.name)
+          ?? (item.category === 'food' ? 'minecraft:food' : undefined)
+          ?? (item.placeBlockId !== undefined || item.category === 'block' ? 'minecraft:block_item' : undefined),
       };
       items.set(itemDef.id, itemDef);
       itemsByOfficialId.set(itemDef.officialId, itemDef);
@@ -320,6 +326,7 @@ export const ItemRegistry = {
         maxStackSize: 64,
         category: 'block',
         placeBlockId: id,
+        behaviorId: 'minecraft:block_item',
       };
     }
 
@@ -337,6 +344,8 @@ export const ItemRegistry = {
         displayName: block.displayName ?? block.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
         maxStackSize: 64,
         category: 'block',
+        placeBlockId: id,
+        behaviorId: 'minecraft:block_item',
       };
     }
     return undefined;

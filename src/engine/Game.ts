@@ -59,6 +59,7 @@ import {
   type ItemUseStopReason,
   type WorldContext,
 } from '../world/BehaviorRegistry';
+import { planBlockPlacement } from '../world/BlockPlacement';
 import type { WorldTickPayload, WorldTickType } from '../world/WorldTick';
 
 const HONEY_BOTTLE_ID = 454;
@@ -553,6 +554,13 @@ export class Game {
     this.behaviors.registerItem(['map', 'filled_map', 'writable_book', 'written_book'], {
       id: 'minecraft:readable',
       use: ({ stack }) => ({ handled: this.tryUseHeldReadableItem(stack), cooldown: 0.35 }),
+    });
+    this.behaviors.registerItem('block_item', {
+      id: 'minecraft:block_item',
+      use: ({ stack, target }) => ({
+        handled: this.tryPlaceBlockItem(stack, target),
+        cooldown: 0.25,
+      }),
     });
     this.behaviors.registerItem('bow', {
       id: 'minecraft:bow',
@@ -2303,154 +2311,6 @@ export class Game {
         }
       }
 
-      if (this.targetBlock) {
-        const { blockPos, faceNormal } = this.targetBlock;
-
-        // Place block when neither the target block nor the held item claimed the interaction.
-        {
-          const placePos = blockPos.clone().add(faceNormal);
-          const px = Math.floor(this.player.position.x);
-          const py = Math.floor(this.player.position.y);
-          const pz = Math.floor(this.player.position.z);
-          const py1 = Math.floor(this.player.position.y + 1.5);
-
-          const insidePlayer = placePos.x === px && placePos.z === pz &&
-            (placePos.y === py || placePos.y === py1);
-
-          if (!insidePlayer) {
-            const slot = this.inventory.getSlot(this.player.selectedSlot);
-            if (slot && slot.count > 0) {
-              const itemDef = ItemRegistry.get(slot.id);
-              const isDoorItem = itemDef && itemDef.name.endsWith('door');
-              let blockId = ItemRegistry.getPlaceBlockId(slot.id) ?? 0;
-              if (blockId === 63 || blockId === 176) {
-                if (faceNormal.y < 0) {
-                  return; // Cannot place signs/banners on the bottom of a block
-                }
-                if (faceNormal.y === 0) {
-                  blockId = blockId === 63 ? 68 : 177;
-                }
-              }
-              if (blockId > 0) {
-                if (blockId === 115) {
-                  const blockBelow = this.chunks.getBlock(placePos.x, placePos.y - 1, placePos.z) & 0x3FF;
-                  if (blockBelow !== 88) {
-                    return; // Fail placement: Nether Wart can only be placed on Soul Sand
-                  }
-                }
-                // Crops can only be placed on farmland
-                const cropBaseId = blockId & 0x3FF;
-                if (cropBaseId === 59 || cropBaseId === 141 || cropBaseId === 142) {
-                  const blockBelow = this.chunks.getBlock(placePos.x, placePos.y - 1, placePos.z) & 0x3FF;
-                  if (blockBelow !== 60) {
-                    return; // Fail placement: crops can only be planted on farmland
-                  }
-                }
-                let facing: BlockFacing = 'north';
-                if (faceNormal.x > 0) facing = 'east';
-                else if (faceNormal.x < 0) facing = 'west';
-                else if (faceNormal.y > 0) facing = 'up';
-                else if (faceNormal.y < 0) facing = 'down';
-                else if (faceNormal.z > 0) facing = 'south';
-                else if (faceNormal.z < 0) facing = 'north';
-
-                const blockDef = BlockRegistry.get(blockId) || BlockRegistry.getByName(itemDef?.name ?? '');
-                const isSlab = blockDef && blockDef.name.includes('slab') && !blockDef.name.includes('double');
-
-                if (isNetworkConnected) {
-                  this.network.send(PacketType.C2S_BLOCK_PLACE, {
-                    x: placePos.x,
-                    y: placePos.y,
-                    z: placePos.z,
-                    blockId: blockId,
-                    facing: facing
-                  });
-                  this.sound.playBlockPlace(blockId);
-                  if (this.gameMode !== 'creative') {
-                    this.inventory.removeFromSlot(this.player.selectedSlot);
-                  }
-                  this.placeCooldown = 0.25;
-                } else {
-                  if (isDoorItem || (blockDef && blockDef.name.endsWith('door') && !blockDef.name.includes('trapdoor'))) {
-                    const doorBlockId = blockDef?.id ?? 64; // Fallback to wooden door block (64)
-                    const placed = this.placeDoor(placePos.x, placePos.y, placePos.z, doorBlockId);
-                    if (placed) {
-                      this.sound.playBlockPlace(doorBlockId);
-                      if (this.gameMode !== 'creative') {
-                        this.inventory.removeFromSlot(this.player.selectedSlot);
-                      }
-                      this.placeCooldown = 0.25;
-                    }
-                  } else if (isSlab) {
-                    // Slab placement
-                    const existingBlock = this.chunks.getBlock(placePos.x, placePos.y, placePos.z);
-                    if (existingBlock === blockId) {
-                      // Stacking: convert to double slab block
-                      let doubleBlockId = blockId;
-                      const doubleName = blockDef.name.startsWith('double_') ? blockDef.name : `double_${blockDef.name}`;
-                      const doubleDef = BlockRegistry.getByName(doubleName) || BlockRegistry.getByName(`minecraft:${doubleName}`);
-                      if (doubleDef) {
-                        doubleBlockId = doubleDef.id;
-                      }
-                      this.chunks.setBlock(placePos.x, placePos.y, placePos.z, doubleBlockId);
-                      this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, null);
-                      this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
-                    } else {
-                      this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
-                      const slabHalf = faceNormal.y > 0 ? 'bottom' : 'top';
-                      this.chunks.setBlockMeta(placePos.x, placePos.y, placePos.z, { slabHalf });
-                      this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
-                    }
-                    this.sound.playBlockPlace(blockId);
-                    if (this.gameMode !== 'creative') {
-                      this.inventory.removeFromSlot(this.player.selectedSlot);
-                    }
-                    this.placeCooldown = 0.25;
-                  } else if (blockId === 26 || (blockDef && blockDef.name === 'bed')) {
-                    const placed = this.placeBed(placePos.x, placePos.y, placePos.z, blockId);
-                    if (placed) {
-                      this.sound.playBlockPlace(blockId);
-                      if (this.gameMode !== 'creative') {
-                        this.inventory.removeFromSlot(this.player.selectedSlot);
-                      }
-                      this.placeCooldown = 0.25;
-                    }
-                  } else {
-                    this.chunks.setBlock(placePos.x, placePos.y, placePos.z, blockId);
-                    this.sound.playBlockPlace(blockId);
-                    if (this.gameMode !== 'creative') {
-                      this.inventory.removeFromSlot(this.player.selectedSlot);
-                    }
-                    this.placeCooldown = 0.25;
-
-                    // Register redstone component if it is one
-                    this.setPlacedBlockMetadata(placePos.x, placePos.y, placePos.z, blockId, facing);
-                    this.redstone.observeBlockChange(placePos.x, placePos.y, placePos.z);
-                    this.checkFluidAdjacency(placePos.x, placePos.y, placePos.z);
-
-                    if ((blockId & 0x3FF) === 144 && ((blockId >> 10) & 0xF) === 1) {
-                      this.checkWitherSpawning(placePos.x, placePos.y, placePos.z);
-                    }
-
-                    // If placing water/lava, start fluid simulation
-                    if (BlockRegistry.isFluid(blockId)) {
-                      this.scheduleFluidNeighborhood(placePos.x, placePos.y, placePos.z);
-                    }
-
-                    if (blockId === 63 || blockId === 68) {
-                      this.editingSignPos = placePos.clone();
-                      this.openUI = 'sign_edit';
-                      document.exitPointerLock();
-                      this.notifyState();
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
     }
 
     // ─── Footsteps ───
@@ -2959,6 +2819,68 @@ export class Game {
       y: target.position.y + offset.y,
       z: target.position.z + offset.z,
     };
+  }
+
+  private tryPlaceBlockItem(stack: ItemStack, target?: BlockInteractionContext): boolean {
+    if (!target || stack.count <= 0) return false;
+    const item = ItemRegistry.get(stack.id);
+    if (!item) return false;
+
+    const playerX = Math.floor(this.player.position.x);
+    const playerZ = Math.floor(this.player.position.z);
+    const decision = planBlockPlacement({
+      item,
+      target,
+      placeBlockId: ItemRegistry.getPlaceBlockId(stack.id),
+      playerOccupiedCells: [
+        { x: playerX, y: Math.floor(this.player.position.y), z: playerZ },
+        { x: playerX, y: Math.floor(this.player.position.y + 1.5), z: playerZ },
+      ],
+    }, {
+      getBlock: ({ x, y, z }) => this.chunks.getBlock(x, y, z),
+      getBlockMetadata: ({ x, y, z }) => this.chunks.getBlockMeta(x, y, z),
+    });
+    if (!decision.ok) return false;
+
+    const { plan } = decision;
+    const { x, y, z } = plan.position;
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_BLOCK_PLACE, {
+        x,
+        y,
+        z,
+        blockId: plan.blockId,
+        facing: plan.facing,
+      });
+    } else if (plan.kind === 'door') {
+      if (!this.placeDoor(x, y, z, plan.blockId)) return false;
+    } else if (plan.kind === 'bed') {
+      if (!this.placeBed(x, y, z, plan.blockId)) return false;
+    } else if (plan.kind === 'slab') {
+      this.chunks.setBlock(x, y, z, plan.blockId);
+      this.chunks.setBlockMeta(x, y, z, plan.slabHalf ? { slabHalf: plan.slabHalf } : null);
+      this.redstone.observeBlockChange(x, y, z);
+    } else {
+      this.chunks.setBlock(x, y, z, plan.blockId);
+      this.setPlacedBlockMetadata(x, y, z, plan.blockId, plan.facing);
+      this.redstone.observeBlockChange(x, y, z);
+      this.checkFluidAdjacency(x, y, z);
+
+      if (plan.checksWitherSpawn) this.checkWitherSpawning(x, y, z);
+      if (plan.schedulesFluid) this.scheduleFluidNeighborhood(x, y, z);
+      if (plan.opensSignEditor) {
+        this.editingSignPos = new THREE.Vector3(x, y, z);
+        this.openUI = 'sign_edit';
+        document.exitPointerLock();
+        this.notifyState();
+      }
+    }
+
+    this.sound.playBlockPlace(plan.blockId);
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot);
+    }
+    return true;
   }
 
   private tryUseBucket(stack: ItemStack, target?: BlockInteractionContext): boolean {

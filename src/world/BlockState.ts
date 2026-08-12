@@ -156,7 +156,7 @@ function legacyMetadataProperties(def: BlockDef, packedId: number, metadata?: Bl
 
   const facing = metadata?.stairFacing ?? metadata?.facing;
   if (facing) result.facing = facing;
-  if (metadata?.slabHalf) result.type = metadata.slabHalf === 'top' ? 'top' : 'bottom';
+  if (metadata?.slabHalf) result.type = metadata.slabHalf;
   if (metadata?.doorHalf) result.half = metadata.doorHalf;
   if (metadata?.hinge) result.hinge = metadata.hinge;
   if (metadata?.open !== undefined) result.open = metadata.open;

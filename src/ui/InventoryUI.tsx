@@ -4,6 +4,8 @@ import { ItemRegistry } from '../items/ItemRegistry';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { Inventory, HOTBAR_SIZE, INVENTORY_SIZE } from '../player/Inventory';
 import { findCraftingResult } from '../items/CraftingRecipes';
+import { getAllRecipeBookEntries, planGridFill, type RecipeBookEntry } from '../items/RecipeBook';
+import { RecipeBookUI } from './RecipeBookUI';
 import { useI18n } from '../i18n';
 import { EnchantSystem } from '../systems/EnchantSystem';
 import { PotionEffects } from '../systems/PotionEffect';
@@ -65,6 +67,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
   const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(4).fill(0));
   const [craftResult, setCraftResult] = useState<{ id: number; count: number } | null>(null);
   const [creativeSearch, setCreativeSearch] = useState('');
+  const [recipeBookOpen, setRecipeBookOpen] = useState(false);
+  const recipeEntries = useRef(getAllRecipeBookEntries()).current;
   const [hoveredSlot, setHoveredSlot] = useState<{
     item: ItemStack;
     itemDef: any;
@@ -112,6 +116,31 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     const maxStack = ItemRegistry.getMaxStackSize(itemId);
     setHeldItem({ id: itemId, count: maxStack });
   };
+
+  // P3.2: fill the 2x2 grid from inventory when a recipe book entry is chosen.
+  const handleRecipeSelect = useCallback((entry: RecipeBookEntry) => {
+    if (heldItem) {
+      inventory.addItem(heldItem.id, heldItem.count);
+      setHeldItem(null);
+    }
+    const plan = planGridFill(
+      entry.recipe,
+      2,
+      (slot) => inventory.getSlot(slot)?.id ?? null,
+      (slot) => inventory.getSlot(slot)?.count ?? 0,
+    );
+    if (!plan) return;
+    for (const move of plan.moves) {
+      const slot = inventory.getSlot(move.fromSlot);
+      if (slot) {
+        slot.count -= move.count;
+        if (slot.count <= 0) inventory.setSlot(move.fromSlot, null);
+      }
+    }
+    setCraftingGrid(plan.grid);
+    setRecipeBookOpen(false);
+    onInventoryChange();
+  }, [heldItem, inventory, onInventoryChange]);
 
   // Track mouse for held item
   useEffect(() => {
@@ -824,7 +853,26 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
           {/* Crafting area */}
           {gameMode === 'survival' && (
             <div>
-              <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('crafting2x2')}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <div style={{ fontSize: '12px', color: '#aaa' }}>{t('crafting2x2')}</div>
+                <button
+                  onClick={() => setRecipeBookOpen((open) => !open)}
+                  title={t('recipeBook')}
+                  style={{
+                    width: '26px', height: '26px', cursor: 'pointer', borderRadius: '4px',
+                    background: recipeBookOpen ? '#4a8a4a' : '#3c6e3c',
+                    border: '2px solid #7ab87a', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <div style={{
+                    width: '14px', height: '18px', background: '#2a5a2a',
+                    border: '1px solid #9ccc9c', borderRadius: '1px', position: 'relative',
+                  }}>
+                    <div style={{ position: 'absolute', left: '3px', top: '2px', width: '1px', height: '14px', background: '#9ccc9c' }} />
+                    <div style={{ position: 'absolute', left: '7px', top: '2px', width: '1px', height: '14px', background: '#9ccc9c' }} />
+                  </div>
+                </button>
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
                   display: 'grid',
@@ -878,6 +926,26 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
           </div>
         </div>
       </div>
+
+      {/* P3.2: recipe book overlay (2x2-compatible recipes only) */}
+      {recipeBookOpen && (
+        <RecipeBookUI
+          entries={recipeEntries.filter((entry) => {
+            const h = entry.recipe.inShape?.length ?? 0;
+            const w = entry.recipe.inShape ? entry.recipe.inShape[0].length : (entry.recipe.ingredients?.length ?? 0);
+            return h <= 2 && w <= 2;
+          })}
+          gridSize={2}
+          nameOf={(itemId) => {
+            const item = ItemRegistry.get(itemId);
+            return getLocalizedItemName(itemId, item?.displayName ?? '');
+          }}
+          getItemIconStyle={getItemIconStyle}
+          onSelect={handleRecipeSelect}
+          onClose={() => setRecipeBookOpen(false)}
+          title={t('recipeBook')}
+        />
+      )}
 
       {/* Held item following cursor */}
       {heldItem && (

@@ -3,6 +3,8 @@ import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { Inventory } from '../player/Inventory';
 import { findCraftingResult } from '../items/CraftingRecipes';
+import { getAllRecipeBookEntries, planGridFill, type RecipeBookEntry } from '../items/RecipeBook';
+import { RecipeBookUI } from './RecipeBookUI';
 import { useI18n } from '../i18n';
 
 interface CraftingTableUIProps {
@@ -28,6 +30,8 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
     index: number;
     type: 'inventory' | 'crafting';
   } | null>(null);
+  const [recipeBookOpen, setRecipeBookOpen] = useState(false);
+  const recipeEntries = useRef(getAllRecipeBookEntries()).current;
   const mouseRef = useRef({ x: 0, y: 0 });
 
   // Track mouse for held item
@@ -106,6 +110,32 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
     setCraftingGrid(newGrid);
     onInventoryChange();
   }, [craftResult, inventory, craftingGrid, onInventoryChange]);
+
+  // P3.2: fill the 3x3 grid from inventory when a recipe book entry is chosen.
+  const handleRecipeSelect = useCallback((entry: RecipeBookEntry) => {
+    // Return any held item first so the grid fill can use full inventory view.
+    if (heldItem) {
+      inventory.addItem(heldItem.id, heldItem.count);
+      setHeldItem(null);
+    }
+    const plan = planGridFill(
+      entry.recipe,
+      3,
+      (slot) => inventory.getSlot(slot)?.id ?? null,
+      (slot) => inventory.getSlot(slot)?.count ?? 0,
+    );
+    if (!plan) return;
+    for (const move of plan.moves) {
+      const slot = inventory.getSlot(move.fromSlot);
+      if (slot) {
+        slot.count -= move.count;
+        if (slot.count <= 0) inventory.setSlot(move.fromSlot, null);
+      }
+    }
+    setCraftingGrid(plan.grid);
+    setRecipeBookOpen(false);
+    onInventoryChange();
+  }, [heldItem, inventory, onInventoryChange]);
 
   const handleClose = useCallback(() => {
     // Return held item to inventory
@@ -329,7 +359,27 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
         </button>
         {/* Crafting area */}
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', marginBottom: '8px', color: '#aaa' }}>{t('craftingTable3x3')}</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <div style={{ fontSize: '12px', color: '#aaa' }}>{t('craftingTable3x3')}</div>
+            <button
+              onClick={() => setRecipeBookOpen((open) => !open)}
+              title="Recipe book"
+              style={{
+                width: '26px', height: '26px', cursor: 'pointer', borderRadius: '4px',
+                background: recipeBookOpen ? '#4a8a4a' : '#3c6e3c',
+                border: '2px solid #7ab87a', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              {/* Green book icon */}
+              <div style={{
+                width: '14px', height: '18px', background: '#2a5a2a',
+                border: '1px solid #9ccc9c', borderRadius: '1px', position: 'relative',
+              }}>
+                <div style={{ position: 'absolute', left: '3px', top: '2px', width: '1px', height: '14px', background: '#9ccc9c' }} />
+                <div style={{ position: 'absolute', left: '7px', top: '2px', width: '1px', height: '14px', background: '#9ccc9c' }} />
+              </div>
+            </button>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
               display: 'grid',
@@ -381,6 +431,22 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
           </div>
         </div>
       </div>
+
+      {/* P3.2: recipe book overlay */}
+      {recipeBookOpen && (
+        <RecipeBookUI
+          entries={recipeEntries}
+          gridSize={3}
+          nameOf={(itemId) => {
+            const item = ItemRegistry.get(itemId);
+            return getLocalizedItemName(itemId, item?.displayName ?? '');
+          }}
+          getItemIconStyle={getItemIconStyle}
+          onSelect={handleRecipeSelect}
+          onClose={() => setRecipeBookOpen(false)}
+          title={t('recipeBook')}
+        />
+      )}
 
       {/* Held item following cursor */}
       {heldItem && (

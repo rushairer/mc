@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { Inventory } from '../player/Inventory';
-import { findSmeltingResult, isSmeltingFuel } from '../items/SmeltingRecipes';
+import { findSmeltingResult, isSmeltingFuel, SMELTING_RECIPES } from '../items/SmeltingRecipes';
 import { useI18n } from '../i18n';
 
 interface FurnaceUIProps {
@@ -36,6 +36,28 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({
   const [inputSlot, setInputSlot] = useState<ItemStack | null>(furnaceSlots[0]);
   const [fuelSlot, setFuelSlot] = useState<ItemStack | null>(furnaceSlots[1]);
   const [outputSlot, setOutputSlot] = useState<ItemStack | null>(furnaceSlots[2]);
+  const [recipeListOpen, setRecipeListOpen] = useState(false);
+
+  // P3.2: smelting recipe browser — place the recipe input from the inventory.
+  const handleRecipeSelect = useCallback((inputId: number) => {
+    if (inputSlot) {
+      inventory.addItem(inputSlot.id, inputSlot.count);
+      setInputSlot(null);
+    }
+    for (let slot = 0; slot < 36; slot++) {
+      const item = inventory.getSlot(slot);
+      if (!item) continue;
+      const exact = item.id === inputId;
+      const baseMatch = (item.id & 0x3FF) === (inputId & 0x3FF);
+      if (!exact && !baseMatch) continue;
+      item.count -= 1;
+      if (item.count <= 0) inventory.setSlot(slot, null);
+      setInputSlot({ id: item.id, count: 1 });
+      setRecipeListOpen(false);
+      onInventoryChange();
+      return;
+    }
+  }, [inputSlot, inventory, onInventoryChange]);
 
   // Sync state changes back to furnaceSlots and notify parent
   useEffect(() => {
@@ -237,9 +259,62 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({
         >
           X
         </button>
-        <div style={{ fontSize: '14px', marginBottom: '12px', color: '#aaa' }}>
-          {containerType === 'smoker' ? t('smoker') : (containerType === 'blast_furnace' ? t('blastFurnace') : t('furnace'))}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div style={{ fontSize: '14px', color: '#aaa' }}>
+            {containerType === 'smoker' ? t('smoker') : (containerType === 'blast_furnace' ? t('blastFurnace') : t('furnace'))}
+          </div>
+          <button
+            onClick={() => setRecipeListOpen((open) => !open)}
+            title={t('recipeBook')}
+            style={{
+              padding: '4px 10px', fontSize: '11px', cursor: 'pointer',
+              background: recipeListOpen ? '#4a8a4a' : '#3c6e3c',
+              border: '2px solid #7ab87a', color: '#fff', fontFamily: '"Courier New", monospace',
+            }}
+          >
+            {t('recipeBook')} ({SMELTING_RECIPES.length})
+          </button>
         </div>
+
+        {/* P3.2: smelting recipe browser */}
+        {recipeListOpen && (
+          <div style={{
+            marginBottom: '12px', border: '2px solid #555', background: 'rgba(20,20,20,0.9)',
+            padding: '8px', maxHeight: '220px', overflowY: 'auto',
+          }}>
+            <div style={{ fontSize: '10px', color: '#888', marginBottom: '6px' }}>
+              Click a recipe to place its input from your inventory.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {SMELTING_RECIPES.map((recipe, i) => {
+                const inputDef = ItemRegistry.get(recipe.input);
+                const outputDef = ItemRegistry.get(recipe.output);
+                if (!inputDef || !outputDef) return null;
+                return (
+                  <div
+                    key={i}
+                    onClick={() => handleRecipeSelect(recipe.input)}
+                    title={`${getLocalizedItemName(recipe.input, inputDef.displayName)} → ${getLocalizedItemName(recipe.output, outputDef.displayName)}`}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
+                      padding: '4px', border: '1px solid #444', background: 'rgba(60,60,60,0.7)',
+                    }}
+                  >
+                    <div style={getItemIconStyle(recipe.input, 24)} />
+                    <span style={{ fontSize: '12px', color: '#ccc', flex: 1 }}>
+                      {getLocalizedItemName(recipe.input, inputDef.displayName)}
+                    </span>
+                    <span style={{ color: '#aaa' }}>→</span>
+                    <div style={getItemIconStyle(recipe.output, 24)} />
+                    <span style={{ fontSize: '12px', color: '#ccc' }}>
+                      {getLocalizedItemName(recipe.output, outputDef.displayName)}{recipe.outputCount > 1 ? ` x${recipe.outputCount}` : ''}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Input → Output */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>

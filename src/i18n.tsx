@@ -64,6 +64,7 @@ export interface TranslationsSchema {
   offhand: string;
   crafting2x2: string;
   craftingTable3x3: string;
+  recipeBook: string;
   creativeCatalog: string;
   creativeSearchPlaceholder: string;
   creativeNoResults: string;
@@ -269,6 +270,7 @@ export const translations: Record<Locale, TranslationsSchema> = {
     offhand: 'Offhand',
     crafting2x2: 'Crafting (2×2)',
     craftingTable3x3: 'Crafting Table (3×3)',
+    recipeBook: 'Recipe Book',
     creativeCatalog: 'Creative Catalog',
     creativeSearchPlaceholder: 'Search items...',
     creativeNoResults: 'No matching items',
@@ -472,6 +474,7 @@ export const translations: Record<Locale, TranslationsSchema> = {
     offhand: '副手',
     crafting2x2: '合成 (2×2)',
     craftingTable3x3: '工作台 (3×3)',
+    recipeBook: '配方书',
     creativeCatalog: '创造模式物品栏',
     creativeSearchPlaceholder: '搜索物品...',
     creativeNoResults: '没有匹配的物品',
@@ -675,6 +678,7 @@ export const translations: Record<Locale, TranslationsSchema> = {
     offhand: '副手',
     crafting2x2: '合成 (2×2)',
     craftingTable3x3: '工作台 (3×3)',
+    recipeBook: '配方書',
     creativeCatalog: '創造模式物品欄',
     creativeSearchPlaceholder: '搜尋物品...',
     creativeNoResults: '沒有匹配的物品',

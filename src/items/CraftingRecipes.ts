@@ -42,6 +42,11 @@ function matchIngredient(playerItem: number, recipeItem: RawRecipeCell): boolean
   return matchSingleIngredient(playerItem, recipeItem);
 }
 
+/** Public matcher used by the recipe book grid-fill planner (P3.2). */
+export function matchesRecipeCell(playerItem: number, recipeItem: RawRecipeCell): boolean {
+  return matchIngredient(playerItem, recipeItem);
+}
+
 function matchSingleIngredient(playerItem: number, choice: number | RawRecipeIngredient): boolean {
   const pBaseId = playerItem & 0x3FF;
   const pMeta = playerItem >> 10;
@@ -92,10 +97,25 @@ function matchShapelessIngredients(activeItems: number[], ingredients: RawRecipe
   return backtrack(0);
 }
 
-export function findCraftingResult(grid: number[]): { id: number; count: number } | null {
-  // grid is 9 elements flat representing a 3x3 crafting grid.
-  // 0 = empty.
+export interface RecipeListItem {
+  resultId: number;
+  resultCount: number;
+  recipe: RawRecipe;
+}
 
+/** All registered crafting recipes with packed result ids (P3.2 recipe book). */
+export function listCraftingRecipes(): RecipeListItem[] {
+  const out: RecipeListItem[] = [];
+  for (const [resultIdStr, recipes] of Object.entries(recipesData)) {
+    for (const recipe of recipes) {
+      const packedResultId = ((recipe.result.metadata ?? 0) << 10) | recipe.result.id;
+      out.push({ resultId: packedResultId, resultCount: recipe.result.count, recipe });
+    }
+  }
+  return out;
+}
+
+export function findCraftingResult(grid: number[]): { id: number; count: number } | null {
   // 1. Get bounds of active items in grid
   let minRow = 3, maxRow = -1, minCol = 3, maxCol = -1;
   let activeCount = 0;

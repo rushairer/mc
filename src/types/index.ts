@@ -142,6 +142,7 @@ export interface ItemStack {
     dimension: number;
     pixels: string[];
     playerMarker: { x: number; z: number };
+    locked?: boolean;
   };
   book?: {
     title?: string;
@@ -149,6 +150,8 @@ export interface ItemStack {
     pages: string[];
     signed?: boolean;
   };
+  /** P3.5 — loom-applied banner patterns. */
+  patterns?: Array<{ pattern: string; color: string }>;
 }
 
 export type PotionKind = 'bottle' | 'water' | 'awkward' | 'healing' | 'regeneration' | 'speed' | 'fire_resistance' | 'poison' | 'strength' | 'hunger' | 'slowness' | 'water_breathing' | 'jump_boost' | 'absorption';

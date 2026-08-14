@@ -28,6 +28,9 @@ export function inferBlockBehaviorId(rawName: string): string | undefined {
   if (name === 'bell') return 'minecraft:bell';
   if (name === 'campfire' || name === 'soul_campfire') return 'minecraft:campfire';
   if (name === 'crafting_table') return 'minecraft:crafting_table';
+  if (name === 'stonecutter') return 'minecraft:stonecutter';
+  if (name === 'cartography_table') return 'minecraft:cartography_table';
+  if (name === 'loom') return 'minecraft:loom';
   if (name === 'chest' || name === 'barrel') return 'minecraft:storage';
   if (name === 'hopper') return 'minecraft:hopper';
   if (name === 'enchanting_table') return 'minecraft:enchanting_table';

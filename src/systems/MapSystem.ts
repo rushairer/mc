@@ -8,6 +8,8 @@ export interface MapData {
   dimension: number;
   pixels: string[];
   playerMarker: { x: number; z: number };
+  /** P3.5 — cartography table lock. */
+  locked?: boolean;
 }
 
 const MAP_SIZE = 32;
@@ -59,6 +61,33 @@ export class MapSystem {
   restoreFromMaps(maps: MapData[]) {
     const maxId = maps.reduce((max, map) => Math.max(max, map.id), 0);
     this.nextMapId = Math.max(this.nextMapId, maxId + 1);
+  }
+
+  // ─── P3.5: cartography table operations ───
+
+  /** Clone a map: identical data with a fresh id (map + empty map). */
+  cloneMap(map: MapData): MapData {
+    return {
+      ...map,
+      id: this.nextMapId++,
+      pixels: [...map.pixels],
+      playerMarker: { ...map.playerMarker },
+    };
+  }
+
+  /**
+   * Zoom out: double the scale (max 4) and re-sample the area (map + paper).
+   * Returns the updated map (the original is replaced in place by callers).
+   */
+  zoomOutMap(map: MapData, worldGen: WorldGen): MapData {
+    const scale = Math.min(4, map.scale * 2);
+    const reSampled = this.createFilledMap(worldGen, map.centerX, map.centerZ, map.dimension, scale);
+    return { ...reSampled, locked: map.locked };
+  }
+
+  /** Lock a map so it can no longer be cloned/zoomed (map + glass pane). */
+  lockMap(map: MapData): MapData {
+    return { ...map, locked: true, pixels: [...map.pixels], playerMarker: { ...map.playerMarker } };
   }
 
   private tintForHeight(hex: string, height: number): string {

@@ -111,7 +111,7 @@ const WORLD_SPAWN_X = 8;
 const WORLD_SPAWN_Z = 8;
 const CAMPFIRE_COOK_TICKS = 30 * 20;
 
-export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause' | 'end_poem' | 'sign_edit' | 'advancements' | 'map' | 'book';
+export type UIType = 'none' | 'inventory' | 'furnace' | 'crafting_table' | 'chest' | 'hopper' | 'enchanting_table' | 'anvil' | 'brewing_stand' | 'trading' | 'death' | 'menu' | 'pause' | 'end_poem' | 'sign_edit' | 'advancements' | 'map' | 'book' | 'stonecutter' | 'cartography_table' | 'loom';
 
 type FishingBobberState = {
   mesh: THREE.Mesh;
@@ -469,6 +469,31 @@ export class Game {
       preventsItemUse: true,
       interact: () => {
         this.openCraftingTableUI();
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    // P3.5: stonecutter / cartography table / loom open their workstation UIs.
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:stonecutter',
+      preventsItemUse: true,
+      interact: () => {
+        this.openStonecutterUI();
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:cartography_table',
+      preventsItemUse: true,
+      interact: () => {
+        this.openCartographyUI();
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:loom',
+      preventsItemUse: true,
+      interact: () => {
+        this.openLoomUI();
         return { handled: true, cooldown: 0.5 };
       },
     });
@@ -1177,6 +1202,39 @@ export class Game {
   openCraftingTableUI() {
     this.openUI = 'crafting_table';
     document.exitPointerLock();
+  }
+
+  // ─── P3.5: workstation UIs ───
+
+  openStonecutterUI() {
+    this.openUI = 'stonecutter';
+    document.exitPointerLock();
+  }
+
+  openCartographyUI() {
+    this.openUI = 'cartography_table';
+    document.exitPointerLock();
+  }
+
+  openLoomUI() {
+    this.openUI = 'loom';
+    document.exitPointerLock();
+  }
+
+  /** P3.5 — cartography craft: clone / zoom out / lock a filled map. */
+  handleCartographyCraft(mapItem: ItemStack, ingredient: ItemStack): ItemStack | null {
+    const mapData = mapItem.map;
+    if (!mapData || mapData.locked) return null;
+    if (ingredient.id === EMPTY_MAP_ID) {
+      return { id: FILLED_MAP_ID, count: 1, map: this.maps.cloneMap(mapData) };
+    }
+    if (ingredient.id === 339) { // paper -> zoom out
+      return { id: FILLED_MAP_ID, count: 1, map: this.maps.zoomOutMap(mapData, this.chunks.getWorldGen()) };
+    }
+    if (ingredient.id === 102) { // glass pane -> lock
+      return { id: FILLED_MAP_ID, count: 1, map: this.maps.lockMap(mapData) };
+    }
+    return null;
   }
 
   openChestUI(x: number, y: number, z: number) {

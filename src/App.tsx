@@ -6,6 +6,9 @@ import { InventoryUI } from './ui/InventoryUI';
 import { ChatBar } from './ui/ChatBar';
 import { FurnaceUI } from './ui/FurnaceUI';
 import { CraftingTableUI } from './ui/CraftingTableUI';
+import { StonecutterUI } from './ui/StonecutterUI';
+import { CartographyUI } from './ui/CartographyUI';
+import { LoomUI } from './ui/LoomUI';
 import { ChestUI } from './ui/ChestUI';
 import { EnchantUI } from './ui/EnchantUI';
 import { AnvilUI } from './ui/AnvilUI';
@@ -525,6 +528,33 @@ export const App: React.FC = () => {
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
           onDropItem={handleDropItem}
+        />
+      )}
+
+      {/* P3.5: workstation UIs */}
+      {gameState.openUI === 'stonecutter' && gameState.inventory && (
+        <StonecutterUI
+          inventory={gameState.inventory}
+          onClose={handleCloseUI}
+          onInventoryChange={handleInventoryChange}
+          getItemIconStyle={getItemIconStyle}
+        />
+      )}
+      {gameState.openUI === 'cartography_table' && gameState.inventory && (
+        <CartographyUI
+          inventory={gameState.inventory}
+          onClose={handleCloseUI}
+          onInventoryChange={handleInventoryChange}
+          getItemIconStyle={getItemIconStyle}
+          onCraft={(mapItem, ingredient) => gameRef.current?.handleCartographyCraft(mapItem, ingredient) ?? null}
+        />
+      )}
+      {gameState.openUI === 'loom' && gameState.inventory && (
+        <LoomUI
+          inventory={gameState.inventory}
+          onClose={handleCloseUI}
+          onInventoryChange={handleInventoryChange}
+          getItemIconStyle={getItemIconStyle}
         />
       )}
 

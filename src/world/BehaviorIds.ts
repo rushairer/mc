@@ -39,6 +39,8 @@ export function inferBlockBehaviorId(rawName: string): string | undefined {
   if (name === 'daylight_detector' || name === 'daylight_detector_inverted') return 'minecraft:daylight_detector';
   if (name === 'lever') return 'minecraft:lever';
   if (name === 'tnt') return 'minecraft:tnt';
+  if (name.includes('repeater')) return 'minecraft:repeater';
+  if (name === 'note_block') return 'minecraft:note_block';
   if (name === 'bed' || (name.endsWith('_bed') && name !== 'bedrock')) return 'minecraft:bed';
   if (name.includes('trapdoor') && name !== 'iron_trapdoor') return 'minecraft:trapdoor';
   if (name.endsWith('_button')) return 'minecraft:button';

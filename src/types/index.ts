@@ -59,6 +59,11 @@ export interface BlockMetadata {
   blockState?: BlockStateProperties;
   facing?: BlockFacing;
   redstoneType?: 'wire' | 'torch' | 'repeater' | 'piston' | 'lever' | 'button' | 'comparator' | 'observer' | 'daylight_detector' | 'pressure_plate' | 'tripwire_hook' | 'tripwire';
+  /** P3.6 — repeater output delay in ticks (1-4). */
+  delayTicks?: number;
+  /** P3.6 — note block pitch (0-24 semitones) and power-edge flag. */
+  notePitch?: number;
+  notePowered?: boolean;
   containerType?: 'chest' | 'barrel' | 'hopper' | 'furnace' | 'smoker' | 'blast_furnace' | 'brewing_stand';
   inventory?: (ItemStack | null)[];
   spawnerMobType?: 'zombie' | 'skeleton' | 'spider';

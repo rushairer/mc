@@ -592,6 +592,24 @@ export class Game {
         return { handled: true, cooldown: 0.25 };
       },
     });
+    // P3.6: repeater delay cycling + note block pitch cycling.
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:repeater',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.cycleRepeaterDelay(position.x, position.y, position.z);
+        this.sound.playLever();
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:note_block',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.cycleNotePitch(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
     // P3.1: buttons (wooden 0.5s / stone 1.5s press), fence gates and iron
     // doors. Buttons emit a redstone pulse while pressed and reset on a
     // scheduled world tick; gates open/close by hand and by redstone; iron
@@ -5184,13 +5202,19 @@ export class Game {
     const redstoneType = this.getRedstoneType(blockId);
     if (redstoneType) {
       this.redstone.register(x, y, z, redstoneType, facing);
-      this.chunks.setBlockMeta(x, y, z, {
+      // P3.6: repeaters default to a 1-tick output delay.
+      const metadata: Record<string, unknown> = {
         facing,
         redstoneType,
         powered: false,
         signal: 0,
         extended: false,
-      }, true);
+      };
+      if (redstoneType === 'repeater') {
+        metadata.delayTicks = 1;
+        this.redstone.setRepeaterDelay(x, y, z, 1);
+      }
+      this.chunks.setBlockMeta(x, y, z, metadata as any, true);
       return;
     }
 
@@ -6165,12 +6189,44 @@ export class Game {
     const def = BlockRegistry.get(blockId);
     if (!def) return;
     const name = def.name;
+    const powered = this.redstone.isPositionPowered(x, y, z);
+
+    // P3.6: note blocks play on a rising power edge.
+    if (name === 'note_block') {
+      const meta = this.chunks.getBlockMeta(x, y, z) ?? {};
+      const wasPowered = !!meta.notePowered;
+      if (powered && !wasPowered) {
+        this.playNoteBlock(x, y, z);
+        this.chunks.setBlockMeta(x, y, z, { ...meta, notePowered: true }, true);
+      } else if (!powered && wasPowered) {
+        this.chunks.setBlockMeta(x, y, z, { ...meta, notePowered: false }, true);
+      }
+      return;
+    }
+
+    // P3.6: redstone lamps light up while powered (swap block variants).
+    if (name === 'redstone_lamp' || name === 'lit_redstone_lamp') {
+      const LAMP_ID = 123;
+      const LIT_LAMP_ID = 124;
+      const base = blockId & 0x3FF;
+      const isLit = base === LIT_LAMP_ID;
+      if (powered && !isLit) {
+        this.chunks.setBlock(x, y, z, (blockId & ~0x3FF) | LIT_LAMP_ID);
+        this.chunks.setBlockMeta(x, y, z, null);
+        this.redstone.observeBlockChange(x, y, z);
+      } else if (!powered && isLit) {
+        this.chunks.setBlock(x, y, z, (blockId & ~0x3FF) | LAMP_ID);
+        this.chunks.setBlockMeta(x, y, z, null);
+        this.redstone.observeBlockChange(x, y, z);
+      }
+      return;
+    }
+
     const isDoor = name.endsWith('door') && !name.includes('trapdoor');
     const isGate = name.includes('fence_gate');
     const isTrapdoor = name.includes('trapdoor');
     if (!isDoor && !isGate && !isTrapdoor) return;
 
-    const powered = this.redstone.isPositionPowered(x, y, z);
     const meta = this.chunks.getBlockMeta(x, y, z);
     const currentOpen = meta?.open ?? false;
 
@@ -6189,6 +6245,31 @@ export class Game {
       this.chunks.setBlockMeta(x, y, z, { ...meta, open: targetOpen }, true);
       this.redstone.observeBlockChange(x, y, z);
     }
+  }
+
+  // ─── P3.6: redstone components and timing ───
+
+  /** Repeater right-click cycles the output delay 1 -> 2 -> 3 -> 4 -> 1. */
+  private cycleRepeaterDelay(x: number, y: number, z: number) {
+    const meta = this.chunks.getBlockMeta(x, y, z);
+    const current = meta?.delayTicks ?? 1;
+    const next = (current % 4) + 1;
+    this.chunks.setBlockMeta(x, y, z, { ...meta, delayTicks: next }, true);
+    this.redstone.setRepeaterDelay(x, y, z, next);
+  }
+
+  /** Note block right-click cycles the pitch through 25 semitones. */
+  private cycleNotePitch(x: number, y: number, z: number) {
+    const meta = this.chunks.getBlockMeta(x, y, z);
+    const next = ((meta?.notePitch ?? 0) + 1) % 25;
+    this.chunks.setBlockMeta(x, y, z, { ...meta, notePitch: next }, true);
+    this.sound.playNoteBlock(next);
+  }
+
+  /** Play the note block's current pitch (called when redstone powers it). */
+  private playNoteBlock(x: number, y: number, z: number) {
+    const meta = this.chunks.getBlockMeta(x, y, z);
+    this.sound.playNoteBlock(meta?.notePitch ?? 0);
   }
 
   private ensureChestMetadata(x: number, y: number, z: number): BlockMetadata | null {

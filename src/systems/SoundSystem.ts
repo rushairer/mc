@@ -574,6 +574,27 @@ export class SoundSystem {
     osc.stop(ctx.currentTime + 0.35);
   }
 
+  /** P3.6 — note block: 25 semitones from F#3, like Java's note block. */
+  playNoteBlock(pitch: number) {
+    if (this.playFirstResourceSound(['block.note_block.harp'])) return;
+
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+
+    const semitone = Math.max(0, Math.min(24, Math.floor(pitch)));
+    const base = 370; // F#3
+    const freq = base * Math.pow(2, semitone / 12);
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+    osc.connect(gain).connect(this.sfxGain!);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+  }
+
   playLever() {
     if (this.playFirstResourceSound(['block.lever.click'])) return;
 

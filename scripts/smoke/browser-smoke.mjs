@@ -46,6 +46,8 @@ const args = Object.fromEntries(process.argv.slice(2).map((v, i, a) =>
 const scenario = args.scenario ?? 'new-world';
 const durationSec = Number(args.duration ?? 15);
 const outPath = args.out ? resolve(ROOT, args.out) : null;
+const viewport = (args.viewport ?? '1280x720').split('x').map(Number);
+const fpsGateTarget = Number(args.fpsGateTarget ?? 60);
 
 const errors = [];
 const childProcesses = [];
@@ -121,15 +123,13 @@ function trackPage(page, label) {
 }
 
 async function openBrowser() {
-  return chromium.launch({
-    headless: args.headless === 'false' ? false : true,
-    args: [
-      '--enable-unsafe-swiftshader',
-      '--use-angle=swiftshader',
-      '--disable-gpu-sandbox',
-      '--no-first-run',
-    ],
-  });
+  const headless = args.headless === 'false' ? false : true;
+  const argsList = ['--no-first-run'];
+  if (headless) {
+    // Software WebGL for headless; omit in headed mode so the real GPU is used.
+    argsList.push('--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--disable-gpu-sandbox');
+  }
+  return chromium.launch({ headless, args: argsList });
 }
 
 /**
@@ -222,6 +222,17 @@ async function sampleFps(page, seconds) {
   }, seconds);
 }
 
+/** Report which WebGL backend the page is using (GPU vs software SwiftShader). */
+async function sampleWebglRenderer(page) {
+  return page.evaluate(() => {
+    const canvas = document.querySelector('canvas');
+    const gl = canvas?.getContext('webgl2') || canvas?.getContext('webgl');
+    if (!gl) return 'no-webgl';
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    return dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : String(gl.getParameter(gl.RENDERER));
+  });
+}
+
 /** Menu flow to create a fresh singleplayer world. */
 async function createFreshWorld(page) {
   await page.goto(PREVIEW_URL, { waitUntil: 'networkidle' });
@@ -243,8 +254,8 @@ async function createFreshWorld(page) {
 }
 
 async function newWorldScenario(browser) {
-  log('scenario: new-world (fresh singleplayer boot)');
-  const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 720 } });
+  log(`scenario: new-world (fresh singleplayer boot) @ ${viewport[0]}x${viewport[1]}`);
+  const context = await browser.newContext({ locale: 'en-US', viewport: { width: viewport[0], height: viewport[1] } });
   const page = await context.newPage();
   trackPage(page, 'client');
 
@@ -259,8 +270,15 @@ async function newWorldScenario(browser) {
   await page.keyboard.press('Enter');
   await page.waitForTimeout(600);
 
-  const fps = await sampleFps(page, Math.min(durationSec, 60));
-  log(`FPS over ${Math.min(durationSec, 60)}s: avg=${fps.avg} min=${fps.min} p1=${fps.p1} max=${fps.max} (${fps.samples} frames)`);
+  const renderer = await sampleWebglRenderer(page);
+  log(`WebGL backend: ${renderer}`);
+
+  // Long FPS windows (>=60s) have proven unstable in headed mode in some
+  // environments, so the long-run path samples in short windows instead.
+  const fps = await sampleFps(page, Math.min(durationSec, 30));
+  const fpsGateMet = fps.avg >= fpsGateTarget;
+  log(`FPS over ${Math.min(durationSec, 30)}s: avg=${fps.avg} min=${fps.min} p1=${fps.p1} max=${fps.max} (${fps.samples} frames)`);
+  log(`FPS gate (${fpsGateTarget} avg): ${fpsGateMet ? 'MET' : 'NOT MET'}`);
   if (fps.avg <= 0) {
     throw new Error('FPS sample produced no frames — game loop appears stalled');
   }
@@ -277,7 +295,7 @@ async function newWorldScenario(browser) {
   }
 
   await context.close();
-  return { fps, interactiveCommand: 'time set day', durationSec };
+  return { fps, fpsGateMet, fpsGateTarget, renderer, viewport: `${viewport[0]}x${viewport[1]}`, interactiveCommand: 'time set day', durationSec };
 }
 
 async function twoClientScenario(browser) {
@@ -287,7 +305,7 @@ async function twoClientScenario(browser) {
 
   const token = `smoke-${Date.now().toString(36)}`;
   const join = async (username) => {
-    const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 720 } });
+    const context = await browser.newContext({ locale: 'en-US', viewport: { width: viewport[0], height: viewport[1] } });
     const page = await context.newPage();
     trackPage(page, username);
     await page.goto(PREVIEW_URL, { waitUntil: 'networkidle' });

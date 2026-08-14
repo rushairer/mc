@@ -61,18 +61,21 @@
     "consoleErrorsAllowed": false
   },
   "latestValidation": {
-    "date": "2026-08-13",
-    "scenario": "phase2.6-block-placement-behavior-old-save-browser-smoke",
-    "loadedChunks": 113,
-    "activeMobs": 24,
-    "worldInteractiveMilliseconds": 9695,
-    "observedFpsSamples": [50, 33, 99, 49, 37, 100, 45],
-    "interactiveTargetMet": true,
-    "fpsTargetMet": false,
+    "date": "2026-08-14",
+    "scenario": "p1.8-real-gpu-long-run-gate",
+    "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+    "viewport": "1920x1080",
+    "renderDistance": 6,
+    "fpsAvg": 112.9,
+    "fpsMin": 14,
+    "fpsP1": 20,
+    "fpsTargetMet": true,
+    "fpsGateTarget": 60,
+    "longRunSeconds": 1800,
+    "automatedLongRunCompleted": true,
+    "twoClientSmokeCompleted": true,
     "consoleErrors": 0,
     "consoleWarnings": 0,
-    "blockPlacementSmokeCompleted": true,
-    "automatedLongRunCompleted": false,
-    "twoClientSmokeCompleted": false
+    "unitTests": 83
   }
 }

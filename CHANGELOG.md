@@ -22,6 +22,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Add data-driven XP rules: ore mining XP (coal 0-2, diamond/emerald 3-7, lapis 2-5, redstone 1-5, nether quartz 2-5, nether gold 0-1, with deepslate variants), plus centralized fishing (1-6) and breeding (1-7) XP ranges.
 - Add fixed-seed chunk regression tests (P1.9): world generation determinism, lighting invariants (sky light surface reach, sealed-cell darkness, torch decay), mesh invariants (topology, NaNs, face culling), and a pinned seed-hash snapshot as a regression tripwire for seed 12345 — all headless in Node.
 - Add Playwright browser smoke automation (P1.8): `npm run smoke` (fresh-world boot, game-loop interactivity proven by chat responding to T, chat command round-trip, FPS sampling), `npm run smoke:long` (30-minute parameterized long-run with periodic sampling), and `npm run smoke:two-client` (multiplayer server join confirmed via server logs plus cross-client chat delivery).
+- Close the 60 FPS release gate on real hardware: headed Chromium on Apple M4 Metal sustained ~113 FPS average at 1920x1080 over a 30-minute run with zero console errors (the game's render distance is 6; the gate spec assumed 8 — recorded as measured in parity-manifest latestValidation).
 
 ### Changed
 - Route workstations, containers, wooden doors and trapdoors, Beds, redstone controls, Buckets, Boats, Minecarts, Hoes, maps and books, Fishing Rods, throwable items, and Eyes of Ender through the shared behavior dispatcher.

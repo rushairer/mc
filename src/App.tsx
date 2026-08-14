@@ -36,6 +36,7 @@ const initialGameState: GameState = {
   health: 20,
   hunger: 20,
   oxygen: 15.0,
+  absorption: 0,
   onGround: false,
   flying: false,
   openUI: 'none',

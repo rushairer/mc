@@ -7,6 +7,8 @@ import type { WorldGen } from '../world/WorldGen';
 import { BiomeType } from '../world/WorldGen';
 import { MAX_RESTORED_MOBS_PER_DIMENSION, type SerializedMob } from './SaveSystem';
 import type { EndGenerator } from '../world/EndGenerator';
+import { EnchantSystem } from './EnchantSystem';
+import { UNDEAD_MOB_TYPES } from './PotionEffect';
 
 const MAX_MOBS = 24;
 const SPAWN_INTERVAL = 2.0; // seconds between spawn attempts
@@ -424,7 +426,8 @@ export class MobSystem {
     playerPos: THREE.Vector3,
     direction: THREE.Vector3,
     damage: number,
-    reach: number
+    reach: number,
+    options?: { smiteLevel?: number; fireTicks?: number; knockbackLevel?: number }
   ): { hit: boolean; mob?: Mob } {
     const ray = new THREE.Raycaster(playerPos, direction, 0, reach);
 
@@ -455,7 +458,17 @@ export class MobSystem {
         .normalize()
         .multiplyScalar(5);
       knockback.y = 4;
-      closestMob.takeDamage(damage, knockback);
+      // P3.3: Smite (+damage vs undead), Knockback, Fire Aspect.
+      const smiteBonus = options?.smiteLevel && UNDEAD_MOB_TYPES.has(closestMob.def.type)
+        ? EnchantSystem.getSmiteBonus(options.smiteLevel)
+        : 0;
+      if (options?.fireTicks) {
+        closestMob.burnTicks = Math.max(closestMob.burnTicks ?? 0, options.fireTicks);
+      }
+      if (options?.knockbackLevel) {
+        knockback.multiplyScalar(1 + options.knockbackLevel * 0.5);
+      }
+      closestMob.takeDamage(damage + smiteBonus, knockback);
       if (closestMob.def.type === 'zombie_pigman') {
         this.makePigmenAngry(closestMob.position, 32);
       }

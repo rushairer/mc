@@ -14,6 +14,10 @@ export interface Projectile {
   mesh: THREE.Mesh | THREE.Group;
   inGround: boolean;
   targetPos?: THREE.Vector3;
+  /** P3.3 — Flame enchantment: ignites the mob it hits. */
+  onFire?: boolean;
+  /** P3.3 — Punch enchantment: extra knockback multiplier. */
+  knockbackBonus?: number;
 }
 
 const ARROW_GRAVITY = -12;
@@ -97,7 +101,9 @@ export class ProjectileSystem {
     direction: THREE.Vector3,
     fromPlayer: boolean,
     damage: number = ARROW_DAMAGE,
-    speed: number = ARROW_SPEED
+    speed: number = ARROW_SPEED,
+    onFire: boolean = false,
+    knockbackBonus: number = 0
   ) {
     const mesh = this.createArrowMesh();
     const vel = direction.clone().normalize().multiplyScalar(speed);
@@ -114,6 +120,8 @@ export class ProjectileSystem {
       lifetime: ARROW_LIFETIME,
       mesh,
       inGround: false,
+      onFire,
+      knockbackBonus,
     };
 
     mesh.position.copy(origin);
@@ -344,7 +352,7 @@ export class ProjectileSystem {
     dt: number,
     getBlock: (x: number, y: number, z: number) => number,
     hitPlayer: (damage: number, knockback: THREE.Vector3, type: ProjectileType) => void,
-    hitMob: (mobId: number, damage: number, knockback: THREE.Vector3, type: ProjectileType) => void,
+    hitMob: (mobId: number, damage: number, knockback: THREE.Vector3, type: ProjectileType, onFire: boolean) => void,
     getMobs: () => { id: number; position: THREE.Vector3; width: number; height: number }[],
     playerPos: THREE.Vector3,
     playerWidth: number,
@@ -446,6 +454,7 @@ export class ProjectileSystem {
           } else {
             const kb = proj.velocity.clone().normalize().multiplyScalar(2);
             kb.y = 1;
+            kb.multiplyScalar(1 + (proj.knockbackBonus ?? 0));
             hitPlayer(proj.damage, kb, proj.type);
           }
           if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket')) {
@@ -471,7 +480,8 @@ export class ProjectileSystem {
             } else {
               const kb = proj.velocity.clone().normalize().multiplyScalar(2);
               kb.y = 1;
-              hitMob(mob.id, proj.damage, kb, proj.type);
+              kb.multiplyScalar(1 + (proj.knockbackBonus ?? 0));
+              hitMob(mob.id, proj.damage, kb, proj.type, proj.onFire ?? false);
             }
             if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket')) {
               onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);

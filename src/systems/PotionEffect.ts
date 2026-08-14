@@ -1,4 +1,8 @@
-export type PotionEffectId = 'healing' | 'regeneration' | 'speed' | 'fire_resistance' | 'poison' | 'wither' | 'levitation';
+export type PotionEffectId =
+  | 'healing' | 'regeneration' | 'speed' | 'fire_resistance' | 'poison'
+  | 'wither' | 'levitation'
+  | 'strength' | 'weakness' | 'slowness' | 'hunger' | 'jump_boost'
+  | 'water_breathing' | 'absorption' | 'resistance';
 
 export interface PotionEffectData {
   id: PotionEffectId;
@@ -10,19 +14,45 @@ export interface ActivePotionEffect extends PotionEffectData {
   remaining: number;
 }
 
-const EFFECT_NAMES: Record<PotionEffectId, string> = {
-  healing: 'Healing',
-  regeneration: 'Regeneration',
-  speed: 'Speed',
-  fire_resistance: 'Fire Resistance',
-  poison: 'Poison',
-  wither: 'Wither',
-  levitation: 'Levitation',
+export interface EffectDef {
+  name: string;
+  /** Applied once on apply() (healing); no duration ticking. */
+  instant?: boolean;
+  /** Seconds between periodic ticks (regeneration/poison/wither). */
+  tickInterval?: number;
+  /** HP healed per tick. */
+  tickHeal?: number;
+  /** HP damaged per tick. */
+  tickDamage?: number;
+  /** Damage bypasses the "non-lethal" guard (wither). */
+  lethalDamage?: boolean;
+}
+
+/** P3.3 — data-driven effect registry (Java 1.20.1 values). */
+export const EFFECT_DEFS: Record<PotionEffectId, EffectDef> = {
+  healing: { name: 'Healing', instant: true },
+  regeneration: { name: 'Regeneration', tickInterval: 2.0, tickHeal: 1 },
+  speed: { name: 'Speed' },
+  fire_resistance: { name: 'Fire Resistance' },
+  poison: { name: 'Poison', tickInterval: 2.0, tickDamage: 1 },
+  wither: { name: 'Wither', tickInterval: 2.0, tickDamage: 1, lethalDamage: true },
+  levitation: { name: 'Levitation' },
+  strength: { name: 'Strength' },
+  weakness: { name: 'Weakness' },
+  slowness: { name: 'Slowness' },
+  hunger: { name: 'Hunger', tickInterval: 4.0 },
+  jump_boost: { name: 'Jump Boost' },
+  water_breathing: { name: 'Water Breathing' },
+  absorption: { name: 'Absorption' },
+  resistance: { name: 'Resistance' },
 };
+
+/** Undead mobs targeted by Smite. */
+export const UNDEAD_MOB_TYPES = new Set(['zombie', 'skeleton', 'wither_skeleton', 'zombie_pigman', 'wither']);
 
 export const PotionEffects = {
   getName(id: PotionEffectId): string {
-    return EFFECT_NAMES[id] ?? id;
+    return EFFECT_DEFS[id]?.name ?? id;
   },
 
   format(effect: PotionEffectData | ActivePotionEffect): string {
@@ -31,7 +61,22 @@ export const PotionEffects = {
   },
 
   isInstant(effect: PotionEffectData): boolean {
-    return effect.id === 'healing';
+    return EFFECT_DEFS[effect.id]?.instant ?? false;
+  },
+
+  /** Melee damage modifier: Strength +3/level, Weakness -4/level (1.20.1). */
+  getMeleeDamageModifier(strengthLevel: number, weaknessLevel: number): number {
+    return strengthLevel * 3 - weaknessLevel * 4;
+  },
+
+  /** Movement speed multiplier: Speed +20%/level, Slowness -15%/level. */
+  getSpeedMultiplier(speedLevel: number, slownessLevel: number): number {
+    return (1 + speedLevel * 0.2) * Math.max(0.1, 1 - slownessLevel * 0.15);
+  },
+
+  /** Resistance reduces all damage by 20% per level (capped 80%). */
+  getResistanceReduction(level: number): number {
+    return Math.min(0.8, level * 0.2);
   },
 };
 
@@ -65,31 +110,29 @@ export class PotionEffectSystem {
         continue;
       }
 
-      if (effect.id === 'regeneration') {
-        this.tickTimers.regeneration = (this.tickTimers.regeneration ?? 0) + dt;
-        if (this.tickTimers.regeneration >= 2.0) {
-          this.tickTimers.regeneration = 0;
-          heal(effect.level);
-        }
-      } else if (effect.id === 'poison') {
-        this.tickTimers.poison = (this.tickTimers.poison ?? 0) + dt;
-        if (this.tickTimers.poison >= 2.0) {
-          this.tickTimers.poison = 0;
-          damage(effect.level);
-        }
-      } else if (effect.id === 'wither') {
-        this.tickTimers.wither = (this.tickTimers.wither ?? 0) + dt;
-        if (this.tickTimers.wither >= 2.0) {
-          this.tickTimers.wither = 0;
-          damage(effect.level, true);
-        }
+      const def = EFFECT_DEFS[effect.id];
+      if (!def?.tickInterval) continue;
+
+      const timer = (this.tickTimers[effect.id] ?? 0) + dt;
+      if (timer < def.tickInterval) {
+        this.tickTimers[effect.id] = timer;
+        continue;
       }
+      this.tickTimers[effect.id] = 0;
+      if (def.tickHeal) heal(def.tickHeal * effect.level);
+      if (def.tickDamage) damage(def.tickDamage * effect.level, !!def.lethalDamage);
     }
   }
 
   getSpeedMultiplier(): number {
-    const speed = this.effects.find((entry) => entry.id === 'speed');
-    return speed ? 1 + speed.level * 0.2 : 1;
+    return PotionEffects.getSpeedMultiplier(
+      this.getLevel('speed'),
+      this.getLevel('slowness'),
+    );
+  }
+
+  getLevel(id: PotionEffectId): number {
+    return this.effects.find((entry) => entry.id === id)?.level ?? 0;
   }
 
   has(id: PotionEffectId): boolean {

@@ -22,7 +22,9 @@ export class SurvivalSystem {
     getBlock: (x: number, y: number, z: number) => number,
     damage: (amount: number, type: 'fall' | 'drown' | 'starve' | 'fire' | 'lava' | 'magic') => void,
     difficulty: string = 'normal',
-    gamerules: any = null
+    gamerules: any = null,
+    hasEffect: (id: string) => boolean = () => false,
+    getEnchantLevel: (id: string) => number = () => 0,
   ) {
     if (gameMode === 'creative') {
       player.health = 20;
@@ -95,8 +97,13 @@ export class SurvivalSystem {
     if (this.wasFalling && player.onGround) {
       const fallDist = this.fallStartY - player.position.y;
       if (fallDist > 3 && doFallDamage) {
-        const fallDamage = Math.floor(fallDist - 3);
-        damage(fallDamage, 'fall');
+        // P3.3: Feather Falling reduces fall damage.
+        const featherReduction = getEnchantLevel('feather_falling');
+        const reduced = Math.max(0, fallDist - 3) * (1 - Math.min(0.8, featherReduction * 0.12));
+        const fallDamage = Math.floor(reduced);
+        if (fallDamage > 0) {
+          damage(fallDamage, 'fall');
+        }
       }
       this.wasFalling = false;
     }
@@ -110,14 +117,21 @@ export class SurvivalSystem {
     const isUnderwater = (headBlock & 0x3FF) === 8 || (headBlock & 0x3FF) === 9; // flowing or still water
 
     if (isUnderwater) {
-      // Consume oxygen
-      player.oxygen = Math.max(0, player.oxygen - dt);
+      // P3.3: Water Breathing effect or Respiration enchantment stops oxygen loss.
+      const respiration = getEnchantLevel('respiration');
+      const canBreathe = hasEffect('water_breathing') || respiration > 0;
+      if (!canBreathe) {
+        // Consume oxygen
+        player.oxygen = Math.max(0, player.oxygen - dt);
 
-      // If oxygen is empty, take drowning damage every 1.5 seconds
-      if (player.oxygen <= 0) {
-        this.drownTimer += dt;
-        if (this.drownTimer >= 1.5) {
-          damage(2, 'drown'); // 1 heart damage
+        // If oxygen is empty, take drowning damage every 1.5 seconds
+        if (player.oxygen <= 0) {
+          this.drownTimer += dt;
+          if (this.drownTimer >= 1.5) {
+            damage(2, 'drown'); // 1 heart damage
+            this.drownTimer = 0;
+          }
+        } else {
           this.drownTimer = 0;
         }
       } else {
@@ -140,10 +154,13 @@ export class SurvivalSystem {
     const doFireDamage = gamerules ? gamerules.getRule('fireDamage') : true;
 
     if ((isFootLava || isHeadLava) && doFireDamage) {
-      this.fireDamageTimer += dt;
-      if (this.fireDamageTimer >= 0.5) {
-        damage(4, 'lava'); // 2 hearts damage every 0.5 seconds in lava
-        this.fireDamageTimer = 0;
+      // P3.3: Fire Resistance effect nullifies lava damage.
+      if (!hasEffect('fire_resistance')) {
+        this.fireDamageTimer += dt;
+        if (this.fireDamageTimer >= 0.5) {
+          damage(4, 'lava'); // 2 hearts damage every 0.5 seconds in lava
+          this.fireDamageTimer = 0;
+        }
       }
     } else {
       this.fireDamageTimer = 0;

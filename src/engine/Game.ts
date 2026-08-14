@@ -35,7 +35,7 @@ import { DroppedItemSystem } from '../systems/DroppedItemSystem';
 import { VehicleSystem, Vehicle } from '../systems/VehicleSystem';
 import { XPSystem } from '../systems/XPSystem';
 import { EnchantSystem } from '../systems/EnchantSystem';
-import { PotionEffectSystem } from '../systems/PotionEffect';
+import { PotionEffectSystem, PotionEffects } from '../systems/PotionEffect';
 import { GameRuleSystem } from '../systems/GameRuleSystem';
 import { AdvancementSystem } from '../systems/AdvancementSystem';
 import { MapSystem } from '../systems/MapSystem';
@@ -144,6 +144,7 @@ export interface GameState {
   health: number;
   hunger: number;
   oxygen: number;
+  absorption: number;
   onGround: boolean;
   flying: boolean;
   openUI: UIType;
@@ -1701,6 +1702,13 @@ export class Game {
     // Player update
     this.updateShieldBlockingState();
     this.player.speedMultiplier = this.potionEffects.getSpeedMultiplier() * (this.isShieldBlocking ? 0.35 : 1.0);
+    // P3.3: Jump Boost raises jump; Depth Strider raises swim speed.
+    this.player.jumpBoostMultiplier = 1 + this.potionEffects.getLevel('jump_boost') * 0.4;
+    this.player.swimSpeedMultiplier = 1 + EnchantSystem.getArmorLevel(this.inventory.armor, 'depth_strider') * 0.33;
+    // Absorption effect expired -> clear the extra hearts.
+    if (this.potionEffects.getLevel('absorption') === 0) {
+      this.player.absorption = 0;
+    }
     if (this.potionEffects.has('levitation') && !this.player.flying && !this.riddenMob) {
       this.player.velocity.y = Math.max(this.player.velocity.y, 3.8);
       this.player.onGround = false;
@@ -1790,7 +1798,7 @@ export class Game {
       this.mobs.update(dt, this.player.position, isNight,
         (x, y, z) => this.chunks.getBlock(x, y, z),
         (damage, knockback, attacker) => {
-          this.damagePlayer(damage, 'mob', knockback);
+          this.damagePlayer(damage, 'mob', knockback, attacker);
           if (attacker && attacker.def.type === 'wither_skeleton') {
             this.potionEffects.apply({ id: 'wither', level: 1, duration: 10.0 }, (amount) => {
               this.player.health = Math.min(20, this.player.health + amount);
@@ -1800,7 +1808,7 @@ export class Game {
         (x, y, z) => this.chunks.isSolidBlock(x, y, z),
         this.gameMode,
         (mob) => {
-          this.handleMobDeath(mob);
+          this.handleMobDeath(mob, EnchantSystem.getLevel(this.inventory.getSlot(this.player.selectedSlot), 'looting'));
         },
         (origin, direction, type) => {
           if (type === 'fireball') {
@@ -1887,7 +1895,7 @@ export class Game {
         dt,
         (x, y, z) => this.chunks.getBlock(x, y, z),
         (damage, knockback, type) => {
-          this.damagePlayer(damage, 'mob', knockback);
+          this.damagePlayer(damage, 'projectile', knockback);
           if (type === 'shulker_bullet') {
             this.potionEffects.apply({ id: 'levitation', level: 1, duration: 8 }, () => {});
           }
@@ -1897,11 +1905,15 @@ export class Game {
             });
           }
         },
-        (mobId, damage, knockback, type) => {
+        (mobId, damage, knockback, type, onFire) => {
           const mob = this.mobs.mobs.get(mobId);
           if (mob) {
             const projectileDamage = type === 'snowball' && mob.def.type === 'blaze' ? 3 : damage;
             mob.takeDamage(projectileDamage, knockback);
+            // P3.3: Flame enchantment sets the target on fire.
+            if (onFire && type === 'arrow') {
+              mob.burnTicks = Math.max(mob.burnTicks ?? 0, 5);
+            }
             if (mob.def.type === 'zombie_pigman') {
               this.mobs.makePigmenAngry(mob.position, 32);
             }
@@ -2175,6 +2187,9 @@ export class Game {
       : 1;
     const fullAttackDamage = baseAttackDamage + EnchantSystem.getSharpnessBonus(
       EnchantSystem.getLevel(selectedItemStack, 'sharpness')
+    ) + PotionEffects.getMeleeDamageModifier(
+      this.potionEffects.getLevel('strength'),
+      this.potionEffects.getLevel('weakness'),
     );
     const attackCooldownDuration = this.getAttackCooldownDuration(selectedItemId);
     const attackCooldownProgress = this.getAttackCooldownProgress();
@@ -2216,7 +2231,12 @@ export class Game {
         this.player.eyePosition,
         dir,
         meleeAttackDamage,
-        4.5
+        4.5,
+        {
+          smiteLevel: EnchantSystem.getLevel(selectedItemStack, 'smite'),
+          fireTicks: EnchantSystem.getFireTicks(EnchantSystem.getLevel(selectedItemStack, 'fire_aspect')),
+          knockbackLevel: EnchantSystem.getLevel(selectedItemStack, 'knockback'),
+        }
       );
 
       if (mobHit.hit) {
@@ -2321,7 +2341,10 @@ export class Game {
             // P2.7: a wrong-tier tool (e.g. stone pickaxe on diamond ore)
             // breaks the block but drops nothing, matching Java 1.20.1.
             const harvestable = isSurvival ? ItemRegistry.canHarvest(selectedItemId, blockId) : true;
-            this.destroyBlockAt(bp.x, bp.y, bp.z, true, harvestable);
+            this.destroyBlockAt(bp.x, bp.y, bp.z, true, harvestable, {
+              fortune: EnchantSystem.getLevel(selectedItemStack, 'fortune'),
+              silkTouch: EnchantSystem.getLevel(selectedItemStack, 'silk_touch') > 0,
+            });
             // P2.7: data-driven mining XP (ores and datapack xpDrop).
             if (isSurvival && blockDef) {
               const xpRange = blockDef.xpDrop ?? getBlockXpRange(blockDef.name);
@@ -2399,7 +2422,15 @@ export class Game {
 
     this.survival.update(dt, this.player, this.gameMode, (x, y, z) => this.chunks.getBlock(x, y, z), (dmg, type) => {
       this.damagePlayer(dmg, type as any);
-    }, this.gamerules.getDifficulty(), this.gamerules);
+    }, this.gamerules.getDifficulty(), this.gamerules,
+      (id) => this.potionEffects.has(id as any),
+      (id) => EnchantSystem.getArmorLevel(this.inventory.armor, id as any),
+    );
+
+    // P3.3: Hunger effect drains hunger over time (1 per 4 seconds per level).
+    if (this.potionEffects.getLevel('hunger') > 0 && this.player.hunger > 0) {
+      this.player.hunger = Math.max(0, this.player.hunger - this.potionEffects.getLevel('hunger') * 0.25 * dt);
+    }
     this.potionEffects.update(
       dt,
       (amount) => { this.player.health = Math.min(20, this.player.health + amount); },
@@ -3078,6 +3109,10 @@ export class Game {
       potion,
       (amount) => { this.player.health = Math.min(20, this.player.health + amount); },
     );
+    // P3.3: Absorption potion grants extra hearts (2 per level).
+    if (potion.id === 'absorption') {
+      this.player.absorption = 4 * potion.level;
+    }
     this.sound.playBurp();
     if (this.gameMode !== 'creative') {
       this.inventory.setSlot(this.player.selectedSlot, { id: GLASS_BOTTLE_ID, count: 1 });
@@ -3194,7 +3229,7 @@ export class Game {
     return false;
   }
 
-  private handleMobDeath(mob: Mob) {
+  private handleMobDeath(mob: Mob, lootingLevel = 0) {
     this.advancements.checkMobKilled(mob.def.type);
 
     // Spawn death particles
@@ -3222,14 +3257,18 @@ export class Game {
 
     if (shouldDrop) {
       for (const drop of mob.def.drops) {
-        if (Math.random() < drop.chance) {
-          const dropPos = mob.position.clone().add(new THREE.Vector3(0, 0.5, 0));
-          const velocity = new THREE.Vector3(
-            (Math.random() - 0.5) * 1.5,
-            1.5 + Math.random() * 1.5,
-            (Math.random() - 0.5) * 1.5
-          );
-          this.droppedItems.spawnItem(drop.id, drop.count, dropPos, velocity, 0.5);
+        // P3.3: Looting adds up to `level` extra drop rolls per entry.
+        const rolls = 1 + lootingLevel;
+        for (let roll = 0; roll < rolls; roll++) {
+          if (Math.random() < drop.chance) {
+            const dropPos = mob.position.clone().add(new THREE.Vector3(0, 0.5, 0));
+            const velocity = new THREE.Vector3(
+              (Math.random() - 0.5) * 1.5,
+              1.5 + Math.random() * 1.5,
+              (Math.random() - 0.5) * 1.5
+            );
+            this.droppedItems.spawnItem(drop.id, drop.count, dropPos, velocity, 0.5);
+          }
         }
       }
     }
@@ -3700,7 +3739,7 @@ export class Game {
         .normalize()
         .multiplyScalar(8);
       knockback.y = 5;
-      this.damagePlayer(damage, 'mob', knockback);
+      this.damagePlayer(damage, 'explosion', knockback);
     }
 
     // Damage nearby mobs
@@ -3938,12 +3977,17 @@ export class Game {
       this.inventory.damageTool(this.player.selectedSlot);
     }
 
+    const bowStack = this.inventory.getSlot(this.player.selectedSlot);
     this.projectiles.shootArrow(
       this.player.eyePosition.clone(),
       this.player.forward.clone(),
       true,
-      Math.max(1, BOW_BASE_DAMAGE * power),
-      THREE.MathUtils.lerp(BOW_MIN_SPEED, BOW_MAX_SPEED, power)
+      Math.max(1, BOW_BASE_DAMAGE * power) * EnchantSystem.getPowerMultiplier(
+        EnchantSystem.getLevel(bowStack, 'power')
+      ),
+      THREE.MathUtils.lerp(BOW_MIN_SPEED, BOW_MAX_SPEED, power),
+      EnchantSystem.getLevel(bowStack, 'flame') > 0,
+      EnchantSystem.getLevel(bowStack, 'punch'),
     );
     this.sound.playBowShoot(power);
     this.swordSwingTimer = Math.max(0.2, 0.9 * power);
@@ -4016,8 +4060,21 @@ export class Game {
     return facing.dot(directionToDamageSource) > 0.25;
   }
 
-  damagePlayer(amount: number, type: 'mob' | 'fall' | 'drown' | 'starve' | 'wither' | 'magic' | 'fire' | 'lava', knockback?: THREE.Vector3) {
+  damagePlayer(
+    amount: number,
+    type: 'mob' | 'projectile' | 'fall' | 'drown' | 'starve' | 'wither' | 'magic' | 'fire' | 'lava' | 'explosion',
+    knockback?: THREE.Vector3,
+    attacker?: Mob
+  ) {
     if (this.gameMode === 'creative' || this.spawnProtectionTimer > 0) return;
+
+    // P3.3: Thorns reflects damage back to the attacking mob.
+    if (attacker && (type === 'mob' || type === 'projectile')) {
+      const thornsLevel = this.inventory.armor.reduce((max, item) => Math.max(max, EnchantSystem.getLevel(item, 'thorns')), 0);
+      if (thornsLevel > 0 && Math.random() < EnchantSystem.getThornsChance(thornsLevel)) {
+        attacker.takeDamage(EnchantSystem.getThornsDamage(thornsLevel));
+      }
+    }
 
     if (type === 'mob' && this.canShieldBlock(knockback)) {
       this.damageActiveShield(amount);
@@ -4036,27 +4093,47 @@ export class Game {
       return;
     }
 
-    let finalDamage = amount;
+    // P3.3: Resistance effect reduces all damage (20% per level).
+    let finalDamage = amount * (1 - PotionEffects.getResistanceReduction(this.potionEffects.getLevel('resistance')));
     const defense = this.inventory.getTotalArmorDefense();
 
-    if (type === 'mob' || type === 'fall') {
+    if (type === 'mob' || type === 'projectile' || type === 'fall') {
       const reduction = Math.min(0.8, defense * 0.04);
       const protectionReduction = this.inventory.armor.reduce((sum, item) => {
         return sum + EnchantSystem.getProtectionReduction(EnchantSystem.getLevel(item, 'protection'));
       }, 0);
-      finalDamage = Math.max(1, amount * (1 - Math.min(0.9, reduction + protectionReduction)));
-      
+      const projectileReduction = type === 'projectile'
+        ? this.inventory.armor.reduce((sum, item) => {
+          return sum + EnchantSystem.getProjectileProtectionReduction(EnchantSystem.getLevel(item, 'projectile_protection'));
+        }, 0)
+        : 0;
+      finalDamage = Math.max(1, finalDamage * (1 - Math.min(0.9, reduction + protectionReduction + projectileReduction)));
+
       if (defense > 0) {
         this.inventory.damageArmor(1);
       }
     } else if (type === 'lava' || type === 'fire') {
       const protectionReduction = this.inventory.armor.reduce((sum, item) => {
-        return sum + EnchantSystem.getProtectionReduction(EnchantSystem.getLevel(item, 'protection'));
+        return sum + EnchantSystem.getProtectionReduction(EnchantSystem.getLevel(item, 'protection'))
+          + EnchantSystem.getFireProtectionReduction(EnchantSystem.getLevel(item, 'fire_protection'));
       }, 0);
-      finalDamage = Math.max(1, amount * (1 - Math.min(0.9, protectionReduction)));
+      finalDamage = Math.max(1, finalDamage * (1 - Math.min(0.9, protectionReduction)));
+    } else if (type === 'explosion') {
+      const protectionReduction = this.inventory.armor.reduce((sum, item) => {
+        return sum + EnchantSystem.getProtectionReduction(EnchantSystem.getLevel(item, 'protection'))
+          + EnchantSystem.getBlastProtectionReduction(EnchantSystem.getLevel(item, 'blast_protection'));
+      }, 0);
+      finalDamage = Math.max(1, finalDamage * (1 - Math.min(0.9, protectionReduction)));
     }
 
-    this.player.health = Math.max(0, this.player.health - finalDamage);
+    // P3.3: Absorption absorbs damage before health.
+    if (this.player.absorption > 0) {
+      const absorbed = Math.min(this.player.absorption, finalDamage);
+      this.player.absorption -= absorbed;
+      finalDamage = Math.max(0, finalDamage - absorbed);
+    }
+
+    this.player.health = Math.max(0, this.player.health - Math.max(0, finalDamage));
 
     if (knockback) {
       this.player.velocity.add(knockback);
@@ -4169,6 +4246,7 @@ export class Game {
       health: this.player.health,
       hunger: this.player.hunger,
       oxygen: this.player.oxygen,
+      absorption: this.player.absorption,
       onGround: this.player.onGround,
       flying: this.player.flying,
       openUI: this.openUI,
@@ -6339,7 +6417,14 @@ export class Game {
     }
   }
 
-  private destroyBlockAt(x: number, y: number, z: number, spawnDrop: boolean = true, harvestable: boolean = true) {
+  private destroyBlockAt(
+    x: number,
+    y: number,
+    z: number,
+    spawnDrop: boolean = true,
+    harvestable: boolean = true,
+    dropEnchants?: { fortune: number; silkTouch: boolean },
+  ) {
     const blockId = this.chunks.getBlock(x, y, z);
     const baseId = blockId & 0x3FF;
     if (baseId === 0) return;
@@ -6395,7 +6480,16 @@ export class Game {
         this.droppedItems.spawnItem(380, 1, dropPos, velocity, 0.5);
       } else {
         // P2.7: block drops come from data-driven loot tables (LootSystem).
-        const drops = rollBlockLoot(def, Math.random);
+        // P3.3: Silk Touch drops the block itself; Fortune adds extra rolls.
+        let drops = rollBlockLoot(def, Math.random);
+        if (dropEnchants?.silkTouch) {
+          drops = [{ itemId: def?.id ?? blockId, count: 1 }];
+        } else if (dropEnchants?.fortune && dropEnchants.fortune > 0) {
+          drops = drops.map((drop) => ({
+            ...drop,
+            count: drop.count * (1 + Math.floor(Math.random() * (dropEnchants.fortune + 1))),
+          }));
+        }
         for (const drop of drops) {
           if (drop.count > 0 && drop.itemId > 0) {
             this.droppedItems.spawnItem(drop.itemId, drop.count, dropPos, velocity, 0.5);

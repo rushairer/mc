@@ -25,6 +25,12 @@ export class Player {
   isSneaking = false;
   isCrawling = false;
   speedMultiplier = 1;
+  /** P3.3 — Jump Boost multiplier (set by the game loop). */
+  jumpBoostMultiplier = 1;
+  /** P3.3 — Depth Strider swim speed multiplier. */
+  swimSpeedMultiplier = 1;
+  /** P3.3 — Absorption hearts (absorb damage before health). */
+  absorption = 0;
   mesh: THREE.Group;
 
   private halfWidth = PLAYER_WIDTH / 2;
@@ -152,9 +158,10 @@ export class Player {
       const inClimbable = baseFoot === 65 || baseFoot === 106 || baseBody === 65 || baseBody === 106;
 
       if (inFluid) {
-        // Swimming mode
-        this.velocity.x = moveDir.x * speed * 0.5;
-        this.velocity.z = moveDir.z * speed * 0.5;
+        // Swimming mode (P3.3: Depth Strider boosts swim speed)
+        const swimMul = this.swimSpeedMultiplier;
+        this.velocity.x = moveDir.x * speed * 0.5 * swimMul;
+        this.velocity.z = moveDir.z * speed * 0.5 * swimMul;
 
         if (input.jump) {
           // Swim up
@@ -199,9 +206,9 @@ export class Player {
         // Gravity
         this.velocity.y += GRAVITY * dt;
 
-        // Jump
+        // Jump (P3.3: Jump Boost raises jump velocity)
         if (input.jump && this.onGround) {
-          this.velocity.y = JUMP_VELOCITY;
+          this.velocity.y = JUMP_VELOCITY * this.jumpBoostMultiplier;
           this.onGround = false;
         }
       }

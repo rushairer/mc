@@ -87,6 +87,9 @@ export class Mob {
   villagerProfession: VillagerProfession = 'farmer';
   air = MOB_MAX_AIR;
   drownTimer = 0;
+  /** Remaining burn seconds (Flame / Fire Aspect). Ticked in update(). */
+  burnTicks = 0;
+  private burnDamageTimer = 0;
   magmaCubeJumpTimer = 0;
   
   // Breeding & Growth state
@@ -1165,6 +1168,20 @@ export class Mob {
       this.drownTimer = 0;
     }
 
+    // Burning (Flame arrows / Fire Aspect): 1 damage every 0.5s (1.20.1 fire).
+    if (this.burnTicks > 0) {
+      this.burnTicks -= dt;
+      this.burnDamageTimer += dt;
+      this.setBurningVisual(true);
+      if (this.burnDamageTimer >= 0.5) {
+        this.burnDamageTimer = 0;
+        this.takeDamage(1);
+      }
+    } else {
+      this.burnDamageTimer = 0;
+      this.setBurningVisual(false);
+    }
+
     if (fluidState.inWater || fluidState.inLava) {
       if (fluidState.headInWater) {
         this.velocity.y = Math.min(1.15, this.velocity.y + 7 * dt);
@@ -1784,8 +1801,22 @@ export class Mob {
     }
   }
 
-  private getFluidState(getBlock: (x: number, y: number, z: number) => number) {
-    const mx = Math.floor(this.position.x);
+  private setBurningVisual(burning: boolean) {
+    if (!this.mesh) return;
+    this.mesh.traverse((child) => {
+      const mat = (child as THREE.Mesh).material as THREE.MeshLambertMaterial | THREE.Material[] | undefined;
+      if (!mat) return;
+      const materials = Array.isArray(mat) ? mat : [mat];
+      for (const m of materials) {
+        if (m instanceof THREE.MeshLambertMaterial) {
+          m.emissive = burning ? new THREE.Color(0xcc3300) : new THREE.Color(0x000000);
+          m.needsUpdate = true;
+        }
+      }
+    });
+  }
+
+  private getFluidState(getBlock: (x: number, y: number, z: number) => number) {    const mx = Math.floor(this.position.x);
     const mz = Math.floor(this.position.z);
     const footY = Math.floor(this.position.y);
     const bodyY = Math.floor(this.position.y + Math.min(1, this.height * 0.55));

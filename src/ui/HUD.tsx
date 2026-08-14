@@ -53,6 +53,23 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
     );
   });
 
+  // P3.3: Absorption hearts (golden, rendered after normal hearts)
+  const absorptionHearts = Array.from({ length: Math.floor((state.absorption ?? 0) / 2) }, (_, i) => (
+    <span key={`abs-${i}`} style={{
+      position: 'relative',
+      display: 'inline-block',
+      width: '18px',
+      height: '18px',
+      fontSize: '18px',
+      fontFamily: 'Arial, sans-serif',
+      textAlign: 'center',
+      lineHeight: '18px',
+    }}>
+      <span style={{ position: 'absolute', left: '1px', top: '1px', color: '#000', zIndex: 1 }}>❤</span>
+      <span style={{ position: 'absolute', left: 0, top: 0, zIndex: 2, color: '#ffd700' }}>❤</span>
+    </span>
+  ));
+
   // Hunger drumsticks
   const drumsticks = Array.from({ length: 10 }, (_, i) => {
     const filled = state.hunger >= (i + 1) * 2;
@@ -296,12 +313,15 @@ export const HUD: React.FC<{ state: GameState, getItemIconStyle: (id: number, si
             </div>
           </div>
 
-          {/* Hearts and Drumsticks */}
+          {/* Hearts, Absorption and Drumsticks */}
           <div style={{
             display: 'flex',
             justifyContent: 'space-between',
           }}>
-            <div style={{ display: 'flex', gap: '1px' }}>{hearts}</div>
+            <div style={{ display: 'flex', gap: '1px' }}>
+              {hearts}
+              {absorptionHearts}
+            </div>
             <div style={{ display: 'flex', gap: '1px' }}>{drumsticks}</div>
           </div>
 

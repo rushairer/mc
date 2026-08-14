@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { ActivePotionEffect, PotionEffectData } from '../systems/PotionEffect';
+import type { EnchantmentId } from '../systems/EnchantSystem';
 
 export interface BlockDef {
   id: number;
@@ -125,7 +126,7 @@ export interface ItemStack {
   durability?: number;
   chargedProjectileId?: number;
   customName?: string;
-  enchantments?: { id: 'sharpness' | 'efficiency' | 'protection' | 'unbreaking'; level: number }[];
+  enchantments?: { id: EnchantmentId; level: number }[];
   potion?: {
     kind: PotionKind;
     name: string;
@@ -148,7 +149,7 @@ export interface ItemStack {
   };
 }
 
-export type PotionKind = 'bottle' | 'water' | 'awkward' | 'healing' | 'regeneration' | 'speed' | 'fire_resistance' | 'poison';
+export type PotionKind = 'bottle' | 'water' | 'awkward' | 'healing' | 'regeneration' | 'speed' | 'fire_resistance' | 'poison' | 'strength' | 'hunger' | 'slowness' | 'water_breathing' | 'jump_boost' | 'absorption';
 
 export type { ActivePotionEffect, PotionEffectData };
 

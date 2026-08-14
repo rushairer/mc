@@ -20,6 +20,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Add tool harvest tiers (wood/gold 0, stone 1, iron 2, diamond 3, netherite 4): a wrong-tier tool now breaks harvest-gated blocks at hand speed and drops nothing, matching Java 1.20.1.
 - Add a data-driven loot table system (`LootSystem`): a pure, replayable roll engine now drives block drops (replacing the legacy `BLOCK_DROP_OVERRIDES`, including the 10% gravel-flint roll) and fishing loot, with named tables addressable from `BlockDef.lootTable` for data packs.
 - Add data-driven XP rules: ore mining XP (coal 0-2, diamond/emerald 3-7, lapis 2-5, redstone 1-5, nether quartz 2-5, nether gold 0-1, with deepslate variants), plus centralized fishing (1-6) and breeding (1-7) XP ranges.
+- Add fixed-seed chunk regression tests (P1.9): world generation determinism, lighting invariants (sky light surface reach, sealed-cell darkness, torch decay), mesh invariants (topology, NaNs, face culling), and a pinned seed-hash snapshot as a regression tripwire for seed 12345 — all headless in Node.
+- Add Playwright browser smoke automation (P1.8): `npm run smoke` (fresh-world boot, game-loop interactivity proven by chat responding to T, chat command round-trip, FPS sampling), `npm run smoke:long` (30-minute parameterized long-run with periodic sampling), and `npm run smoke:two-client` (multiplayer server join confirmed via server logs plus cross-client chat delivery).
 
 ### Changed
 - Route workstations, containers, wooden doors and trapdoors, Beds, redstone controls, Buckets, Boats, Minecarts, Hoes, maps and books, Fishing Rods, throwable items, and Eyes of Ender through the shared behavior dispatcher.

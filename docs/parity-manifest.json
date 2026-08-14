@@ -22,7 +22,7 @@
     },
     "automatedAcceptance": {
       "state": "partial",
-      "evidence": ["npm run test:unit", "npm run check"]
+      "evidence": ["npm run test:unit", "npm run check", "npm run smoke", "npm run smoke:two-client"]
     }
   },
   "inventory": {

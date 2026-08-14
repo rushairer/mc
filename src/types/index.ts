@@ -21,6 +21,8 @@ export interface BlockDef {
   collisionShapes?: BlockCollisionShape[];
   tags?: string[];
   lootTable?: string;
+  /** XP range awarded when a player mines this block (data pack overridable). */
+  xpDrop?: { min: number; max: number };
   behaviorId?: string;
 }
 

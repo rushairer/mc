@@ -2,6 +2,9 @@ import { BlockRegistry } from '../world/BlockRegistry';
 import rawItems from './data/items.json';
 import type { DataPackItem } from '../systems/DataPackTypes';
 import { inferItemBehaviorId } from '../world/BehaviorIds';
+import { getBlockTags, getMineableCategory, getRequiredHarvestTier } from '../world/BlockTags';
+import { canHarvestBlock, getToolHarvestTier } from './ToolTierRules';
+import { rollBlockLoot } from '../world/LootSystem';
 
 export interface ItemDef {
   id: number; // internal runtime ID: legacy packed ID or generated bridge ID
@@ -89,17 +92,8 @@ const FOOD_STATS: Record<string, { hunger: number; saturation: number }> = {
 };
 
 // ─── Block Drop Mappings (Packed IDs) ───
-const BLOCK_DROP_OVERRIDES: Record<number, number | (() => number)> = {
-  2: 3,                 // grass -> dirt
-  16: 263,              // coal ore -> coal
-  26: 355,              // bed block -> bed item
-  56: 264,              // diamond ore -> diamond
-  73: 331,              // redstone ore -> redstone dust
-  21: (4 << 10) | 351,  // lapis ore -> lapis lazuli (dye metadata 4)
-  13: () => Math.random() < 0.1 ? 318 : 13, // gravel -> flint (10%) or gravel
-  82: 337,              // clay block -> clay ball
-  118: 380,             // cauldron block -> cauldron item
-};
+// Legacy block drop overrides moved to data-driven loot tables in
+// `src/world/LootSystem.ts` (BLOCK_LOOT_TABLES) as part of P2.7.
 
 // Vanilla has several inventory items whose item ID differs from the block ID
 // placed into the world. Keep this map explicit so icons, hand meshes, and
@@ -389,11 +383,27 @@ export const ItemRegistry = {
     const block = BlockRegistry.get(blockId);
     if (!block) return 1;
 
-    // Matching tool speed bonus
-    if (block.toolCategory && item.toolType === block.toolCategory) {
-      return item.miningSpeed ?? 1;
+    const tags = getBlockTags(block);
+    const category = getMineableCategory(tags) ?? block.toolCategory;
+    if (category && item.toolType === category) {
+      // P2.7: a wrong-tier tool breaks the block at hand speed (Java 1.20.1).
+      if (getToolHarvestTier(item) >= getRequiredHarvestTier(tags)) {
+        return item.miningSpeed ?? 1;
+      }
+      return 1;
     }
     return 1;
+  },
+
+  /**
+   * P2.7: whether the held item can harvest this block (tier >= required).
+   * Blocks without a harvest requirement always return true.
+   */
+  canHarvest(id: number, blockId: number): boolean {
+    const block = BlockRegistry.get(blockId);
+    if (!block) return true;
+    const required = getRequiredHarvestTier(getBlockTags(block));
+    return canHarvestBlock(this.get(id), required);
   },
 
   getBreakTime(blockId: number, heldItemId: number): number {
@@ -405,14 +415,10 @@ export const ItemRegistry = {
   },
 
   getBlockDropItem(blockId: number): number {
-    // Check drop overrides
-    const override = BLOCK_DROP_OVERRIDES[blockId];
-    if (override !== undefined) {
-      return typeof override === 'function' ? override() : override;
-    }
-
-    // Default: block drops its own ID
-    return blockId;
+    // P2.7: block drops are now data-driven loot tables (LootSystem).
+    const block = BlockRegistry.get(blockId);
+    const drops = rollBlockLoot(block, Math.random);
+    return drops.length > 0 ? drops[0].itemId : blockId;
   },
 
   getDisplayName(id: number): string {

@@ -16,6 +16,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Add a pure block-placement planner with replayable decisions for face offsets, support checks, player collision, sign variants, and slab merging.
 - Add dedicated fallback item icons and held-item models for Bow, Crossbow, Arrow variants, Fishing Rod, Trident, Snowball, Egg, Ender Pearl, and Eye of Ender instead of generic flat item placeholders.
 - Add a procedural bow-shot sound with resource-pack hooks for `entity.arrow.shoot` and `item.crossbow.shoot`.
+- Add data-driven block tags (`minecraft:mineable/pickaxe|axe|shovel|hoe` and `minecraft:needs_stone|iron|diamond_tool`) inferred at registry load, with built-in name overrides and full data-pack replacement through `BlockDef.tags`.
+- Add tool harvest tiers (wood/gold 0, stone 1, iron 2, diamond 3, netherite 4): a wrong-tier tool now breaks harvest-gated blocks at hand speed and drops nothing, matching Java 1.20.1.
+- Add a data-driven loot table system (`LootSystem`): a pure, replayable roll engine now drives block drops (replacing the legacy `BLOCK_DROP_OVERRIDES`, including the 10% gravel-flint roll) and fishing loot, with named tables addressable from `BlockDef.lootTable` for data packs.
+- Add data-driven XP rules: ore mining XP (coal 0-2, diamond/emerald 3-7, lapis 2-5, redstone 1-5, nether quartz 2-5, nether gold 0-1, with deepslate variants), plus centralized fishing (1-6) and breeding (1-7) XP ranges.
 
 ### Changed
 - Route workstations, containers, wooden doors and trapdoors, Beds, redstone controls, Buckets, Boats, Minecarts, Hoes, maps and books, Fishing Rods, throwable items, and Eyes of Ender through the shared behavior dispatcher.
@@ -27,6 +31,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Schedule Campfire cooking by per-slot completion ticks instead of scanning every loaded block-metadata entry each frame; existing cooking progress is converted automatically when an older save loads.
 - Bow firing now supports normal, spectral, and tipped arrows as ammo, consumes bow durability in Survival mode, and uses a distinct shoot feedback instead of the player hurt sound.
 - Creative flight help text now documents double-space to toggle flight and Space/Shift for vertical flight; F is documented only as the offhand swap key.
+- Replace the hardcoded block drop override map with data-driven loot tables, and route fishing loot through the same weighted roll engine.
+- Make breeding and fishing XP rolls use the centralized `XpRules` data instead of inline `Math.random` arithmetic.
 - Document the current multiplayer status as an experimental WebSocket mode: local/server join, movement, chat, chunks, basic block edits, mobs, drops, and weather/time sync are present, while full authoritative survival gameplay and item actions still need incremental work.
 
 ### Fixed

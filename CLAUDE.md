@@ -39,7 +39,7 @@
 
 ### 当前阶段
 
-**Java 1.20.1 对等重建 · 阶段 1 收尾 / 阶段 2 行为底座** — 旧阶段 1–5 只作为历史里程碑，不再代表 1:1 完成度。开发顺序与验收口径以 `docs/DEVELOPMENT_ROADMAP.md` 顶部的“对等重建计划”和 `docs/parity-manifest.json` 为准。
+**Java 1.20.1 对等重建 · 阶段 2 行为底座完成** — P2.1–P2.7 已全部完成（BlockState、TickScheduler、行为注册表、纯放置规划器、标签/战利品表/工具等级/经验规则数据化）；P1.8/P1.9 的自动化回归仍 🟡。下一步按路线图进入“1.20.1 内容补齐”。开发顺序与验收口径以 `docs/DEVELOPMENT_ROADMAP.md` 顶部的“对等重建计划”和 `docs/parity-manifest.json` 为准。
 
 ### 重要提示
 

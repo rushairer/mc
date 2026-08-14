@@ -4,6 +4,7 @@ import rawBlocks from '../items/data/blocks.json';
 import { createBlockStateSchema, getDefaultBlockState, resolveBlockState } from './BlockState';
 import type { BlockMetadata, BlockState, BlockStateProperties } from '../types';
 import { inferBlockBehaviorId } from './BehaviorIds';
+import { BLOCK_TAG_OVERRIDES, inferHarvestTags, inferMineableTags } from './BlockTags';
 
 const blocks: Map<number, BlockDef> = new Map();
 const blocksByOfficialId: Map<string, BlockDef> = new Map();
@@ -59,6 +60,9 @@ for (const b of rawBlocks) {
   } else if (b.material === 'dirt' || b.name === 'grass' || b.name === 'dirt' || b.name === 'sand' || b.name === 'gravel' || b.name === 'clay') {
     toolCategory = 'shovel';
   }
+
+  // P2.7: data-driven block tags (explicit overrides win over name inference).
+  const tags = BLOCK_TAG_OVERRIDES[b.name] ?? [...inferMineableTags(b.name, b.material), ...inferHarvestTags(b.name)];
 
   // Helper to get texture properties
   const getTextureProperties = (name: string) => {
@@ -118,6 +122,7 @@ for (const b of rawBlocks) {
       solid: isSolid,
       hardness: b.hardness ?? 1.0,
       toolCategory,
+      tags,
       luminance: emitLight,
       baseId: runtimeId,
       metadata: 0,
@@ -163,6 +168,7 @@ for (const b of rawBlocks) {
       solid: isSolid,
       hardness: b.hardness ?? 1.0,
       toolCategory,
+      tags,
       luminance: emitLight,
       baseId: runtimeId,
       metadata: 0,
@@ -202,6 +208,8 @@ export const BlockRegistry = {
         hardness: block.hardness ?? 1,
         toolCategory: block.toolCategory,
         dropsId: block.dropsId,
+        tags: block.tags,
+        xpDrop: block.xpDrop,
         luminance: block.luminance ?? 0,
         baseId: block.baseId ?? block.id,
         metadata: block.metadata ?? 0,

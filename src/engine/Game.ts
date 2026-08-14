@@ -48,7 +48,7 @@ import type { Enchantment } from '../systems/EnchantSystem';
 import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '../types';
 import { NetworkClient } from '../server/NetworkClient';
 import { PacketType } from '../server/NetworkProtocol';
-import { coordinateRandom } from './DeterministicRandom';
+import { coordinateRandom, XorShiftRandom, hashIntegers } from './DeterministicRandom';
 import { TickScheduler, type ScheduledTick } from '../systems/TickScheduler';
 import {
   BehaviorRegistry,
@@ -60,6 +60,8 @@ import {
   type WorldContext,
 } from '../world/BehaviorRegistry';
 import { planBlockPlacement } from '../world/BlockPlacement';
+import { rollBlockLoot, rollLootTable, type LootTable } from '../world/LootSystem';
+import { getBlockXpRange, rollXp, BREEDING_XP_RANGE, FISHING_XP_RANGE } from '../world/XpRules';
 import type { WorldTickPayload, WorldTickType } from '../world/WorldTick';
 
 const HONEY_BOTTLE_ID = 454;
@@ -73,6 +75,19 @@ const RAW_FISH_ID = 349;
 const RAW_SALMON_ID = (1 << 10) | 349;
 const CLOWNFISH_ID = (2 << 10) | 349;
 const PUFFERFISH_ID = (3 << 10) | 349;
+
+// P2.7: fishing loot as a data-driven loot table (weights mirror 1.20.1 odds).
+const FISHING_LOOT_TABLE: LootTable = {
+  pools: [{
+    rolls: 1,
+    entries: [
+      { itemId: RAW_FISH_ID, min: 1, max: 1, weight: 70 },
+      { itemId: RAW_SALMON_ID, min: 1, max: 1, weight: 18 },
+      { itemId: CLOWNFISH_ID, min: 1, max: 1, weight: 8 },
+      { itemId: PUFFERFISH_ID, min: 1, max: 1, weight: 4 },
+    ],
+  }],
+};
 const TRIDENT_ID = 20275;
 const FIREWORK_ROCKET_ID = 401;
 const MODERN_FIREWORK_ROCKET_ID = 20096;
@@ -1773,7 +1788,7 @@ export class Game {
         heldItem,
         (type, pos) => {
           this.particles.spawnBlockBreak(pos.x, pos.y + 0.5, pos.z, 0xff5555, 20);
-          this.xp.spawnXP(1 + Math.floor(Math.random() * 7), pos.clone().add(new THREE.Vector3(0, 0.5, 0)));
+          this.xp.spawnXP(rollXp(BREEDING_XP_RANGE, Math.random), pos.clone().add(new THREE.Vector3(0, 0.5, 0)));
           this.sound.playXP();
         },
         playerLookDir,
@@ -2263,14 +2278,31 @@ export class Game {
           if (isNetworkConnected) {
             this.network.send(PacketType.C2S_BLOCK_BREAK, { x: bp.x, y: bp.y, z: bp.z });
           } else {
-            if (this.gameMode !== 'creative') {
+            const isSurvival = this.gameMode !== 'creative';
+            if (isSurvival) {
               // Damage tool
               const heldItemStack = this.inventory.getSlot(this.player.selectedSlot);
               if (heldItemStack && ItemRegistry.isTool(heldItemStack.id)) {
                 this.inventory.damageTool(this.player.selectedSlot);
               }
             }
-            this.destroyBlockAt(bp.x, bp.y, bp.z, true);
+            // P2.7: a wrong-tier tool (e.g. stone pickaxe on diamond ore)
+            // breaks the block but drops nothing, matching Java 1.20.1.
+            const harvestable = isSurvival ? ItemRegistry.canHarvest(selectedItemId, blockId) : true;
+            this.destroyBlockAt(bp.x, bp.y, bp.z, true, harvestable);
+            // P2.7: data-driven mining XP (ores and datapack xpDrop).
+            if (isSurvival && blockDef) {
+              const xpRange = blockDef.xpDrop ?? getBlockXpRange(blockDef.name);
+              if (xpRange) {
+                const xpRandom = new XorShiftRandom(
+                  hashIntegers(this.seed, this.worldTickScheduler.getCurrentTick(), bp.x, bp.y, bp.z)
+                );
+                const xpAmount = xpRange.min + xpRandom.nextInt(xpRange.max - xpRange.min + 1);
+                if (xpAmount > 0) {
+                  this.xp.spawnXP(xpAmount, new THREE.Vector3(bp.x + 0.5, bp.y + 0.5, bp.z + 0.5));
+                }
+              }
+            }
           }
           this.sound.playBlockBreak(blockId);
           this.breakProgress = 0;
@@ -3353,7 +3385,7 @@ export class Game {
       const velocity = new THREE.Vector3().subVectors(this.player.eyePosition, bobber.position).normalize().multiplyScalar(6);
       velocity.y = 3.5;
       this.droppedItems.spawnItem(lootId, 1, dropPos, velocity, 0.1);
-      this.xp.spawnXP(1 + Math.floor(Math.random() * 6), bobber.position.clone());
+      this.xp.spawnXP(rollXp(FISHING_XP_RANGE, Math.random), bobber.position.clone());
       this.particles.spawnXP(bobber.position.x, bobber.position.y, bobber.position.z, 8);
       this.sound.playPickup();
     } else {
@@ -3414,11 +3446,9 @@ export class Game {
   }
 
   private rollFishingLoot(): number {
-    const roll = Math.random();
-    if (roll < 0.70) return RAW_FISH_ID;
-    if (roll < 0.88) return RAW_SALMON_ID;
-    if (roll < 0.96) return CLOWNFISH_ID;
-    return PUFFERFISH_ID;
+    // P2.7: data-driven fishing loot table (weights mirror 1.20.1 odds).
+    const drops = rollLootTable(FISHING_LOOT_TABLE, Math.random);
+    return drops.length > 0 ? drops[0].itemId : RAW_FISH_ID;
   }
 
   private clearFishingBobber() {
@@ -6143,7 +6173,7 @@ export class Game {
     }
   }
 
-  private destroyBlockAt(x: number, y: number, z: number, spawnDrop: boolean = true) {
+  private destroyBlockAt(x: number, y: number, z: number, spawnDrop: boolean = true, harvestable: boolean = true) {
     const blockId = this.chunks.getBlock(x, y, z);
     const baseId = blockId & 0x3FF;
     if (baseId === 0) return;
@@ -6181,7 +6211,7 @@ export class Game {
     }
 
     // 2. Spawn item drop for the block itself
-    if (spawnDrop && this.gameMode !== 'creative') {
+    if (spawnDrop && this.gameMode !== 'creative' && harvestable) {
       const dropPos = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
       const velocity = new THREE.Vector3(
         (Math.random() - 0.5) * 1.5,
@@ -6198,9 +6228,12 @@ export class Game {
       } else if (baseId === 118 || def?.name.includes('cauldron')) {
         this.droppedItems.spawnItem(380, 1, dropPos, velocity, 0.5);
       } else {
-        const dropId = ItemRegistry.getBlockDropItem(blockId);
-        if (dropId > 0) {
-          this.droppedItems.spawnItem(dropId, 1, dropPos, velocity, 0.5);
+        // P2.7: block drops come from data-driven loot tables (LootSystem).
+        const drops = rollBlockLoot(def, Math.random);
+        for (const drop of drops) {
+          if (drop.count > 0 && drop.itemId > 0) {
+            this.droppedItems.spawnItem(drop.itemId, drop.count, dropPos, velocity, 0.5);
+          }
         }
       }
     }

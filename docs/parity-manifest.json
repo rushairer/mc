@@ -39,6 +39,7 @@
     "blockStateFoundation": { "definitions": "partial", "visualModels": "not-applicable", "behavior": "partial", "automatedAcceptance": "partial" },
     "tickScheduler": { "definitions": "complete", "visualModels": "not-applicable", "behavior": "complete", "automatedAcceptance": "partial" },
     "behaviorRegistry": { "definitions": "complete", "visualModels": "not-applicable", "behavior": "complete", "automatedAcceptance": "partial" },
+    "tagsLootTierRules": { "definitions": "partial", "visualModels": "not-applicable", "behavior": "partial", "automatedAcceptance": "partial" },
     "worldGeneration": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
     "blocks": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
     "itemsAndCrafting": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },

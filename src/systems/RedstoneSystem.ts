@@ -96,6 +96,7 @@ export class RedstoneSystem {
       if (
         comp.type !== 'torch' &&
         comp.type !== 'lever' &&
+        comp.type !== 'button' &&
         comp.type !== 'daylight_detector' &&
         comp.type !== 'observer' &&
         comp.type !== 'comparator' &&
@@ -131,6 +132,11 @@ export class RedstoneSystem {
         } else {
           comp.signal = 0;
         }
+        onComponentChange?.(comp);
+      } else if (comp.type === 'button') {
+        // Buttons keep their signal only while pressed (state set by the
+        // scheduled reset tick); the block behavior handles pressing.
+        comp.signal = comp.state ? 15 : 0;
         onComponentChange?.(comp);
       } else if (comp.type === 'daylight_detector') {
         const isDaylight = Math.sin(gameTime * 2 * Math.PI);
@@ -583,6 +589,22 @@ export class RedstoneSystem {
     if (comp && comp.type === 'lever') {
       comp.state = !comp.state;
       return comp.state;
+    }
+    return false;
+  }
+
+  /**
+   * Whether any redstone component at this position or its six neighbors is
+   * emitting a signal — used by doors, fence gates and trapdoors to react to
+   * adjacent power, matching Java 1.20.1.
+   */
+  isPositionPowered(x: number, y: number, z: number): boolean {
+    const NEIGHBORS: Array<[number, number, number]> = [
+      [0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1],
+    ];
+    for (const [dx, dy, dz] of NEIGHBORS) {
+      const comp = this.get(x + dx, y + dy, z + dz);
+      if (comp && comp.signal > 0) return true;
     }
     return false;
   }

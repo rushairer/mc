@@ -10,9 +10,11 @@ test('infers stable behavior ids for interactive block families', () => {
   assert.equal(inferBlockBehaviorId('red_bed'), 'minecraft:bed');
   assert.equal(inferBlockBehaviorId('bedrock'), undefined);
   assert.equal(inferBlockBehaviorId('oak_door'), 'minecraft:door');
-  assert.equal(inferBlockBehaviorId('iron_door'), undefined);
+  assert.equal(inferBlockBehaviorId('iron_door'), 'minecraft:iron_door');
   assert.equal(inferBlockBehaviorId('oak_trapdoor'), 'minecraft:trapdoor');
   assert.equal(inferBlockBehaviorId('iron_trapdoor'), undefined);
+  assert.equal(inferBlockBehaviorId('stone_button'), 'minecraft:button');
+  assert.equal(inferBlockBehaviorId('oak_fence_gate'), 'minecraft:fence_gate');
 });
 
 test('infers stable behavior ids for readable and active-use items', () => {
@@ -34,7 +36,7 @@ test('infers stable behavior ids for readable and active-use items', () => {
 test('vanilla registry definitions expose inferred behavior references', () => {
   assert.equal(BlockRegistry.getByName('smoker')?.behaviorId, 'minecraft:furnace');
   assert.equal(BlockRegistry.getByName('barrel')?.behaviorId, 'minecraft:storage');
-  assert.equal(BlockRegistry.getByName('iron_door')?.behaviorId, undefined);
+  assert.equal(BlockRegistry.getByName('iron_door')?.behaviorId, 'minecraft:iron_door');
   assert.equal(ItemRegistry.getByName('filled_map')?.behaviorId, 'minecraft:readable');
   assert.equal(ItemRegistry.getByName('trident')?.behaviorId, 'minecraft:throwable');
   assert.equal(ItemRegistry.getByName('crossbow')?.behaviorId, 'minecraft:crossbow');

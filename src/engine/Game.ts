@@ -60,6 +60,7 @@ import {
   type WorldContext,
 } from '../world/BehaviorRegistry';
 import { planBlockPlacement } from '../world/BlockPlacement';
+import { getButtonPressTicks } from '../world/ButtonRules';
 import { rollBlockLoot, rollLootTable, type LootTable } from '../world/LootSystem';
 import { getBlockXpRange, rollXp, BREEDING_XP_RANGE, FISHING_XP_RANGE } from '../world/XpRules';
 import type { WorldTickPayload, WorldTickType } from '../world/WorldTick';
@@ -549,13 +550,44 @@ export class Game {
         return { handled: true, cooldown: 0.25 };
       },
     });
-    this.behaviors.registerBlock('tnt', {
+    this.behaviors.registerBlock(['tnt'], {
       id: 'minecraft:tnt',
       preventsItemUse: true,
       interact: ({ position }) => {
         this.igniteTNT(position.x, position.y, position.z);
         return { handled: true, cooldown: 0.25 };
       },
+    });
+    // P3.1: buttons (wooden 0.5s / stone 1.5s press), fence gates and iron
+    // doors. Buttons emit a redstone pulse while pressed and reset on a
+    // scheduled world tick; gates open/close by hand and by redstone; iron
+    // doors ignore right-click and are driven by redstone only.
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:button',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.pressButton(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.25 };
+      },
+      scheduledTick: (_world, position, reason) => {
+        if (reason === 'button_reset') {
+          this.releaseButton(position.x, position.y, position.z);
+        }
+      },
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:fence_gate',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.toggleFenceGate(position.x, position.y, position.z);
+        this.sound.playLever();
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:iron_door',
+      preventsItemUse: true,
+      interact: () => ({ handled: true, cooldown: 0.25 }), // iron doors cannot be hand-opened
     });
     this.behaviors.registerBlock('bed', {
       id: 'minecraft:bed',
@@ -2479,6 +2511,8 @@ export class Game {
             signal: component.signal,
           });
         }
+        // P3.1: doors / fence gates / trapdoors react to adjacent redstone power.
+        this.applyRedstoneToNeighbors(component.x, component.y, component.z);
       },
       this.gameTime,
       (x, y, z) => this.chunks.getBlockMeta(x, y, z),
@@ -4863,6 +4897,18 @@ export class Game {
       return;
     }
 
+    if (name.endsWith('_button')) {
+      const buttonFacing = facing === 'up' || facing === 'down' ? this.getPlayerHorizontalFacing() : facing;
+      this.redstone.register(x, y, z, 'button', buttonFacing);
+      this.chunks.setBlockMeta(x, y, z, {
+        facing: buttonFacing,
+        redstoneType: 'button',
+        powered: false,
+        signal: 0,
+      }, true);
+      return;
+    }
+
     if (name === 'tripwire') {
       this.redstone.register(x, y, z, 'tripwire', 'up');
       this.chunks.setBlockMeta(x, y, z, {
@@ -5003,6 +5049,18 @@ export class Game {
       }
       this.chunks.setBlockMeta(x, y, z, {
         facing: hingeFacing,
+        open: false,
+      }, true);
+      return;
+    }
+
+    if (name.includes('fence_gate')) {
+      let gateFacing = facing;
+      if (gateFacing === 'up' || gateFacing === 'down') {
+        gateFacing = this.getPlayerHorizontalFacing();
+      }
+      this.chunks.setBlockMeta(x, y, z, {
+        facing: gateFacing,
         open: false,
       }, true);
       return;
@@ -5725,13 +5783,14 @@ export class Game {
     }
   }
 
-  private toggleDoor(x: number, y: number, z: number) {
+  private setDoorOpen(x: number, y: number, z: number, open: boolean) {
     const base = this.getDoorBase(x, y, z);
     if (!base) return;
 
     const lowerMeta = this.chunks.getBlockMeta(base.x, base.y, base.z);
     const upperMeta = this.chunks.getBlockMeta(base.x, base.y + 1, base.z);
-    const open = !(lowerMeta?.open ?? upperMeta?.open ?? false);
+    if ((lowerMeta?.open ?? upperMeta?.open ?? false) === open) return;
+
     const facing = lowerMeta?.facing ?? upperMeta?.facing ?? 'north';
     const hinge = lowerMeta?.hinge ?? upperMeta?.hinge ?? 'left';
     const blockId = this.chunks.getBlock(base.x, base.y, base.z);
@@ -5757,6 +5816,14 @@ export class Game {
       }, true);
       this.redstone.observeBlockChange(base.x, base.y + 1, base.z);
     }
+  }
+
+  private toggleDoor(x: number, y: number, z: number) {
+    const base = this.getDoorBase(x, y, z);
+    if (!base) return;
+    const lowerMeta = this.chunks.getBlockMeta(base.x, base.y, base.z);
+    const upperMeta = this.chunks.getBlockMeta(base.x, base.y + 1, base.z);
+    this.setDoorOpen(base.x, base.y, base.z, !(lowerMeta?.open ?? upperMeta?.open ?? false));
   }
 
   private breakDoor(x: number, y: number, z: number) {
@@ -5786,6 +5853,105 @@ export class Game {
       open,
     }, true);
     this.redstone.observeBlockChange(x, y, z);
+  }
+
+  // ─── P3.1: buttons, fence gates, redstone-driven openable blocks ───
+
+  private pressButton(x: number, y: number, z: number) {
+    const blockId = this.chunks.getBlock(x, y, z);
+    if (blockId === 0) return;
+    const def = BlockRegistry.get(blockId);
+    if (!def || !def.name.endsWith('_button')) return;
+
+    const meta = this.chunks.getBlockMeta(x, y, z) ?? {};
+    if (meta.powered) return; // already pressed
+
+    this.chunks.setBlockMeta(x, y, z, {
+      ...meta,
+      redstoneType: 'button',
+      powered: true,
+      signal: 15,
+    }, true);
+
+    const existing = this.redstone.get(x, y, z);
+    if (existing && existing.type === 'button') {
+      existing.state = true;
+      existing.signal = 15;
+    } else {
+      this.redstone.register(x, y, z, 'button', meta.facing ?? 'north', { signal: 15, state: true });
+    }
+    this.redstone.observeBlockChange(x, y, z);
+    this.sound.playLever();
+
+    // Wooden buttons 10 ticks, stone-family buttons 30 ticks (Java 1.20.1).
+    this.scheduleWorldTick('block_event', x, y, z, getButtonPressTicks(def.name), 'button_reset');
+  }
+
+  private releaseButton(x: number, y: number, z: number) {
+    const comp = this.redstone.get(x, y, z);
+    if (comp && comp.type === 'button') {
+      comp.state = false;
+      comp.signal = 0;
+    }
+    const meta = this.chunks.getBlockMeta(x, y, z);
+    if (meta?.powered) {
+      this.chunks.setBlockMeta(x, y, z, { ...meta, powered: false, signal: 0 }, true);
+      this.redstone.observeBlockChange(x, y, z);
+    }
+  }
+
+  private toggleFenceGate(x: number, y: number, z: number) {
+    const meta = this.chunks.getBlockMeta(x, y, z);
+    const open = !(meta?.open ?? false);
+    this.chunks.setBlockMeta(x, y, z, { ...meta, open }, true);
+    this.redstone.observeBlockChange(x, y, z);
+  }
+
+  private applyRedstoneToNeighbors(x: number, y: number, z: number) {
+    const NEIGHBORS: Array<[number, number, number]> = [
+      [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1],
+    ];
+    for (const [dx, dy, dz] of NEIGHBORS) {
+      this.applyRedstonePowerToBlock(x + dx, y + dy, z + dz);
+    }
+  }
+
+  /**
+   * Java 1.20.1 openable-block power rules:
+   * - fence gates / trapdoors open while powered and close when unpowered;
+   * - iron doors open while powered and close when unpowered (no hand use);
+   * - wooden doors open while powered and keep their state when unpowered.
+   */
+  private applyRedstonePowerToBlock(x: number, y: number, z: number) {
+    const blockId = this.chunks.getBlock(x, y, z);
+    if (blockId === 0) return;
+    const def = BlockRegistry.get(blockId);
+    if (!def) return;
+    const name = def.name;
+    const isDoor = name.endsWith('door') && !name.includes('trapdoor');
+    const isGate = name.includes('fence_gate');
+    const isTrapdoor = name.includes('trapdoor');
+    if (!isDoor && !isGate && !isTrapdoor) return;
+
+    const powered = this.redstone.isPositionPowered(x, y, z);
+    const meta = this.chunks.getBlockMeta(x, y, z);
+    const currentOpen = meta?.open ?? false;
+
+    let targetOpen: boolean | null = null;
+    if (isGate || isTrapdoor) {
+      targetOpen = powered;
+    } else if (isDoor) {
+      if (powered) targetOpen = true;
+      else if (name === 'iron_door') targetOpen = false;
+    }
+    if (targetOpen === null || targetOpen === currentOpen) return;
+
+    if (isDoor) {
+      this.setDoorOpen(x, y, z, targetOpen);
+    } else {
+      this.chunks.setBlockMeta(x, y, z, { ...meta, open: targetOpen }, true);
+      this.redstone.observeBlockChange(x, y, z);
+    }
   }
 
   private ensureChestMetadata(x: number, y: number, z: number): BlockMetadata | null {

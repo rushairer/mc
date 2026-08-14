@@ -228,8 +228,12 @@ export class ChunkManager {
   isSolidBlock(wx: number, wy: number, wz: number): boolean {
     const blockId = this.getBlock(wx, wy, wz);
     const def = BlockRegistry.get(blockId);
-    const isDoorOrTrapdoor = def && (def.name.endsWith('door') || def.name.includes('trapdoor'));
-    if (isDoorOrTrapdoor) {
+    const isOpenable = def && (
+      def.name.endsWith('door') ||
+      def.name.includes('trapdoor') ||
+      def.name.includes('fence_gate')
+    );
+    if (isOpenable) {
       const meta = this.getBlockMeta(wx, wy, wz);
       return !meta?.open;
     }

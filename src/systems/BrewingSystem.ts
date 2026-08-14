@@ -9,6 +9,18 @@ export interface BrewingRecipe {
   effect?: PotionEffectData;
 }
 
+/** P3.4 — potion modifier (redstone/glowstone/gunpowder/dragon's breath). */
+export interface PotionModifier {
+  ingredientId: number;
+  name: string;
+  matches: (bottle: ItemStack) => boolean;
+  modify: (bottle: ItemStack) => ItemStack;
+}
+
+export type BrewAction =
+  | { kind: 'brew'; recipe: BrewingRecipe }
+  | { kind: 'modify'; modifier: PotionModifier };
+
 const POTION_ID = 373;
 const GLASS_BOTTLE_ID = 374;
 const NETHER_WART_ID = 372;
@@ -55,12 +67,34 @@ export const BrewingSystem = {
     return { id: POTION_ID, count: 1, potion: { kind: 'water', name: 'Water Bottle' } };
   },
 
+  /** A potion that can still be brewed/modified (has an effect, not awkward). */
+  isBrewablePotion(item: ItemStack | null): boolean {
+    if (!item || item.id !== POTION_ID || !item.potion?.effect) return false;
+    const kind = item.potion.kind;
+    return kind !== 'water' && kind !== 'awkward';
+  },
+
   findRecipe(ingredient: ItemStack | null, bottles: Array<ItemStack | null>): BrewingRecipe | null {
     if (!ingredient) return null;
     return BREWING_RECIPES.find((recipe) =>
       recipe.ingredientId === ingredient.id &&
       bottles.some((bottle) => bottle && this.getPotionKind(bottle) === recipe.inputKind)
     ) ?? null;
+  },
+
+  /**
+   * P3.4 — resolve the brewing action for an ingredient: a base recipe or a
+   * potion modifier (redstone/glowstone/gunpowder/dragon's breath).
+   */
+  findBrewAction(ingredient: ItemStack | null, bottles: Array<ItemStack | null>): BrewAction | null {
+    if (!ingredient) return null;
+    const modifier = POTION_MODIFIERS.find((mod) =>
+      mod.ingredientId === ingredient.id &&
+      bottles.some((bottle) => bottle && mod.matches(bottle))
+    );
+    if (modifier) return { kind: 'modify', modifier };
+    const recipe = this.findRecipe(ingredient, bottles);
+    return recipe ? { kind: 'brew', recipe } : null;
   },
 
   brewBottle(bottle: ItemStack, recipe: BrewingRecipe): ItemStack {
@@ -73,7 +107,81 @@ export const BrewingSystem = {
         kind: recipe.outputKind,
         name: recipe.outputName,
         effect: recipe.effect,
+        variant: bottle.potion?.variant,
       },
     };
   },
 };
+
+/**
+ * P3.4 — potion modifiers (Java 1.20.1):
+ * redstone doubles duration, glowstone raises to level II (duration / 3),
+ * gunpowder makes a splash potion, dragon's breath makes a lingering potion.
+ */
+const REDSTONE_ID = 331;
+const GLOWSTONE_ID = 348;
+const GUNPOWDER_ID = 289;
+const DRAGON_BREATH_ID = 437;
+
+export const POTION_MODIFIERS: PotionModifier[] = [
+  {
+    ingredientId: REDSTONE_ID,
+    name: 'Extended',
+    matches: (bottle) => BrewingSystem.isBrewablePotion(bottle) && (bottle.potion?.effect?.duration ?? 0) > 0,
+    modify: (bottle) => ({
+      ...bottle,
+      potion: {
+        ...bottle.potion!,
+        effect: bottle.potion?.effect
+          ? { ...bottle.potion.effect, duration: bottle.potion.effect.duration * 2 }
+          : undefined,
+        name: `Extended ${bottle.potion?.name ?? ''}`.trim(),
+      },
+    }),
+  },
+  {
+    ingredientId: GLOWSTONE_ID,
+    name: 'Strengthened',
+    matches: (bottle) => BrewingSystem.isBrewablePotion(bottle) && (bottle.potion?.effect?.level ?? 0) < 2,
+    modify: (bottle) => ({
+      ...bottle,
+      potion: {
+        ...bottle.potion!,
+        effect: bottle.potion?.effect
+          ? {
+            ...bottle.potion.effect,
+            level: bottle.potion.effect.level + 1,
+            duration: Math.max(1, Math.floor((bottle.potion.effect.duration ?? 0) / 3)),
+          }
+          : undefined,
+        name: `Strong ${bottle.potion?.name ?? ''}`.trim(),
+      },
+    }),
+  },
+  {
+    ingredientId: GUNPOWDER_ID,
+    name: 'Splash',
+    matches: (bottle) => BrewingSystem.isBrewablePotion(bottle) && bottle.potion?.variant !== 'lingering',
+    modify: (bottle) => ({
+      ...bottle,
+      potion: {
+        ...bottle.potion!,
+        variant: 'splash',
+        name: `Splash ${bottle.potion?.name ?? ''}`.trim(),
+      },
+    }),
+  },
+  {
+    ingredientId: DRAGON_BREATH_ID,
+    name: 'Lingering',
+    matches: (bottle) => bottle.potion?.variant === 'splash' && !!bottle.potion.effect,
+    modify: (bottle) => ({
+      ...bottle,
+      potion: {
+        ...bottle.potion!,
+        variant: 'lingering',
+        name: `Lingering ${bottle.potion?.name ?? ''}`.replace(/^Splash\s+/, '').trim(),
+      },
+    }),
+  },
+];

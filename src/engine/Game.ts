@@ -46,6 +46,7 @@ import { findSmeltingResult, isSmeltingFuel, getFuelBurnTime } from '../items/Sm
 import { CHUNK_SIZE, PLAYER_HEIGHT, PLAYER_WIDTH, PLAYER_CRAWL_HEIGHT, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
 import type { Enchantment } from '../systems/EnchantSystem';
 import type { ActivePotionEffect, BlockFacing, BlockMetadata, ItemStack } from '../types';
+import type { PotionEffectData } from '../systems/PotionEffect';
 import { NetworkClient } from '../server/NetworkClient';
 import { PacketType } from '../server/NetworkProtocol';
 import { coordinateRandom, XorShiftRandom, hashIntegers } from './DeterministicRandom';
@@ -239,6 +240,13 @@ export class Game {
   private fpsTime = 0;
   private currentFps = 0;
   private breakCooldown = 0;
+  /** P3.4 — lingering potion area clouds. */
+  private lingeringClouds: Array<{
+    pos: THREE.Vector3;
+    effect: PotionEffectData;
+    remaining: number;
+    tickTimer: number;
+  }> = [];
   private placeCooldown = 0;
   private lockCooldown = 0;
   private portalTimer = 0;
@@ -696,7 +704,16 @@ export class Game {
     });
     this.behaviors.registerItem('potion', {
       id: 'minecraft:potion',
-      canStartUse: ({ stack }) => stack.id === 373 && !!stack.potion?.effect,
+      // P3.4: splash/lingering potions are thrown instantly; normal potions drink.
+      use: ({ stack }) => {
+        const variant = stack.potion?.variant;
+        if (variant === 'splash' || variant === 'lingering') {
+          this.throwPotion(stack);
+          return { handled: true, cooldown: 0.5 };
+        }
+        return { handled: false };
+      },
+      canStartUse: ({ stack }) => stack.id === 373 && !!stack.potion?.effect && !stack.potion?.variant,
       startUse: () => {
         this.eatingTimer = 0;
         this.chewSoundTimer = 0;
@@ -1925,7 +1942,7 @@ export class Game {
         this.player.position,
         PLAYER_WIDTH, this.player.height,
         (pos, fromPlayer, damage) => {
-          this.handlePotionSplash(pos, fromPlayer, damage);
+          this.handlePotionSplash(pos, fromPlayer, damage, undefined, undefined);
         },
         (pos, shattered) => {
           this.handleEnderEyeDone(pos, shattered);
@@ -2449,6 +2466,36 @@ export class Game {
         }
       }
     );
+
+    // P3.4: lingering potion clouds re-apply their effect in an area.
+    for (let i = this.lingeringClouds.length - 1; i >= 0; i--) {
+      const cloud = this.lingeringClouds[i];
+      cloud.remaining -= dt;
+      cloud.tickTimer += dt;
+      if (cloud.tickTimer >= 0.5) {
+        cloud.tickTimer = 0;
+        this.particles.spawnBlockBreak(
+          cloud.pos.x + (Math.random() - 0.5) * 2,
+          cloud.pos.y + Math.random() * 1.5,
+          cloud.pos.z + (Math.random() - 0.5) * 2,
+          0x8a2be2,
+          3,
+        );
+        if (this.player.position.distanceTo(cloud.pos) <= 3.5 && this.gameMode !== 'creative') {
+          this.potionEffects.apply(cloud.effect, (amount) => {
+            this.player.health = Math.min(20, this.player.health + amount);
+          });
+        }
+        for (const mob of this.mobs.mobs.values()) {
+          if (mob.position.distanceTo(cloud.pos) <= 3.5 && (cloud.effect.id === 'poison' || cloud.effect.id === 'wither')) {
+            mob.takeDamage(cloud.effect.level);
+          }
+        }
+      }
+      if (cloud.remaining <= 0) {
+        this.lingeringClouds.splice(i, 1);
+      }
+    }
 
     // Death check
     if (this.player.health <= 0) {
@@ -3576,10 +3623,23 @@ export class Game {
     this.chunks.setBlock(centerX, centerY + 1, centerZ, 122);
   }
 
-  private handlePotionSplash(pos: THREE.Vector3, fromPlayer: boolean, damage: number) {
+  private handlePotionSplash(
+    pos: THREE.Vector3,
+    fromPlayer: boolean,
+    damage: number,
+    effect?: PotionEffectData,
+    variant?: 'splash' | 'lingering',
+  ) {
     this.particles.spawnBlockBreak(pos.x, pos.y, pos.z, 0x8a2be2, 35);
     this.sound.playBlockBreak(0); // Default break sound category (stone) for potion splash
 
+    // P3.4: player-thrown potions apply their own effect in a radius.
+    if (effect) {
+      this.applyPotionSplashEffect(pos, effect, variant === 'lingering');
+      return;
+    }
+
+    // Witch potions (no effect data): poison or instant damage.
     const splashRadius = 3.5;
     const distToPlayer = this.player.position.distanceTo(pos);
     if (distToPlayer <= splashRadius && this.gameMode !== 'creative') {
@@ -3612,6 +3672,47 @@ export class Game {
         }
       }
     }
+  }
+
+  /**
+   * P3.4 — apply a thrown potion's effect in a radius. Lingering potions also
+   * spawn an area cloud that re-applies the effect while it lasts.
+   */
+  private applyPotionSplashEffect(pos: THREE.Vector3, effect: PotionEffectData, lingering: boolean) {
+    const radius = lingering ? 4 : 3.5;
+    const distToPlayer = this.player.position.distanceTo(pos);
+    if (distToPlayer <= radius && this.gameMode !== 'creative') {
+      this.potionEffects.apply(effect, (amount) => {
+        this.player.health = Math.min(20, this.player.health + amount);
+      });
+    }
+    for (const mob of this.mobs.mobs.values()) {
+      if (mob.position.distanceTo(pos) > radius) continue;
+      // Harmful effects damage mobs; beneficial effects are ignored (1.20.1
+      // undead-inversion is out of scope).
+      if (effect.id === 'poison' || effect.id === 'wither') {
+        mob.takeDamage(effect.level);
+      }
+    }
+    if (lingering) {
+      this.lingeringClouds.push({
+        pos: pos.clone(),
+        effect: { ...effect },
+        remaining: Math.max(5, Math.ceil(effect.duration / 4)),
+        tickTimer: 0,
+      });
+    }
+  }
+
+  private throwPotion(stack: ItemStack) {
+    const origin = this.player.eyePosition.clone();
+    const direction = this.player.forward.clone();
+    this.projectiles.shootPotion(origin, direction, true, 2, stack.potion?.effect, stack.potion?.variant as 'splash' | 'lingering');
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeItem(stack.id, 1);
+    }
+    this.sound.playBowShoot(1);
+    this.notifyState();
   }
 
   private handleThrowableImpact(type: ProjectileType, pos: THREE.Vector3, fromPlayer: boolean) {

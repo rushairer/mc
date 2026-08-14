@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
+import type { PotionEffectData } from './PotionEffect';
 
 export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'trident' | 'firework_rocket' | 'fireball' | 'potion' | 'shulker_bullet' | 'eye_of_ender' | 'wither_skull';
 
@@ -18,6 +19,10 @@ export interface Projectile {
   onFire?: boolean;
   /** P3.3 — Punch enchantment: extra knockback multiplier. */
   knockbackBonus?: number;
+  /** P3.4 — effect carried by a thrown potion. */
+  potionEffect?: PotionEffectData;
+  /** P3.4 — splash vs lingering. */
+  potionVariant?: 'splash' | 'lingering';
 }
 
 const ARROW_GRAVITY = -12;
@@ -52,7 +57,14 @@ export class ProjectileSystem {
     return new THREE.Mesh(geo, mat);
   }
 
-  shootPotion(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage: number = 2) {
+  shootPotion(
+    origin: THREE.Vector3,
+    direction: THREE.Vector3,
+    fromPlayer: boolean,
+    damage: number = 2,
+    potionEffect?: PotionEffectData,
+    potionVariant?: 'splash' | 'lingering',
+  ) {
     const mesh = this.createPotionMesh();
     const vel = direction.clone().normalize().multiplyScalar(15);
     vel.y += 2.5; // Throw arch
@@ -66,7 +78,9 @@ export class ProjectileSystem {
       fromPlayer,
       lifetime: 0,
       mesh,
-      inGround: false
+      inGround: false,
+      potionEffect,
+      potionVariant,
     };
 
     this.projectiles.set(potion.id, potion);
@@ -357,7 +371,7 @@ export class ProjectileSystem {
     playerPos: THREE.Vector3,
     playerWidth: number,
     playerHeight: number,
-    onPotionSplash?: (pos: THREE.Vector3, fromPlayer: boolean, damage: number) => void,
+    onPotionSplash?: (pos: THREE.Vector3, fromPlayer: boolean, damage: number, effect?: PotionEffectData, variant?: 'splash' | 'lingering') => void,
     onEnderEyeComplete?: (pos: THREE.Vector3, shattered: boolean) => void,
     onEnderEyeUpdate?: (pos: THREE.Vector3) => void,
     onProjectileImpact?: (type: ProjectileType, pos: THREE.Vector3, fromPlayer: boolean) => void
@@ -417,7 +431,7 @@ export class ProjectileSystem {
             proj.position.copy(checkPos);
             if (proj.type === 'potion') {
               if (onPotionSplash) {
-                onPotionSplash(proj.position, proj.fromPlayer, proj.damage);
+                onPotionSplash(proj.position, proj.fromPlayer, proj.damage, proj.potionEffect, proj.potionVariant);
               }
             } else if (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket') {
               if (onProjectileImpact) {
@@ -449,7 +463,7 @@ export class ProjectileSystem {
             proj.position.y < playerPos.y + playerHeight) {
           if (proj.type === 'potion') {
             if (onPotionSplash) {
-              onPotionSplash(proj.position, proj.fromPlayer, proj.damage);
+              onPotionSplash(proj.position, proj.fromPlayer, proj.damage, proj.potionEffect, proj.potionVariant);
             }
           } else {
             const kb = proj.velocity.clone().normalize().multiplyScalar(2);
@@ -475,7 +489,7 @@ export class ProjectileSystem {
               proj.position.y < mob.position.y + mob.height) {
             if (proj.type === 'potion') {
               if (onPotionSplash) {
-                onPotionSplash(proj.position, proj.fromPlayer, proj.damage);
+                onPotionSplash(proj.position, proj.fromPlayer, proj.damage, proj.potionEffect, proj.potionVariant);
               }
             } else {
               const kb = proj.velocity.clone().normalize().multiplyScalar(2);

@@ -45,11 +45,11 @@ export const BrewingUI: React.FC<BrewingUIProps> = ({ inventory, brewingSlots, o
   const [progress, setProgress] = useState(0);
   const [hoveredItem, setHoveredItem] = useState<{ item: ItemStack; x: number; y: number } | null>(null);
 
-  const recipe = useMemo(() => BrewingSystem.findRecipe(ingredient, bottles), [ingredient, bottles]);
-  const canBrew = !!recipe && !!fuel && fuel.id === BLAZE_POWDER_ID;
+  const action = useMemo(() => BrewingSystem.findBrewAction(ingredient, bottles), [ingredient, bottles]);
+  const canBrew = !!action && !!fuel && fuel.id === BLAZE_POWDER_ID;
 
   useEffect(() => {
-    if (!canBrew || !recipe) {
+    if (!canBrew || !action) {
       setProgress(0);
       return;
     }
@@ -59,7 +59,12 @@ export const BrewingUI: React.FC<BrewingUIProps> = ({ inventory, brewingSlots, o
         const next = current + 0.025;
         if (next < 1) return next;
 
-        setBottles((prev) => prev.map((bottle) => bottle ? BrewingSystem.brewBottle(bottle, recipe) : null));
+        setBottles((prev) => prev.map((bottle) => {
+          if (!bottle) return null;
+          return action.kind === 'brew'
+            ? BrewingSystem.brewBottle(bottle, action.recipe)
+            : action.modifier.modify(bottle);
+        }));
         setIngredient((prev) => prev ? { ...prev, count: prev.count - 1 } : null);
         setFuel((prev) => prev ? { ...prev, count: prev.count - 1 } : null);
         onInventoryChange();
@@ -68,7 +73,7 @@ export const BrewingUI: React.FC<BrewingUIProps> = ({ inventory, brewingSlots, o
     }, 50);
 
     return () => clearInterval(interval);
-  }, [canBrew, onInventoryChange, recipe]);
+  }, [canBrew, onInventoryChange, action]);
 
   useEffect(() => {
     if (ingredient && ingredient.count <= 0) setIngredient(null);
@@ -259,7 +264,9 @@ export const BrewingUI: React.FC<BrewingUIProps> = ({ inventory, brewingSlots, o
             </div>
           </div>
           <div style={{ color: canBrew ? '#206020' : '#555', fontSize: 12, minWidth: 150 }}>
-            {canBrew && recipe ? getLocalizedDisplayName(recipe.outputName) : t('brewingNeeds')}
+            {canBrew && action
+              ? (action.kind === 'brew' ? getLocalizedDisplayName(action.recipe.outputName) : action.modifier.name)
+              : t('brewingNeeds')}
           </div>
         </div>
 

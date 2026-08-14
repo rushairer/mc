@@ -131,6 +131,8 @@ export interface ItemStack {
     kind: PotionKind;
     name: string;
     effect?: PotionEffectData;
+    /** P3.4 — normal | splash | lingering. */
+    variant?: 'normal' | 'splash' | 'lingering';
   };
   map?: {
     id: number;

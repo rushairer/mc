@@ -4,6 +4,7 @@
  */
 import { LoadedResourcePack, ResourcePackSystem } from './ResourcePackSystem';
 import { getChordNotes, getMusicMode, MUSIC_BAR_SECONDS, type MusicMode, type MusicNote } from './MusicSystem';
+import { getCaveDripInterval, getCaveDripPitch, getRainFilterFrequency, getRainGain, type WeatherKind } from './AmbientRules';
 
 export class SoundSystem {
   private ctx: AudioContext | null = null;
@@ -17,6 +18,8 @@ export class SoundSystem {
   private resourceSounds: Map<string, AudioBuffer[]> = new Map();
   // ─── P4.1: procedural background music ───
   private musicTimer: ReturnType<typeof setInterval> | null = null;
+  // ─── P4.2: rain ambience ───
+  private rainNodes: { source: AudioBufferSourceNode; gain: GainNode } | null = null;
   private musicMode: MusicMode = 'day';
   private musicBar = 0;
   private musicNextTime = 0;
@@ -1133,8 +1136,73 @@ export class SoundSystem {
     osc.stop(when + note.duration + 0.05);
   }
 
+  // ─── P4.2: rain ambience and cave drips ───
+
+  /** Start/stop the looping rain noise; gain scales with weather kind. */
+  updateRainAmbience(kind: WeatherKind) {
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    const targetGain = getRainGain(kind);
+    if (targetGain <= 0) {
+      if (this.rainNodes) {
+        const { source, gain } = this.rainNodes;
+        try {
+          gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.0);
+        } catch (e) {}
+        setTimeout(() => {
+          try { source.stop(); gain.disconnect(); } catch (e) {}
+        }, 1200);
+        this.rainNodes = null;
+      }
+      return;
+    }
+    if (this.rainNodes) {
+      // Adjust intensity in place.
+      try {
+        this.rainNodes.gain.gain.setValueAtTime(this.rainNodes.gain.gain.value, ctx.currentTime);
+        this.rainNodes.gain.gain.exponentialRampToValueAtTime(Math.max(0.001, targetGain), ctx.currentTime + 0.5);
+      } catch (e) {}
+      return;
+    }
+    const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 2), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = getRainFilterFrequency(kind);
+    const gain = ctx.createGain();
+    gain.gain.value = 0.001;
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.001, targetGain), ctx.currentTime + 0.5);
+    source.connect(filter).connect(gain).connect(this.sfxGain!);
+    source.start();
+    this.rainNodes = { source, gain };
+  }
+
+  /** Random cave drip plink (underground ambience). */
+  playCaveDrip() {
+    if (this.playFirstResourceSound(['block.pointed_dripstone.drip_water'])) return;
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    const freq = getCaveDripPitch(Math.random);
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.5, ctx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.05, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+    osc.connect(gain).connect(this.sfxGain!);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.2);
+  }
+
   dispose() {
     this.stopMusic();
+    this.updateRainAmbience('clear');
     if (this.activeAmbientOsc) {
       try {
         (this.activeAmbientOsc as any).stop();

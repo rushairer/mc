@@ -240,6 +240,8 @@ export class Game {
   private fpsTime = 0;
   private currentFps = 0;
   private breakCooldown = 0;
+  /** P4.2 — timer for random cave drip ambience. */
+  private caveDripTimer = 0;
   /** P3.4 — lingering potion area clouds. */
   private lingeringClouds: Array<{
     pos: THREE.Vector3;
@@ -2704,6 +2706,17 @@ export class Game {
       this.sound.updateAmbientSounds(biome, py, light);
       // P4.1: background music mood follows day/night and underground state.
       this.sound.updateMusicMode(this.isNight(), py < 32);
+      // P4.2: rain ambience follows the weather; cave drips underground.
+      this.sound.updateRainAmbience(this.weather.getCurrentWeather() as any);
+      if (py < 32) {
+        this.caveDripTimer -= dt;
+        if (this.caveDripTimer <= 0) {
+          this.caveDripTimer = 3 + Math.random() * 5;
+          this.sound.playCaveDrip();
+        }
+      } else {
+        this.caveDripTimer = 0;
+      }
     }
 
     // Dynamic lighting

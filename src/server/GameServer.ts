@@ -860,6 +860,22 @@ export class GameServer {
         break;
       }
 
+      case 'setblock': {
+        // /setblock <x> <y> <z> <blockId> — server-authoritative block edit.
+        if (args.length >= 4) {
+          const x = parseInt(args[0]);
+          const y = parseInt(args[1]);
+          const z = parseInt(args[2]);
+          const blockId = parseInt(args[3]);
+          if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) && Number.isFinite(blockId)) {
+            this.setBlock(x, y, z, blockId, session.dimension);
+            this.broadcast(PacketType.S2C_BLOCK_UPDATE, { x, y, z, blockId, dimension: session.dimension });
+            this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: `Set block at ${x} ${y} ${z} to ${blockId}` });
+          }
+        }
+        break;
+      }
+
       case 'give': {
         if (args.length >= 1) {
           const itemId = parseInt(args[0]);

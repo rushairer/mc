@@ -337,6 +337,14 @@ async function twoClientScenario(browser) {
   await clientA.page.waitForFunction((tok) => document.body.innerText.includes(tok), token, { timeout: 20000 });
   log(`chat round-trip verified: '${token}' visible on both clients`);
 
+  // P5.5: server-authoritative block edit round-trip via /setblock.
+  const blockToken = `setblock-${Date.now().toString(36)}`;
+  await openChat(clientA.page);
+  await clientA.page.locator('input[type="text"]').fill(`/setblock 0 70 0 1`);
+  await clientA.page.keyboard.press('Enter');
+  await clientA.page.waitForFunction(() => document.body.innerText.includes('Set block at'), { timeout: 20000 });
+  log(`server /setblock round-trip verified (block authority via chat reply)`);
+
   await clientA.context.close();
   await clientB.context.close();
   return { token };

@@ -42,6 +42,7 @@ const initialGameState: GameState = {
   oxygen: 15.0,
   absorption: 0,
   damageFlash: 0,
+  networkStatus: 'idle',
   onGround: false,
   flying: false,
   openUI: 'none',
@@ -458,6 +459,41 @@ export const App: React.FC = () => {
       )}
 
       <HUD state={gameState} getItemIconStyle={getItemIconStyle} />
+
+      {/* P5.4: multiplayer connection status */}
+      {gameState.networkStatus === 'connecting' && (
+        <div style={{ position: 'fixed', top: '8px', right: '8px', zIndex: 45, color: '#ffd966', fontSize: '12px', fontFamily: '"Courier New", monospace', textShadow: '1px 1px 0 #000' }}>
+          Connecting to server...
+        </div>
+      )}
+      {gameState.networkStatus === 'connected' && (
+        <div style={{ position: 'fixed', top: '8px', right: '8px', zIndex: 45, color: '#7CFC00', fontSize: '12px', fontFamily: '"Courier New", monospace', textShadow: '1px 1px 0 #000' }}>
+          ● Online
+        </div>
+      )}
+      {gameState.networkStatus === 'disconnected' && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: 'rgba(40,40,40,0.95)', border: '3px solid #c22', borderRadius: '8px',
+            padding: '24px', color: '#fff', textAlign: 'center', fontFamily: '"Courier New", monospace',
+          }}>
+            <div style={{ fontSize: '18px', marginBottom: '8px', color: '#ff6666' }}>Disconnected</div>
+            <div style={{ fontSize: '12px', color: '#ccc', marginBottom: '16px' }}>
+              The connection to the server was lost.
+            </div>
+            <button
+              className="minecraft-btn"
+              onClick={() => setMenuState('welcome')}
+              style={{ padding: '8px 20px', cursor: 'pointer', fontFamily: '"Courier New", monospace' }}
+            >
+              Back to Menu
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* P4.4: damage flash vignette */}
       {gameState.damageFlash > 0.02 && (
@@ -966,6 +1002,9 @@ export const App: React.FC = () => {
                   <label style={{ color: '#aaa', fontSize: '14px', marginBottom: '6px', textAlign: 'left', textShadow: '1px 1px 0 #000' }}>
                     Server Address / 服务器地址:
                   </label>
+                  <div style={{ color: '#888', fontSize: '11px', marginBottom: '4px', textAlign: 'left' }}>
+                    Format: ws://host:port or wss://host:port
+                  </div>
                   <input
                     type="text"
                     value={serverUrl}

@@ -149,6 +149,8 @@ export interface GameState {
   absorption: number;
   /** P4.4 — normalized damage flash (0..1) for the red vignette overlay. */
   damageFlash: number;
+  /** P5.4 — multiplayer connection status for the UI. */
+  networkStatus: 'idle' | 'connecting' | 'connected' | 'disconnected';
   onGround: boolean;
   flying: boolean;
   openUI: UIType;
@@ -318,6 +320,7 @@ export class Game {
     this.input = new InputManager(this.renderer.renderer.domElement);
     this.atlas = new TextureAtlas();
     this.network = new NetworkClient(this);
+    this.setupNetworkStatusHook();
     this.chunks = new ChunkManager(this.renderer.scene, this.atlas, this.seed, this);
     this.clock = new THREE.Clock();
     this.inventory = new Inventory();
@@ -1387,6 +1390,15 @@ export class Game {
     // P4.1: procedural background music starts with the world.
     this.sound.startMusic();
     this.notifyState();
+  }
+
+  private setupNetworkStatusHook() {
+    this.network.onStatusChange = (status) => {
+      if (status === 'disconnected' && this.activeSlot === 'multiplayer' && this.running) {
+        this.addChatMessage('Connection lost to the server.');
+        this.notifyState();
+      }
+    };
   }
 
   private isMultiplayerNetworkConnected(): boolean {
@@ -4565,6 +4577,7 @@ export class Game {
       oxygen: this.player.oxygen,
       absorption: this.player.absorption,
       damageFlash: normalizeDamageFlash(this.damageFlashTimer),
+      networkStatus: this.network?.getStatus() ?? 'idle',
       onGround: this.player.onGround,
       flying: this.player.flying,
       openUI: this.openUI,

@@ -56,7 +56,7 @@
 | P5.1 | 物品动作 C2S 消息：弓箭/投掷物/喷溅药水由服务端生成与结算（`C2S_ITEM_ACTION` + 服务端投射物系统接通） | ✅ |
 | P5.2 | 背包/玩家状态权威：玩家状态上行钳制（`C2S_PLAYER_STATE`）、消耗品服务端校验结算（`C2S_ITEM_CONSUME`）、弓/工具耐久服务端扣减、死亡掉落（服务端丢包+重生+同步） | ✅ |
 | P5.3 | 容器交互权威与存档持久化：服务端容器存储（`C2S_CONTAINER_OPEN/UPDATE` + 逐槽校验 + 回传），服务端世界快照保存/恢复（`server-world.json`，关停保存/启动加载） | ✅ |
-| P5.4 | 连接状态/错误提示/重连与服务器地址说明 | ⬜ |
+| P5.4 | 连接状态/断线处理：`NetworkClient` 生命周期状态（connecting/connected/disconnected）+ 回调，HUD 状态徽标、断线覆盖层（返回菜单）、服务器地址格式说明 | ✅ |
 | P5.5 | 部署文档（本机/局域网/公网 `ws://`/`wss://`）与双客户端冒烟深化（挖放方块/攻击/弓箭命中） | ⬜ |
 
 后续顺序固定为：行为基础层 → 1.20.1 内容补齐 → 音画与手感 → 多人权威化与发布质量。
@@ -352,6 +352,7 @@
 | 2026-08-14 | Java 1.20.1 对等重建 P5.1 | 物品动作 C2S 消息与服务端权威投射物：`C2S_ITEM_ACTION`（throw / bow_release）+ `ItemActionRules` 纯规则（载荷校验、弓蓄力伤害/速度 1.20.1 公式、力量附魔加成）；`GameServer` 接通原本未接线的投射物系统（`spawnProjectile` 广播 S2C_PROJECTILE_SPAWN 含速度/伤害/药水效果，`bow_release` 服务端扣箭并同步背包，投掷物按 ID 分类生成）；客户端多人模式下弓/投掷/喷溅药水改发 C2S 消息不本地生成，`S2C_PROJECTILE_SPAWN` 改用真实速度与伤害；新增 6 项回归测试（共 146 项） | 本次变更 |
 | 2026-08-14 | Java 1.20.1 对等重建 P5.2 | 背包/玩家状态权威：`PlayerStateRules` 纯规则（状态钳制、消耗品校验、扣减）+ `C2S_PLAYER_STATE`（客户端每 0.5s 上行本地模拟状态，服务端钳制存储，防止服务端推送回退）+ `C2S_ITEM_CONSUME`（服务端校验并扣减食物/药水、同步背包；客户端多人模式不再本地扣减）；服务端耐久（弓蓄力释放与挖方块扣工具耐久并同步）；服务端死亡处理（health≤0 时掉落全部背包为世界掉落物、重置状态、同步并广播死亡音效）；新增 3 项回归测试（共 149 项） | 本次变更 |
 | 2026-08-14 | Java 1.20.1 对等重建 P5.3 | 容器权威与存档持久化：`ContainerRules` 纯规则（槽位尺寸、点击校验、同 ID 堆叠、整表校验）+ `C2S_CONTAINER_OPEN/UPDATE`（服务端容器存储 `containerData`，客户端开箱发送、内容节流上行、服务端逐槽校验存储并回传 `S2C_CONTAINER_DATA` 应用至本地箱子）；`GameServer.saveWorld/loadWorld` 世界快照（区块数据+元数据、世界时间/天气、容器数据 → JSON），standalone 关停保存/启动加载（`WORLD_PATH` 可配置）；新增 5 项回归测试（共 154 项） | 本次变更 |
+| 2026-08-14 | Java 1.20.1 对等重建 P5.4 | 连接状态与断线处理：`NetworkClient.status` 生命周期（connecting/connected/disconnected）+ `onStatusChange` 回调 + `getStatus()`；`GameState.networkStatus` 驱动 HUD 状态徽标（连接中/在线）与断线覆盖层（含返回菜单按钮）；多人断线时聊天提示；多人菜单服务器地址格式说明（`ws://host:port` / `wss://host:port`）；修复测试中 mock 连接未清理导致的挂起（disconnect 停本地服务端）；新增 1 项回归测试（共 155 项） | 本次变更 |
 
 ---
 

@@ -10,6 +10,9 @@ export class NetworkClient {
   private socket: any; // MockWebSocket or WebSocket
   private game: any;   // Game class instance
   isConnected = false;
+  /** P5.4 — connection lifecycle status. */
+  status: 'idle' | 'connecting' | 'connected' | 'disconnected' = 'idle';
+  onStatusChange?: (status: 'connecting' | 'connected' | 'disconnected') => void;
   private localServer: GameServer | null = null;
   playerId: string | null = null;
 
@@ -40,8 +43,10 @@ export class NetworkClient {
       this.socket = new WebSocket(cleanUrl);
     }
 
+    this.setStatus('connecting');
     this.socket.onopen = () => {
       this.isConnected = true;
+      this.setStatus('connected');
       console.log("Network client connected.");
       this.send(PacketType.C2S_JOIN, { username, mode: gameMode, slot });
     };
@@ -57,6 +62,7 @@ export class NetworkClient {
 
     this.socket.onclose = () => {
       this.isConnected = false;
+      this.setStatus('disconnected');
       console.log("Network client disconnected.");
       this.clearOtherPlayers();
     };
@@ -64,6 +70,15 @@ export class NetworkClient {
     this.socket.onerror = (err: any) => {
       console.error("Network client connection error:", err);
     };
+  }
+
+  private setStatus(status: 'connecting' | 'connected' | 'disconnected') {
+    this.status = status;
+    this.onStatusChange?.(status);
+  }
+
+  getStatus() {
+    return this.status;
   }
 
   disconnect() {

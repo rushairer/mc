@@ -88,3 +88,29 @@ test('P5.1 projectile spawn uses server velocity, damage and potion effect', () 
   assert.equal(removed.length, 0);
   assert.ok((game.projectiles.projectiles as Map<number, unknown>).has(7));
 });
+
+test('P5.4 connection status transitions through the lifecycle', async () => {
+  const transitions: string[] = [];
+  const game = {
+    player: { health: 20, hunger: 20, oxygen: 20 },
+    xp: { setProgress: () => {} },
+    notifyState: () => {},
+  };
+  const client = new NetworkClient(game as any);
+  client.onStatusChange = (status) => transitions.push(status);
+
+  const connected = new Promise<void>((resolve) => {
+    const previous = client.onStatusChange;
+    client.onStatusChange = (status) => {
+      previous?.(status);
+      if (status === 'connected') resolve();
+    };
+  });
+
+  client.connect('mock://local', 'Tester');
+  await connected;
+  assert.equal(client.getStatus(), 'connected');
+  assert.equal(client.isConnected, true);
+  assert.deepEqual(transitions, ['connecting', 'connected']);
+  client.disconnect();
+});

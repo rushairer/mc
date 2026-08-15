@@ -12,6 +12,8 @@ export enum PacketType {
   C2S_CHUNK_REQUEST = 'C2S_CHUNK_REQUEST',
   C2S_INTERACT_BLOCK = 'C2S_INTERACT_BLOCK',
   C2S_INTERACT_ENTITY = 'C2S_INTERACT_ENTITY',
+  /** P5.1 — server-authoritative item actions (bow release, throwables). */
+  C2S_ITEM_ACTION = 'C2S_ITEM_ACTION',
 
   // Server to Client
   S2C_JOIN_ACK = 'S2C_JOIN_ACK',

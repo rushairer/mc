@@ -143,6 +143,42 @@ export class ProjectileSystem {
     this.projectiles.set(arrow.id, arrow);
   }
 
+  /**
+   * P5.1 — spawn a projectile from a server-authoritative S2C_PROJECTILE_SPAWN
+   * (the id is re-keyed by the network client afterwards).
+   */
+  spawnServerProjectile(
+    type: 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'fireball' | 'shulker_bullet',
+    position: THREE.Vector3,
+    velocity: THREE.Vector3,
+    damage: number = 4,
+    potionEffect?: PotionEffectData,
+  ) {
+    const mesh = type === 'arrow'
+      ? this.createArrowMesh()
+      : type === 'trident'
+        ? this.createTridentMesh()
+        : type === 'potion'
+          ? this.createPotionMesh()
+          : this.createThrowableMesh(type as 'snowball' | 'egg' | 'ender_pearl');
+    const projectile: Projectile = {
+      id: this.nextId++,
+      type: type as ProjectileType,
+      position: position.clone(),
+      velocity: velocity.clone(),
+      damage,
+      fromPlayer: true,
+      lifetime: 30,
+      mesh,
+      inGround: false,
+      potionEffect,
+    };
+    mesh.position.copy(position);
+    this.addProjectileMesh(mesh);
+    this.projectiles.set(projectile.id, projectile);
+    return projectile;
+  }
+
   shootTrident(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage: number = 9) {
     const mesh = this.createTridentMesh();
     const vel = direction.clone().normalize().multiplyScalar(24);

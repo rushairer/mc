@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { PacketType, Packet, compressBlocks } from './NetworkProtocol';
+import { getBowReleaseParams, parseItemAction } from './ItemActionRules';
+import type { PotionEffectData } from '../systems/PotionEffect';
 import { WorldGen } from '../world/WorldGen';
 import { Dimension, DimensionGenerator } from '../world/DimensionGenerator';
 import { Chunk } from '../world/Chunk';
@@ -73,12 +75,15 @@ interface ServerDroppedItem {
 
 interface ServerProjectile {
   id: number;
-  type: 'arrow' | 'fireball' | 'shulker_bullet';
+  type: 'arrow' | 'fireball' | 'shulker_bullet' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident';
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   ownerId?: string;
   age: number;
   dimension: number;
+  damage: number;
+  /** P5.1 — splash/lingering potion effect carried to the splash site. */
+  potionEffect?: PotionEffectData;
 }
 
 export class GameServer {
@@ -86,6 +91,7 @@ export class GameServer {
   private mobs: Map<number, ServerMob> = new Map();
   private droppedItems: Map<number, ServerDroppedItem> = new Map();
   private projectiles: Map<number, ServerProjectile> = new Map();
+  private nextProjectileId = 1;
   
   private overworldChunks: Map<string, Chunk> = new Map();
   private netherChunks: Map<string, Chunk> = new Map();
@@ -699,6 +705,54 @@ export class GameServer {
         }
         break;
       }
+
+      // P5.1: server-authoritative item actions (bow release / throwables).
+      case PacketType.C2S_ITEM_ACTION: {
+        const request = parseItemAction(packet.payload);
+        if (!request) break;
+        const { action, itemId, power, damageBonus } = request;
+        const payload = packet.payload as { dirX?: number; dirY?: number; dirZ?: number; potionEffect?: PotionEffectData };
+        const origin = new THREE.Vector3(session.x, session.y + 1.6, session.z);
+        const dir = new THREE.Vector3(
+          payload.dirX ?? 0,
+          payload.dirY ?? 0,
+          payload.dirZ ?? -1,
+        ).normalize();
+
+        if (action === 'bow_release') {
+          const ammoSlot = session.inventory.findIndex((slot) => slot && (slot.id & 0x3FF) === 262); // arrow
+          if (ammoSlot < 0) break;
+          const ammo = session.inventory[ammoSlot]!;
+          ammo.count -= 1;
+          if (ammo.count <= 0) session.inventory[ammoSlot] = null;
+          const params = getBowReleaseParams(power ?? 1, damageBonus ?? 0);
+          this.spawnProjectile(session, 'arrow', origin, dir.multiplyScalar(params.speed), {
+            damage: params.damage,
+            velocityY: 0.5,
+          });
+          this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, {
+            slots: session.inventory,
+            armor: session.armor,
+            offhand: session.offhand,
+          });
+          this.broadcast(PacketType.S2C_SOUND, { type: 'bow_shoot', x: origin.x, y: origin.y, z: origin.z });
+        } else if (action === 'throw') {
+          const baseId = itemId & 0x3FF;
+          const type = baseId === 332 ? 'snowball'
+            : baseId === 344 ? 'egg'
+              : baseId === 368 ? 'ender_pearl'
+                : baseId === 373 ? 'potion'
+                  : baseId === 505 ? 'trident'
+                    : null;
+          if (!type) break;
+          this.spawnProjectile(session, type, origin, dir.multiplyScalar(15), {
+            damage: type === 'trident' ? 9 : 1,
+            velocityY: 2.5,
+            potionEffect: payload.potionEffect,
+          });
+        }
+        break;
+      }
     }
   }
 
@@ -1260,6 +1314,43 @@ export class GameServer {
         }
       }
     }
+  }
+
+  /** P5.1 — create a server-authoritative projectile and broadcast it. */
+  private spawnProjectile(
+    owner: PlayerSession,
+    type: ServerProjectile['type'],
+    position: THREE.Vector3,
+    velocity: THREE.Vector3,
+    extra?: { damage?: number; velocityY?: number; potionEffect?: PotionEffectData },
+  ) {
+    const id = this.nextProjectileId++;
+    const vel = velocity.clone();
+    vel.y += extra?.velocityY ?? 0;
+    const projectile: ServerProjectile = {
+      id,
+      type,
+      position: position.clone(),
+      velocity: vel,
+      ownerId: owner.id,
+      age: 0,
+      dimension: owner.dimension,
+      damage: extra?.damage ?? 4,
+      potionEffect: extra?.potionEffect,
+    };
+    this.projectiles.set(id, projectile);
+    this.broadcast(PacketType.S2C_PROJECTILE_SPAWN, {
+      id,
+      type,
+      x: projectile.position.x,
+      y: projectile.position.y,
+      z: projectile.position.z,
+      dirX: projectile.velocity.x,
+      dirY: projectile.velocity.y,
+      dirZ: projectile.velocity.z,
+      damage: projectile.damage,
+      ownerId: owner.id,
+    });
   }
 
   private tickProjectiles(dt: number) {

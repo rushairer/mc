@@ -292,8 +292,15 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_PROJECTILE_SPAWN: {
-        const { id, type, x, y, z } = packet.payload;
-        this.game.projectiles.spawnProjectile(type, new THREE.Vector3(x, y, z), new THREE.Vector3(0, 0, 0));
+        const { id, type, x, y, z, dirX, dirY, dirZ, damage, potionEffect } = packet.payload;
+        // P5.1: spawn with the server's velocity/damage (was zero-velocity).
+        this.game.projectiles.spawnServerProjectile(
+          type,
+          new THREE.Vector3(x, y, z),
+          new THREE.Vector3(dirX ?? 0, dirY ?? 0, dirZ ?? 0),
+          damage ?? 4,
+          potionEffect,
+        );
         const list = Array.from(this.game.projectiles.projectiles.values());
         if (list.length > 0) {
           const newest = list[list.length - 1] as any;

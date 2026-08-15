@@ -48,3 +48,43 @@ test('authoritative despawn and sound packets use the actual client system APIs'
   assert.deepEqual(removed, [42]);
   assert.deepEqual(played, ['break', 'place', 'hurt', 'hit', 'pickup', 'xp', 'explode']);
 });
+
+test('P5.1 projectile spawn uses server velocity, damage and potion effect', () => {
+  const spawned: unknown[] = [];
+  const removed: number[] = [];
+  const game = {
+    projectiles: {
+      spawnServerProjectile: (...args: unknown[]) => {
+        spawned.push(args);
+        return { id: 999 };
+      },
+      projectiles: new Map<number, unknown>([
+        [999, { id: 999 }],
+      ]),
+    },
+  };
+  const client = new NetworkClient(game as any);
+
+  (client as any).handlePacket({
+    type: PacketType.S2C_PROJECTILE_SPAWN,
+    payload: {
+      id: 7,
+      type: 'arrow',
+      x: 10, y: 64, z: -4,
+      dirX: 3, dirY: 0.5, dirZ: 0,
+      damage: 9,
+      potionEffect: { id: 'strength', level: 1, duration: 60 },
+    },
+  });
+
+  assert.equal(spawned.length, 1);
+  const [type, pos, vel, damage, effect] = spawned[0] as any[];
+  assert.equal(type, 'arrow');
+  assert.deepEqual([pos.x, pos.y, pos.z], [10, 64, -4]);
+  assert.deepEqual([vel.x, vel.y, vel.z], [3, 0.5, 0], 'real server velocity');
+  assert.equal(damage, 9);
+  assert.equal(effect.id, 'strength');
+  // The projectile is re-keyed to the server id.
+  assert.equal(removed.length, 0);
+  assert.ok((game.projectiles.projectiles as Map<number, unknown>).has(7));
+});

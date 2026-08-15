@@ -3832,6 +3832,15 @@ export class Game {
   private throwPotion(stack: ItemStack) {
     const origin = this.player.eyePosition.clone();
     const direction = this.player.forward.clone();
+    // P5.1: multiplayer splash potions spawn server-side.
+    if (this.sendItemAction({ action: 'throw', itemId: stack.id, potionEffect: stack.potion?.effect })) {
+      if (this.gameMode !== 'creative') {
+        this.inventory.removeItem(stack.id, 1);
+      }
+      this.sound.playBowShoot(1);
+      this.notifyState();
+      return;
+    }
     this.projectiles.shootPotion(origin, direction, true, 2, stack.potion?.effect, stack.potion?.variant as 'splash' | 'lingering');
     if (this.gameMode !== 'creative') {
       this.inventory.removeItem(stack.id, 1);
@@ -4196,6 +4205,24 @@ export class Game {
     if (this.gameMode !== 'creative') {
       const ammoId = this.getBowAmmoItemId();
       if (ammoId === null) {
+        this.notifyState();
+        return;
+      }
+      // P5.1: in multiplayer the server consumes the arrow and spawns it.
+      if (this.isMultiplayerNetworkConnected()) {
+        const bowStack = this.inventory.getSlot(this.player.selectedSlot);
+        const powerBonus = EnchantSystem.getPowerMultiplier(EnchantSystem.getLevel(bowStack, 'power')) - 1;
+        this.network.send(PacketType.C2S_ITEM_ACTION, {
+          action: 'bow_release',
+          itemId: bowStack?.id ?? 0,
+          power,
+          damageBonus: powerBonus,
+          dirX: this.player.forward.x,
+          dirY: this.player.forward.y,
+          dirZ: this.player.forward.z,
+        });
+        this.sound.playBowShoot(power);
+        this.swordSwingTimer = Math.max(0.2, 0.9 * power);
         this.notifyState();
         return;
       }
@@ -5000,6 +5027,19 @@ export class Game {
     this.notifyState();
   }
 
+  /** P5.1 — in multiplayer, ask the server to spawn the projectile. */
+  private sendItemAction(payload: Record<string, unknown>): boolean {
+    if (!this.isMultiplayerNetworkConnected()) return false;
+    const dir = this.player.forward;
+    this.network.send(PacketType.C2S_ITEM_ACTION, {
+      ...payload,
+      dirX: dir.x,
+      dirY: dir.y,
+      dirZ: dir.z,
+    });
+    return true;
+  }
+
   private tryThrowHeldProjectile(heldItemId: number): boolean {
     if (
       heldItemId !== SNOWBALL_ID &&
@@ -5027,6 +5067,15 @@ export class Game {
     }
 
     if (heldItemId === TRIDENT_ID) {
+      // P5.1: multiplayer throws spawn server-side.
+      if (this.sendItemAction({ action: 'throw', itemId: heldItemId })) {
+        if (this.gameMode !== 'creative') {
+          this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+        }
+        this.placeCooldown = 0.7;
+        this.notifyState();
+        return true;
+      }
       const origin = this.player.eyePosition.clone().add(this.player.forward.clone().multiplyScalar(0.45));
       this.projectiles.shootTrident(origin, this.player.forward, true, 9);
       this.sound.playLever();
@@ -5041,6 +5090,15 @@ export class Game {
     }
 
     const type = heldItemId === SNOWBALL_ID ? 'snowball' : heldItemId === EGG_ID ? 'egg' : 'ender_pearl';
+    // P5.1: multiplayer throws spawn server-side.
+    if (this.sendItemAction({ action: 'throw', itemId: heldItemId })) {
+      if (this.gameMode !== 'creative') {
+        this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+      }
+      this.placeCooldown = type === 'ender_pearl' ? 0.8 : 0.35;
+      this.notifyState();
+      return true;
+    }
     const origin = this.player.eyePosition.clone().add(this.player.forward.clone().multiplyScalar(0.35));
     this.projectiles.shootThrowable(type, origin, this.player.forward, true);
     this.sound.playLever();

@@ -62,6 +62,7 @@ import {
 } from '../world/BehaviorRegistry';
 import { planBlockPlacement } from '../world/BlockPlacement';
 import { getButtonPressTicks } from '../world/ButtonRules';
+import { getDamageShake, normalizeDamageFlash } from '../systems/FeelRules';
 import { rollBlockLoot, rollLootTable, type LootTable } from '../world/LootSystem';
 import { getBlockXpRange, rollXp, BREEDING_XP_RANGE, FISHING_XP_RANGE } from '../world/XpRules';
 import type { WorldTickPayload, WorldTickType } from '../world/WorldTick';
@@ -146,6 +147,8 @@ export interface GameState {
   hunger: number;
   oxygen: number;
   absorption: number;
+  /** P4.4 — normalized damage flash (0..1) for the red vignette overlay. */
+  damageFlash: number;
   onGround: boolean;
   flying: boolean;
   openUI: UIType;
@@ -2118,9 +2121,18 @@ export class Game {
     if (this.perspectiveMode === 'first') {
       this.player.mesh.visible = false;
 
-      // Camera position at eye level in first person
+      // Camera position at eye level in first person (P4.4: damage shake)
       const eye = this.player.eyePosition;
-      this.renderer.camera.position.copy(eye);
+      const shake = getDamageShake(this.damageFlashTimer);
+      if (shake > 0) {
+        this.renderer.camera.position.set(
+          eye.x + (Math.random() - 0.5) * shake,
+          eye.y + (Math.random() - 0.5) * shake,
+          eye.z + (Math.random() - 0.5) * shake,
+        );
+      } else {
+        this.renderer.camera.position.copy(eye);
+      }
 
       // First person arm visibility and animation
       if (this.openUI === 'none') {
@@ -2136,7 +2148,20 @@ export class Game {
         const defRotY = Math.PI / 4.5;
         const defRotZ = -Math.PI / 12;
 
-        if (this.player.swingProgress > 0) {
+        if (this.breakProgress > 0 && this.breakingBlockPos && this.player.swingProgress <= 0) {
+          // P4.4: arm pump while mining.
+          const pump = Math.sin(this.breakProgress * Math.PI * 4) * 0.6;
+          this.fpArmGroup.position.set(
+            defX + pump * 0.015,
+            defY - pump * 0.012,
+            defZ - pump * 0.03
+          );
+          this.fpArmGroup.rotation.set(
+            defRotX - pump * 0.18,
+            defRotY,
+            defRotZ - pump * 0.05
+          );
+        } else if (this.player.swingProgress > 0) {
           const t = this.player.swingProgress;
           const swingAngle = Math.sin(t * Math.PI);
 
@@ -4448,6 +4473,7 @@ export class Game {
       hunger: this.player.hunger,
       oxygen: this.player.oxygen,
       absorption: this.player.absorption,
+      damageFlash: normalizeDamageFlash(this.damageFlashTimer),
       onGround: this.player.onGround,
       flying: this.player.flying,
       openUI: this.openUI,

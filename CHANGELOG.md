@@ -32,6 +32,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Add procedural background music (P4.1): a `MusicSystem` scheduler plays 3-4 note ambient chords every 2-second bar through the existing music gain, with day (C major pentatonic), night (A minor) and cave (low D minor) modes that follow the world state; Web Audio synthesized, no external audio files.
 - Expand ambient audio (P4.2): a looping filtered-noise rain ambience that scales with the weather (louder/darker in thunder) and random cave drips when underground, driven by pure `AmbientRules` helpers.
 - Add material and creature sound variety (P4.3): `SoundRules` classifies blocks into 7 sound materials (stone/wood/grass/sand/metal/glass/generic) driving break/place/step synthesis, and 24 mob types into 13 voice families — zombie groans, skeleton rattles, creeper hisses, slime squishes, boss roars and distinct animal calls (cow moo, pig oink, sheep baa, chicken cluck, horse neigh, wolf bark, cat meow) — with ambient idle calls every 5-15 seconds near the player.
+- Polish damage feedback (P4.4): a red vignette overlay that was previously computed but never rendered is now displayed (pure `FeelRules` for flash normalization and opacity), the camera shakes on damage, and the first-person arm pumps while mining.
 
 ### Changed
 - Route workstations, containers, wooden doors and trapdoors, Beds, redstone controls, Buckets, Boats, Minecarts, Hoes, maps and books, Fishing Rods, throwable items, and Eyes of Ender through the shared behavior dispatcher.

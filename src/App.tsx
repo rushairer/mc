@@ -24,6 +24,7 @@ import type { Enchantment } from './systems/EnchantSystem';
 import type { TradeOffer } from './systems/VillageSystem';
 import type { ItemStack } from './types';
 import { SaveSystem } from './systems/SaveSystem';
+import { getVignetteOpacity } from './systems/FeelRules';
 import { useI18n, translations } from './i18n';
 
 const initialGameState: GameState = {
@@ -40,6 +41,7 @@ const initialGameState: GameState = {
   hunger: 20,
   oxygen: 15.0,
   absorption: 0,
+  damageFlash: 0,
   onGround: false,
   flying: false,
   openUI: 'none',
@@ -456,6 +458,19 @@ export const App: React.FC = () => {
       )}
 
       <HUD state={gameState} getItemIconStyle={getItemIconStyle} />
+
+      {/* P4.4: damage flash vignette */}
+      {gameState.damageFlash > 0.02 && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          pointerEvents: 'none',
+          zIndex: 40,
+          opacity: getVignetteOpacity(gameState.damageFlash),
+          background: 'radial-gradient(ellipse at center, rgba(255,0,0,0) 40%, rgba(180,0,0,0.85) 100%)',
+          transition: 'opacity 0.08s linear',
+        }} />
+      )}
       <DebugOverlay state={gameState} visible={showDebug} />
       <ChatBar
         open={gameState.chatOpen}

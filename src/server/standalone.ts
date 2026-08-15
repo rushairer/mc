@@ -8,7 +8,23 @@ const wss = new WebSocketServer({ port: PORT });
 const gameServer = new GameServer(98765, true);
 gameServer.start();
 
+// P5.3: restore the last world snapshot and save on shutdown.
+const WORLD_PATH = process.env.WORLD_PATH || './server-world.json';
+gameServer.loadWorld(WORLD_PATH);
 console.log(`Minecraft Clone Multiplayer Server is running on ws://localhost:${PORT}`);
+
+const shutdown = async () => {
+  console.log('Saving world...');
+  try {
+    await gameServer.saveWorld(WORLD_PATH);
+    console.log('World saved.');
+  } catch (err) {
+    console.error('World save failed:', err);
+  }
+  process.exit(0);
+};
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 wss.on('connection', (ws, req) => {
   // Extract query parameters like username

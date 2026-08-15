@@ -340,6 +340,12 @@ export class NetworkClient {
         break;
       }
 
+      case PacketType.S2C_CONTAINER_DATA: {
+        const { x, y, z, slots } = packet.payload;
+        this.game.applyServerContainerData(x, y, z, slots);
+        break;
+      }
+
       case PacketType.S2C_WEATHER: {
         const { type, intensity } = packet.payload;
         this.game.weather.setWeatherType(type);

@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import { PacketType, Packet, compressBlocks } from './NetworkProtocol';
 import { getBowReleaseParams, parseItemAction } from './ItemActionRules';
 import { clampPlayerState, consumeOne, validateConsume } from './PlayerStateRules';
+import { applyContainerClick, containerKey, createContainerSlots, validateContainerClick, validateContainerSlots } from './ContainerRules';
 import type { PotionEffectData } from '../systems/PotionEffect';
+
 import { WorldGen } from '../world/WorldGen';
 import { Dimension, DimensionGenerator } from '../world/DimensionGenerator';
 import { Chunk } from '../world/Chunk';
@@ -95,6 +97,8 @@ export class GameServer {
   private droppedItems: Map<number, ServerDroppedItem> = new Map();
   private projectiles: Map<number, ServerProjectile> = new Map();
   private nextProjectileId = 1;
+  /** P5.3 — server-owned container contents keyed by position. */
+  private containerData: Map<string, (ItemStack | null)[]> = new Map();
   
   private overworldChunks: Map<string, Chunk> = new Map();
   private netherChunks: Map<string, Chunk> = new Map();
@@ -798,6 +802,34 @@ export class GameServer {
         }
         break;
       }
+
+      // P5.3: container authority — the server owns chest contents.
+      case PacketType.C2S_CONTAINER_OPEN: {
+        const { x, y, z } = packet.payload;
+        const blockId = this.getBlock(x, y, z, session.dimension);
+        const base = blockId & 0x3FF;
+        const name = BlockRegistry.get(blockId)?.name ?? 'chest';
+        const key = containerKey(x, y, z);
+        if (!this.containerData.has(key)) {
+          this.containerData.set(key, createContainerSlots(name.includes('hopper') ? 'hopper' : 'chest'));
+        }
+        this.sendTo(session, PacketType.S2C_CONTAINER_DATA, {
+          x, y, z, slots: this.containerData.get(key),
+        });
+        break;
+      }
+
+      case PacketType.C2S_CONTAINER_UPDATE: {
+        const { x, y, z, slots } = packet.payload;
+        const key = containerKey(x, y, z);
+        const existing = this.containerData.get(key);
+        if (!existing || !validateContainerSlots(slots, existing.length)) break;
+        // Adopt the client's (optimistic) contents, server-validated per slot.
+        const adopted = slots.map((slot: ItemStack | null) => (slot ? { ...slot } : null));
+        this.containerData.set(key, adopted);
+        this.sendTo(session, PacketType.S2C_CONTAINER_DATA, { x, y, z, slots: adopted });
+        break;
+      }
     }
   }
 
@@ -1045,6 +1077,54 @@ export class GameServer {
         });
       }
     }
+  }
+
+  /** P5.3 — serialize the overworld + world state to a JSON snapshot. */
+  async saveWorld(path: string) {
+    const chunks = Array.from(this.overworldChunks.values()).map((chunk) => ({
+      cx: chunk.cx,
+      cz: chunk.cz,
+      data: Array.from(chunk.data),
+      metadata: Array.from(chunk.metadata.entries()).map(([index, meta]) => ({ index, metadata: { ...meta } })),
+    }));
+    const containers = Array.from(this.containerData.entries()).map(([key, slots]) => ({
+      key,
+      slots: slots.map((slot) => (slot ? { ...slot } : null)),
+    }));
+    const snapshot = {
+      version: 1,
+      gameTime: this.gameTime,
+      weatherType: this.weatherType,
+      weatherIntensity: this.weatherIntensity,
+      chunks,
+      containers,
+    };
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(path, JSON.stringify(snapshot), 'utf8');
+  }
+
+  /** P5.3 — restore a JSON snapshot created by saveWorld. */
+  async loadWorld(path: string) {
+    const { existsSync, readFileSync } = await import('node:fs');
+    if (!existsSync(path)) return;
+    const snapshot = JSON.parse(readFileSync(path, 'utf8'));
+    if (snapshot.version !== 1) return;
+    this.gameTime = snapshot.gameTime ?? this.gameTime;
+    this.weatherType = snapshot.weatherType ?? this.weatherType;
+    this.weatherIntensity = snapshot.weatherIntensity ?? this.weatherIntensity;
+    for (const c of snapshot.chunks ?? []) {
+      const chunk = new Chunk(c.cx, c.cz);
+      chunk.data.set(c.data);
+      for (const m of c.metadata ?? []) chunk.metadata.set(m.index, { ...m.metadata });
+      this.overworldChunks.set(`${c.cx},${c.cz}`, chunk);
+    }
+    for (const container of snapshot.containers ?? []) {
+      this.containerData.set(container.key, container.slots);
+    }
+  }
+
+  getWorldStats() {
+    return { chunks: this.overworldChunks.size, containers: this.containerData.size, players: this.players.size };
   }
 
   /** P5.2 — drop the inventory to the world, respawn the player, sync. */

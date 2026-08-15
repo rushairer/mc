@@ -18,6 +18,9 @@ export enum PacketType {
   C2S_PLAYER_STATE = 'C2S_PLAYER_STATE',
   /** P5.2 — server-validated consumable use (food / potions). */
   C2S_ITEM_CONSUME = 'C2S_ITEM_CONSUME',
+  /** P5.3 — container interaction authority (chests, barrels, hoppers...). */
+  C2S_CONTAINER_OPEN = 'C2S_CONTAINER_OPEN',
+  C2S_CONTAINER_UPDATE = 'C2S_CONTAINER_UPDATE',
 
   // Server to Client
   S2C_JOIN_ACK = 'S2C_JOIN_ACK',
@@ -43,7 +46,9 @@ export enum PacketType {
   S2C_INVENTORY_SYNC = 'S2C_INVENTORY_SYNC',
   S2C_WEATHER = 'S2C_WEATHER',
   S2C_TIME = 'S2C_TIME',
-  S2C_BOSS_BAR = 'S2C_BOSS_BAR'
+  S2C_BOSS_BAR = 'S2C_BOSS_BAR',
+  /** P5.3 — server container contents. */
+  S2C_CONTAINER_DATA = 'S2C_CONTAINER_DATA'
 }
 
 export interface Packet {

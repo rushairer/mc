@@ -1361,6 +1361,8 @@ export class Game {
     // Don't request lock here — the loading screen may still be covering the canvas.
     // App.tsx will request pointer lock after the loading screen is hidden.
     this.lockCooldown = 2.0;
+    // P4.1: procedural background music starts with the world.
+    this.sound.startMusic();
     this.notifyState();
   }
 
@@ -2700,6 +2702,8 @@ export class Game {
       const biome = this.chunks.getBiomeAt(px, pz);
       const light = this.chunks.getLight(px, py, pz);
       this.sound.updateAmbientSounds(biome, py, light);
+      // P4.1: background music mood follows day/night and underground state.
+      this.sound.updateMusicMode(this.isNight(), py < 32);
     }
 
     // Dynamic lighting

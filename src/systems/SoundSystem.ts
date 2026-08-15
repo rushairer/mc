@@ -3,6 +3,7 @@
  * Generates simple sounds procedurally (no external files needed).
  */
 import { LoadedResourcePack, ResourcePackSystem } from './ResourcePackSystem';
+import { getChordNotes, getMusicMode, MUSIC_BAR_SECONDS, type MusicMode, type MusicNote } from './MusicSystem';
 
 export class SoundSystem {
   private ctx: AudioContext | null = null;
@@ -14,6 +15,11 @@ export class SoundSystem {
   private activeAmbientGain: GainNode | null = null;
   private currentAmbientType = '';
   private resourceSounds: Map<string, AudioBuffer[]> = new Map();
+  // ─── P4.1: procedural background music ───
+  private musicTimer: ReturnType<typeof setInterval> | null = null;
+  private musicMode: MusicMode = 'day';
+  private musicBar = 0;
+  private musicNextTime = 0;
 
   init() {
     if (this.initialized) return;
@@ -1068,7 +1074,67 @@ export class SoundSystem {
     source.start();
   }
 
+  // ─── P4.1: procedural background music ───
+
+  startMusic() {
+    const ctx = this.ensureCtx();
+    if (!ctx || this.musicTimer != null) return;
+    this.musicNextTime = ctx.currentTime + 0.5;
+    this.musicBar = 0;
+    this.musicTimer = setInterval(() => this.scheduleMusic(), 250);
+  }
+
+  stopMusic() {
+    if (this.musicTimer != null) {
+      clearInterval(this.musicTimer);
+      this.musicTimer = null;
+    }
+  }
+
+  /** Switch the music mood (day/night/cave); restarts the progression. */
+  setMusicMode(mode: MusicMode) {
+    if (mode !== this.musicMode) {
+      this.musicMode = mode;
+      this.musicBar = 0;
+    }
+  }
+
+  /** Convenience: derive the mode from world state. */
+  updateMusicMode(isNight: boolean, isCave: boolean) {
+    this.setMusicMode(getMusicMode(isNight, isCave));
+  }
+
+  private scheduleMusic() {
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    // Schedule bars up to a short lookahead so notes never gap.
+    while (this.musicNextTime < ctx.currentTime + 1.5) {
+      const notes = getChordNotes(this.musicMode, this.musicBar, Math.random);
+      for (const note of notes) {
+        this.playMusicNote(note, this.musicNextTime + note.startOffset);
+      }
+      this.musicNextTime += MUSIC_BAR_SECONDS;
+      this.musicBar++;
+    }
+  }
+
+  private playMusicNote(note: MusicNote, when: number) {
+    const ctx = this.ensureCtx();
+    if (!ctx || !this.musicGain) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(note.freq, when);
+    gain.gain.setValueAtTime(0.001, when);
+    gain.gain.linearRampToValueAtTime(note.gain, when + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + note.duration);
+    osc.connect(gain).connect(this.musicGain);
+    osc.start(when);
+    osc.stop(when + note.duration + 0.05);
+  }
+
   dispose() {
+    this.stopMusic();
     if (this.activeAmbientOsc) {
       try {
         (this.activeAmbientOsc as any).stop();

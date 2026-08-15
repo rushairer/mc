@@ -14,6 +14,10 @@ export enum PacketType {
   C2S_INTERACT_ENTITY = 'C2S_INTERACT_ENTITY',
   /** P5.1 — server-authoritative item actions (bow release, throwables). */
   C2S_ITEM_ACTION = 'C2S_ITEM_ACTION',
+  /** P5.2 — client uploads player state so server pushes never revert it. */
+  C2S_PLAYER_STATE = 'C2S_PLAYER_STATE',
+  /** P5.2 — server-validated consumable use (food / potions). */
+  C2S_ITEM_CONSUME = 'C2S_ITEM_CONSUME',
 
   // Server to Client
   S2C_JOIN_ACK = 'S2C_JOIN_ACK',

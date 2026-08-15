@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PacketType, Packet, compressBlocks } from './NetworkProtocol';
 import { getBowReleaseParams, parseItemAction } from './ItemActionRules';
+import { clampPlayerState, consumeOne, validateConsume } from './PlayerStateRules';
 import type { PotionEffectData } from '../systems/PotionEffect';
 import { WorldGen } from '../world/WorldGen';
 import { Dimension, DimensionGenerator } from '../world/DimensionGenerator';
@@ -36,6 +37,8 @@ interface PlayerSession {
   armor: (ItemStack | null)[];
   offhand: ItemStack | null;
   selectedSlot: number;
+  /** P5.2 — guards one-time death handling. */
+  dead?: boolean;
 }
 
 interface ServerMob {
@@ -628,6 +631,17 @@ export class GameServer {
       case PacketType.C2S_BLOCK_BREAK: {
         const { x, y, z } = packet.payload;
         this.setBlock(x, y, z, 0, session.dimension);
+        // P5.2: damage the held tool server-side.
+        const tool = session.inventory[session.selectedSlot];
+        if (tool && tool.durability !== undefined) {
+          tool.durability -= 1;
+          if (tool.durability <= 0) session.inventory[session.selectedSlot] = null;
+          this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, {
+            slots: session.inventory,
+            armor: session.armor,
+            offhand: session.offhand,
+          });
+        }
         this.broadcast(PacketType.S2C_BLOCK_UPDATE, { x, y, z, blockId: 0, dimension: session.dimension });
         this.broadcast(PacketType.S2C_SOUND, { type: 'break', x, y, z });
         break;
@@ -725,6 +739,12 @@ export class GameServer {
           const ammo = session.inventory[ammoSlot]!;
           ammo.count -= 1;
           if (ammo.count <= 0) session.inventory[ammoSlot] = null;
+          // P5.2: server-authoritative bow durability.
+          const bow = session.inventory[session.selectedSlot];
+          if (bow) {
+            bow.durability = (bow.durability ?? 100) - 1;
+            if (bow.durability <= 0) session.inventory[session.selectedSlot] = null;
+          }
           const params = getBowReleaseParams(power ?? 1, damageBonus ?? 0);
           this.spawnProjectile(session, 'arrow', origin, dir.multiplyScalar(params.speed), {
             damage: params.damage,
@@ -749,6 +769,31 @@ export class GameServer {
             damage: type === 'trident' ? 9 : 1,
             velocityY: 2.5,
             potionEffect: payload.potionEffect,
+          });
+        }
+        break;
+      }
+
+      // P5.2: client uploads its simulated state so server pushes stay convergent.
+      case PacketType.C2S_PLAYER_STATE: {
+        const clamped = clampPlayerState(packet.payload);
+        session.health = clamped.health;
+        session.hunger = clamped.hunger;
+        session.oxygen = clamped.oxygen;
+        break;
+      }
+
+      // P5.2: server-validated consumable use.
+      case PacketType.C2S_ITEM_CONSUME: {
+        const { slot, itemId } = packet.payload;
+        const stack = session.inventory[slot];
+        if (validateConsume(stack, itemId)) {
+          const updated = consumeOne(stack!);
+          session.inventory[slot] = updated;
+          this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, {
+            slots: session.inventory,
+            armor: session.armor,
+            offhand: session.offhand,
           });
         }
         break;
@@ -1002,6 +1047,35 @@ export class GameServer {
     }
   }
 
+  /** P5.2 — drop the inventory to the world, respawn the player, sync. */
+  private handlePlayerDeath(player: PlayerSession) {
+    player.dead = true;
+    // Drop inventory in the world.
+    for (let i = 0; i < 36; i++) {
+      const stack = player.inventory[i];
+      if (stack) {
+        this.spawnDroppedItem(stack.id, stack.count, player.x, player.y, player.z, player.dimension);
+        player.inventory[i] = null;
+      }
+    }
+    player.health = 20;
+    player.hunger = 20;
+    player.oxygen = 15;
+    this.sendTo(player, PacketType.S2C_INVENTORY_SYNC, {
+      slots: player.inventory,
+      armor: player.armor,
+      offhand: player.offhand,
+    });
+    this.sendTo(player, PacketType.S2C_PLAYER_STATE, {
+      health: player.health,
+      hunger: player.hunger,
+      oxygen: player.oxygen,
+      level: player.xpLevel,
+      xpProgress: player.xpCurrent / (7 + player.xpLevel * 7),
+    });
+    this.broadcast(PacketType.S2C_SOUND, { type: 'death', x: player.x, y: player.y, z: player.z });
+  }
+
   spawnDroppedItem(itemId: number, count: number, x: number, y: number, z: number, dimension: number): ServerDroppedItem {
     const id = this.nextEntityId++;
     const item: ServerDroppedItem = {
@@ -1039,6 +1113,13 @@ export class GameServer {
       this.weatherIntensity = this.weatherType === 'clear' ? 0 : 0.8;
       this.broadcast(PacketType.S2C_WEATHER, { type: this.weatherType, intensity: this.weatherIntensity });
     }
+    // P5.2: server-authoritative death — drop inventory and respawn.
+    for (const player of this.players.values()) {
+      if (player.health <= 0 && !player.dead) {
+        this.handlePlayerDeath(player);
+      }
+    }
+
 
     if (Math.random() < 0.02) {
       this.broadcast(PacketType.S2C_TIME, { gameTime: this.gameTime });

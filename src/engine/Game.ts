@@ -245,6 +245,8 @@ export class Game {
   private breakCooldown = 0;
   /** P4.2 — timer for random cave drip ambience. */
   private caveDripTimer = 0;
+  /** P5.2 — throttle for uploading local player state in multiplayer. */
+  private playerStateSyncTimer = 0;
   /** P3.4 — lingering potion area clouds. */
   private lingeringClouds: Array<{
     pos: THREE.Vector3;
@@ -2579,6 +2581,19 @@ export class Game {
       }
     );
 
+    // P5.2: upload simulated player state so the server's pushes stay convergent.
+    if (this.isMultiplayerNetworkConnected()) {
+      this.playerStateSyncTimer -= dt;
+      if (this.playerStateSyncTimer <= 0) {
+        this.playerStateSyncTimer = 0.5;
+        this.network.send(PacketType.C2S_PLAYER_STATE, {
+          health: this.player.health,
+          hunger: this.player.hunger,
+          oxygen: this.player.oxygen,
+        });
+      }
+    }
+
     // P3.4: lingering potion clouds re-apply their effect in an area.
     for (let i = this.lingeringClouds.length - 1; i >= 0; i--) {
       const cloud = this.lingeringClouds[i];
@@ -3286,7 +3301,13 @@ export class Game {
       this.player.absorption = 4 * potion.level;
     }
     this.sound.playBurp();
-    if (this.gameMode !== 'creative') {
+    // P5.2: server-validated consumable use in multiplayer.
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_ITEM_CONSUME, {
+        slot: this.player.selectedSlot,
+        itemId: stack.id,
+      });
+    } else if (this.gameMode !== 'creative') {
       this.inventory.setSlot(this.player.selectedSlot, { id: GLASS_BOTTLE_ID, count: 1 });
     }
     this.notifyState();
@@ -3342,7 +3363,13 @@ export class Game {
     }
 
     this.sound.playBurp();
-    if (this.gameMode !== 'creative') {
+    // P5.2: in multiplayer the server validates and deducts consumables.
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_ITEM_CONSUME, {
+        slot: this.player.selectedSlot,
+        itemId: stack.id,
+      });
+    } else if (this.gameMode !== 'creative') {
       if (stack.id === HONEY_BOTTLE_ID) {
         if (stack.count <= 1) {
           this.inventory.setSlot(this.player.selectedSlot, { id: GLASS_BOTTLE_ID, count: 1 });

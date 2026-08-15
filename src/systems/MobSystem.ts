@@ -9,6 +9,7 @@ import { MAX_RESTORED_MOBS_PER_DIMENSION, type SerializedMob } from './SaveSyste
 import type { EndGenerator } from '../world/EndGenerator';
 import { EnchantSystem } from './EnchantSystem';
 import { UNDEAD_MOB_TYPES } from './PotionEffect';
+import { getMobIdleInterval, getMobSoundFamily, shouldMobIdle } from './SoundRules';
 
 const MAX_MOBS = 24;
 const SPAWN_INTERVAL = 2.0; // seconds between spawn attempts
@@ -46,7 +47,8 @@ export class MobSystem {
     playerHeldItem = 0,
     onMobBreed?: (type: MobType, pos: THREE.Vector3) => void,
     playerLookDir?: THREE.Vector3,
-    endGenerator?: EndGenerator
+    endGenerator?: EndGenerator,
+    onMobAmbientSound?: (mob: Mob, kind: 'idle') => void,
   ) {
     if (!getBlock || !hurtPlayer) return;
 
@@ -131,6 +133,19 @@ export class MobSystem {
       mob.update(dt, playerPos, getBlock, hurtPlayer, isSolidBlock, gameMode, (origin, dir, type) => {
         if (onMobShoot) onMobShoot(origin, dir, type);
       }, playerHeldItem, playerLookDir);
+
+      // P4.3: ambient idle sounds for audible families near the player.
+      mob.idleSoundTimer -= dt;
+      if (mob.idleSoundTimer <= 0) {
+        mob.idleSoundTimer = getMobIdleInterval(Math.random);
+        if (
+          shouldMobIdle(getMobSoundFamily(mob.def.type)) &&
+          mob.position.distanceTo(playerPos) < 24 &&
+          onMobAmbientSound
+        ) {
+          onMobAmbientSound(mob, 'idle');
+        }
+      }
 
       if (mob.isDead()) {
         if (onMobDeath) {

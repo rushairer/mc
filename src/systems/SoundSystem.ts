@@ -5,6 +5,9 @@
 import { LoadedResourcePack, ResourcePackSystem } from './ResourcePackSystem';
 import { getChordNotes, getMusicMode, MUSIC_BAR_SECONDS, type MusicMode, type MusicNote } from './MusicSystem';
 import { getCaveDripInterval, getCaveDripPitch, getRainFilterFrequency, getRainGain, type WeatherKind } from './AmbientRules';
+import { getBlockSoundMaterial, getMobIdleInterval, getMobSoundFamily, shouldMobIdle, type MobSoundFamily } from './SoundRules';
+import { BlockRegistry } from '../world/BlockRegistry';
+import type { MobType } from '../entities/Mob';
 
 export class SoundSystem {
   private ctx: AudioContext | null = null;
@@ -89,6 +92,24 @@ export class SoundSystem {
     return true;
   }
 
+  // ─── P4.3: material classification ───
+
+  private getBreakMaterial(blockId: number): { type: 'stone' | 'wood' | 'grass' | 'sand'; bright?: boolean } {
+    const def = BlockRegistry.get(blockId);
+    const name = def?.name ?? '';
+    const material = getBlockSoundMaterial(name);
+    switch (material) {
+      case 'wood': return { type: 'wood' };
+      case 'grass': return { type: 'grass' };
+      case 'sand': return { type: 'sand' };
+      case 'metal':
+      case 'glass':
+        return { type: 'stone', bright: true };
+      default:
+        return { type: 'stone' };
+    }
+  }
+
   playBlockBreak(blockId: number = 0) {
     const baseId = blockId & 0x3FF;
     if (this.playFirstResourceSound([`block.break.${baseId}`, 'block.break'])) return;
@@ -99,20 +120,14 @@ export class SoundSystem {
     let duration = 0.15;
     let type: 'stone' | 'wood' | 'grass' | 'sand' = 'stone';
     let volume = 0.4;
+    let bright = false;
 
-    if (baseId === 2 || baseId === 18 || baseId === 161 || baseId === 175 || baseId === 106) {
-      type = 'grass';
-      duration = 0.12;
-      volume = 0.3;
-    } else if (baseId === 5 || baseId === 17 || baseId === 85 || baseId === 96 || baseId === 167) {
-      type = 'wood';
-      duration = 0.18;
-      volume = 0.45;
-    } else if (baseId === 12 || baseId === 13 || baseId === 3 || baseId === 82) {
-      type = 'sand';
-      duration = 0.15;
-      volume = 0.35;
-    }
+    const material = this.getBreakMaterial(blockId);
+    type = material.type;
+    bright = !!material.bright;
+    if (type === 'grass') { duration = 0.12; volume = 0.3; }
+    else if (type === 'wood') { duration = 0.18; volume = 0.45; }
+    else if (type === 'sand') { duration = 0.15; volume = 0.35; }
 
     if (type === 'stone') {
       const bufferSize = ctx.sampleRate * duration;
@@ -125,7 +140,7 @@ export class SoundSystem {
       source.buffer = buffer;
       const filter = ctx.createBiquadFilter();
       filter.type = 'lowpass';
-      filter.frequency.value = 600 + Math.random() * 300;
+      filter.frequency.value = bright ? 2600 + Math.random() * 400 : 600 + Math.random() * 300;
       source.connect(filter).connect(this.sfxGain!);
       source.start();
     } else if (type === 'grass') {
@@ -185,20 +200,14 @@ export class SoundSystem {
     let duration = 0.12;
     let type: 'stone' | 'wood' | 'grass' | 'sand' = 'stone';
     let volume = 0.3;
+    let bright = false;
 
-    if (baseId === 2 || baseId === 18 || baseId === 161 || baseId === 175 || baseId === 106) {
-      type = 'grass';
-      duration = 0.1;
-      volume = 0.25;
-    } else if (baseId === 5 || baseId === 17 || baseId === 85 || baseId === 96 || baseId === 167) {
-      type = 'wood';
-      duration = 0.15;
-      volume = 0.35;
-    } else if (baseId === 12 || baseId === 13 || baseId === 3 || baseId === 82) {
-      type = 'sand';
-      duration = 0.12;
-      volume = 0.28;
-    }
+    const material = this.getBreakMaterial(blockId);
+    type = material.type;
+    bright = !!material.bright;
+    if (type === 'grass') { duration = 0.1; volume = 0.25; }
+    else if (type === 'wood') { duration = 0.15; volume = 0.35; }
+    else if (type === 'sand') { duration = 0.12; volume = 0.28; }
 
     if (type === 'stone') {
       const osc = ctx.createOscillator();
@@ -211,7 +220,7 @@ export class SoundSystem {
       
       const filter = ctx.createBiquadFilter();
       filter.type = 'lowpass';
-      filter.frequency.value = 250;
+      filter.frequency.value = bright ? 1800 : 250;
 
       osc.connect(filter).connect(gain).connect(this.sfxGain!);
       osc.start();
@@ -423,6 +432,113 @@ export class SoundSystem {
     osc.stop(ctx.currentTime + 0.4);
   }
 
+  // ─── P4.3: per-creature voice synthesis ───
+
+  /** Per-family/idle-hurt-death voice call (Web Audio, no external files). */
+  playMobSound(type: MobType, kind: 'idle' | 'hurt' | 'death') {
+    if (this.playFirstResourceSound([`entity.${type}.${kind}`, 'entity.mob.sound'])) return;
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    const family = getMobSoundFamily(type);
+    const intensity = kind === 'idle' ? 0.5 : kind === 'hurt' ? 1.3 : 1.6;
+    const duration = kind === 'death' ? 0.55 : kind === 'hurt' ? 0.3 : 0.25;
+
+    if (family === 'animal') {
+      this.synthAnimalCall(ctx, type, kind, intensity);
+      return;
+    }
+    if (family === 'creeper') {
+      this.synthNoiseCall(ctx, 'highpass', 2500, duration, 0.25 * intensity, 2); // hiss
+      return;
+    }
+    if (family === 'skeleton') {
+      this.synthNoiseCall(ctx, 'bandpass', 3000, duration, 0.3 * intensity, 1); // rattle
+      return;
+    }
+    if (family === 'spider') {
+      this.synthToneCall(ctx, 'square', 220 + Math.random() * 60, 180, duration, 0.2 * intensity);
+      return;
+    }
+    if (family === 'slime') {
+      this.synthToneCall(ctx, 'sine', 260, 90, duration, 0.3 * intensity);
+      return;
+    }
+    if (family === 'blaze') {
+      this.synthNoiseCall(ctx, 'bandpass', 1200, duration, 0.25 * intensity, 1);
+      return;
+    }
+    if (family === 'witch') {
+      this.synthToneCall(ctx, 'sawtooth', 500, 650, duration, 0.3 * intensity);
+      return;
+    }
+    if (family === 'villager') {
+      this.synthToneCall(ctx, 'sine', 320, 260, duration, 0.25 * intensity);
+      return;
+    }
+    if (family === 'golem') {
+      this.synthNoiseCall(ctx, 'lowpass', 300, 0.3, 0.35 * intensity, 1);
+      return;
+    }
+    if (family === 'ender') {
+      this.synthToneCall(ctx, 'sine', 420, 820, duration, 0.28 * intensity);
+      return;
+    }
+    if (family === 'boss') {
+      this.synthToneCall(ctx, 'sawtooth', 65, 40, 0.8, 0.4 * intensity);
+      return;
+    }
+    // zombie-family and generic: low groan (pitch slides down on death).
+    const start = family === 'zombie' ? 120 : 180;
+    const end = family === 'zombie' ? 60 : 90;
+    this.synthToneCall(ctx, 'sawtooth', start, end, duration, 0.3 * intensity);
+  }
+
+  /** Distinct animal calls keyed by the actual mob type. */
+  private synthAnimalCall(ctx: AudioContext, type: MobType, kind: 'idle' | 'hurt' | 'death', intensity: number) {
+    switch (type) {
+      case 'cow': this.synthToneCall(ctx, 'sine', 140, 90, 0.35, 0.3 * intensity); return;
+      case 'pig': this.synthToneCall(ctx, 'square', 210, 150, 0.2, 0.28 * intensity); return;
+      case 'sheep': this.synthToneCall(ctx, 'sawtooth', 420, 300, 0.3, 0.25 * intensity); return;
+      case 'chicken': this.synthToneCall(ctx, 'square', 520, 420, 0.12, 0.28 * intensity); return;
+      case 'horse': this.synthToneCall(ctx, 'sawtooth', 300, 520, 0.4, 0.25 * intensity); return;
+      case 'wolf': this.synthToneCall(ctx, 'square', 300, 240, 0.15, 0.35 * intensity); return;
+      case 'cat': this.synthToneCall(ctx, 'sine', 700, 850, 0.3, 0.22 * intensity); return;
+      default: this.synthToneCall(ctx, 'sine', 300, 200, 0.25, 0.2 * intensity); return;
+    }
+  }
+
+  private synthToneCall(ctx: AudioContext, wave: OscillatorType, from: number, to: number, duration: number, volume: number) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(from, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(1, to), ctx.currentTime + duration);
+    gain.gain.setValueAtTime(volume, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 2500;
+    osc.connect(filter).connect(gain).connect(this.sfxGain!);
+    osc.start();
+    osc.stop(ctx.currentTime + duration + 0.05);
+  }
+
+  private synthNoiseCall(ctx: AudioContext, filterType: BiquadFilterType, freq: number, duration: number, volume: number, decay: number) {
+    const bufferSize = Math.floor(ctx.sampleRate * duration);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * decay)) * volume;
+    }
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = filterType;
+    filter.frequency.value = freq;
+    source.connect(filter).connect(this.sfxGain!);
+    source.start();
+  }
+
   playExplosion() {
     if (this.playFirstResourceSound(['entity.generic.explode'])) return;
 
@@ -483,22 +599,20 @@ export class SoundSystem {
     let filterType: BiquadFilterType = 'lowpass';
     let volume = 0.08;
 
-    // Map block types
-    if (blockId === 1 || blockId === 4 || blockId === 10 || blockId === 11 || blockId === 12 || blockId === 22 || blockId === 23 || blockId === 25 || blockId === 35) {
-      // stone / cobblestone / ores / iron/gold/diamond blocks / furnace / obsidian
+    // P4.3: material-driven classification.
+    const def = BlockRegistry.get(blockId);
+    const stepMaterial = getBlockSoundMaterial(def?.name ?? '');
+    if (stepMaterial === 'stone' || stepMaterial === 'metal' || stepMaterial === 'glass') {
       freq = 800;
       volume = 0.12;
-    } else if (blockId === 5 || blockId === 6 || blockId === 20 || blockId === 24) {
-      // wood / log / bookshelf / crafting table
+    } else if (stepMaterial === 'wood') {
       freq = 350;
       volume = 0.08;
-    } else if (blockId === 8 || blockId === 9) {
-      // sand / gravel
+    } else if (stepMaterial === 'sand') {
       freq = 500;
       filterType = 'bandpass';
       volume = 0.08;
-    } else if (blockId === 27 || blockId === 28) {
-      // snow / ice
+    } else if (stepMaterial === 'grass') {
       freq = 700;
       volume = 0.06;
     }

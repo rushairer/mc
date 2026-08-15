@@ -90,6 +90,8 @@ export class Mob {
   /** Remaining burn seconds (Flame / Fire Aspect). Ticked in update(). */
   burnTicks = 0;
   private burnDamageTimer = 0;
+  /** P4.3 — countdown to the next ambient idle sound. */
+  idleSoundTimer = 0;
   magmaCubeJumpTimer = 0;
   
   // Breeding & Growth state

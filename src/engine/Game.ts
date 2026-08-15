@@ -1929,7 +1929,12 @@ export class Game {
           this.sound.playXP();
         },
         playerLookDir,
-        this.chunks.dimensionGen.endGenerator
+        this.chunks.dimensionGen.endGenerator,
+        (mob, kind) => {
+          if (kind === 'idle') {
+            this.sound.playMobSound(mob.def.type, 'idle');
+          }
+        },
       );
 
       this.enderDragon.update(
@@ -1945,7 +1950,7 @@ export class Game {
       for (const [id, mob] of this.mobs.mobs) {
         if (mob.health <= 0 && !mob.deathSoundPlayed) {
           mob.deathSoundPlayed = true;
-          this.sound.playMobDeath();
+          this.sound.playMobSound(mob.def.type, 'death');
         }
         if (mob.def.type === 'creeper') {
           if (mob.fuseTimer >= 0 && mob.fuseTimer < dt) {
@@ -2339,7 +2344,9 @@ export class Game {
       if (mobHit.hit) {
         this.swordSwingTimer = 0.4;
         this.startAttackCooldown(attackCooldownDuration);
-        this.sound.playMobHurt();
+        if (mobHit.mob) {
+          this.sound.playMobSound(mobHit.mob.def.type, 'hurt');
+        }
         // Spawn damage particles on mob
         if (mobHit.mob) {
           this.particles.spawnDamageParticles(
@@ -2370,7 +2377,7 @@ export class Game {
       )) {
         this.swordSwingTimer = 0.4;
         this.startAttackCooldown(attackCooldownDuration);
-        this.sound.playMobHurt();
+        this.sound.playMobSound('wither', 'hurt');
         const dragon = this.enderDragon.dragon;
         if (dragon) {
           this.particles.spawnDamageParticles(
@@ -3425,7 +3432,7 @@ export class Game {
       const hit = this.enderDragon.hitByProjectile(projectile.position, projectile.damage, projectile.velocity);
       if (!hit) continue;
       this.particles.spawnDamageParticles(projectile.position.x, projectile.position.y, projectile.position.z, 10);
-      this.sound.playMobHurt();
+      this.sound.playMobSound('wither', 'hurt');
       this.projectiles.removeProjectile(id);
     }
   }

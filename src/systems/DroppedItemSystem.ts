@@ -7,7 +7,15 @@ const PLAYER_HALF_WIDTH = 0.3;
 const PLAYER_HEIGHT = 1.8;
 const PICKUP_EXPAND_XZ = 1.0;
 const PICKUP_EXPAND_Y = 0.5;
-const MERGE_RADIUS = 0.5;
+
+// Java 1.20.1 item entities are 0.25 x 0.25. Vanilla searches the current
+// entity AABB inflated by (0.5, 0, 0.5), so compatible entity AABBs may
+// intersect at up to 0.75 blocks horizontally but only 0.25 vertically.
+const ITEM_ENTITY_WIDTH = 0.25;
+const ITEM_ENTITY_HEIGHT = 0.25;
+const MERGE_EXPAND_XZ = 0.5;
+const MERGE_CENTER_XZ = ITEM_ENTITY_WIDTH + MERGE_EXPAND_XZ;
+const MERGE_CENTER_Y = ITEM_ENTITY_HEIGHT;
 
 export class DroppedItemSystem {
   items: Map<number, DroppedItem> = new Map();
@@ -113,14 +121,17 @@ export class DroppedItemSystem {
         const b = list[j];
         if (!this.items.has(b.id)) continue;
         if (a.itemId !== b.itemId) continue;
-        if (b.count >= maxStack) continue;
+        if (b.count <= 0) continue;
 
-        const closeEnough = Math.abs(a.position.x - b.position.x) <= MERGE_RADIUS
-          && Math.abs(a.position.y - b.position.y) <= MERGE_RADIUS
-          && Math.abs(a.position.z - b.position.z) <= MERGE_RADIUS;
+        const closeEnough = Math.abs(a.position.x - b.position.x) <= MERGE_CENTER_XZ
+          && Math.abs(a.position.y - b.position.y) <= MERGE_CENTER_Y
+          && Math.abs(a.position.z - b.position.z) <= MERGE_CENTER_XZ;
         if (!closeEnough) continue;
 
+        // A full donor entity may still top up a partial receiver. Only the
+        // receiving stack needs free capacity.
         const transfer = Math.min(b.count, maxStack - a.count);
+        if (transfer <= 0) continue;
         a.count += transfer;
         b.count -= transfer;
         a.pickupDelay = Math.max(a.pickupDelay, b.pickupDelay);

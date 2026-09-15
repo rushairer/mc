@@ -69,7 +69,7 @@ function stack(id: number): ItemStack {
   return { id, count: 1 };
 }
 
-test('enchantment registry exposes 20 enchantments with value functions', () => {
+test('enchantment registry exposes 20 enchantments with Java value functions', () => {
   const ids: EnchantmentId[] = [
     'sharpness', 'efficiency', 'protection', 'unbreaking', 'power', 'punch',
     'flame', 'fire_aspect', 'knockback', 'smite', 'looting', 'fortune',
@@ -79,7 +79,10 @@ test('enchantment registry exposes 20 enchantments with value functions', () => 
   for (const id of ids) {
     assert.ok(EnchantSystem.getDefinition(id), `enchantment ${id} registered`);
   }
-  assert.equal(EnchantSystem.getPowerMultiplier(5), 2.25);
+  assert.equal(EnchantSystem.getSharpnessBonus(1), 1);
+  assert.equal(EnchantSystem.getSharpnessBonus(5), 3);
+  assert.equal(EnchantSystem.getPowerMultiplier(1), 1.5);
+  assert.equal(EnchantSystem.getPowerMultiplier(5), 2.5);
   assert.equal(EnchantSystem.getSmiteBonus(2), 5);
   assert.equal(EnchantSystem.getFireTicks(2), 8);
   assert.ok(Math.abs(EnchantSystem.getThornsChance(3) - 0.45) < 1e-9);

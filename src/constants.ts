@@ -7,9 +7,11 @@ export const RENDER_DISTANCE = 6;
 // ─── Physics ───
 export const BLOCK_SIZE = 1;
 export const GRAVITY = -28;
-export const JUMP_VELOCITY = 9;
-export const WALK_SPEED = 4.3;
-export const SPRINT_SPEED = 5.6;
+// Java applies an initial +0.42 blocks/tick jump velocity at 20 TPS.
+export const JUMP_VELOCITY = 8.4;
+// Vanilla steady-state horizontal speeds on ordinary ground.
+export const WALK_SPEED = 4.317;
+export const SPRINT_SPEED = 5.612;
 export const PLAYER_WIDTH = 0.6;
 export const PLAYER_HEIGHT = 1.8;
 export const PLAYER_EYE_HEIGHT = 1.62;

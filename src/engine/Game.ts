@@ -1507,7 +1507,7 @@ export class Game {
     this.player.velocity.set(0, 0, 0);
     this.player.health = 20;
     this.player.hunger = 20;
-    this.player.saturation = 20;
+    this.player.saturation = 5;
     this.player.flying = false;
     this.spawnProtectionTimer = 3;
     this.player.resolveStuck(this.chunks);
@@ -2931,6 +2931,7 @@ export class Game {
           getBlockMeta: (x, y, z) => this.chunks.getBlockMeta(x, y, z),
           setBlock: (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
           setBlockMeta: (x, y, z, metadata, markDirty) => this.chunks.setBlockMeta(x, y, z, metadata, markDirty),
+          dimension: tick.dimension,
         });
         for (const next of result.next) {
           this.scheduleWorldTick(

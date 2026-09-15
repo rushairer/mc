@@ -27,6 +27,7 @@ const MATERIAL_INDEX: Partial<Record<CombatToolMaterial, number>> = {
   wood: 0,
   gold: 0,
   stone: 1,
+  copper: 1, // project extension: preserve a stone-like fallback outside parity scope
   iron: 2,
   diamond: 3,
   netherite: 4,
@@ -67,10 +68,7 @@ export function getMeleeAttackDamage(
   material?: CombatToolMaterial,
 ): number {
   if (toolType === 'trident') return 9;
-  if (!material || MATERIAL_INDEX[material] === undefined) {
-    // Keep non-vanilla project extensions neutral rather than inventing a vanilla value.
-    return 1;
-  }
+  if (!material || MATERIAL_INDEX[material] === undefined) return 1;
 
   const index = MATERIAL_INDEX[material]!;
   switch (toolType) {

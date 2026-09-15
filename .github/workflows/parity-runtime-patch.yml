@@ -52,3 +52,5 @@ jobs:
           git add src/engine/Game.ts
           git commit -m "fix: wire dimension-aware fluids and respawn saturation"
           git push origin HEAD:master
+
+# Retry after correcting the powered-lock test fixture.

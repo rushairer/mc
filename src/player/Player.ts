@@ -19,7 +19,7 @@ export class Player {
   selectedSlot = 0;
   health = 20;
   hunger = 20;
-  saturation = 20;
+  saturation = 5;
   oxygen = 15.0; // oxygen in seconds (15 seconds max)
   flying = false;
   isSneaking = false;
@@ -129,7 +129,11 @@ export class Player {
       }
     }
 
-    const wantsSprint = input.sprint && !this.isSneaking && !this.isCrawling;
+    // Java survival sprinting requires forward movement and more than 6 food
+    // points. Flying is not hunger-gated because it is a creative ability.
+    const hasSprintFood = this.flying || this.hunger > 6;
+    const wantsSprint = input.sprint && input.forward && !input.back
+      && hasSprintFood && !this.isSneaking && !this.isCrawling;
     let speedMultiplier = 1.0;
     if (this.isCrawling || this.isSneaking) {
       speedMultiplier = SNEAK_SPEED_MULTIPLIER;

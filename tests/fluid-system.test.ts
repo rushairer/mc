@@ -56,7 +56,7 @@ test('source water schedules propagation but remains unchanged', () => {
   assert.equal(result.next.length, 4);
 });
 
-test('lava meeting side water becomes cobblestone on its scheduled tick', () => {
+test('water touching a lava source from the side creates obsidian', () => {
   const fluid = new FluidSystem();
   const world = createWorld([
     [0, 10, 0, 11],
@@ -65,7 +65,33 @@ test('lava meeting side water becomes cobblestone on its scheduled tick', () => 
 
   const result = fluid.processTick(0, 10, 0, world.access);
 
+  assert.equal(world.blocks.get(world.key(0, 10, 0)), 49);
+  assert.equal(result.changed, true);
+});
+
+test('water touching flowing lava from the side creates cobblestone', () => {
+  const fluid = new FluidSystem();
+  const world = createWorld([
+    [0, 10, 0, 10, { fluidLevel: 6 }],
+    [1, 10, 0, 9],
+  ]);
+
+  const result = fluid.processTick(0, 10, 0, world.access);
+
   assert.equal(world.blocks.get(world.key(0, 10, 0)), 4);
   assert.equal(result.changed, true);
-  assert.equal(result.delayTicks, 10);
+});
+
+test('lava flowing downward into water turns the water cell into stone', () => {
+  const fluid = new FluidSystem();
+  const world = createWorld([
+    [0, 10, 0, 10, { fluidLevel: 6 }],
+    [0, 9, 0, 9],
+  ]);
+
+  const result = fluid.processTick(0, 10, 0, world.access);
+
+  assert.equal(world.blocks.get(world.key(0, 10, 0)), 10, 'lava remains in its current cell');
+  assert.equal(world.blocks.get(world.key(0, 9, 0)), 1, 'water below becomes stone');
+  assert.equal(result.changed, true);
 });

@@ -21,26 +21,53 @@ const healing = () => potion('healing', 'Potion of Healing', { id: 'healing', le
 
 // ─── Modifier recipes (P3.4) ───
 
-test('redstone dust extends potion duration', () => {
+test('redstone dust uses Java 1.20.1 potion-specific extended durations', () => {
   const modifier = POTION_MODIFIERS.find((m) => m.ingredientId === 331);
   assert.ok(modifier);
-  assert.ok(modifier!.matches(strength()));
-  const extended = modifier!.modify(strength());
-  assert.equal(extended.potion?.effect?.duration, 360);
-  assert.ok(extended.potion?.name?.includes('Extended'));
-  // Instant potions (duration 0) cannot be extended.
-  assert.ok(!modifier!.matches(healing()));
+  const cases: Array<[ItemStack, number]> = [
+    [strength(), 480],
+    [potion('speed', 'Potion of Swiftness', { id: 'speed', level: 1, duration: 180 }), 480],
+    [potion('regeneration', 'Potion of Regeneration', { id: 'regeneration', level: 1, duration: 45 }), 90],
+    [potion('poison', 'Potion of Poison', { id: 'poison', level: 1, duration: 45 }), 90],
+    [potion('fire_resistance', 'Potion of Fire Resistance', { id: 'fire_resistance', level: 1, duration: 180 }), 480],
+    [potion('water_breathing', 'Potion of Water Breathing', { id: 'water_breathing', level: 1, duration: 180 }), 480],
+    [potion('jump_boost', 'Potion of Leaping', { id: 'jump_boost', level: 1, duration: 180 }), 480],
+    [potion('slowness', 'Potion of Slowness', { id: 'slowness', level: 1, duration: 90 }), 240],
+  ];
+  for (const [base, expectedDuration] of cases) {
+    assert.ok(modifier!.matches(base));
+    assert.equal(modifier!.modify(base).potion?.effect?.duration, expectedDuration);
+  }
+  assert.ok(!modifier!.matches(healing()), 'instant potions cannot be extended');
 });
 
-test('glowstone dust strengthens to level II with reduced duration', () => {
+test('glowstone dust uses Java 1.20.1 strengthened durations', () => {
   const modifier = POTION_MODIFIERS.find((m) => m.ingredientId === 348);
   assert.ok(modifier);
-  assert.ok(modifier!.matches(strength()));
-  const strong = modifier!.modify(strength());
-  assert.equal(strong.potion?.effect?.level, 2);
-  assert.equal(strong.potion?.effect?.duration, 60);
-  // Level II potions cannot be strengthened further.
-  assert.ok(!modifier!.matches(strong));
+  const cases: Array<[ItemStack, number, number]> = [
+    [strength(), 2, 90],
+    [potion('speed', 'Potion of Swiftness', { id: 'speed', level: 1, duration: 180 }), 2, 90],
+    [potion('regeneration', 'Potion of Regeneration', { id: 'regeneration', level: 1, duration: 45 }), 2, 22],
+    [potion('poison', 'Potion of Poison', { id: 'poison', level: 1, duration: 45 }), 2, 21],
+    [healing(), 2, 0],
+    [potion('jump_boost', 'Potion of Leaping', { id: 'jump_boost', level: 1, duration: 180 }), 2, 90],
+    [potion('slowness', 'Potion of Slowness', { id: 'slowness', level: 1, duration: 90 }), 4, 20],
+  ];
+  for (const [base, expectedLevel, expectedDuration] of cases) {
+    assert.ok(modifier!.matches(base));
+    const strong = modifier!.modify(base);
+    assert.equal(strong.potion?.effect?.level, expectedLevel);
+    assert.equal(strong.potion?.effect?.duration, expectedDuration);
+    assert.ok(!modifier!.matches(strong), 'already-strengthened potion cannot be strengthened again');
+  }
+});
+
+test('glowstone rejects effects that have no stronger Java 1.20.1 potion', () => {
+  const modifier = POTION_MODIFIERS.find((m) => m.ingredientId === 348)!;
+  const fireResistance = potion('fire_resistance', 'Potion of Fire Resistance', { id: 'fire_resistance', level: 1, duration: 180 });
+  const waterBreathing = potion('water_breathing', 'Potion of Water Breathing', { id: 'water_breathing', level: 1, duration: 180 });
+  assert.equal(modifier.matches(fireResistance), false);
+  assert.equal(modifier.matches(waterBreathing), false);
 });
 
 test('gunpowder makes a splash potion', () => {
@@ -104,18 +131,19 @@ test('modifier chain gunpowder -> dragon breath -> brew stays coherent', () => {
   assert.equal(lingering.potion?.effect?.duration, 180);
 });
 
-test('all new base-effect recipes remain brewable', () => {
+test('Java 1.20.1 base-effect recipes exclude non-brewable hunger and absorption potions', () => {
+  const invalidKinds = new Set(['hunger', 'absorption']);
+  assert.equal(BREWING_RECIPES.some((recipe) => invalidKinds.has(recipe.outputKind)), false);
+
   const brews: Array<[number, string, string]> = [
     [370, 'awkward', 'regeneration'],
     [353, 'awkward', 'speed'],
     [375, 'awkward', 'poison'],
     [377, 'awkward', 'strength'],
     [378, 'awkward', 'fire_resistance'],
-    [376, 'awkward', 'hunger'],
     [376, 'speed', 'slowness'],
     [20218, 'awkward', 'water_breathing'],
     [414, 'awkward', 'jump_boost'],
-    [322, 'awkward', 'absorption'],
     [382, 'awkward', 'healing'],
   ];
   for (const [ingredient, inputKind, outputKind] of brews) {

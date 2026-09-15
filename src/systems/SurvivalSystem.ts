@@ -1,13 +1,18 @@
 import type { Player } from '../player/Player';
 import { WALK_SPEED } from '../constants';
+import { BlockRegistry } from '../world/BlockRegistry';
 
 const EXHAUSTION_UNIT = 4.0;
 const HEAL_EXHAUSTION_PER_HP = 6.0;
 const FAST_REGEN_INTERVAL = 0.5;
 const SLOW_REGEN_INTERVAL = 4.0;
+const PEACEFUL_FOOD_INTERVAL = 0.5;
+const PEACEFUL_HEALTH_INTERVAL = 1.0;
 const MAX_AIR_SECONDS = 15.0;
 const AIR_REFILL_MULTIPLIER = 4.0;
 const DROWNING_DAMAGE_INTERVAL = 1.0;
+const LAVA_DAMAGE_INTERVAL = 0.5;
+const FIRE_CONTACT_DAMAGE_INTERVAL = 0.5;
 const TIMER_EPSILON = 1e-9;
 
 export class SurvivalSystem {
@@ -15,9 +20,12 @@ export class SurvivalSystem {
   private wasFalling = false;
   private starvationTimer = 0;
   private regenTimer = 0;
+  private peacefulFoodTimer = 0;
+  private peacefulHealthTimer = 0;
   private exhaustion = 0;
   private wasOnGround = true;
   private drownTimer = 0;
+  private lavaDamageTimer = 0;
   private fireDamageTimer = 0;
   private lastPlayerX: number | null = null;
   private lastPlayerZ: number | null = null;
@@ -77,16 +85,38 @@ export class SurvivalSystem {
     }
 
     // ─── Peaceful regeneration ───
+    // Java 1.20.1 restores food every 10 game ticks and health every 20 game
+    // ticks while naturalRegeneration is enabled. Saturation is NOT restored in
+    // 1.20.1; that behavior was added to Java later.
     if (difficulty === 'peaceful') {
-      if (player.health < 20) {
-        this.regenTimer += dt;
-        if (this.regenTimer + TIMER_EPSILON >= 0.5) {
-          player.health = Math.min(20, player.health + 1);
-          this.regenTimer = Math.max(0, this.regenTimer - 0.5);
+      const naturalRegeneration = gamerules ? gamerules.getRule('naturalRegeneration') : true;
+      if (naturalRegeneration) {
+        if (player.hunger < 20) {
+          this.peacefulFoodTimer += dt;
+          while (this.peacefulFoodTimer + TIMER_EPSILON >= PEACEFUL_FOOD_INTERVAL && player.hunger < 20) {
+            player.hunger = Math.min(20, player.hunger + 1);
+            this.peacefulFoodTimer = Math.max(0, this.peacefulFoodTimer - PEACEFUL_FOOD_INTERVAL);
+          }
+        } else {
+          this.peacefulFoodTimer = 0;
+        }
+
+        if (player.health < 20) {
+          this.peacefulHealthTimer += dt;
+          while (this.peacefulHealthTimer + TIMER_EPSILON >= PEACEFUL_HEALTH_INTERVAL && player.health < 20) {
+            player.health = Math.min(20, player.health + 1);
+            this.peacefulHealthTimer = Math.max(0, this.peacefulHealthTimer - PEACEFUL_HEALTH_INTERVAL);
+          }
+        } else {
+          this.peacefulHealthTimer = 0;
         }
       } else {
-        this.regenTimer = 0;
+        this.peacefulFoodTimer = 0;
+        this.peacefulHealthTimer = 0;
       }
+    } else {
+      this.peacefulFoodTimer = 0;
+      this.peacefulHealthTimer = 0;
     }
 
     // ─── Fall Damage ───
@@ -104,7 +134,7 @@ export class SurvivalSystem {
       if (fallDist > 3 && doFallDamage) {
         const featherReduction = getEnchantLevel('feather_falling');
         const reduced = Math.max(0, fallDist - 3) * (1 - Math.min(0.8, featherReduction * 0.12));
-        const fallDamage = Math.floor(reduced);
+        const fallDamage = Math.ceil(reduced - TIMER_EPSILON);
         if (fallDamage > 0) {
           damage(fallDamage, 'fall');
         }
@@ -157,15 +187,27 @@ export class SurvivalSystem {
     );
     const isFootLava = (footBlock & 0x3FF) === 10 || (footBlock & 0x3FF) === 11;
     const isHeadLava = (headBlock & 0x3FF) === 10 || (headBlock & 0x3FF) === 11;
+    const footName = BlockRegistry.get(footBlock)?.name;
+    const headName = BlockRegistry.get(headBlock)?.name;
+    const isInFire = footName === 'fire' || footName === 'soul_fire' || headName === 'fire' || headName === 'soul_fire';
     const doFireDamage = gamerules ? gamerules.getRule('fireDamage') : true;
+    const fireImmune = hasEffect('fire_resistance');
 
-    if ((isFootLava || isHeadLava) && doFireDamage) {
-      if (!hasEffect('fire_resistance')) {
-        this.fireDamageTimer += dt;
-        if (this.fireDamageTimer + TIMER_EPSILON >= 0.5) {
-          damage(4, 'lava');
-          this.fireDamageTimer = Math.max(0, this.fireDamageTimer - 0.5);
-        }
+    if ((isFootLava || isHeadLava) && doFireDamage && !fireImmune) {
+      this.lavaDamageTimer += dt;
+      while (this.lavaDamageTimer + TIMER_EPSILON >= LAVA_DAMAGE_INTERVAL) {
+        damage(4, 'lava');
+        this.lavaDamageTimer = Math.max(0, this.lavaDamageTimer - LAVA_DAMAGE_INTERVAL);
+      }
+    } else {
+      this.lavaDamageTimer = 0;
+    }
+
+    if (isInFire && doFireDamage && !fireImmune) {
+      this.fireDamageTimer += dt;
+      while (this.fireDamageTimer + TIMER_EPSILON >= FIRE_CONTACT_DAMAGE_INTERVAL) {
+        damage(2, 'fire');
+        this.fireDamageTimer = Math.max(0, this.fireDamageTimer - FIRE_CONTACT_DAMAGE_INTERVAL);
       }
     } else {
       this.fireDamageTimer = 0;
@@ -175,7 +217,7 @@ export class SurvivalSystem {
     if (difficulty !== 'peaceful') {
       if (player.hunger <= 0) {
         this.starvationTimer += dt;
-        if (this.starvationTimer + TIMER_EPSILON >= 4) {
+        while (this.starvationTimer + TIMER_EPSILON >= 4) {
           const limit = difficulty === 'easy' ? 10 : (difficulty === 'normal' ? 1 : 0);
           if (player.health > limit) {
             damage(1, 'starve');
@@ -185,6 +227,8 @@ export class SurvivalSystem {
       } else {
         this.starvationTimer = 0;
       }
+    } else {
+      this.starvationTimer = 0;
     }
 
     // ─── Natural Regeneration ───

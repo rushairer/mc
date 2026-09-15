@@ -8,10 +8,10 @@ import { BlockRegistry } from '../src/world/BlockRegistry';
 // ─── Button rules (P3.1) ───
 
 test('buttons follow Java 1.20.1 press durations', () => {
-  assert.equal(getButtonPressTicks('oak_button'), 10, 'wooden buttons 0.5s');
-  assert.equal(getButtonPressTicks('warped_button'), 10);
-  assert.equal(getButtonPressTicks('stone_button'), 30, 'stone buttons 1.5s');
-  assert.equal(getButtonPressTicks('polished_blackstone_button'), 30);
+  assert.equal(getButtonPressTicks('oak_button'), 30, 'wooden buttons 1.5s');
+  assert.equal(getButtonPressTicks('warped_button'), 30);
+  assert.equal(getButtonPressTicks('stone_button'), 20, 'stone buttons 1.0s');
+  assert.equal(getButtonPressTicks('polished_blackstone_button'), 20);
 });
 
 test('button and fence gate name predicates', () => {

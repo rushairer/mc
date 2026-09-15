@@ -8,6 +8,7 @@ const SLOW_REGEN_INTERVAL = 4.0;
 const MAX_AIR_SECONDS = 15.0;
 const AIR_REFILL_MULTIPLIER = 4.0;
 const DROWNING_DAMAGE_INTERVAL = 1.0;
+const TIMER_EPSILON = 1e-9;
 
 export class SurvivalSystem {
   private fallStartY = 0;
@@ -66,8 +67,8 @@ export class SurvivalSystem {
 
     // Exhaustion is processed in Peaceful too, but Peaceful prevents the visible
     // food level itself from decreasing once saturation is empty.
-    while (this.exhaustion >= EXHAUSTION_UNIT) {
-      this.exhaustion -= EXHAUSTION_UNIT;
+    while (this.exhaustion + TIMER_EPSILON >= EXHAUSTION_UNIT) {
+      this.exhaustion = Math.max(0, this.exhaustion - EXHAUSTION_UNIT);
       if (player.saturation > 0) {
         player.saturation = Math.max(0, player.saturation - 1);
       } else if (difficulty !== 'peaceful') {
@@ -79,9 +80,9 @@ export class SurvivalSystem {
     if (difficulty === 'peaceful') {
       if (player.health < 20) {
         this.regenTimer += dt;
-        if (this.regenTimer >= 0.5) {
+        if (this.regenTimer + TIMER_EPSILON >= 0.5) {
           player.health = Math.min(20, player.health + 1);
-          this.regenTimer -= 0.5;
+          this.regenTimer = Math.max(0, this.regenTimer - 0.5);
         }
       } else {
         this.regenTimer = 0;
@@ -131,9 +132,9 @@ export class SurvivalSystem {
 
         if (player.oxygen <= 0 && doDrowningDamage) {
           this.drownTimer += dt;
-          if (this.drownTimer >= DROWNING_DAMAGE_INTERVAL) {
+          if (this.drownTimer + TIMER_EPSILON >= DROWNING_DAMAGE_INTERVAL) {
             damage(2, 'drown');
-            this.drownTimer -= DROWNING_DAMAGE_INTERVAL;
+            this.drownTimer = Math.max(0, this.drownTimer - DROWNING_DAMAGE_INTERVAL);
           }
         } else {
           this.drownTimer = 0;
@@ -161,9 +162,9 @@ export class SurvivalSystem {
     if ((isFootLava || isHeadLava) && doFireDamage) {
       if (!hasEffect('fire_resistance')) {
         this.fireDamageTimer += dt;
-        if (this.fireDamageTimer >= 0.5) {
+        if (this.fireDamageTimer + TIMER_EPSILON >= 0.5) {
           damage(4, 'lava');
-          this.fireDamageTimer -= 0.5;
+          this.fireDamageTimer = Math.max(0, this.fireDamageTimer - 0.5);
         }
       }
     } else {
@@ -174,12 +175,12 @@ export class SurvivalSystem {
     if (difficulty !== 'peaceful') {
       if (player.hunger <= 0) {
         this.starvationTimer += dt;
-        if (this.starvationTimer >= 4) {
+        if (this.starvationTimer + TIMER_EPSILON >= 4) {
           const limit = difficulty === 'easy' ? 10 : (difficulty === 'normal' ? 1 : 0);
           if (player.health > limit) {
             damage(1, 'starve');
           }
-          this.starvationTimer -= 4;
+          this.starvationTimer = Math.max(0, this.starvationTimer - 4);
         }
       } else {
         this.starvationTimer = 0;
@@ -191,18 +192,18 @@ export class SurvivalSystem {
       const naturalRegeneration = gamerules ? gamerules.getRule('naturalRegeneration') : true;
       if (naturalRegeneration && player.health < 20 && player.hunger >= 20 && player.saturation > 0) {
         this.regenTimer += dt;
-        if (this.regenTimer >= FAST_REGEN_INTERVAL) {
+        if (this.regenTimer + TIMER_EPSILON >= FAST_REGEN_INTERVAL) {
           const fundedExhaustion = Math.min(player.saturation, HEAL_EXHAUSTION_PER_HP);
           player.health = Math.min(20, player.health + fundedExhaustion / HEAL_EXHAUSTION_PER_HP);
           this.exhaustion += fundedExhaustion;
-          this.regenTimer -= FAST_REGEN_INTERVAL;
+          this.regenTimer = Math.max(0, this.regenTimer - FAST_REGEN_INTERVAL);
         }
       } else if (naturalRegeneration && player.health < 20 && player.hunger >= 18) {
         this.regenTimer += dt;
-        if (this.regenTimer >= SLOW_REGEN_INTERVAL) {
+        if (this.regenTimer + TIMER_EPSILON >= SLOW_REGEN_INTERVAL) {
           player.health = Math.min(20, player.health + 1);
           this.exhaustion += HEAL_EXHAUSTION_PER_HP;
-          this.regenTimer -= SLOW_REGEN_INTERVAL;
+          this.regenTimer = Math.max(0, this.regenTimer - SLOW_REGEN_INTERVAL);
         }
       } else {
         this.regenTimer = 0;

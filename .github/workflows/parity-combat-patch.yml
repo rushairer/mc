@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   patch:
-    if: "${{ github.event.head_commit.message == 'chore: rerun verified combat parity patch' }}"
+    if: "${{ github.event.head_commit.message == 'chore: rerun combat patch with sweep parity' }}"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,5 +29,5 @@ jobs:
           git config user.name "Aben"
           git config user.email "5195693+rushairer@users.noreply.github.com"
           git add src/items/ItemRegistry.ts src/systems/EnchantSystem.ts src/engine/Game.ts
-          git commit -m "fix: wire Java 1.20.1 combat attributes"
+          git commit -m "fix: wire Java 1.20.1 combat attributes and sweep damage"
           git push origin master

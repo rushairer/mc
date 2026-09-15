@@ -17,11 +17,13 @@ interface XPOrb {
   age: number;
 }
 
-const PICKUP_RADIUS = 7.25;
+const FOLLOW_RADIUS = 8.0;
 const TOUCH_RADIUS = 0.65;
 const DESPAWN_TIME = 300;
 const PLAYER_PICKUP_COOLDOWN = 0.1; // 2 game ticks
 const TICKS_PER_SECOND = 20;
+const XP_GRAVITY = 12; // 0.03 blocks/tick velocity loss at 20 TPS
+const FOLLOW_ACCELERATION = 40; // continuous equivalent of +0.1 blocks/tick per tick
 const TIMER_EPSILON = 1e-9;
 
 export class XPSystem {
@@ -68,7 +70,20 @@ export class XPSystem {
         continue;
       }
 
-      orb.velocity.y -= 18 * dt;
+      // Java applies -0.03 blocks/tick to an XP orb, then accelerates it toward
+      // a nearby player with a squared falloff inside an 8-block radius.
+      orb.velocity.y -= XP_GRAVITY * dt;
+      const toPlayer = new THREE.Vector3().subVectors(target, orb.position);
+      const followDistance = toPlayer.length();
+      if (followDistance > TIMER_EPSILON && followDistance < FOLLOW_RADIUS) {
+        const normalizedDistance = followDistance / FOLLOW_RADIUS;
+        const power = 1 - normalizedDistance;
+        orb.velocity.addScaledVector(
+          toPlayer.normalize(),
+          FOLLOW_ACCELERATION * power * power * dt,
+        );
+      }
+
       orb.position.addScaledVector(orb.velocity, dt);
 
       const bx = Math.floor(orb.position.x);
@@ -81,23 +96,20 @@ export class XPSystem {
         orb.velocity.z *= 0.7;
       }
 
-      orb.velocity.x *= Math.pow(0.98, dt * TICKS_PER_SECOND);
-      orb.velocity.z *= Math.pow(0.98, dt * TICKS_PER_SECOND);
+      const drag = Math.pow(0.98, dt * TICKS_PER_SECOND);
+      orb.velocity.x *= drag;
+      orb.velocity.y *= drag;
+      orb.velocity.z *= drag;
 
-      const dist = orb.position.distanceTo(target);
-      if (dist < PICKUP_RADIUS) {
-        const pullDir = new THREE.Vector3().subVectors(target, orb.position).normalize();
-        const speed = Math.max(4.5, (PICKUP_RADIUS - dist) * 6.5);
-        orb.position.addScaledVector(pullDir, speed * dt);
-
-        if (dist < TOUCH_RADIUS && this.pickupCooldown <= 0) {
-          this.addXP(orb.value);
-          this.removeOrb(id);
-          this.pickupCooldown = PLAYER_PICKUP_COOLDOWN;
-          onPickup();
-          changed = true;
-          continue;
-        }
+      // Player contact is evaluated after movement, mirroring entity collision.
+      // The two-tick player cooldown ensures only one touching orb is collected.
+      if (orb.position.distanceTo(target) < TOUCH_RADIUS && this.pickupCooldown <= 0) {
+        this.addXP(orb.value);
+        this.removeOrb(id);
+        this.pickupCooldown = PLAYER_PICKUP_COOLDOWN;
+        onPickup();
+        changed = true;
+        continue;
       }
 
       const pulse = 0.85 + Math.sin((orb.age * 8) + orb.id) * 0.12;

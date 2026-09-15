@@ -68,6 +68,7 @@ import { getBlockXpRange, rollXp, BREEDING_XP_RANGE, FISHING_XP_RANGE } from '..
 import type { WorldTickPayload, WorldTickType } from '../world/WorldTick';
 import { getAttackCooldownSeconds } from '../items/CombatAttributes';
 import { calculateMeleeDamage, getSweepDamage, isChargedMeleeAttack } from '../systems/CombatRules';
+import { applyDamageProtection, baseArmorApplies } from '../systems/DamageRules';
 
 const HONEY_BOTTLE_ID = 454;
 const GLASS_BOTTLE_ID = 374;
@@ -4414,37 +4415,33 @@ export class Game {
       return;
     }
 
-    // P3.3: Resistance effect reduces all damage (20% per level).
-    let finalDamage = amount * (1 - PotionEffects.getResistanceReduction(this.potionEffects.getLevel('resistance')));
+    const protectionLevels = this.inventory.armor.reduce((totals, item) => {
+      totals.protection += EnchantSystem.getLevel(item, 'protection');
+      totals.fireProtection += EnchantSystem.getLevel(item, 'fire_protection');
+      totals.blastProtection += EnchantSystem.getLevel(item, 'blast_protection');
+      totals.projectileProtection += EnchantSystem.getLevel(item, 'projectile_protection');
+      totals.featherFalling += EnchantSystem.getLevel(item, 'feather_falling');
+      return totals;
+    }, {
+      protection: 0,
+      fireProtection: 0,
+      blastProtection: 0,
+      projectileProtection: 0,
+      featherFalling: 0,
+    });
+
     const defense = this.inventory.getTotalArmorDefense();
+    const toughness = this.inventory.getTotalArmorToughness();
+    let finalDamage = applyDamageProtection(amount, type, defense, toughness, protectionLevels);
 
-    if (type === 'mob' || type === 'projectile' || type === 'fall') {
-      const reduction = Math.min(0.8, defense * 0.04);
-      const protectionReduction = this.inventory.armor.reduce((sum, item) => {
-        return sum + EnchantSystem.getProtectionReduction(EnchantSystem.getLevel(item, 'protection'));
-      }, 0);
-      const projectileReduction = type === 'projectile'
-        ? this.inventory.armor.reduce((sum, item) => {
-          return sum + EnchantSystem.getProjectileProtectionReduction(EnchantSystem.getLevel(item, 'projectile_protection'));
-        }, 0)
-        : 0;
-      finalDamage = Math.max(1, finalDamage * (1 - Math.min(0.9, reduction + protectionReduction + projectileReduction)));
+    // Starvation is tagged bypasses_effects in Java; other project damage kinds
+    // are reduced by Resistance after the armor-dependent calculation.
+    if (type !== 'starve') {
+      finalDamage *= 1 - PotionEffects.getResistanceReduction(this.potionEffects.getLevel('resistance'));
+    }
 
-      if (defense > 0) {
-        this.inventory.damageArmor(1);
-      }
-    } else if (type === 'lava' || type === 'fire') {
-      const protectionReduction = this.inventory.armor.reduce((sum, item) => {
-        return sum + EnchantSystem.getProtectionReduction(EnchantSystem.getLevel(item, 'protection'))
-          + EnchantSystem.getFireProtectionReduction(EnchantSystem.getLevel(item, 'fire_protection'));
-      }, 0);
-      finalDamage = Math.max(1, finalDamage * (1 - Math.min(0.9, protectionReduction)));
-    } else if (type === 'explosion') {
-      const protectionReduction = this.inventory.armor.reduce((sum, item) => {
-        return sum + EnchantSystem.getProtectionReduction(EnchantSystem.getLevel(item, 'protection'))
-          + EnchantSystem.getBlastProtectionReduction(EnchantSystem.getLevel(item, 'blast_protection'));
-      }, 0);
-      finalDamage = Math.max(1, finalDamage * (1 - Math.min(0.9, protectionReduction)));
+    if (baseArmorApplies(type) && defense > 0 && finalDamage > 0) {
+      this.inventory.damageArmor(1);
     }
 
     // P3.3: Absorption absorbs damage before health.

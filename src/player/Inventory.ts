@@ -1,6 +1,7 @@
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { EnchantSystem } from '../systems/EnchantSystem';
+import { getArmorToughness } from '../items/ArmorAttributes';
 
 export const INVENTORY_SIZE = 36;  // 0-8 = hotbar, 9-35 = main
 export const HOTBAR_SIZE = 9;
@@ -241,6 +242,19 @@ export class Inventory {
           total += def.armorDefense;
         }
       }
+    }
+    return total;
+  }
+
+  /** Get total Java armor toughness from equipped pieces. */
+  getTotalArmorToughness(): number {
+    if (!this.armor || !Array.isArray(this.armor)) {
+      this.armor = new Array(ARMOR_SLOTS).fill(null);
+    }
+    let total = 0;
+    for (const item of this.armor) {
+      if (!item) continue;
+      total += getArmorToughness(ItemRegistry.get(item.id)?.name);
     }
     return total;
   }

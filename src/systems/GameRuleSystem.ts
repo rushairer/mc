@@ -58,9 +58,9 @@ export class GameRuleSystem {
   adjustDamageForDifficulty(baseDamage: number, isHostile: boolean): number {
     if (!isHostile) return baseDamage;
     if (this.difficulty === 'peaceful') return 0;
-    if (this.difficulty === 'easy') return Math.max(1, Math.floor(baseDamage * 0.5));
+    if (this.difficulty === 'easy') return Math.min(baseDamage / 2 + 1, baseDamage);
     if (this.difficulty === 'normal') return baseDamage;
-    if (this.difficulty === 'hard') return Math.max(1, Math.floor(baseDamage * 1.5));
+    if (this.difficulty === 'hard') return baseDamage * 1.5;
     return baseDamage;
   }
 

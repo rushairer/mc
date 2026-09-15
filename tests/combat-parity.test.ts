@@ -9,6 +9,7 @@ import {
   calculateMeleeDamage,
   getBaseDamageCooldownScale,
   getEnchantmentDamageCooldownScale,
+  getSweepDamage,
   isChargedMeleeAttack,
 } from '../src/systems/CombatRules';
 
@@ -101,4 +102,15 @@ test('critical hits multiply base damage but not enchantment bonus', () => {
     critical: true,
   });
   close(damage, 20.50416, 1e-5);
+});
+
+test('sweep side hits deal exactly one damage without Sweeping Edge', () => {
+  assert.equal(getSweepDamage(4, 0), 1);
+  assert.equal(getSweepDamage(20, 0), 1);
+});
+
+test('Sweeping Edge transfer formula is ready for later enchantment coverage', () => {
+  close(getSweepDamage(8, 1), 5);
+  close(getSweepDamage(8, 2), 1 + 16 / 3);
+  close(getSweepDamage(8, 3), 7);
 });

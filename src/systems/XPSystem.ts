@@ -22,6 +22,7 @@ const TOUCH_RADIUS = 0.65;
 const DESPAWN_TIME = 300;
 const PLAYER_PICKUP_COOLDOWN = 0.1; // 2 game ticks
 const TICKS_PER_SECOND = 20;
+const TIMER_EPSILON = 1e-9;
 
 export class XPSystem {
   private scene: THREE.Scene;
@@ -55,6 +56,9 @@ export class XPSystem {
     const target = playerPos.clone().add(new THREE.Vector3(0, 0.9, 0));
     let changed = false;
     this.pickupCooldown = Math.max(0, this.pickupCooldown - dt);
+    if (this.pickupCooldown < TIMER_EPSILON) {
+      this.pickupCooldown = 0;
+    }
 
     for (const [id, orb] of this.orbs) {
       orb.age += dt;

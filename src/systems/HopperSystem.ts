@@ -6,6 +6,9 @@ import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
 import type { ItemStack, BlockFacing, BlockMetadata } from '../types';
 
+const HOPPER_TRANSFER_COOLDOWN = 0.4; // 8 game ticks at 20 TPS
+const TIMER_EPSILON = 1e-9;
+
 export class HopperSystem {
   private chunks: ChunkManager;
   private droppedItems: DroppedItemSystem;
@@ -26,11 +29,14 @@ export class HopperSystem {
         const def = BlockRegistry.get(blockId);
         if (!def || def.name !== 'hopper') continue;
 
-        // Dec cooldown
+        // Decrement the 8-game-tick transfer cooldown. When the remaining
+        // cooldown reaches zero exactly on this update, vanilla permits a new
+        // transfer immediately instead of idling for one extra render frame.
         let cooldown = metadata.transferCooldown ?? 0;
         if (cooldown > 0) {
-          metadata.transferCooldown = cooldown - dt;
-          continue;
+          cooldown = Math.max(0, cooldown - dt);
+          metadata.transferCooldown = cooldown;
+          if (cooldown > TIMER_EPSILON) continue;
         }
 
         // If redstone powered, hopper is locked
@@ -53,7 +59,7 @@ export class HopperSystem {
         // Try transfer
         const transferred = this.tickHopper(worldX, worldY, worldZ, metadata);
         if (transferred) {
-          metadata.transferCooldown = 0.4; // 8 game ticks (0.4 seconds)
+          metadata.transferCooldown = HOPPER_TRANSFER_COOLDOWN;
           anyTransfer = true;
         }
       }
@@ -199,8 +205,6 @@ export class HopperSystem {
 
   private pullFromDroppedItems(hx: number, hy: number, hz: number, hopperInventory: (ItemStack | null)[]): boolean {
     for (const [id, item] of this.droppedItems.items) {
-      if (item.pickupDelay > 0) continue;
-
       const px = item.position.x;
       const py = item.position.y;
       const pz = item.position.z;
@@ -210,7 +214,9 @@ export class HopperSystem {
         py >= hy + 0.8 && py <= hy + 1.8 &&
         pz >= hz - 0.2 && pz <= hz + 1.2
       ) {
-        const addedCount = this.pushItem(hopperInventory, { id: item.itemId, count: 1 });
+        // Hopper suction is independent from the player's pickupDelay and can
+        // absorb as much of one item entity stack as its five slots can accept.
+        const addedCount = this.pushItem(hopperInventory, { id: item.itemId, count: item.count });
         if (addedCount > 0) {
           item.count -= addedCount;
           if (item.count <= 0) {

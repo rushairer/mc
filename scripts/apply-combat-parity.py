@@ -35,12 +35,27 @@ replace_once(
 replace_once(
     "src/engine/Game.ts",
     "import type { WorldTickPayload, WorldTickType } from '../world/WorldTick';\n",
-    "import type { WorldTickPayload, WorldTickType } from '../world/WorldTick';\nimport { getAttackCooldownSeconds } from '../items/CombatAttributes';\nimport { calculateMeleeDamage, isChargedMeleeAttack } from '../systems/CombatRules';\n",
+    "import type { WorldTickPayload, WorldTickType } from '../world/WorldTick';\nimport { getAttackCooldownSeconds } from '../items/CombatAttributes';\nimport { calculateMeleeDamage, getSweepDamage, isChargedMeleeAttack } from '../systems/CombatRules';\n",
 )
 replace_once(
     "src/engine/Game.ts",
     "    const fullAttackDamage = baseAttackDamage + EnchantSystem.getSharpnessBonus(\n      EnchantSystem.getLevel(selectedItemStack, 'sharpness')\n    ) + PotionEffects.getMeleeDamageModifier(\n      this.potionEffects.getLevel('strength'),\n      this.potionEffects.getLevel('weakness'),\n    );\n    const attackCooldownDuration = this.getAttackCooldownDuration(selectedItemId);\n    const attackCooldownProgress = this.getAttackCooldownProgress();\n    const attackDamage = fullAttackDamage * this.getAttackCooldownDamageScale();\n    const isCriticalMelee = attackCooldownProgress >= 0.9 && this.isCriticalMeleeAttack();\n    const meleeAttackDamage = isCriticalMelee ? attackDamage * 1.5 : attackDamage;",
     "    const attributeAttackDamage = baseAttackDamage + PotionEffects.getMeleeDamageModifier(\n      this.potionEffects.getLevel('strength'),\n      this.potionEffects.getLevel('weakness'),\n    );\n    const enchantmentAttackDamage = EnchantSystem.getSharpnessBonus(\n      EnchantSystem.getLevel(selectedItemStack, 'sharpness')\n    );\n    const attackCooldownDuration = this.getAttackCooldownDuration(selectedItemId);\n    const attackCooldownProgress = this.getAttackCooldownProgress();\n    const isCriticalMelee = isChargedMeleeAttack(attackCooldownProgress) && this.isCriticalMeleeAttack();\n    const meleeAttackDamage = calculateMeleeDamage({\n      baseAttributeDamage: attributeAttackDamage,\n      enchantmentDamage: enchantmentAttackDamage,\n      cooldownProgress: attackCooldownProgress,\n      critical: isCriticalMelee,\n    });",
+)
+replace_once(
+    "src/engine/Game.ts",
+    "            this.trySweepAttack(\n              mobHit.mob,\n              attackDamage,\n              attackCooldownProgress,\n              isHoldingSword\n            );",
+    "            this.trySweepAttack(\n              mobHit.mob,\n              getSweepDamage(attributeAttackDamage + enchantmentAttackDamage, 0),\n              attackCooldownProgress,\n              isHoldingSword\n            );",
+)
+replace_once(
+    "src/engine/Game.ts",
+    "  private trySweepAttack(\n    primaryMob: Mob,\n    attackDamage: number,\n    attackCooldownProgress: number,\n    isHoldingSword: boolean\n  ) {",
+    "  private trySweepAttack(\n    primaryMob: Mob,\n    sweepDamage: number,\n    attackCooldownProgress: number,\n    isHoldingSword: boolean\n  ) {",
+)
+replace_once(
+    "src/engine/Game.ts",
+    "    const sweepDamage = Math.max(1, attackDamage * 0.35);\n",
+    "",
 )
 replace_once(
     "src/engine/Game.ts",

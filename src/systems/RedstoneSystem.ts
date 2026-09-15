@@ -32,7 +32,7 @@ export interface RedstoneComponent {
   signal: number;
   facing: BlockFacing;
   state: boolean; // on/off for torch, extended for piston, mode for comparator, active pulse for observer
-  /** P3.6 — repeater output delay in ticks (1-4). */
+  /** Repeater delay setting in redstone ticks (1-4); one redstone tick is two game ticks. */
   delayTicks?: number;
 }
 
@@ -50,7 +50,7 @@ interface PendingRepeaterSignal {
 export class RedstoneSystem {
   private components: Map<string, RedstoneComponent> = new Map();
   private tickScheduler = new TickScheduler<'redstone'>(20);
-  /** P3.6 — scheduled repeater outputs (keyed by position). */
+  /** Scheduled repeater outputs keyed by position and absolute game tick. */
   private pendingRepeaters: Map<string, PendingRepeaterSignal> = new Map();
   private stepIndex = 0;
 
@@ -64,7 +64,7 @@ export class RedstoneSystem {
     z: number,
     type: RedstoneComponent['type'],
     facing: RedstoneComponent['facing'] = 'north',
-    initialState?: Partial<Pick<RedstoneComponent, 'signal' | 'state'>>
+    initialState?: Partial<Pick<RedstoneComponent, 'signal' | 'state' | 'delayTicks'>>
   ) {
     const key = RedstoneSystem.key(x, y, z);
     this.components.set(key, {
@@ -75,11 +75,14 @@ export class RedstoneSystem {
       signal: initialState?.signal ?? 0,
       facing,
       state: initialState?.state ?? false,
+      ...(type === 'repeater' ? { delayTicks: Math.max(1, Math.min(4, initialState?.delayTicks ?? 1)) } : {}),
     });
   }
 
   unregister(x: number, y: number, z: number) {
-    this.components.delete(RedstoneSystem.key(x, y, z));
+    const key = RedstoneSystem.key(x, y, z);
+    this.components.delete(key);
+    this.pendingRepeaters.delete(key);
   }
 
   get(x: number, y: number, z: number): RedstoneComponent | undefined {
@@ -100,13 +103,13 @@ export class RedstoneSystem {
     const steps = fixedSteps ?? this.tickScheduler.advance(dt).steps;
     if (steps === 0) return;
     for (let fixedTick = 0; fixedTick < steps; fixedTick++) {
-      this.stepIndex = fixedTick;
+      this.stepIndex += 1;
 
-      // P3.6: fire scheduled repeater outputs due at this step.
+      // Fire scheduled repeater outputs due on or before this absolute game tick.
       for (const [key, pending] of this.pendingRepeaters) {
-        if (pending.dueStep !== fixedTick) continue;
+        if (pending.dueStep > this.stepIndex) continue;
         const comp = this.components.get(key);
-        if (comp) {
+        if (comp && comp.type === 'repeater' && !this.isRepeaterLocked(comp)) {
           comp.signal = pending.signal;
           comp.state = pending.signal > 0;
           onComponentChange?.(comp);
@@ -315,8 +318,8 @@ export class RedstoneSystem {
     }
 
     this.propagate(queue, getBlock, setBlock, triggerSound, onComponentChange);
-    // P3.6: schedule repeater outputs when their input power changes.
-    this.syncRepeaterInputs(onComponentChange);
+    // Schedule repeater outputs when their input power changes.
+    this.syncRepeaterInputs();
 
     // Update comparators based on stable inputs
     if (getBlockMeta) {
@@ -440,15 +443,14 @@ export class RedstoneSystem {
           queue.push(neighbor);
           visited.add(key);
         } else if (neighbor.type === 'repeater') {
-          if (this.isRepeaterInput(neighbor, current) && !neighbor.state) {
-            // P3.6: schedule the output after the repeater's delay (1-4 ticks).
-            const delay = Math.max(1, Math.min(4, neighbor.delayTicks ?? 1));
-            const key = RedstoneSystem.key(neighbor.x, neighbor.y, neighbor.z);
-            const existing = this.pendingRepeaters.get(key);
-            if (!existing || existing.dueStep > this.stepIndex + delay) {
-              this.pendingRepeaters.set(key, { dueStep: this.stepIndex + delay, signal: 15 });
+          if (this.isRepeaterInput(neighbor, current) && !this.isRepeaterLocked(neighbor) && !neighbor.state) {
+            const dueStep = this.stepIndex + this.getRepeaterDelayGameTicks(neighbor);
+            const repeaterKey = RedstoneSystem.key(neighbor.x, neighbor.y, neighbor.z);
+            const existing = this.pendingRepeaters.get(repeaterKey);
+            if (!existing || existing.dueStep > dueStep) {
+              this.pendingRepeaters.set(repeaterKey, { dueStep, signal: 15 });
             }
-            visited.add(key);
+            visited.add(repeaterKey);
           }
         } else if (neighbor.type === 'piston') {
           if (newSignal > 0 && !neighbor.state) {
@@ -609,13 +611,35 @@ export class RedstoneSystem {
   }
 
   private isRepeaterInput(repeater: RedstoneComponent, source: RedstoneComponent): boolean {
-    const dx = Math.abs(repeater.x - source.x);
-    const dy = Math.abs(repeater.y - source.y);
-    const dz = Math.abs(repeater.z - source.z);
-    return dx + dy + dz === 1;
+    const back = this.getFacingDirection(this.getOppositeFacing(repeater.facing));
+    return source.x === repeater.x + back[0]
+      && source.y === repeater.y + back[1]
+      && source.z === repeater.z + back[2];
   }
 
-  /** P3.6 — set a repeater's output delay (1-4 ticks) from the game loop. */
+  private getRepeaterDelayGameTicks(repeater: RedstoneComponent): number {
+    const redstoneTicks = Math.max(1, Math.min(4, repeater.delayTicks ?? 1));
+    return redstoneTicks * 2;
+  }
+
+  private isRepeaterLocked(repeater: RedstoneComponent): boolean {
+    if (repeater.type !== 'repeater') return false;
+    const dirs = this.getComparatorDirections(repeater.facing);
+    for (const side of [dirs.left, dirs.right]) {
+      const source = this.get(repeater.x + side[0], repeater.y + side[1], repeater.z + side[2]);
+      if (!source || source.signal <= 0) continue;
+      if (source.type !== 'repeater' && source.type !== 'comparator') continue;
+      const output = this.getFacingDirection(source.facing);
+      if (source.x + output[0] === repeater.x
+        && source.y + output[1] === repeater.y
+        && source.z + output[2] === repeater.z) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Set a repeater's output delay setting (1-4 redstone ticks). */
   setRepeaterDelay(x: number, y: number, z: number, delayTicks: number) {
     const comp = this.components.get(RedstoneSystem.key(x, y, z));
     if (comp && comp.type === 'repeater') {
@@ -623,27 +647,29 @@ export class RedstoneSystem {
     }
   }
 
-  /**
-   * P3.6 — schedule repeater outputs when their input power changes and no
-   * transition is already pending.
-   */
-  private syncRepeaterInputs(onComponentChange?: (component: RedstoneComponent) => void) {
+  /** Schedule repeater outputs when their rear input changes. */
+  private syncRepeaterInputs() {
     for (const comp of this.components.values()) {
       if (comp.type !== 'repeater') continue;
       const key = RedstoneSystem.key(comp.x, comp.y, comp.z);
+      if (this.isRepeaterLocked(comp)) {
+        this.pendingRepeaters.delete(key);
+        continue;
+      }
       const pending = this.pendingRepeaters.get(key);
-      // The input side is behind the repeater's facing direction.
       const back = this.getFacingDirection(this.getOppositeFacing(comp.facing));
       const inputComp = this.get(comp.x + back[0], comp.y + back[1], comp.z + back[2]);
       const powered = !!inputComp && inputComp.signal > 0;
       if (pending) {
-        // Keep a redundant on-transition; overwrite when the direction flips.
+        // Keep a redundant transition; replace it when the input direction flips.
         if ((pending.signal > 0) === powered) continue;
       } else if (comp.state === powered) {
         continue;
       }
-      const delay = Math.max(1, Math.min(4, comp.delayTicks ?? 1));
-      this.pendingRepeaters.set(key, { dueStep: this.stepIndex + delay, signal: powered ? 15 : 0 });
+      this.pendingRepeaters.set(key, {
+        dueStep: this.stepIndex + this.getRepeaterDelayGameTicks(comp),
+        signal: powered ? 15 : 0,
+      });
     }
   }
 
@@ -674,6 +700,8 @@ export class RedstoneSystem {
 
   dispose() {
     this.components.clear();
+    this.pendingRepeaters.clear();
     this.tickScheduler.clear();
+    this.stepIndex = 0;
   }
 }

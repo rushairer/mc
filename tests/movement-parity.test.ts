@@ -21,5 +21,5 @@ test('sneaking remains thirty percent of walking speed', () => {
 
 test('jump impulse corresponds to 0.42 blocks per game tick', () => {
   assert.equal(TICK_RATE, 20);
-  assert.equal(JUMP_VELOCITY / TICK_RATE, 0.42);
+  assert.ok(Math.abs(JUMP_VELOCITY / TICK_RATE - 0.42) < 1e-12);
 });

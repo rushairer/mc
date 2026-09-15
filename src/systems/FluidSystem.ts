@@ -13,6 +13,8 @@ export interface FluidTickAccess {
   getBlockMeta(x: number, y: number, z: number): BlockMetadata | undefined;
   setBlock(x: number, y: number, z: number, id: number): void;
   setBlockMeta(x: number, y: number, z: number, meta: BlockMetadata | null, markDirty?: boolean): void;
+  /** Java dimension id: Overworld=0, Nether=1, End=2. */
+  dimension?: number;
 }
 
 export interface FluidTickResult {
@@ -20,6 +22,14 @@ export interface FluidTickResult {
   next: FluidTickPosition[];
   delayTicks: number;
 }
+
+type FluidType = 'water' | 'lava';
+
+type TargetFluidState = {
+  level: number;
+  type: FluidType;
+  source: boolean;
+};
 
 /** Stateless fluid rules. Pending work lives in the shared world TickScheduler. */
 export class FluidSystem {
@@ -46,7 +56,7 @@ export class FluidSystem {
     const isAir = baseId === 0;
     if (!isWater && !isLava && !isAir) return { changed: false, next: [], delayTicks: 5 };
 
-    let fluidType: 'water' | 'lava' | null = null;
+    let fluidType: FluidType | null = null;
     let currentLevel = 0;
     let isSource = false;
 
@@ -57,7 +67,7 @@ export class FluidSystem {
     } else if (isLava) {
       fluidType = 'lava';
       isSource = baseId === 11;
-      currentLevel = isSource ? 8 : (access.getBlockMeta(x, y, z)?.fluidLevel ?? 4);
+      currentLevel = isSource ? 8 : (access.getBlockMeta(x, y, z)?.fluidLevel ?? this.getLavaHorizontalLevel(access.dimension));
     }
 
     if (fluidType) {
@@ -67,7 +77,7 @@ export class FluidSystem {
         return {
           changed,
           next: Array.from(next.values()),
-          delayTicks: fluidType === 'lava' ? 10 : 5,
+          delayTicks: this.getDelayTicks(fluidType, access.dimension),
         };
       }
     }
@@ -77,31 +87,69 @@ export class FluidSystem {
       return {
         changed,
         next: Array.from(next.values()),
-        delayTicks: fluidType === 'lava' ? 10 : 5,
+        delayTicks: this.getDelayTicks(fluidType!, access.dimension),
       };
     }
 
-    const target = this.calculateTargetLevel(x, y, z, access.getBlock, access.getBlockMeta);
-    if (target.level !== currentLevel || (target.level > 0 && target.type !== fluidType)) {
-      if (target.level === 0) {
+    const target = this.calculateTargetState(
+      x,
+      y,
+      z,
+      access.getBlock,
+      access.getBlockMeta,
+      access.dimension,
+    );
+    const targetIsCurrentSource = target.source && (
+      (target.type === 'water' && baseId === 9) ||
+      (target.type === 'lava' && baseId === 11)
+    );
+    const targetMatchesCurrentFlow = !target.source && target.type === fluidType && target.level === currentLevel;
+
+    if (target.level === 0) {
+      if (!isAir) {
         setBlock(x, y, z, 0);
         access.setBlockMeta(x, y, z, null);
-      } else {
-        const flowId = target.type === 'water' ? 8 : 10;
-        const sourceId = target.type === 'water' ? 9 : 11;
-        setBlock(x, y, z, target.level === 8 ? sourceId : flowId);
-        access.setBlockMeta(x, y, z, { fluidLevel: target.level }, true);
+        this.enqueueNeighbors(x, y, z, enqueueNext);
       }
+    } else if (!targetIsCurrentSource && !targetMatchesCurrentFlow) {
+      const flowId = target.type === 'water' ? 8 : 10;
+      const sourceId = target.type === 'water' ? 9 : 11;
+      setBlock(x, y, z, target.source ? sourceId : flowId);
+      access.setBlockMeta(x, y, z, target.source ? null : { fluidLevel: target.level }, true);
       this.enqueueNeighbors(x, y, z, enqueueNext);
-    } else if (target.level > 0) {
-      this.spreadFromFlowing(x, y, z, target.type, target.level, access.getBlock, enqueueNext);
+    } else if (!target.source) {
+      this.spreadFromFlowing(
+        x,
+        y,
+        z,
+        target.type,
+        target.level,
+        access.getBlock,
+        enqueueNext,
+        access.dimension,
+      );
     }
 
     return {
       changed,
       next: Array.from(next.values()),
-      delayTicks: target.type === 'lava' ? 10 : 5,
+      delayTicks: this.getDelayTicks(target.level > 0 ? target.type : (fluidType ?? 'water'), access.dimension),
     };
+  }
+
+  private getDelayTicks(type: FluidType, dimension?: number): number {
+    if (type === 'water') return 5;
+    return dimension === 1 ? 10 : 30;
+  }
+
+  /** Horizontal decay from a full fluid state for Java 1.20.1. */
+  private getFlowDrop(type: FluidType, dimension?: number): number {
+    if (type === 'water') return 1;
+    return dimension === 1 ? 1 : 2;
+  }
+
+  private getLavaHorizontalLevel(dimension?: number): number {
+    return 8 - this.getFlowDrop('lava', dimension);
   }
 
   private enqueueNeighbors(
@@ -122,7 +170,7 @@ export class FluidSystem {
     x: number,
     y: number,
     z: number,
-    type: 'water' | 'lava',
+    type: FluidType,
     getBlock: (x: number, y: number, z: number) => number,
     setBlock: (x: number, y: number, z: number, id: number) => void,
   ): boolean {
@@ -136,19 +184,16 @@ export class FluidSystem {
       const neighborBaseId = getBlock(nx, ny, nz) & 0x3FF;
 
       if (type === 'water' && (neighborBaseId === 10 || neighborBaseId === 11)) {
-        // Flowing water touching the top or side of a lava source makes obsidian;
-        // flowing lava touched by water becomes cobblestone.
+        // Water touching a lava source makes obsidian; flowing lava makes cobblestone.
         setBlock(nx, ny, nz, neighborBaseId === 11 ? 49 : 4);
         return true;
       }
 
       if (type === 'lava' && (neighborBaseId === 8 || neighborBaseId === 9)) {
         if (dy === -1) {
-          // Lava flowing downward into water consumes the water cell and forms stone.
+          // Downward lava into water forms stone at the water position.
           setBlock(nx, ny, nz, 1);
         } else {
-          // Water contacting a lava source from the top/side forms obsidian; a
-          // flowing lava block in the same situation becomes cobblestone.
           setBlock(x, y, z, currentBaseId === 11 ? 49 : 4);
         }
         return true;
@@ -157,16 +202,18 @@ export class FluidSystem {
     return false;
   }
 
-  private calculateTargetLevel(
+  private calculateTargetState(
     x: number,
     y: number,
     z: number,
     getBlock: (x: number, y: number, z: number) => number,
     getBlockMeta: (x: number, y: number, z: number) => BlockMetadata | undefined,
-  ): { level: number; type: 'water' | 'lava' } {
+    dimension?: number,
+  ): TargetFluidState {
     const aboveId = getBlock(x, y + 1, z) & 0x3FF;
-    if (aboveId === 8 || aboveId === 9) return { level: 8, type: 'water' };
-    if (aboveId === 10 || aboveId === 11) return { level: 8, type: 'lava' };
+    // A full falling fluid column is still FLOWING fluid, not a source block.
+    if (aboveId === 8 || aboveId === 9) return { level: 8, type: 'water', source: false };
+    if (aboveId === 10 || aboveId === 11) return { level: 8, type: 'lava', source: false };
 
     let maxWaterLevel = 0;
     let maxLavaLevel = 0;
@@ -179,25 +226,28 @@ export class FluidSystem {
       if (baseId === 8 || baseId === 9) {
         const level = baseId === 9 ? 8 : (metadata?.fluidLevel ?? 1);
         maxWaterLevel = Math.max(maxWaterLevel, level);
-        if (level === 8) sourceWaterCount++;
+        if (baseId === 9) sourceWaterCount++;
       } else if (baseId === 10 || baseId === 11) {
         const level = baseId === 11 ? 8 : (metadata?.fluidLevel ?? 1);
         maxLavaLevel = Math.max(maxLavaLevel, level);
       }
     }
 
-    let waterTarget = Math.max(0, maxWaterLevel - 1);
-    const lavaTarget = Math.max(0, maxLavaLevel - 2);
+    // Java source conversion is a water-only rule. Lava never creates a new
+    // source from neighboring lava blocks in vanilla 1.20.1.
     if (sourceWaterCount >= 2) {
       const belowId = getBlock(x, y - 1, z) & 0x3FF;
       if (BlockRegistry.isSolid(getBlock(x, y - 1, z)) || belowId === 8 || belowId === 9) {
-        waterTarget = 8;
+        return { level: 8, type: 'water', source: true };
       }
     }
 
-    if (waterTarget >= lavaTarget && waterTarget > 0) return { level: waterTarget, type: 'water' };
-    if (lavaTarget > 0) return { level: lavaTarget, type: 'lava' };
-    return { level: 0, type: 'water' };
+    const waterTarget = Math.max(0, maxWaterLevel - this.getFlowDrop('water', dimension));
+    const lavaTarget = Math.max(0, maxLavaLevel - this.getFlowDrop('lava', dimension));
+
+    if (waterTarget >= lavaTarget && waterTarget > 0) return { level: waterTarget, type: 'water', source: false };
+    if (lavaTarget > 0) return { level: lavaTarget, type: 'lava', source: false };
+    return { level: 0, type: 'water', source: false };
   }
 
   private spreadFromSource(
@@ -219,17 +269,18 @@ export class FluidSystem {
     x: number,
     y: number,
     z: number,
-    type: 'water' | 'lava',
+    type: FluidType,
     level: number,
     getBlock: (x: number, y: number, z: number) => number,
     enqueueNext: (x: number, y: number, z: number) => void,
+    dimension?: number,
   ) {
     const belowId = getBlock(x, y - 1, z) & 0x3FF;
     if (belowId === 0 || BlockRegistry.isFluid(belowId)) {
       enqueueNext(x, y - 1, z);
       return;
     }
-    const step = type === 'water' ? 1 : 2;
+    const step = this.getFlowDrop(type, dimension);
     if (level <= step) return;
     for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
       const id = getBlock(x + dx, y, z + dz) & 0x3FF;

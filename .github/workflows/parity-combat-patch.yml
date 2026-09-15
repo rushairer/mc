@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'chore: run combat parity patch script'
+    if: "${{ github.event.head_commit.message == 'chore: execute combat parity patch' }}"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

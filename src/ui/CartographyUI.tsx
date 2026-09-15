@@ -18,16 +18,23 @@ const FILLED_MAP_ID = 358;
 const EMPTY_MAP_ID = 395;
 const PAPER_ID = 339;
 const GLASS_PANE_ID = 102;
+const MAX_MAP_SCALE = 4;
 
 export type CartographyAction = 'clone' | 'zoom' | 'lock' | null;
 
-/** P3.5 — cartography table action resolution (pure). */
+/** P3.5 — Cartography table action resolution (Java 1.20.1). */
 export function getCartographyAction(mapItem: ItemStack | null, ingredient: ItemStack | null): CartographyAction {
   if (!mapItem || !ingredient) return null;
   if (mapItem.id !== FILLED_MAP_ID || !mapItem.map) return null;
-  if (mapItem.map.locked) return null;
+
+  // A locked map can still be copied, and the copy remains locked. Locking only
+  // freezes map contents; it does not make the item uncopyable.
   if (ingredient.id === EMPTY_MAP_ID) return 'clone';
-  if (ingredient.id === PAPER_ID) return 'zoom';
+  if (mapItem.map.locked) return null;
+
+  if (ingredient.id === PAPER_ID) {
+    return mapItem.map.scale < MAX_MAP_SCALE ? 'zoom' : null;
+  }
   if (ingredient.id === GLASS_PANE_ID) return 'lock';
   return null;
 }

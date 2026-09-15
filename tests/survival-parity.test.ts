@@ -59,6 +59,16 @@ test('drowning starts one second after the 15-second air supply is exhausted', (
   assert.deepEqual(damage, [[2, 'drown']]);
 });
 
+test('drowningDamage gamerule prevents drowning damage but still drains air', () => {
+  const system = new SurvivalSystem();
+  const player = makePlayer({ oxygen: 1 });
+  const damage: Array<[number, string]> = [];
+  const rules = { getRule: (name: string) => name === 'drowningDamage' ? false : true };
+  system.update(2, player, 'survival', () => 8, (amount, type) => damage.push([amount, type]), 'normal', rules);
+  assert.equal(player.oxygen, 0);
+  assert.deepEqual(damage, []);
+});
+
 test('Respiration extends expected underwater air time instead of granting immunity', () => {
   const system = new SurvivalSystem();
   const player = makePlayer();

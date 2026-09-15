@@ -20,6 +20,29 @@ export interface CommandResult {
   message: string;
 }
 
+const DAY_TICKS = 24000;
+const TIME_PRESETS: Record<string, number> = {
+  day: 1000,
+  noon: 6000,
+  night: 13000,
+  midnight: 18000,
+  // Keep the existing convenience aliases while mapping them to their real ticks.
+  sunset: 12000,
+  sunrise: 23000,
+};
+
+const BOOLEAN_GAMERULES = [
+  'keepInventory',
+  'doMobSpawning',
+  'doDaylightCycle',
+  'doWeatherCycle',
+  'fallDamage',
+  'fireDamage',
+  'drowningDamage',
+  'naturalRegeneration',
+  'mobGriefing',
+] as const;
+
 export class CommandSystem {
   private ctx: CommandContext;
   history: string[] = [];
@@ -91,21 +114,33 @@ export class CommandSystem {
   }
 
   private cmdTime(args: string[]): CommandResult {
-    if (args.length < 1) return { success: false, message: 'Usage: /time <day|night|noon|midnight|0-1>' };
-    const val = args[0].toLowerCase();
-    let t: number;
-    switch (val) {
-      case 'day': t = 0.25; break;
-      case 'night': case 'midnight': t = 0.75; break;
-      case 'noon': t = 0.25; break;
-      case 'sunrise': t = 0; break;
-      case 'sunset': t = 0.5; break;
-      default:
-        t = parseFloat(val);
-        if (isNaN(t) || t < 0 || t > 1) return { success: false, message: 'Time must be 0-1 or day/night/noon/midnight' };
+    if (args.length < 1) return { success: false, message: 'Usage: /time set <day|night|noon|midnight|ticks>' };
+
+    // Java syntax is `/time set <value>`. Keep the old one-token shorthand as a
+    // compatibility path for existing saves/UI while using the same canonical mapping.
+    let valueArg: string;
+    if (args[0].toLowerCase() === 'set') {
+      if (args.length < 2) return { success: false, message: 'Usage: /time set <day|night|noon|midnight|ticks>' };
+      valueArg = args[1].toLowerCase();
+    } else {
+      valueArg = args[0].toLowerCase();
     }
-    this.ctx.setTimeOfDay(t);
-    return { success: true, message: `Time set to ${t}` };
+
+    const presetTicks = TIME_PRESETS[valueArg];
+    let ticks: number;
+    if (presetTicks !== undefined) {
+      ticks = presetTicks;
+    } else {
+      ticks = Number(valueArg);
+      if (!Number.isFinite(ticks) || ticks < 0) {
+        return { success: false, message: 'Time must be a non-negative tick value or day/night/noon/midnight' };
+      }
+      ticks = Math.floor(ticks);
+    }
+
+    const normalized = ((ticks % DAY_TICKS) + DAY_TICKS) % DAY_TICKS / DAY_TICKS;
+    this.ctx.setTimeOfDay(normalized);
+    return { success: true, message: `Time set to ${ticks % DAY_TICKS} ticks` };
   }
 
   private cmdWeather(args: string[]): CommandResult {
@@ -121,11 +156,9 @@ export class CommandSystem {
   private cmdGamerule(args: string[]): CommandResult {
     if (args.length < 1) return { success: false, message: 'Usage: /gamerule <ruleName> [value]' };
     const ruleName = args[0];
-    
-    // Check if rule is valid (list of allowed rules)
-    const validRules = ['keepInventory', 'doMobSpawning', 'doDaylightCycle', 'doWeatherCycle', 'fallDamage', 'fireDamage', 'mobGriefing'];
-    if (!validRules.includes(ruleName)) {
-      return { success: false, message: `Unknown gamerule: ${ruleName}. Valid rules: ${validRules.join(', ')}` };
+
+    if (!(BOOLEAN_GAMERULES as readonly string[]).includes(ruleName)) {
+      return { success: false, message: `Unknown gamerule: ${ruleName}. Valid rules: ${BOOLEAN_GAMERULES.join(', ')}` };
     }
 
     if (args.length < 2) {
@@ -146,8 +179,8 @@ export class CommandSystem {
   private cmdDifficulty(args: string[]): CommandResult {
     if (args.length < 1) return { success: false, message: 'Usage: /difficulty <peaceful|easy|normal|hard|0|1|2|3>' };
     let diff = args[0].toLowerCase();
-    
-    // Support numeric difficulties
+
+    // Preserve numeric compatibility for the browser clone's existing console.
     if (diff === '0') diff = 'peaceful';
     else if (diff === '1') diff = 'easy';
     else if (diff === '2') diff = 'normal';
@@ -164,7 +197,7 @@ export class CommandSystem {
   private cmdHelp(): CommandResult {
     return {
       success: true,
-      message: '/give <id> [count] | /tp <x> <y> <z> | /gamemode <survival|creative> | /time <day|night> | /weather <clear|rain|thunder> | /gamerule <rule> [true|false] | /difficulty <diff>'
+      message: '/give <id> [count] | /tp <x> <y> <z> | /gamemode <survival|creative> | /time set <day|night|noon|midnight|ticks> | /weather <clear|rain|thunder> | /gamerule <rule> [true|false] | /difficulty <diff>'
     };
   }
 }

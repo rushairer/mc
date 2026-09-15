@@ -37,3 +37,33 @@ test('pickup uses the expanded player collision box instead of a 2.5-block magne
   assert.equal(system.isWithinVanillaPickupBounds(new THREE.Vector3(1.31, 65, 0), player), false);
   assert.equal(system.isWithinVanillaPickupBounds(new THREE.Vector3(0, 66.31, 0), player), false);
 });
+
+test('a full donor stack can top up a compatible partial dropped stack', () => {
+  const system = new DroppedItemSystem(new THREE.Scene(), () => null) as any;
+  const receiver = system.spawnItem(1, 60, new THREE.Vector3(0, 64, 0));
+  const donor = system.spawnItem(1, 64, new THREE.Vector3(0.2, 64, 0));
+
+  system.mergeItems();
+
+  assert.equal(receiver.count, 64);
+  assert.equal(donor.count, 60);
+  assert.equal(system.items.size, 2);
+  system.dispose();
+});
+
+test('item merge search expands horizontally but not vertically', () => {
+  const horizontal = new DroppedItemSystem(new THREE.Scene(), () => null) as any;
+  const horizontalA = horizontal.spawnItem(1, 1, new THREE.Vector3(0, 64, 0));
+  horizontal.spawnItem(1, 1, new THREE.Vector3(0.7, 64, 0));
+  horizontal.mergeItems();
+  assert.equal(horizontalA.count, 2, '0.7-block horizontal separation remains mergeable');
+  assert.equal(horizontal.items.size, 1);
+  horizontal.dispose();
+
+  const vertical = new DroppedItemSystem(new THREE.Scene(), () => null) as any;
+  vertical.spawnItem(1, 1, new THREE.Vector3(0, 64, 0));
+  vertical.spawnItem(1, 1, new THREE.Vector3(0, 64.3, 0));
+  vertical.mergeItems();
+  assert.equal(vertical.items.size, 2, '0.3-block vertical separation is outside the uninflated item AABB');
+  vertical.dispose();
+});

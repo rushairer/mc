@@ -118,6 +118,7 @@ export class SurvivalSystem {
       Math.floor(player.eyePosition.z)
     );
     const isUnderwater = (headBlock & 0x3FF) === 8 || (headBlock & 0x3FF) === 9;
+    const doDrowningDamage = gamerules ? gamerules.getRule('drowningDamage') : true;
 
     if (isUnderwater) {
       const respiration = Math.max(0, getEnchantLevel('respiration'));
@@ -128,7 +129,7 @@ export class SurvivalSystem {
         const drainRate = 1 / (respiration + 1);
         player.oxygen = Math.max(0, player.oxygen - dt * drainRate);
 
-        if (player.oxygen <= 0) {
+        if (player.oxygen <= 0 && doDrowningDamage) {
           this.drownTimer += dt;
           if (this.drownTimer >= DROWNING_DAMAGE_INTERVAL) {
             damage(2, 'drown');

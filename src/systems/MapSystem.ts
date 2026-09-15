@@ -4,6 +4,7 @@ export interface MapData {
   id: number;
   centerX: number;
   centerZ: number;
+  /** Java map scale level, from 0 (1:1) through 4 (1:16). */
   scale: number;
   dimension: number;
   pixels: string[];
@@ -12,7 +13,9 @@ export interface MapData {
   locked?: boolean;
 }
 
-const MAP_SIZE = 32;
+const MAP_SIZE = 128;
+const MIN_SCALE = 0;
+const MAX_SCALE = 4;
 
 const BIOME_COLORS: Record<BiomeType, string> = {
   [BiomeType.Plains]: '#6bb34a',
@@ -28,19 +31,45 @@ const BIOME_COLORS: Record<BiomeType, string> = {
   [BiomeType.Badlands]: '#b56a3a',
 };
 
+function clampScale(scale: number): number {
+  return Math.max(MIN_SCALE, Math.min(MAX_SCALE, Math.floor(scale)));
+}
+
+function blocksPerPixel(scale: number): number {
+  return 1 << clampScale(scale);
+}
+
+/**
+ * Since Java 1.8 every map scale is snapped to a global grid whose top-left
+ * corner is `multipleOfMapWidth - 64`. This is what makes adjacent maps tile
+ * without arbitrary overlaps.
+ */
+function alignedCenter(coordinate: number, scale: number): number {
+  const width = MAP_SIZE * blocksPerPixel(scale);
+  return Math.floor((Math.floor(coordinate) + 64) / width) * width + width / 2 - 64;
+}
+
+function markerCoordinate(coordinate: number, center: number, scale: number): number {
+  const half = MAP_SIZE / 2;
+  const pixel = Math.floor((coordinate - center) / blocksPerPixel(scale)) + half;
+  return Math.max(0, Math.min(MAP_SIZE - 1, pixel));
+}
+
 export class MapSystem {
   private nextMapId = 1;
 
-  createFilledMap(worldGen: WorldGen, x: number, z: number, dimension: number, scale = 4): MapData {
-    const centerX = Math.floor(x);
-    const centerZ = Math.floor(z);
+  createFilledMap(worldGen: WorldGen, x: number, z: number, dimension: number, scale = 0): MapData {
+    const scaleLevel = clampScale(scale);
+    const sampleStride = blocksPerPixel(scaleLevel);
+    const centerX = alignedCenter(x, scaleLevel);
+    const centerZ = alignedCenter(z, scaleLevel);
     const pixels: string[] = [];
     const half = MAP_SIZE / 2;
 
     for (let py = 0; py < MAP_SIZE; py++) {
       for (let px = 0; px < MAP_SIZE; px++) {
-        const wx = Math.floor(centerX + (px - half) * scale);
-        const wz = Math.floor(centerZ + (py - half) * scale);
+        const wx = centerX + (px - half) * sampleStride;
+        const wz = centerZ + (py - half) * sampleStride;
         const biome = worldGen.getBiome(wx, wz);
         const height = worldGen.getTerrainHeight(wx, wz);
         pixels.push(this.tintForHeight(BIOME_COLORS[biome] ?? '#5f9f47', height));
@@ -51,10 +80,13 @@ export class MapSystem {
       id: this.nextMapId++,
       centerX,
       centerZ,
-      scale,
+      scale: scaleLevel,
       dimension,
       pixels,
-      playerMarker: { x: half, z: half },
+      playerMarker: {
+        x: markerCoordinate(x, centerX, scaleLevel),
+        z: markerCoordinate(z, centerZ, scaleLevel),
+      },
     };
   }
 
@@ -76,16 +108,16 @@ export class MapSystem {
   }
 
   /**
-   * Zoom out: double the scale (max 4) and re-sample the area (map + paper).
-   * Returns the updated map (the original is replaced in place by callers).
+   * Zoom out by one Java scale level (max 4) and re-sample on that scale's
+   * global grid. Returns the updated map; callers replace the original.
    */
   zoomOutMap(map: MapData, worldGen: WorldGen): MapData {
-    const scale = Math.min(4, map.scale * 2);
+    const scale = Math.min(MAX_SCALE, clampScale(map.scale) + 1);
     const reSampled = this.createFilledMap(worldGen, map.centerX, map.centerZ, map.dimension, scale);
     return { ...reSampled, locked: map.locked };
   }
 
-  /** Lock a map so it can no longer be cloned/zoomed (map + glass pane). */
+  /** Lock a map so its terrain data can no longer update or be zoomed. */
   lockMap(map: MapData): MapData {
     return { ...map, locked: true, pixels: [...map.pixels], playerMarker: { ...map.playerMarker } };
   }

@@ -15,12 +15,13 @@ interface XPOrb {
   velocity: THREE.Vector3;
   mesh: THREE.Mesh;
   age: number;
-  pickupDelay: number;
 }
 
-const PICKUP_RADIUS = 5.5;
+const PICKUP_RADIUS = 7.25;
 const TOUCH_RADIUS = 0.65;
 const DESPAWN_TIME = 300;
+const PLAYER_PICKUP_COOLDOWN = 0.1; // 2 game ticks
+const TICKS_PER_SECOND = 20;
 
 export class XPSystem {
   private scene: THREE.Scene;
@@ -29,6 +30,7 @@ export class XPSystem {
   private level = 0;
   private current = 0;
   private total = 0;
+  private pickupCooldown = 0;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -52,10 +54,10 @@ export class XPSystem {
   ) {
     const target = playerPos.clone().add(new THREE.Vector3(0, 0.9, 0));
     let changed = false;
+    this.pickupCooldown = Math.max(0, this.pickupCooldown - dt);
 
     for (const [id, orb] of this.orbs) {
       orb.age += dt;
-      orb.pickupDelay = Math.max(0, orb.pickupDelay - dt);
 
       if (orb.age >= DESPAWN_TIME) {
         this.removeOrb(id);
@@ -75,23 +77,22 @@ export class XPSystem {
         orb.velocity.z *= 0.7;
       }
 
-      orb.velocity.x *= Math.pow(0.98, dt * 60);
-      orb.velocity.z *= Math.pow(0.98, dt * 60);
+      orb.velocity.x *= Math.pow(0.98, dt * TICKS_PER_SECOND);
+      orb.velocity.z *= Math.pow(0.98, dt * TICKS_PER_SECOND);
 
-      if (orb.pickupDelay <= 0) {
-        const dist = orb.position.distanceTo(target);
-        if (dist < PICKUP_RADIUS) {
-          const pullDir = new THREE.Vector3().subVectors(target, orb.position).normalize();
-          const speed = Math.max(4.5, (PICKUP_RADIUS - dist) * 6.5);
-          orb.position.addScaledVector(pullDir, speed * dt);
+      const dist = orb.position.distanceTo(target);
+      if (dist < PICKUP_RADIUS) {
+        const pullDir = new THREE.Vector3().subVectors(target, orb.position).normalize();
+        const speed = Math.max(4.5, (PICKUP_RADIUS - dist) * 6.5);
+        orb.position.addScaledVector(pullDir, speed * dt);
 
-          if (dist < TOUCH_RADIUS) {
-            this.addXP(orb.value);
-            this.removeOrb(id);
-            onPickup();
-            changed = true;
-            continue;
-          }
+        if (dist < TOUCH_RADIUS && this.pickupCooldown <= 0) {
+          this.addXP(orb.value);
+          this.removeOrb(id);
+          this.pickupCooldown = PLAYER_PICKUP_COOLDOWN;
+          onPickup();
+          changed = true;
+          continue;
         }
       }
 
@@ -156,6 +157,7 @@ export class XPSystem {
     this.level = 0;
     this.current = 0;
     this.total = 0;
+    this.pickupCooldown = 0;
     for (const id of Array.from(this.orbs.keys())) {
       this.removeOrb(id);
     }
@@ -202,7 +204,6 @@ export class XPSystem {
       ),
       mesh,
       age: 0,
-      pickupDelay: 0.45,
     };
 
     this.orbs.set(orb.id, orb);
@@ -223,7 +224,14 @@ export class XPSystem {
   }
 
   private splitOrbValue(remaining: number): number {
-    if (remaining >= 11) return 11;
+    if (remaining >= 2477) return 2477;
+    if (remaining >= 1237) return 1237;
+    if (remaining >= 617) return 617;
+    if (remaining >= 307) return 307;
+    if (remaining >= 149) return 149;
+    if (remaining >= 73) return 73;
+    if (remaining >= 37) return 37;
+    if (remaining >= 17) return 17;
     if (remaining >= 7) return 7;
     if (remaining >= 3) return 3;
     return 1;

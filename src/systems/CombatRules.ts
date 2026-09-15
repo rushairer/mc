@@ -43,3 +43,12 @@ export function calculateMeleeDamage(input: MeleeDamageInput): number {
     * getEnchantmentDamageCooldownScale(p);
   return base + enchantment;
 }
+
+/**
+ * Secondary sweep targets take exactly 1 damage without Sweeping Edge.
+ * Sweeping Edge transfers level/(level+1) of the attack damage in addition.
+ */
+export function getSweepDamage(attackDamage: number, sweepingEdgeLevel = 0): number {
+  const level = Math.max(0, sweepingEdgeLevel);
+  return 1 + Math.max(0, attackDamage) * (level / (level + 1));
+}

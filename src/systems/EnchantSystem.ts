@@ -222,7 +222,7 @@ export const EnchantSystem = {
 
   // ─── Combat values (Java 1.20.1) ───
   getSharpnessBonus(level: number): number {
-    return level > 0 ? 1 + level * 0.5 : 0;
+    return level > 0 ? 0.5 + level * 0.5 : 0;
   },
   getSmiteBonus(level: number): number {
     return level > 0 ? 2.5 * level : 0;
@@ -231,7 +231,7 @@ export const EnchantSystem = {
     return 4 * level;
   },
   getPowerMultiplier(level: number): number {
-    return level > 0 ? 1 + 0.25 * level : 1;
+    return level > 0 ? 1.25 + 0.25 * level : 1;
   },
   getThornsChance(level: number): number {
     return Math.min(0.45, level * 0.15);

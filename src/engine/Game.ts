@@ -66,6 +66,8 @@ import { getDamageShake, normalizeDamageFlash } from '../systems/FeelRules';
 import { rollBlockLoot, rollLootTable, type LootTable } from '../world/LootSystem';
 import { getBlockXpRange, rollXp, BREEDING_XP_RANGE, FISHING_XP_RANGE } from '../world/XpRules';
 import type { WorldTickPayload, WorldTickType } from '../world/WorldTick';
+import { getAttackCooldownSeconds } from '../items/CombatAttributes';
+import { calculateMeleeDamage, getSweepDamage, isChargedMeleeAttack } from '../systems/CombatRules';
 
 const HONEY_BOTTLE_ID = 454;
 const GLASS_BOTTLE_ID = 374;
@@ -2342,17 +2344,22 @@ export class Game {
     const baseAttackDamage = isHoldingTool
       ? (ItemRegistry.get(selectedItemId)?.damage ?? 1)
       : 1;
-    const fullAttackDamage = baseAttackDamage + EnchantSystem.getSharpnessBonus(
-      EnchantSystem.getLevel(selectedItemStack, 'sharpness')
-    ) + PotionEffects.getMeleeDamageModifier(
+    const attributeAttackDamage = baseAttackDamage + PotionEffects.getMeleeDamageModifier(
       this.potionEffects.getLevel('strength'),
       this.potionEffects.getLevel('weakness'),
     );
+    const enchantmentAttackDamage = EnchantSystem.getSharpnessBonus(
+      EnchantSystem.getLevel(selectedItemStack, 'sharpness')
+    );
     const attackCooldownDuration = this.getAttackCooldownDuration(selectedItemId);
     const attackCooldownProgress = this.getAttackCooldownProgress();
-    const attackDamage = fullAttackDamage * this.getAttackCooldownDamageScale();
-    const isCriticalMelee = attackCooldownProgress >= 0.9 && this.isCriticalMeleeAttack();
-    const meleeAttackDamage = isCriticalMelee ? attackDamage * 1.5 : attackDamage;
+    const isCriticalMelee = isChargedMeleeAttack(attackCooldownProgress) && this.isCriticalMeleeAttack();
+    const meleeAttackDamage = calculateMeleeDamage({
+      baseAttributeDamage: attributeAttackDamage,
+      enchantmentDamage: enchantmentAttackDamage,
+      cooldownProgress: attackCooldownProgress,
+      critical: isCriticalMelee,
+    });
 
     if (!this.chatOpen && this.input.isMouseDown(0) && this.swordSwingTimer <= 0) {
         // First: try to attack vehicle
@@ -2418,7 +2425,7 @@ export class Game {
           } else {
             this.trySweepAttack(
               mobHit.mob,
-              attackDamage,
+              getSweepDamage(attributeAttackDamage + enchantmentAttackDamage, 0),
               attackCooldownProgress,
               isHoldingSword
             );
@@ -3559,22 +3566,7 @@ export class Game {
 
   private getAttackCooldownDuration(itemId: number): number {
     const itemDef = ItemRegistry.get(itemId);
-    if (!itemDef || !ItemRegistry.isTool(itemId)) return 0.4;
-
-    switch (itemDef.toolType) {
-      case 'axe':
-        return 1.0;
-      case 'pickaxe':
-      case 'shovel':
-      case 'hoe':
-        return 0.8;
-      case 'spear':
-        return 0.9;
-      case 'sword':
-        return 0.625;
-      default:
-        return 0.625;
-    }
+    return getAttackCooldownSeconds(itemDef?.toolType, itemDef?.toolMaterial);
   }
 
   private getAttackCooldownProgress(): number {
@@ -3599,7 +3591,7 @@ export class Game {
 
   private trySweepAttack(
     primaryMob: Mob,
-    attackDamage: number,
+    sweepDamage: number,
     attackCooldownProgress: number,
     isHoldingSword: boolean
   ) {
@@ -3612,7 +3604,6 @@ export class Game {
     forward.normalize();
 
     const playerPos = this.player.position;
-    const sweepDamage = Math.max(1, attackDamage * 0.35);
     let sweptCount = 0;
 
     for (const mob of this.mobs.mobs.values()) {

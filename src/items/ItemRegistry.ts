@@ -5,6 +5,7 @@ import { inferItemBehaviorId } from '../world/BehaviorIds';
 import { getBlockTags, getMineableCategory, getRequiredHarvestTier } from '../world/BlockTags';
 import { canHarvestBlock, getToolHarvestTier } from './ToolTierRules';
 import { rollBlockLoot } from '../world/LootSystem';
+import { getMeleeAttackDamage } from './CombatAttributes';
 
 export interface ItemDef {
   id: number; // internal runtime ID: legacy packed ID or generated bridge ID
@@ -185,7 +186,9 @@ for (const item of rawItems) {
         const stats = TOOL_STATS[toolMaterial];
         durability = stats.durability;
         miningSpeed = stats.miningSpeed;
-        damage = toolType === 'sword' || toolType === 'spear' ? stats.damage + 3 : (toolType === 'axe' ? stats.damage + 2 : stats.damage);
+        damage = toolType === 'spear'
+          ? stats.damage + 3
+          : getMeleeAttackDamage(toolType, toolMaterial);
       }
     } else if (name === 'bow' || name === 'crossbow' || name === 'trident' || name === 'mace' || name === 'brush' || name === 'fishing_rod') {
       category = 'tool';

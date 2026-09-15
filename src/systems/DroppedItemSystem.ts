@@ -3,6 +3,12 @@ import { DroppedItem } from '../entities/DroppedItem';
 import { Inventory } from '../player/Inventory';
 import { ItemRegistry } from '../items/ItemRegistry';
 
+const PLAYER_HALF_WIDTH = 0.3;
+const PLAYER_HEIGHT = 1.8;
+const PICKUP_EXPAND_XZ = 1.0;
+const PICKUP_EXPAND_Y = 0.5;
+const MERGE_RADIUS = 0.5;
+
 export class DroppedItemSystem {
   items: Map<number, DroppedItem> = new Map();
   private scene: THREE.Scene;
@@ -22,7 +28,7 @@ export class DroppedItemSystem {
     count: number,
     position: THREE.Vector3,
     velocity?: THREE.Vector3,
-    pickupDelay = 1.0
+    pickupDelay = 0.5
   ): DroppedItem {
     const item = new DroppedItem(
       itemId,
@@ -53,55 +59,46 @@ export class DroppedItemSystem {
     playPickupSound: () => void,
     onInventoryChange: () => void
   ) {
-    // 1. Update each item
     for (const [id, item] of this.items) {
       item.update(dt, isSolidBlock);
 
-      // Despawn item if age exceeds 300s (5 minutes)
       if (item.age >= 300) {
         this.removeItem(id);
         continue;
       }
 
-      // 2. Pickup check & Magnet effect
-      if (item.pickupDelay <= 0) {
-        // Distance to player feet/center (player is at playerPos)
-        // Adjust for player height: player position is at feet
-        const dist = item.position.distanceTo(playerPos);
-        if (dist < 2.5) {
-          // Magnet effect: pull towards player center/torso
-          const targetPos = playerPos.clone().add(new THREE.Vector3(0, 0.8, 0));
-          const pullDir = new THREE.Vector3().subVectors(targetPos, item.position).normalize();
-          // The closer it is, the faster it is pulled
-          const pullDist = item.position.distanceTo(targetPos);
-          const speed = Math.max(3.0, (2.5 - pullDist) * 8.0);
-          item.position.addScaledVector(pullDir, speed * dt);
-          item.mesh.position.copy(item.position);
+      if (item.pickupDelay <= 0 && this.isWithinVanillaPickupBounds(item.position, playerPos)) {
+        const remaining = inventory.addItem(item.itemId, item.count);
+        if (remaining !== item.count) {
+          playPickupSound();
+          onInventoryChange();
 
-          // Touch distance for pickup
-          if (pullDist < 0.75) {
-            const remaining = inventory.addItem(item.itemId, item.count);
-            if (remaining !== item.count) {
-              playPickupSound();
-              onInventoryChange();
-              
-              if (remaining <= 0) {
-                this.removeItem(id);
-              } else {
-                item.count = remaining;
-              }
-            }
+          if (remaining <= 0) {
+            this.removeItem(id);
+          } else {
+            item.count = remaining;
           }
         }
       }
     }
 
-    // 3. Merging logic: run every 0.5 seconds to conserve CPU
+    // Vanilla item entities periodically look for nearby compatible stacks.
     this.mergeTimer += dt;
     if (this.mergeTimer >= 0.5) {
-      this.mergeTimer = 0;
+      this.mergeTimer -= 0.5;
       this.mergeItems();
     }
+  }
+
+  private isWithinVanillaPickupBounds(itemPos: THREE.Vector3, playerPos: THREE.Vector3): boolean {
+    const dx = Math.abs(itemPos.x - playerPos.x);
+    const dy = itemPos.y - playerPos.y;
+    const dz = Math.abs(itemPos.z - playerPos.z);
+
+    return dx <= PLAYER_HALF_WIDTH + PICKUP_EXPAND_XZ
+      && dz <= PLAYER_HALF_WIDTH + PICKUP_EXPAND_XZ
+      && dy >= -PICKUP_EXPAND_Y
+      && dy <= PLAYER_HEIGHT + PICKUP_EXPAND_Y;
   }
 
   private mergeItems() {
@@ -118,18 +115,21 @@ export class DroppedItemSystem {
         if (a.itemId !== b.itemId) continue;
         if (b.count >= maxStack) continue;
 
-        const dist = a.position.distanceTo(b.position);
-        if (dist < 1.2) {
-          // Merge b into a
-          const transfer = Math.min(b.count, maxStack - a.count);
-          a.count += transfer;
-          b.count -= transfer;
+        const closeEnough = Math.abs(a.position.x - b.position.x) <= MERGE_RADIUS
+          && Math.abs(a.position.y - b.position.y) <= MERGE_RADIUS
+          && Math.abs(a.position.z - b.position.z) <= MERGE_RADIUS;
+        if (!closeEnough) continue;
 
-          if (b.count <= 0) {
-            this.removeItem(b.id);
-          }
-          if (a.count >= maxStack) break;
+        const transfer = Math.min(b.count, maxStack - a.count);
+        a.count += transfer;
+        b.count -= transfer;
+        a.pickupDelay = Math.max(a.pickupDelay, b.pickupDelay);
+        a.age = Math.min(a.age, b.age);
+
+        if (b.count <= 0) {
+          this.removeItem(b.id);
         }
+        if (a.count >= maxStack) break;
       }
     }
   }

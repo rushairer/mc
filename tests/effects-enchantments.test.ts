@@ -131,14 +131,16 @@ test('getArmorLevel finds the highest enchantment across armor', () => {
 
 // ─── Brewing integration (P3.3) ───
 
-test('new effects are brewable through data-driven recipes', () => {
+test('brewable effects follow Java 1.20.1 data-driven recipes', () => {
   const brews: Array<[number, string, string]> = [
+    [370, 'awkward', 'regeneration'],
+    [353, 'awkward', 'speed'],
+    [375, 'awkward', 'poison'],
     [377, 'awkward', 'strength'],
-    [376, 'awkward', 'hunger'],
+    [378, 'awkward', 'fire_resistance'],
     [376, 'speed', 'slowness'],
     [20218, 'awkward', 'water_breathing'],
     [414, 'awkward', 'jump_boost'],
-    [322, 'awkward', 'absorption'],
     [382, 'awkward', 'healing'],
   ];
   for (const [ingredient, inputKind, outputKind] of brews) {
@@ -146,6 +148,8 @@ test('new effects are brewable through data-driven recipes', () => {
       r.ingredientId === ingredient && r.inputKind === inputKind && r.outputKind === outputKind);
     assert.ok(recipe, `recipe ${ingredient} ${inputKind} -> ${outputKind}`);
   }
+  assert.equal(BREWING_RECIPES.some((r) => r.outputKind === 'hunger'), false, 'Hunger has no Java 1.20.1 potion recipe');
+  assert.equal(BREWING_RECIPES.some((r) => r.outputKind === 'absorption'), false, 'Absorption has no Java 1.20.1 potion recipe');
 });
 
 test('BrewingSystem round-trips a strength potion', () => {

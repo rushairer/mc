@@ -7,6 +7,8 @@ export interface GameRules {
   doWeatherCycle: boolean;
   fallDamage: boolean;
   fireDamage: boolean;
+  drowningDamage: boolean;
+  naturalRegeneration: boolean;
   mobGriefing: boolean;
 }
 
@@ -19,6 +21,8 @@ export class GameRuleSystem {
     doWeatherCycle: true,
     fallDamage: true,
     fireDamage: true,
+    drowningDamage: true,
+    naturalRegeneration: true,
     mobGriefing: true,
   };
 

@@ -127,12 +127,30 @@ export class FluidSystem {
     setBlock: (x: number, y: number, z: number, id: number) => void,
   ): boolean {
     const directions = [[0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
+    const currentBaseId = getBlock(x, y, z) & 0x3FF;
+
     for (const [dx, dy, dz] of directions) {
-      const neighborBaseId = getBlock(x + dx, y + dy, z + dz) & 0x3FF;
+      const nx = x + dx;
+      const ny = y + dy;
+      const nz = z + dz;
+      const neighborBaseId = getBlock(nx, ny, nz) & 0x3FF;
+
       if (type === 'water' && (neighborBaseId === 10 || neighborBaseId === 11)) {
-        setBlock(x + dx, y + dy, z + dz, neighborBaseId === 11 ? 49 : 4);
-      } else if (type === 'lava' && (neighborBaseId === 8 || neighborBaseId === 9)) {
-        setBlock(x, y, z, dy === -1 ? 1 : 4);
+        // Flowing water touching the top or side of a lava source makes obsidian;
+        // flowing lava touched by water becomes cobblestone.
+        setBlock(nx, ny, nz, neighborBaseId === 11 ? 49 : 4);
+        return true;
+      }
+
+      if (type === 'lava' && (neighborBaseId === 8 || neighborBaseId === 9)) {
+        if (dy === -1) {
+          // Lava flowing downward into water consumes the water cell and forms stone.
+          setBlock(nx, ny, nz, 1);
+        } else {
+          // Water contacting a lava source from the top/side forms obsidian; a
+          // flowing lava block in the same situation becomes cobblestone.
+          setBlock(x, y, z, currentBaseId === 11 ? 49 : 4);
+        }
         return true;
       }
     }

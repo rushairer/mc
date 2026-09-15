@@ -30,11 +30,11 @@ test('one repeater redstone tick equals two game ticks', () => {
   redstone.register(1, 64, 0, 'repeater', 'east', { delayTicks: 1, signal: 0, state: false });
   redstone.register(2, 64, 0, 'wire', 'up');
 
-  run(redstone, 1); // detect powered rear input and schedule the transition
+  run(redstone, 1);
   assert.equal(redstone.get(1, 64, 0)?.signal, 0);
-  run(redstone, 1); // one game tick later
+  run(redstone, 1);
   assert.equal(redstone.get(1, 64, 0)?.signal, 0);
-  const afterTwo = run(redstone, 1); // two game-tick intervals after detection
+  const afterTwo = run(redstone, 1);
   assert.equal(redstone.get(1, 64, 0)?.signal, 15);
   assert.equal(afterTwo.get('2,64,0') ?? 0, 14);
 });
@@ -73,7 +73,7 @@ test('repeater output drops off after the configured redstone delay', () => {
   assert.ok(lever);
   lever.state = false;
   lever.signal = 0;
-  run(redstone, 1); // detect falling edge
+  run(redstone, 1);
   run(redstone, 1);
   assert.equal(redstone.get(1, 64, 0)?.signal, 15);
   const after = run(redstone, 1);
@@ -83,7 +83,7 @@ test('repeater output drops off after the configured redstone delay', () => {
 
 test('repeaters only accept power from their rear input', () => {
   const redstone = new RedstoneSystem();
-  redstone.register(1, 64, -1, 'lever', 'north', { signal: 15, state: true }); // side input
+  redstone.register(1, 64, -1, 'lever', 'north', { signal: 15, state: true });
   redstone.register(1, 64, 0, 'repeater', 'east', { delayTicks: 1 });
   run(redstone, 8);
   assert.equal(redstone.get(1, 64, 0)?.signal, 0);
@@ -93,15 +93,17 @@ test('powered side diode locks a repeater in its current state', () => {
   const redstone = new RedstoneSystem();
   redstone.register(0, 64, 0, 'lever', 'north', { signal: 15, state: true });
   redstone.register(1, 64, 0, 'repeater', 'east', { delayTicks: 1 });
-  redstone.register(1, 64, -1, 'repeater', 'south', { signal: 15, state: true });
+
+  // The side repeater is itself kept powered from its rear so the locking
+  // signal persists instead of naturally turning off after its own delay.
+  redstone.register(1, 64, -2, 'lever', 'north', { signal: 15, state: true });
+  redstone.register(1, 64, -1, 'repeater', 'south', { delayTicks: 1, signal: 15, state: true });
 
   run(redstone, 8);
   assert.equal(redstone.get(1, 64, 0)?.signal, 0, 'locked repeater keeps its old output');
 
-  const lock = redstone.get(1, 64, -1);
-  assert.ok(lock);
-  lock.signal = 0;
-  lock.state = false;
+  redstone.unregister(1, 64, -1);
+  redstone.unregister(1, 64, -2);
   run(redstone, 3);
   assert.equal(redstone.get(1, 64, 0)?.signal, 15, 'unlock permits the rear input transition');
 });

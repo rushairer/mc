@@ -21,7 +21,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Wire server movement combat death and containers
+      - name: Wire and push server authority
         run: |
           node scripts/parity-111-130-runtime.mjs server
           npm run audit:parity
@@ -30,7 +30,8 @@ jobs:
           git config user.email "5195693+rushairer@users.noreply.github.com"
           git add src/server/GameServer.ts
           git commit -m "fix: wire server movement combat and container authority"
-      - name: Wire client correction and authority intents
+          git push origin HEAD:master
+      - name: Wire and push client authority intents
         run: |
           node scripts/parity-111-130-client-prep.mjs
           node scripts/parity-111-130-runtime.mjs client
@@ -38,5 +39,4 @@ jobs:
           npm run check
           git add src/server/NetworkClient.ts src/engine/Game.ts
           git commit -m "fix: wire client movement and container authority intents"
-      - name: Push staged parity work
-        run: git push origin HEAD:master
+          git push origin HEAD:master

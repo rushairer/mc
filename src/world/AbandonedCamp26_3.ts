@@ -147,7 +147,7 @@ export function buildAbandonedCampLoot26_3(
   plan: AbandonedCampPlan26_3,
   container: 'chest' | 'barrel',
 ): (ItemStack | null)[] {
-  const size = container === 'chest' ? 27 : 27;
+  const size = 27;
   const inventory: (ItemStack | null)[] = Array(size).fill(null);
   const candidates: ItemStack[] = [];
   const add = (value: ItemStack | null) => { if (value) candidates.push(value); };
@@ -209,7 +209,6 @@ function placeCampPlan(worldGen: WorldGen, chunk: Chunk, plan: AbandonedCampPlan
   const hay = BlockRegistry.getByName('hay_block')?.id ?? ItemRegistry.getByName('hay_block')?.placeBlockId;
   const centerY = plan.centerY;
 
-  // Common platform / cleared campsite.
   for (let dx = -5; dx <= 5; dx++) {
     for (let dz = -5; dz <= 5; dz++) {
       const wx = plan.centerX + dx;
@@ -221,7 +220,6 @@ function placeCampPlan(worldGen: WorldGen, chunk: Chunk, plan: AbandonedCampPlan
     }
   }
 
-  // Fallen/rack logs and a small biome-neutral shelter outline.
   for (let dx = -4; dx <= 4; dx++) {
     setWorldBlock(chunk, plan.centerX + dx, centerY + 1, plan.centerZ - 4, poplarLog);
   }
@@ -256,7 +254,7 @@ export function decorateAbandonedCampChunk26_3(worldGen: WorldGen, chunk: Chunk)
   const chunkMinZ = chunk.cz * CHUNK_SIZE;
   const centerX = chunkMinX + Math.floor(CHUNK_SIZE / 2);
   const centerZ = chunkMinZ + Math.floor(CHUNK_SIZE / 2);
-  const plans = getNearbyAbandonedCamps26_3(worldGen, centerX, centerZ, CAMP_CELL_SIZE + CAMP_RADIUS + CHUNK_SIZE);
+  const plans = getNearbyAbandonedCamps26_3(worldGen, centerX, centerZ, CAMP_CELL_SIZE + CAMP_RADIUS + CHUNK_SIZE)
     .filter(plan =>
       plan.centerX + CAMP_RADIUS >= chunkMinX
       && plan.centerX - CAMP_RADIUS < chunkMinX + CHUNK_SIZE

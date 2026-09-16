@@ -30,7 +30,7 @@ jobs:
           cache: npm
 
       - name: Apply item fundamentals patch
-        run: node scripts/patch-parity-291-310.mjs
+        run: node scripts/patch-parity-291-310-v2.mjs
 
       - name: Install dependencies
         run: npm ci

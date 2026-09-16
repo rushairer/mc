@@ -84,13 +84,13 @@ test('shield blocks a front hit after startup but not a hit from behind', () => 
   assert.equal(resolveServerShieldBlock(6, 'mob', state, 0, 2, false).blocked, false);
 });
 
-test('blocked damage drives shield durability and Java 1.20.1 axe disable', () => {
+test('blocked damage consumes shield durability but Java 26.3 axe hits do not disable it', () => {
   const state = { isBlocking: true, usingSeconds: 0.25, disabledSeconds: 0, x: 0, z: 0, yaw: 0 };
   const ordinary = resolveServerShieldBlock(2.9, 'mob', state, 0, -2, false);
   assert.deepEqual(ordinary, { blocked: true, durabilityDamage: 0, disableSeconds: 0 });
 
   const axe = resolveServerShieldBlock(6.2, 'mob', state, 0, -2, true);
-  assert.deepEqual(axe, { blocked: true, durabilityDamage: 7, disableSeconds: 5 });
+  assert.deepEqual(axe, { blocked: true, durabilityDamage: 7, disableSeconds: 0 });
 });
 
 test('disabled shield cannot block until its cooldown expires', () => {

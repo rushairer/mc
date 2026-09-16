@@ -194,7 +194,9 @@ test('210: 26.3 crafting bridge produces wool/concrete shapes and colored cushio
   const woolSlab = ItemRegistry.getByName('white_wool_slab')!.id;
   assert.deepEqual(findCraftingResult(grid(whiteWool, whiteWool, whiteWool)), { id: woolSlab, count: 6 });
 
-  const whiteConcrete = ItemRegistry.getByName('white_concrete')!.id;
+  // Legacy concrete colors are block metadata variants; use the canonical block
+  // runtime id so the modern 26.3 recipe bridge can coexist with the old item table.
+  const whiteConcrete = BlockRegistry.getByName('white_concrete')!.id;
   const concreteSlab = ItemRegistry.getByName('white_concrete_slab')!.id;
   assert.deepEqual(findCraftingResult(grid(whiteConcrete, whiteConcrete, whiteConcrete)), { id: concreteSlab, count: 6 });
 

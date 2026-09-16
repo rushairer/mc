@@ -19,9 +19,7 @@ function potion(kind: string, name: string, effect?: { id: string; level: number
 const strength = () => potion('strength', 'Potion of Strength', { id: 'strength', level: 1, duration: 180 });
 const healing = () => potion('healing', 'Potion of Healing', { id: 'healing', level: 1, duration: 0 });
 
-// ─── Modifier recipes (P3.4) ───
-
-test('redstone dust uses Java 1.20.1 potion-specific extended durations', () => {
+test('redstone dust uses potion-specific extended durations', () => {
   const modifier = POTION_MODIFIERS.find((m) => m.ingredientId === 331);
   assert.ok(modifier);
   const cases: Array<[ItemStack, number]> = [
@@ -41,7 +39,7 @@ test('redstone dust uses Java 1.20.1 potion-specific extended durations', () => 
   assert.ok(!modifier!.matches(healing()), 'instant potions cannot be extended');
 });
 
-test('glowstone dust uses Java 1.20.1 strengthened durations', () => {
+test('glowstone dust uses strengthened durations', () => {
   const modifier = POTION_MODIFIERS.find((m) => m.ingredientId === 348);
   assert.ok(modifier);
   const cases: Array<[ItemStack, number, number]> = [
@@ -62,7 +60,7 @@ test('glowstone dust uses Java 1.20.1 strengthened durations', () => {
   }
 });
 
-test('glowstone rejects effects that have no stronger Java 1.20.1 potion', () => {
+test('glowstone rejects effects that have no stronger potion', () => {
   const modifier = POTION_MODIFIERS.find((m) => m.ingredientId === 348)!;
   const fireResistance = potion('fire_resistance', 'Potion of Fire Resistance', { id: 'fire_resistance', level: 1, duration: 180 });
   const waterBreathing = potion('water_breathing', 'Potion of Water Breathing', { id: 'water_breathing', level: 1, duration: 180 });
@@ -76,7 +74,6 @@ test('gunpowder makes a splash potion', () => {
   assert.ok(modifier!.matches(strength()));
   const splash = modifier!.modify(strength());
   assert.equal(splash.potion?.variant, 'splash');
-  // Lingering potions cannot be re-splashed.
   const lingering = potion('strength', 'Lingering Potion of Strength', { id: 'strength', level: 1, duration: 180 }, 'lingering');
   assert.ok(!modifier!.matches(lingering));
 });
@@ -91,7 +88,23 @@ test("dragon's breath turns splash into lingering", () => {
   assert.ok(!modifier!.matches(strength()), 'normal potions are not lingering-able');
 });
 
-// ─── Brew action resolution (P3.4) ───
+test('Java 26.3 returns a glass bottle when the final dragon breath is brewed', () => {
+  assert.deepEqual(BrewingSystem.consumeIngredient({ id: 437, count: 1 }), {
+    ingredient: { id: 374, count: 1 },
+    returnedContainer: null,
+  });
+});
+
+test('stacked dragon breath keeps the remainder and returns one glass bottle', () => {
+  assert.deepEqual(BrewingSystem.consumeIngredient({ id: 437, count: 3 }), {
+    ingredient: { id: 437, count: 2 },
+    returnedContainer: { id: 374, count: 1 },
+  });
+  assert.deepEqual(BrewingSystem.consumeIngredient({ id: 331, count: 1 }), {
+    ingredient: null,
+    returnedContainer: null,
+  });
+});
 
 test('findBrewAction resolves modifiers before base recipes', () => {
   const bottles = [strength()];
@@ -131,7 +144,7 @@ test('modifier chain gunpowder -> dragon breath -> brew stays coherent', () => {
   assert.equal(lingering.potion?.effect?.duration, 180);
 });
 
-test('Java 1.20.1 base-effect recipes exclude non-brewable hunger and absorption potions', () => {
+test('base-effect recipes exclude non-brewable hunger and absorption potions', () => {
   const invalidKinds = new Set(['hunger', 'absorption']);
   assert.equal(BREWING_RECIPES.some((recipe) => invalidKinds.has(recipe.outputKind)), false);
 

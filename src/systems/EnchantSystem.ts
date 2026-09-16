@@ -1,8 +1,9 @@
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { getDurabilityUseChance as getJavaDurabilityUseChance } from './DurabilityRules';
 
 export type EnchantmentId =
-  | 'sharpness' | 'efficiency' | 'protection' | 'unbreaking'
+  | 'sharpness' | 'efficiency' | 'protection' | 'unbreaking' | 'mending'
   | 'power' | 'punch' | 'flame' | 'fire_aspect' | 'knockback' | 'smite'
   | 'looting' | 'fortune' | 'silk_touch' | 'feather_falling' | 'thorns'
   | 'projectile_protection' | 'blast_protection' | 'fire_protection'
@@ -107,6 +108,12 @@ const ENCHANTMENT_DEFS: Record<EnchantmentId, {
   unbreaking: {
     displayName: 'Unbreaking', maxLevel: 3, appliesTo: ['breakable'],
     description: (level) => `${Math.round((1 - EnchantSystem.getDurabilityUseChance(level)) * 100)}% chance to avoid durability loss`,
+  },
+  // Mending is a treasure enchantment in Java. It can be merged/applied via
+  // anvil/book flows, but is deliberately excluded from enchanting-table rolls.
+  mending: {
+    displayName: 'Mending', maxLevel: 1, appliesTo: [],
+    description: () => 'Repairs equipped gear using collected experience',
   },
 };
 
@@ -269,11 +276,16 @@ export const EnchantSystem = {
   },
 
   // ─── Utility ───
-  getDurabilityUseChance(level: number): number {
-    return level > 0 ? 1 / (level + 1) : 1;
+  getDurabilityUseChance(level: number, kind: 'tool' | 'armor' = 'tool'): number {
+    return getJavaDurabilityUseChance(level, kind);
   },
-  shouldUseDurability(item: ItemStack | null | undefined): boolean {
+  shouldUseDurability(
+    item: ItemStack | null | undefined,
+    random: () => number = Math.random,
+  ): boolean {
+    if (!item) return false;
     const level = this.getLevel(item, 'unbreaking');
-    return Math.random() < this.getDurabilityUseChance(level);
+    const kind = ItemRegistry.get(item.id)?.category === 'armor' ? 'armor' : 'tool';
+    return random() < this.getDurabilityUseChance(level, kind);
   },
 };

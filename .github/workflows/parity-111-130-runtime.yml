@@ -1,0 +1,41 @@
+name: Parity 111-130 Runtime Wiring
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/.parity-111-130-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  wire-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Wire server movement combat death and containers
+        run: |
+          node scripts/parity-111-130-runtime.mjs server
+          npm run audit:parity
+          npm run check
+          git config user.name "Aben"
+          git config user.email "5195693+rushairer@users.noreply.github.com"
+          git add src/server/GameServer.ts
+          git commit -m "fix: wire server movement combat and container authority"
+      - name: Wire client correction and authority intents
+        run: |
+          node scripts/parity-111-130-runtime.mjs client
+          npm run audit:parity
+          npm run check
+          git add src/server/NetworkClient.ts src/engine/Game.ts
+          git commit -m "fix: wire client movement and container authority intents"
+      - name: Push staged parity work
+        run: git push origin HEAD:master

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 import type { VillagerProfession } from '../systems/VillageSystem';
 import { shouldRunRandomMovement26_3 } from '../world/WildernessBoundChanges26_3';
+import { resolveShelfMushroomLanding26_3 } from '../world/WildernessBoundGameplay26_3';
 
 export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker' | 'pillager' | 'wither' | 'guardian' | 'vex';
 
@@ -114,6 +115,7 @@ export class Mob {
   deathTimer?: number;
   deathSoundPlayed?: boolean;
   swingTimer = 0;
+  private shelfMushroomBounceSound26_3: 'block.shelf_mushroom.bounce' | null = null;
 
   static nextId = 1;
 
@@ -1554,6 +1556,12 @@ export class Mob {
     }
   }
 
+  consumeShelfMushroomBounceSound26_3(): 'block.shelf_mushroom.bounce' | null {
+    const eventName = this.shelfMushroomBounceSound26_3;
+    this.shelfMushroomBounceSound26_3 = null;
+    return eventName;
+  }
+
   isAttractedBy(itemId: number): boolean {
     const type = this.def.type;
     if (type === 'cow' || type === 'sheep') {
@@ -1955,7 +1963,8 @@ export class Mob {
     this.position.y += this.velocity.y * dt;
     this.onGround = false;
 
-    if (this.checkCollision(getBlock, isSolidBlock, ignoredBlocks)) {
+    const resolvedShelfLanding = this.resolveShelfMushroomLanding26_3(prevY, getBlock);
+    if (!resolvedShelfLanding && this.checkCollision(getBlock, isSolidBlock, ignoredBlocks)) {
       if (this.velocity.y < 0) {
         this.position.y = Math.floor(prevY) + 0.001;
         this.onGround = true;
@@ -1978,6 +1987,30 @@ export class Mob {
       this.velocity.y = 0;
       this.onGround = true;
     }
+  }
+
+  private resolveShelfMushroomLanding26_3(
+    prevY: number,
+    getBlock: (x: number, y: number, z: number) => number,
+  ): boolean {
+    if (this.velocity.y >= 0) return false;
+    const bx = Math.floor(this.position.x);
+    const bz = Math.floor(this.position.z);
+    const minY = Math.floor(this.position.y);
+    const maxY = Math.floor(prevY);
+
+    for (let by = maxY; by >= minY; by--) {
+      const topY = by + 1;
+      if (prevY < topY || this.position.y > topY) continue;
+      const landing = resolveShelfMushroomLanding26_3(getBlock(bx, by, bz), this.velocity.y, false);
+      if (!landing.supported) continue;
+      this.position.y = topY + 0.001;
+      this.velocity.y = landing.verticalVelocity;
+      this.onGround = false;
+      if (landing.soundEvent) this.shelfMushroomBounceSound26_3 = landing.soundEvent;
+      return true;
+    }
+    return false;
   }
 
   public checkCollision(

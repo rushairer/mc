@@ -51,6 +51,7 @@ export class MobSystem {
     playerLookDir?: THREE.Vector3,
     endGenerator?: EndGenerator,
     onMobAmbientSound?: (mob: Mob, kind: 'idle') => void,
+    onMobBounceSound26_3?: (mob: Mob, eventName: 'block.shelf_mushroom.bounce') => void,
   ) {
     if (!getBlock || !hurtPlayer) return;
 
@@ -135,6 +136,11 @@ export class MobSystem {
       mob.update(dt, playerPos, getBlock, hurtPlayer, isSolidBlock, gameMode, (origin, dir, type) => {
         if (onMobShoot) onMobShoot(origin, dir, type);
       }, playerHeldItem, playerLookDir, mob.position.distanceTo(playerPos) <= RANDOM_MOVEMENT_PLAYER_RANGE_26_3);
+
+      const shelfBounceEvent26_3 = mob.consumeShelfMushroomBounceSound26_3();
+      if (shelfBounceEvent26_3 && onMobBounceSound26_3) {
+        onMobBounceSound26_3(mob, shelfBounceEvent26_3);
+      }
 
       // P4.3: ambient idle sounds for audible families near the player.
       mob.idleSoundTimer -= dt;

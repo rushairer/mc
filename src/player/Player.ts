@@ -9,6 +9,7 @@ import { ChunkManager } from '../world/ChunkManager';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { VisualResolver } from '../visual/VisualResolver';
+import { resolveShelfMushroomLanding26_3 } from '../world/WildernessBoundGameplay26_3';
 
 export class Player {
   position: THREE.Vector3;
@@ -37,11 +38,18 @@ export class Player {
   swingProgress = 0;
   private lastHeldItemId = -1;
   private lastArmorIds = [-1, -1, -1, -1];
+  private shelfMushroomBounceSound26_3: 'block.shelf_mushroom.bounce' | null = null;
 
   startSwing() {
     if (this.swingProgress === 0) {
       this.swingProgress = 0.01;
     }
+  }
+
+  consumeShelfMushroomBounceSound26_3(): 'block.shelf_mushroom.bounce' | null {
+    const eventName = this.shelfMushroomBounceSound26_3;
+    this.shelfMushroomBounceSound26_3 = null;
+    return eventName;
   }
 
   constructor(spawnX: number, spawnY: number, spawnZ: number) {
@@ -281,7 +289,8 @@ export class Player {
     this.position.y += this.velocity.y * dt;
     this.onGround = false;
 
-    if (this.checkCollision(chunks, ignoredBlocks)) {
+    const resolvedShelfLanding = this.resolveShelfMushroomLanding26_3(prevY, chunks);
+    if (!resolvedShelfLanding && this.checkCollision(chunks, ignoredBlocks)) {
       if (this.velocity.y < 0) {
         // Landing - snap to block top
         this.position.y = Math.floor(prevY) + 0.001;
@@ -306,6 +315,31 @@ export class Player {
       this.velocity.y = 0;
       this.onGround = true;
     }
+  }
+
+  private resolveShelfMushroomLanding26_3(prevY: number, chunks: ChunkManager): boolean {
+    if (this.velocity.y >= 0) return false;
+    const bx = Math.floor(this.position.x);
+    const bz = Math.floor(this.position.z);
+    const minY = Math.floor(this.position.y);
+    const maxY = Math.floor(prevY);
+
+    for (let by = maxY; by >= minY; by--) {
+      const topY = by + 1;
+      if (prevY < topY || this.position.y > topY) continue;
+      const landing = resolveShelfMushroomLanding26_3(
+        chunks.getBlock(bx, by, bz),
+        this.velocity.y,
+        this.isSneaking,
+      );
+      if (!landing.supported) continue;
+      this.position.y = topY + 0.001;
+      this.velocity.y = landing.bounced ? landing.verticalVelocity : 0;
+      this.onGround = !landing.bounced;
+      if (landing.soundEvent) this.shelfMushroomBounceSound26_3 = landing.soundEvent;
+      return true;
+    }
+    return false;
   }
 
   public checkCollision(chunks: ChunkManager, ignoredBlocks?: Set<string>): boolean {

@@ -1,5 +1,6 @@
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { BlockRegistry } from './BlockRegistry';
 import {
   DYE_COLORS,
   EXPLORER_MAP_NAMES,
@@ -167,6 +168,21 @@ export function applyShelfMushroomBounce26_3(incomingVerticalVelocity: number, s
     soundEvent: 'block.shelf_mushroom.bounce',
     verticalVelocity: Math.abs(incomingVerticalVelocity) * 0.5,
   };
+}
+
+export function isShelfMushroomBlockId26_3(blockId: number): boolean {
+  return BlockRegistry.get(blockId)?.name === 'shelf_mushroom';
+}
+
+export function resolveShelfMushroomLanding26_3(
+  blockId: number,
+  incomingVerticalVelocity: number,
+  sneaking = false,
+): ShelfMushroomBounce26_3 & { supported: boolean } {
+  if (!isShelfMushroomBlockId26_3(blockId)) {
+    return { supported: false, bounced: false, verticalVelocity: incomingVerticalVelocity };
+  }
+  return { supported: true, ...applyShelfMushroomBounce26_3(incomingVerticalVelocity, sneaking) };
 }
 
 export function isExplorerMapItemName26_3(name: string): boolean {

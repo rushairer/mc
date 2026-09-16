@@ -5,7 +5,7 @@ export const SHIELD_BLOCK_DELAY_SECONDS = 5 / 20;
 export const SHIELD_DISABLE_SECONDS = 5;
 export const SHIELD_MOVEMENT_MULTIPLIER = 0.3;
 
-/** Project damage kinds that are blockable by a Java 1.20.1 shield. */
+/** Project damage kinds that are blockable by the current Java shield rules. */
 export function shieldCanBlockDamage(kind: PlayerDamageKind): boolean {
   switch (kind) {
     case 'mob':
@@ -18,9 +18,9 @@ export function shieldCanBlockDamage(kind: PlayerDamageKind): boolean {
 }
 
 /**
- * Java 1.20.1 uses a horizontal hemisphere test. sourceToPlayer must point
- * from the damage source toward the player; a negative dot means the source is
- * in front of the player's facing direction.
+ * Shields use a horizontal hemisphere test. sourceToPlayer must point from the
+ * damage source toward the player; a negative dot means the source is in front
+ * of the player's facing direction.
  */
 export function shieldFacesSource(
   facingX: number,
@@ -45,9 +45,10 @@ export function getBlockedShieldDurabilityDamage(blockedDamage: number): number 
 }
 
 /**
- * Java 1.20.1 has MC-197537: player axe hits disable an active shield for five
- * seconds regardless of sprint/efficiency/cooldown. Preserve actual 1.20.1.
+ * Java 26.3 fixes MC-311705: axes no longer disable shields. Keep this helper
+ * as a compatibility seam for existing combat callers, but axe hits contribute
+ * no shield-disable duration on the latest-stable target.
  */
-export function getAxeShieldDisableSeconds(isAxeHit: boolean): number {
-  return isAxeHit ? SHIELD_DISABLE_SECONDS : 0;
+export function getAxeShieldDisableSeconds(_isAxeHit: boolean): number {
+  return 0;
 }

@@ -9,6 +9,7 @@ on:
       - scripts/patch-parity-291-300-v2.mjs
       - scripts/patch-parity-291-300-v3.mjs
       - scripts/patch-parity-291-300-v4.mjs
+      - scripts/patch-parity-291-300-v5.mjs
       - .github/workflows/parity-291-300.yml
 
 permissions:
@@ -26,7 +27,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: node scripts/patch-parity-291-300-v4.mjs
+      - run: node scripts/patch-parity-291-300-v5.mjs
       - run: npm run check
       - name: Commit parity batch
         run: |

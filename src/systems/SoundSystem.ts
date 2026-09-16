@@ -92,6 +92,18 @@ export class SoundSystem {
     return true;
   }
 
+  /** Route Java 26.3 named sound events through resource packs first, then a procedural fallback. */
+  playNamedEvent26_3(eventName: string, blockId = 0): boolean {
+    if (this.playFirstResourceSound([eventName])) return true;
+    if (eventName.endsWith('.break')) { this.playBlockBreak(blockId); return true; }
+    if (eventName.endsWith('.place') || eventName.endsWith('.sit')) { this.playBlockPlace(blockId); return true; }
+    if (eventName.endsWith('.step') || eventName.endsWith('.fall') || eventName.endsWith('.hit') || eventName.endsWith('.bounce') || eventName.endsWith('.get_up')) {
+      this.playStep(blockId);
+      return true;
+    }
+    return false;
+  }
+
   // ─── P4.3: material classification ───
 
   private getBreakMaterial(blockId: number): { type: 'stone' | 'wood' | 'grass' | 'sand'; bright?: boolean } {

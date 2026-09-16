@@ -73,6 +73,7 @@ const initialGameState: GameState = {
   isBlocking: false,
   bowChargeProgress: 0,
   attackCooldownProgress: 1,
+  improvedTransparency26_3: { enabled: false, backend: 'sorted-alpha', fullOit: false },
   currentDimension: 0,
   bossName: null,
   bossHealth: 0,

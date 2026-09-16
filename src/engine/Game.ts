@@ -61,7 +61,7 @@ import {
   type WorldContext,
 } from '../world/BehaviorRegistry';
 import { planBlockPlacement } from '../world/BlockPlacement';
-import { shouldPrioritizeShieldUse26_3 } from '../world/WildernessBoundChanges26_3';
+import { fallingLeafParticle26_3, shouldPrioritizeShieldUse26_3 } from '../world/WildernessBoundChanges26_3';
 import { applySaturationStew26_3 } from '../world/SuspiciousStew26_3';
 import { getButtonPressTicks } from '../world/ButtonRules';
 import { getDamageShake, normalizeDamageFlash } from '../systems/FeelRules';
@@ -201,6 +201,7 @@ export interface GameState {
   isBlocking: boolean;
   bowChargeProgress: number;
   attackCooldownProgress: number;
+  improvedTransparency26_3: { enabled: boolean; backend: 'sorted-alpha' | 'oit-pending'; fullOit: false };
   lookedAtSignText?: string[] | null;
   currentDimension: number;
   bossName: string | null;
@@ -320,7 +321,7 @@ export class Game {
   private farmingSimulationSequence = 0;
   private furnaceTickTimer = 0;
   private particleScanTimer = 0;
-  private ambientParticleSources: { x: number; y: number; z: number; type: 'torch' | 'furnace' | 'enchanting_table' }[] = [];
+  private ambientParticleSources: { x: number; y: number; z: number; type: 'torch' | 'furnace' | 'enchanting_table' | 'poplar_leaves'; color?: number; blockId?: number }[] = [];
   private savedMobsByDimension: Partial<Record<SaveDimensionId, SerializedMob[]>> = {};
   private worldTickScheduler = new TickScheduler<WorldTickType, WorldTickPayload>(20);
   private behaviors = new BehaviorRegistry<
@@ -2145,6 +2146,12 @@ export class Game {
       this.input.keys.clear();
       this.input.mouseButtons.clear();
       document.exitPointerLock();
+      this.notifyState();
+    }
+
+    // Java 26.3: rebindable F3 + X toggles Improved Transparency.
+    if (!this.chatOpen && this.input.consumeImprovedTransparencyToggle26_3()) {
+      this.renderer.toggleImprovedTransparency26_3();
       this.notifyState();
     }
 
@@ -4636,6 +4643,18 @@ export class Game {
     const dragonState = this.enderDragon.getState();
     const activeWither = Array.from(this.mobs.mobs.values()).find(m => m.def.type === 'wither' && m.health > 0);
 
+    if (this.openMapSlot !== null) {
+      const openMapStack = this.inventory.getSlot(this.openMapSlot);
+      if (openMapStack?.map) {
+        openMapStack.map = this.maps.updatePlayerMarker(
+          openMapStack.map,
+          this.player.position.x,
+          this.player.position.z,
+          THREE.MathUtils.radToDeg(this.player.yaw),
+        );
+      }
+    }
+
     const state: GameState = {
       fps: this.currentFps,
       playerX: Math.round(this.player.position.x * 10) / 10,
@@ -4685,6 +4704,7 @@ export class Game {
       isBlocking: this.isShieldBlocking,
       bowChargeProgress: this.bowChargeActive ? this.getBowPower(this.bowChargeTimer) : 0,
       attackCooldownProgress: this.getAttackCooldownProgress(),
+      improvedTransparency26_3: this.renderer.getImprovedTransparencyState26_3(),
       lookedAtSignText: this.lookedAtSignText,
       currentDimension: this.chunks.currentDimension,
       bossName: dragonState.active ? 'Ender Dragon' : (activeWither ? 'Wither' : null),
@@ -7284,7 +7304,12 @@ export class Game {
           for (let z = pz - 8; z <= pz + 8; z++) {
             const blockId = this.chunks.getBlock(x, y, z);
             const baseId = blockId & 0x3FF;
-            if (baseId === 50) { // Torch
+            const blockName = BlockRegistry.get(blockId)?.name ?? '';
+            const leafParticle = fallingLeafParticle26_3(blockName);
+            if (leafParticle) {
+              const color = leafParticle.includes(':red_') ? 0xc84b3f : leafParticle.includes(':orange_') ? 0xe68a3a : 0xe7c94c;
+              this.ambientParticleSources.push({ x, y, z, type: 'poplar_leaves', color, blockId });
+            } else if (baseId === 50) { // Torch
               this.ambientParticleSources.push({ x, y, z, type: 'torch' });
             } else if (baseId === 62) { // Lit furnace
               this.ambientParticleSources.push({ x, y, z, type: 'furnace' });
@@ -7298,7 +7323,14 @@ export class Game {
 
     const probabilityMult = dt / 0.016;
     for (const src of this.ambientParticleSources) {
-      if (src.type === 'torch') {
+      if (src.type === 'poplar_leaves') {
+        if (Math.random() < 0.012 * probabilityMult) {
+          this.particles.spawnFallingLeaf(src.x + 0.5, src.y + 0.15, src.z + 0.5, src.color ?? 0xe7c94c);
+        }
+        if (Math.random() < 0.0008 * probabilityMult) {
+          this.sound.playNamedEvent26_3('block.poplar_leaves.ambient', src.blockId ?? 0);
+        }
+      } else if (src.type === 'torch') {
         if (Math.random() < 0.05 * probabilityMult) {
           this.particles.spawnFlame(src.x + 0.5, src.y + 0.6, src.z + 0.5, 1);
         }

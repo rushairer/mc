@@ -6,7 +6,7 @@ interface Particle {
   life: number;
   maxLife: number;
   gravity?: number;
-  type?: 'break' | 'flame' | 'smoke' | 'enchant' | 'xp';
+  type?: 'break' | 'flame' | 'smoke' | 'enchant' | 'xp' | 'falling_leaf';
 }
 
 const MAX_PARTICLES = 400; // Increased limit to support rich particle environments
@@ -32,6 +32,9 @@ export class ParticleSystem {
         gravityVal = -0.5; // gentle upward drift (buoyancy)
       } else if (p.type === 'xp') {
         gravityVal = 2.0; // light gravity for experience orbs
+      } else if (p.type === 'falling_leaf') {
+        gravityVal = 0.12;
+        p.mesh.rotation.z += dt * 1.8;
       } else if (p.gravity !== undefined) {
         gravityVal = p.gravity;
       }
@@ -215,6 +218,25 @@ export class ParticleSystem {
         gravity: 0,
       });
     }
+  }
+
+  /** Java 26.3 Poplar falling-leaf particle. */
+  spawnFallingLeaf(x: number, y: number, z: number, color: number): boolean {
+    if (this.particles.length >= MAX_PARTICLES) return false;
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(this.sharedGeo, mat);
+    mesh.scale.set(1.35, 0.18, 1.0);
+    mesh.position.set(x + (Math.random() - 0.5) * 0.7, y, z + (Math.random() - 0.5) * 0.7);
+    this.scene.add(mesh);
+    this.particles.push({
+      mesh,
+      velocity: new THREE.Vector3((Math.random() - 0.5) * 0.35, -0.28 - Math.random() * 0.18, (Math.random() - 0.5) * 0.35),
+      life: 2.2 + Math.random() * 1.2,
+      maxLife: 3.4,
+      gravity: 0.12,
+      type: 'falling_leaf',
+    });
+    return true;
   }
 
   /** Spawn experience particles (XP). */

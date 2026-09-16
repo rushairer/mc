@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ImprovedTransparencyState26_3, type ImprovedTransparencySnapshot26_3 } from './Transparency26_3';
 
 export class Renderer {
   scene: THREE.Scene;
@@ -29,6 +30,7 @@ export class Renderer {
   private dayCount = 0;
   private currentMoonPhase = 0;
   private clock = new THREE.Clock();
+  private improvedTransparency26_3 = new ImprovedTransparencyState26_3();
 
   constructor(container: HTMLElement) {
     this.scene = new THREE.Scene();
@@ -106,6 +108,22 @@ export class Renderer {
 
   setDimension(dim: number) {
     this.currentDimension = dim;
+  }
+
+  setImprovedTransparency26_3(enabled: boolean): ImprovedTransparencySnapshot26_3 {
+    // Keep Three's stable sorted-alpha path until the real OIT pass lands.
+    this.renderer.sortObjects = true;
+    return this.improvedTransparency26_3.set(enabled);
+  }
+
+  toggleImprovedTransparency26_3(): ImprovedTransparencySnapshot26_3 {
+    const next = this.improvedTransparency26_3.toggle();
+    this.renderer.sortObjects = true;
+    return next;
+  }
+
+  getImprovedTransparencyState26_3(): ImprovedTransparencySnapshot26_3 {
+    return this.improvedTransparency26_3.snapshot();
   }
 
   private createSunTexture(): THREE.CanvasTexture {

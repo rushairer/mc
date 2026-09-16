@@ -1,3 +1,16 @@
+export const DEFAULT_IMPROVED_TRANSPARENCY_KEY_26_3 = 'x';
+
+export function matchesImprovedTransparencyChord26_3(
+  heldKeys: ReadonlySet<string>,
+  eventKey: string,
+  binding = DEFAULT_IMPROVED_TRANSPARENCY_KEY_26_3,
+): boolean {
+  const key = eventKey.toLowerCase();
+  const configured = binding.toLowerCase();
+  return (key === configured && heldKeys.has('f3'))
+    || (key === 'f3' && heldKeys.has(configured));
+}
+
 export class InputManager {
   keys: Set<string> = new Set();
   mouseButtons: Set<number> = new Set();
@@ -8,6 +21,8 @@ export class InputManager {
   hasEverLocked = false;
   private lastSpacePressTime = 0;
   private spaceDoubleTapped = false;
+  private improvedTransparencyKey26_3 = DEFAULT_IMPROVED_TRANSPARENCY_KEY_26_3;
+  private improvedTransparencyPulse26_3 = false;
 
   constructor(private canvas: HTMLCanvasElement) {
     document.addEventListener('keydown', this.onKeyDown);
@@ -69,7 +84,27 @@ export class InputManager {
     return tapped;
   }
 
+  setImprovedTransparencyKey26_3(key: string): void {
+    const normalized = key.trim().toLowerCase();
+    if (!normalized) throw new Error('Improved Transparency key binding cannot be empty');
+    this.improvedTransparencyKey26_3 = normalized;
+  }
+
+  getImprovedTransparencyKey26_3(): string {
+    return this.improvedTransparencyKey26_3;
+  }
+
+  consumeImprovedTransparencyToggle26_3(): boolean {
+    const pending = this.improvedTransparencyPulse26_3;
+    this.improvedTransparencyPulse26_3 = false;
+    return pending;
+  }
+
   private onKeyDown = (e: KeyboardEvent) => {
+    if (!e.repeat && matchesImprovedTransparencyChord26_3(this.keys, e.key, this.improvedTransparencyKey26_3)) {
+      this.improvedTransparencyPulse26_3 = true;
+      e.preventDefault();
+    }
     if (e.key === 'F5') {
       e.preventDefault();
     }

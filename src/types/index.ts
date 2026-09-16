@@ -146,8 +146,10 @@ export interface ItemStack {
     scale: number;
     dimension: number;
     pixels: string[];
-    playerMarker: { x: number; z: number };
+    playerMarker: { x: number; z: number; rotation?: number };
     locked?: boolean;
+    explorerItemName?: string;
+    targetMarker?: { x: number; z: number; structure: string };
   };
   book?: {
     title?: string;

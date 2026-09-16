@@ -39,7 +39,8 @@ import {
   parseServerMoveIntent,
 } from './ServerMovementRules';
 import { getDeathXpDrop, resetXpAfterDeath, shouldDropStackOnDeath } from './ServerDeathRules';
-import { canExecuteServerCommand, clampGiveCount, isValidWeatherArgument } from './ServerCommandRules';
+import { applyGiveToInventory, canExecuteServerCommand, isValidWeatherArgument, validateGiveCount } from './ServerCommandRules';
+import { getProjectileImpactBehavior } from './ServerProjectileRules';
 import {
   canPlaceHeldBlock,
   consumeHeldStack,
@@ -896,7 +897,8 @@ export class GameServer {
           const resistance = getNetheriteKnockbackResistance(target.armor);
           this.applyMeleeKnockbackToPlayer(session, target, applyKnockbackResistance(knockback.strength, resistance));
         }
-        if (knockback.sprintKnockback) session.sprinting = false;
+        // Java 26.3 RC3 (MC-311799): sprint-hitting another player no longer
+        // slows/cancels sprint on the attacker. Mob hits keep their legacy path.
         break;
       }
 
@@ -1085,30 +1087,22 @@ export class GameServer {
         if (args.length >= 1) {
           const itemId = parseInt(args[0]);
           const def = ItemRegistry.get(itemId);
-          const count = def ? clampGiveCount(args[1] ?? def.maxStackSize, def.maxStackSize) : null;
-          if (!def || count === null) break;
-
-          // Find empty slot or matching slot
-          let added = false;
-          for (let i = 0; i < 36; i++) {
-            const slot = session.inventory[i];
-            if (!slot) {
-              session.inventory[i] = { id: itemId, count };
-              added = true;
-              break;
-            } else if (slot.id === itemId && slot.count + count <= def.maxStackSize) {
-              slot.count += count;
-              added = true;
-              break;
-            }
+          const count = def ? validateGiveCount(args[1], def.maxStackSize) : null;
+          if (!def || count === null) {
+            this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: 'Invalid /give item or amount (maximum 100 stacks).' });
+            break;
           }
 
-          if (added) {
-            this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, { slots: session.inventory, armor: session.armor, offhand: session.offhand });
-            this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: `Gave ${count} of ${itemId}` });
-          } else {
-            this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: `Inventory full.` });
+          const result = applyGiveToInventory(session.inventory, itemId, count, def.maxStackSize);
+          session.inventory = result.slots;
+          let remainder = result.remainder;
+          while (remainder > 0) {
+            const dropped = Math.min(remainder, def.maxStackSize);
+            this.spawnDroppedStack({ id: itemId, count: dropped }, session.x, session.y + 0.5, session.z, session.dimension, 0);
+            remainder -= dropped;
           }
+          this.syncPlayerInventory(session);
+          this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: `Gave ${count} of ${itemId}` });
         }
         break;
       }
@@ -1119,7 +1113,12 @@ export class GameServer {
           const raw = presets[args[1]] ?? Number(args[1]);
           if (Number.isFinite(raw)) {
             const ticks = ((Math.floor(raw) % 24000) + 24000) % 24000;
-            this.gameTime = ticks / 24000;
+            const nextTime = ticks / 24000;
+            if (Math.abs(nextTime - this.gameTime) <= Number.EPSILON) {
+              this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: `Time already equals ${args[1]}` });
+              break;
+            }
+            this.gameTime = nextTime;
             this.broadcast(PacketType.S2C_TIME, { gameTime: this.gameTime });
             this.sendSystemMessage(`Set time to ${args[1]}`);
           }
@@ -2011,7 +2010,7 @@ export class GameServer {
       potionEffect: extra?.potionEffect,
     };
     this.projectiles.set(id, projectile);
-    this.broadcast(PacketType.S2C_PROJECTILE_SPAWN, {
+    this.broadcastDimension(projectile.dimension, PacketType.S2C_PROJECTILE_SPAWN, {
       id,
       type,
       x: projectile.position.x,
@@ -2025,12 +2024,47 @@ export class GameServer {
     });
   }
 
+  private resolveEnderPearlImpact(proj: ServerProjectile): boolean {
+    const behavior = getProjectileImpactBehavior(proj.type);
+    if (!behavior.teleportsOwner) return false;
+
+    const owner = proj.ownerId ? this.players.get(proj.ownerId) : undefined;
+    if (owner && owner.dimension === proj.dimension) {
+      owner.x = proj.position.x;
+      owner.y = proj.position.y;
+      owner.z = proj.position.z;
+      owner.onGround = false;
+      owner.descending = false;
+      owner.sprinting = false;
+
+      this.sendTo(owner, PacketType.S2C_POSITION_CORRECTION, {
+        x: owner.x, y: owner.y, z: owner.z, yaw: owner.yaw, pitch: owner.pitch,
+      });
+      if (behavior.resetsOwnerMomentum) {
+        this.sendTo(owner, PacketType.S2C_PLAYER_VELOCITY, { x: 0, y: 0, z: 0 });
+      }
+      if (behavior.ownerDamage > 0) {
+        this.applyServerDamageToPlayer(owner, behavior.ownerDamage, 'fall', proj.position, false);
+      }
+      this.broadcastDimension(owner.dimension, PacketType.S2C_PLAYER_MOVE, {
+        id: owner.id, x: owner.x, y: owner.y, z: owner.z, yaw: owner.yaw, pitch: owner.pitch,
+      });
+      this.broadcastDimension(owner.dimension, PacketType.S2C_SOUND, {
+        type: 'ender_pearl_teleport', x: owner.x, y: owner.y, z: owner.z,
+      });
+    }
+
+    this.projectiles.delete(proj.id);
+    this.broadcastDimension(proj.dimension, PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
+    return true;
+  }
+
   private tickProjectiles(dt: number) {
     for (const proj of this.projectiles.values()) {
       proj.age += dt;
       if (proj.age > 30) { // Despawn after 30 seconds
         this.projectiles.delete(proj.id);
-        this.broadcast(PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
+        this.broadcastDimension(proj.dimension, PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
         continue;
       }
 
@@ -2044,9 +2078,10 @@ export class GameServer {
       
       const hitBlock = this.isSolidBlock(px, py, pz, proj.dimension);
       if (hitBlock) {
+        if (this.resolveEnderPearlImpact(proj)) continue;
         this.projectiles.delete(proj.id);
-        this.broadcast(PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
-        this.broadcast(PacketType.S2C_SOUND, { type: 'bow_hit', x: proj.position.x, y: proj.position.y, z: proj.position.z });
+        this.broadcastDimension(proj.dimension, PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
+        this.broadcastDimension(proj.dimension, PacketType.S2C_SOUND, { type: 'bow_hit', x: proj.position.x, y: proj.position.y, z: proj.position.z });
         continue;
       }
 
@@ -2056,9 +2091,13 @@ export class GameServer {
         if (player.dimension === proj.dimension && player.id !== proj.ownerId) {
           const pPos = new THREE.Vector3(player.x, player.y + 0.9, player.z);
           if (proj.position.distanceTo(pPos) < 1.0) {
+            if (this.resolveEnderPearlImpact(proj)) {
+              hitSomeone = true;
+              break;
+            }
             this.applyServerDamageToPlayer(player, proj.damage, 'projectile', proj.position, false);
             this.projectiles.delete(proj.id);
-            this.broadcast(PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
+            this.broadcastDimension(proj.dimension, PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
             hitSomeone = true;
             break;
           }
@@ -2072,6 +2111,10 @@ export class GameServer {
         if (mob.dimension === proj.dimension) {
           const mPos = new THREE.Vector3(mob.position.x, mob.position.y + 0.8, mob.position.z);
           if (proj.position.distanceTo(mPos) < 0.8) {
+            if (this.resolveEnderPearlImpact(proj)) {
+              hitSomeone = true;
+              break;
+            }
             mob.health -= proj.damage;
             mob.hurtTimer = 0.5;
             this.broadcast(PacketType.S2C_MOB_STATE, {
@@ -2085,7 +2128,7 @@ export class GameServer {
               this.handleMobDeath(mob);
             }
             this.projectiles.delete(proj.id);
-            this.broadcast(PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
+            this.broadcastDimension(proj.dimension, PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
             hitSomeone = true;
             break;
           }
@@ -2095,7 +2138,7 @@ export class GameServer {
       if (hitSomeone) continue;
 
       // Broadcast movement updates
-      this.broadcast(PacketType.S2C_PROJECTILE_MOVE, {
+      this.broadcastDimension(proj.dimension, PacketType.S2C_PROJECTILE_MOVE, {
         id: proj.id,
         x: proj.position.x,
         y: proj.position.y,

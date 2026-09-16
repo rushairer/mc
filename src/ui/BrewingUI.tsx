@@ -24,6 +24,7 @@ export const BrewingUI: React.FC<BrewingUIProps> = ({ inventory, brewingSlots, o
   const [ingredient, setIngredient] = useState<ItemStack | null>(brewingSlots[3]);
   const [fuel, setFuel] = useState<ItemStack | null>(brewingSlots[4]);
 
+  // Sync state changes back to brewingSlots and notify parent
   useEffect(() => {
     brewingSlots[0] = bottles[0];
     brewingSlots[1] = bottles[1];
@@ -68,9 +69,7 @@ export const BrewingUI: React.FC<BrewingUIProps> = ({ inventory, brewingSlots, o
           const consumed = BrewingSystem.consumeIngredient(prev);
           if (consumed.returnedContainer) {
             const leftover = inventory.addStack(consumed.returnedContainer);
-            if (leftover) {
-              setHeldItem((held) => held ?? leftover);
-            }
+            if (leftover) setHeldItem((held) => held ?? leftover);
           }
           return consumed.ingredient;
         });
@@ -228,53 +227,108 @@ export const BrewingUI: React.FC<BrewingUIProps> = ({ inventory, brewingSlots, o
     );
   };
 
-  const invSlots = Array.from({ length: INVENTORY_SIZE }, (_, i) => inventory.getSlot(i));
-
   return (
-    <div className="ui-overlay" style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}>
-      <div style={{ background: '#c6c6c6', padding: '18px 20px 22px', border: '3px solid', borderColor: '#fff #555 #555 #fff', minWidth: 520, color: '#222', fontFamily: 'monospace', position: 'relative' }}>
-        <div style={{ fontSize: 16, marginBottom: 14 }}>{t('ui.brewing.title', 'Brewing Stand')}</div>
-        <button onClick={handleClose} style={{ position: 'absolute', right: 8, top: 8 }}>×</button>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', alignItems: 'end', gap: 12, marginBottom: 18 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-            {renderSlot(fuel, () => handleMachineSlotClick('fuel'), t('ui.brewing.fuel', 'Fuel'))}
+    <div style={{
+      position: 'absolute',
+      inset: 0,
+      background: 'rgba(0,0,0,0.45)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 100,
+      fontFamily: '"Courier New", monospace',
+    }}>
+      <div style={{
+        width: '680px',
+        background: '#c6c6c6',
+        border: '4px solid',
+        borderColor: '#fff #555 #555 #fff',
+        padding: '18px',
+        color: '#222',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+      }}>
+        <div style={{ fontSize: '14px', marginBottom: '12px', color: '#333', fontWeight: 'bold' }}>{getLocalizedDisplayName('Brewing Stand')}</div>
+        <div style={{ display: 'flex', gap: 22, alignItems: 'center', marginBottom: 18 }}>
+          {renderSlot(fuel, () => handleMachineSlotClick('fuel'), t('fuel'))}
+          <div style={{ width: 28, height: 110, background: '#222', border: '2px solid #555', position: 'relative' }}>
+            <div style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: `${progress * 100}%`,
+              background: 'linear-gradient(180deg, #7d55ff, #4b238c)',
+            }} />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-            {renderSlot(ingredient, () => handleMachineSlotClick('ingredient'), t('ui.brewing.ingredient', 'Ingredient'))}
-            <div style={{ width: 150, height: 10, background: '#777', border: '1px solid #333' }}>
-              <div style={{ width: `${Math.min(1, progress) * 100}%`, height: '100%', background: '#555' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            {renderSlot(ingredient, () => handleMachineSlotClick('ingredient'), t('brewingIngredient'))}
+            <div style={{ display: 'flex', gap: 12 }}>
+              {bottles.map((bottle, i) => (
+                <React.Fragment key={i}>
+                  {renderSlot(bottle, () => handleMachineSlotClick('bottle', i), t('brewingBottle'))}
+                </React.Fragment>
+              ))}
             </div>
           </div>
-          <div />
+          <div style={{ color: canBrew ? '#206020' : '#555', fontSize: 12, minWidth: 150 }}>
+            {canBrew && action
+              ? (action.kind === 'brew' ? getLocalizedDisplayName(action.recipe.outputName) : action.modifier.name)
+              : t('brewingNeeds')}
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 18, justifyContent: 'center', marginBottom: 18 }}>
-          {bottles.map((bottle, i) => (
+
+        <div style={{ fontSize: '12px', marginBottom: '8px', color: '#444' }}>{t('inventory')}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 48px)', gap: '2px' }}>
+          {Array.from({ length: INVENTORY_SIZE }, (_, i) => (
             <React.Fragment key={i}>
-              {renderSlot(bottle, () => handleMachineSlotClick('bottle', i), `${t('ui.brewing.bottle', 'Bottle')} ${i + 1}`)}
+              {renderSlot(inventory.getSlot(i), () => handleInventorySlotClick(i))}
             </React.Fragment>
           ))}
         </div>
-        <div style={{ fontSize: 13, margin: '10px 0 7px' }}>{t('ui.inventory', 'Inventory')}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 42px)', gap: 2 }}>
-          {invSlots.map((slot, i) => (
-            <div key={i} onClick={() => handleInventorySlotClick(i)} style={{ width: 42, height: 42, background: '#8b8b8b', border: '2px solid', borderColor: '#373737 #fff #fff #373737', boxSizing: 'border-box', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {slot && ItemRegistry.get(slot.id) && <div style={getItemIconStyle(slot.id, 30)} />}
-              {slot && slot.count > 1 && <span style={{ position: 'absolute', right: 2, bottom: 1, color: '#fff', fontSize: 10, textShadow: '1px 1px #000' }}>{slot.count}</span>}
-            </div>
-          ))}
-        </div>
       </div>
+
       {heldItem && (
-        <div id="brewing-held-item" style={{ position: 'fixed', pointerEvents: 'none', zIndex: 1300, width: SLOT_SIZE, height: SLOT_SIZE }}>
-          <div style={getItemIconStyle(heldItem.id, 34)} />
-          {heldItem.count > 1 && <span style={{ position: 'absolute', right: 2, bottom: 0, color: '#fff', fontSize: 11, textShadow: '1px 1px #000' }}>{heldItem.count}</span>}
+        <div id="brewing-held-item" style={{
+          position: 'fixed',
+          width: SLOT_SIZE,
+          height: SLOT_SIZE,
+          pointerEvents: 'none',
+          zIndex: 120,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <div style={getItemIconStyle(heldItem.id, 32)} />
         </div>
       )}
-      {hoveredItem && (
-        <div style={{ position: 'fixed', left: hoveredItem.x + 12, top: hoveredItem.y + 12, zIndex: 1400, background: 'rgba(20,10,35,0.95)', color: '#fff', border: '1px solid #2f0a4f', padding: '5px 7px', pointerEvents: 'none', fontFamily: 'monospace', fontSize: 11 }}>
-          <div>{getLocalizedDisplayName(hoveredItem.item) || getLocalizedItemName(hoveredItem.item.id)}</div>
+
+      {hoveredItem && !heldItem && (
+        <div style={{
+          position: 'fixed',
+          left: `${hoveredItem.x + 12}px`,
+          top: `${hoveredItem.y - 12}px`,
+          background: 'rgba(16, 0, 16, 0.95)',
+          border: '2px solid #2b0054',
+          boxShadow: '0 0 0 1px #5e00a8',
+          padding: '6px 10px',
+          borderRadius: '4px',
+          color: '#fff',
+          fontFamily: '"Courier New", monospace',
+          fontSize: '12px',
+          zIndex: 9999,
+          pointerEvents: 'none',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          minWidth: '130px',
+        }}>
+          <span style={{ fontWeight: 'bold', fontSize: '13px' }}>
+            {hoveredItem.item.customName || (hoveredItem.item.potion?.name ? getLocalizedDisplayName(hoveredItem.item.potion.name) : getLocalizedItemName(hoveredItem.item.id, ItemRegistry.get(hoveredItem.item.id)?.displayName))}
+          </span>
+          <span style={{ color: '#888888', fontSize: '10px', textTransform: 'capitalize' }}>
+            {getLocalizedCategory(ItemRegistry.get(hoveredItem.item.id)?.category ?? 'material')}
+          </span>
           {renderPotionLines(hoveredItem.item)}
-          <div style={{ color: '#777' }}>{getLocalizedCategory(ItemRegistry.get(hoveredItem.item.id)?.category ?? '')}</div>
         </div>
       )}
     </div>

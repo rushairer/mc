@@ -1,6 +1,6 @@
 name: Apply parity 291-310 item fundamentals
 
-# Validation trigger revision: typecheck-diagnostics
+# Validation trigger revision: project-tsc-command
 on:
   push:
     branches: [master]
@@ -39,20 +39,7 @@ jobs:
       - name: Parity audit
         run: npm run audit:parity
       - name: Type check
-        run: |
-          set +e
-          npm run typecheck > parity-291-310-typecheck.log 2>&1
-          status=$?
-          cat parity-291-310-typecheck.log
-          if [ "$status" -ne 0 ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add parity-291-310-typecheck.log
-            git commit -m "chore: capture parity 291-310 typecheck failure"
-            git push origin HEAD:master
-            exit "$status"
-          fi
-          rm parity-291-310-typecheck.log
+        run: npx tsc --noEmit
       - name: Production build
         run: npm run build
       - name: Commit verified parity changes

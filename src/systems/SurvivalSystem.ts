@@ -1,6 +1,7 @@
 import type { Player } from '../player/Player';
 import { WALK_SPEED } from '../constants';
 import { BlockRegistry } from '../world/BlockRegistry';
+import { XorShiftRandom } from '../engine/DeterministicRandom';
 
 const EXHAUSTION_UNIT = 4.0;
 const HEAL_EXHAUSTION_PER_HP = 6.0;
@@ -10,10 +11,22 @@ const PEACEFUL_FOOD_INTERVAL = 0.5;
 const PEACEFUL_HEALTH_INTERVAL = 1.0;
 const MAX_AIR_SECONDS = 15.0;
 const AIR_REFILL_MULTIPLIER = 4.0;
-const DROWNING_DAMAGE_INTERVAL = 1.0;
+const GAME_TICK_SECONDS = 0.05;
+const AIR_SECONDS_PER_TICK = 0.05;
+const DROWNING_DRAIN_TICKS = 20;
 const LAVA_DAMAGE_INTERVAL = 0.5;
 const FIRE_CONTACT_DAMAGE_INTERVAL = 0.5;
 const TIMER_EPSILON = 1e-9;
+
+export interface AirRandomSource {
+  nextInt(maxExclusive: number): number;
+}
+
+/** Java 1.20.1: Respiration level N skips air loss when nextInt(N + 1) > 0. */
+export function shouldConsumeAir(respirationLevel: number, random: AirRandomSource): boolean {
+  const level = Math.max(0, Math.floor(respirationLevel));
+  return level === 0 || random.nextInt(level + 1) === 0;
+}
 
 export class SurvivalSystem {
   private fallStartY = 0;
@@ -24,11 +37,23 @@ export class SurvivalSystem {
   private peacefulHealthTimer = 0;
   private exhaustion = 0;
   private wasOnGround = true;
-  private drownTimer = 0;
+  private airTickAccumulator = 0;
+  private drowningDrainTicks = 0;
   private lavaDamageTimer = 0;
   private fireDamageTimer = 0;
   private lastPlayerX: number | null = null;
   private lastPlayerZ: number | null = null;
+  private airRandom: AirRandomSource;
+
+  constructor(airRandom: AirRandomSource = new XorShiftRandom(0x53555256)) {
+    this.airRandom = airRandom;
+  }
+
+  setAirRandomSource(airRandom: AirRandomSource) {
+    this.airRandom = airRandom;
+    this.airTickAccumulator = 0;
+    this.drowningDrainTicks = 0;
+  }
 
   update(
     dt: number,
@@ -51,7 +76,8 @@ export class SurvivalSystem {
       // Creative mode bypasses survival damage/food processing, but switching
       // modes must not silently overwrite the player's stored food state.
       player.oxygen = MAX_AIR_SECONDS;
-      this.drownTimer = 0;
+      this.airTickAccumulator = 0;
+      this.drowningDrainTicks = 0;
       return;
     }
 
@@ -155,28 +181,38 @@ export class SurvivalSystem {
       const respiration = Math.max(0, getEnchantLevel('respiration'));
       const canBreathe = hasEffect('water_breathing');
       if (!canBreathe) {
-        // Respiration is probabilistic in vanilla. A deterministic equivalent uses
-        // its expected drain rate: level N extends average air time by N + 1.
-        const drainRate = 1 / (respiration + 1);
-        player.oxygen = Math.max(0, player.oxygen - dt * drainRate);
+        // Air supply is an integer tick counter in Java. Keep the public project
+        // representation in seconds, but advance the exact rule on 20 TPS
+        // boundaries so Respiration remains probabilistic instead of fractional.
+        this.airTickAccumulator += dt;
+        while (this.airTickAccumulator + TIMER_EPSILON >= GAME_TICK_SECONDS) {
+          this.airTickAccumulator = Math.max(0, this.airTickAccumulator - GAME_TICK_SECONDS);
+          if (!shouldConsumeAir(respiration, this.airRandom)) continue;
 
-        if (player.oxygen <= 0 && doDrowningDamage) {
-          this.drownTimer += dt;
-          if (this.drownTimer + TIMER_EPSILON >= DROWNING_DAMAGE_INTERVAL) {
-            damage(2, 'drown');
-            this.drownTimer = Math.max(0, this.drownTimer - DROWNING_DAMAGE_INTERVAL);
+          if (player.oxygen > 0) {
+            player.oxygen = Math.max(0, Math.round((player.oxygen - AIR_SECONDS_PER_TICK) * 100) / 100);
+            this.drowningDrainTicks = 0;
+          } else {
+            // Vanilla hurts when air reaches -20, then resets air to zero. We
+            // preserve oxygen >= 0 externally and track those 20 successful
+            // decrements separately; Respiration therefore extends this phase too.
+            this.drowningDrainTicks += 1;
+            if (this.drowningDrainTicks >= DROWNING_DRAIN_TICKS) {
+              if (doDrowningDamage) damage(2, 'drown');
+              this.drowningDrainTicks = 0;
+            }
           }
-        } else {
-          this.drownTimer = 0;
         }
       } else {
         player.oxygen = MAX_AIR_SECONDS;
-        this.drownTimer = 0;
+        this.airTickAccumulator = 0;
+        this.drowningDrainTicks = 0;
       }
     } else {
       // Vanilla replenishes four air-supply ticks per game tick.
       player.oxygen = Math.min(MAX_AIR_SECONDS, player.oxygen + dt * AIR_REFILL_MULTIPLIER);
-      this.drownTimer = 0;
+      this.airTickAccumulator = 0;
+      this.drowningDrainTicks = 0;
     }
 
     // ─── Lava / Fire Damage ───

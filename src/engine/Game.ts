@@ -342,7 +342,7 @@ export class Game {
     this.chunks = new ChunkManager(this.renderer.scene, this.atlas, this.seed, this);
     this.clock = new THREE.Clock();
     this.inventory = new Inventory();
-    this.survival = new SurvivalSystem();
+    this.survival = new SurvivalSystem(new XorShiftRandom(hashIntegers(this.seed, 0x53555256)));
     this.mobs = new MobSystem(this.renderer.scene);
     this.vehicles = new VehicleSystem(this.renderer.scene);
     this.particles = new ParticleSystem(this.renderer.scene);

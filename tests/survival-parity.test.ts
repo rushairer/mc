@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { SurvivalSystem } from '../src/systems/SurvivalSystem';
+import { SurvivalSystem, shouldConsumeAir } from '../src/systems/SurvivalSystem';
 import { BlockRegistry } from '../src/world/BlockRegistry';
 
 function makePlayer(overrides: Record<string, unknown> = {}) {
@@ -22,6 +22,16 @@ function makePlayer(overrides: Record<string, unknown> = {}) {
 
 const noBlocks = () => 0;
 const defaultRules = { getRule: () => true };
+
+class SequenceAirRandom {
+  private index = 0;
+  constructor(private readonly values: number[]) {}
+  nextInt(maxExclusive: number) {
+    if (this.values.length === 0) return 0;
+    const value = this.values[this.index++ % this.values.length];
+    return ((value % maxExclusive) + maxExclusive) % maxExclusive;
+  }
+}
 
 test('standing still does not consume saturation or hunger', () => {
   const system = new SurvivalSystem();
@@ -148,11 +158,30 @@ test('drowningDamage gamerule prevents drowning damage but still drains air', ()
   assert.deepEqual(damage, []);
 });
 
-test('Respiration extends expected underwater air time instead of granting immunity', () => {
-  const system = new SurvivalSystem();
+test('Respiration consumes air only when the Java nextInt(level + 1) roll is zero', () => {
+  const random = new SequenceAirRandom([1, 2, 3, 0]);
+  const system = new SurvivalSystem(random);
   const player = makePlayer();
   system.update(1, player, 'survival', () => 8, () => {}, 'normal', defaultRules, () => false, (id) => id === 'respiration' ? 3 : 0);
   assert.equal(player.oxygen, 14.75);
+});
+
+test('Respiration skip rolls leave air unchanged while a zero roll consumes one air tick', () => {
+  const random = new SequenceAirRandom([3, 2, 1, 0]);
+  assert.equal(shouldConsumeAir(3, random), false);
+  assert.equal(shouldConsumeAir(3, random), false);
+  assert.equal(shouldConsumeAir(3, random), false);
+  assert.equal(shouldConsumeAir(3, random), true);
+});
+
+test('Respiration also stretches the negative-air drowning countdown', () => {
+  const system = new SurvivalSystem(new SequenceAirRandom([1, 2, 3, 0]));
+  const player = makePlayer({ oxygen: 0 });
+  const damage: Array<[number, string]> = [];
+  system.update(3.95, player, 'survival', () => 8, (amount, type) => damage.push([amount, type]), 'normal', defaultRules, () => false, (id) => id === 'respiration' ? 3 : 0);
+  assert.deepEqual(damage, []);
+  system.update(0.05, player, 'survival', () => 8, (amount, type) => damage.push([amount, type]), 'normal', defaultRules, () => false, (id) => id === 'respiration' ? 3 : 0);
+  assert.deepEqual(damage, [[2, 'drown']]);
 });
 
 test('air supply refills at four air ticks per game tick equivalent', () => {

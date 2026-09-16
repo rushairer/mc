@@ -67,7 +67,20 @@ import { useStrawBed as resolveStrawBedUse26_3 } from '../world/WildernessBound2
 import { applySaturationStew26_3 } from '../world/SuspiciousStew26_3';
 import { findChorusFruitDestination26_3 } from '../world/TeleportRules26_3';
 import { getButtonPressTicks } from '../world/ButtonRules';
-import { isSignBlockName, isWallSignBlockName } from '../world/SignRules';
+import {
+  applySignInteraction,
+  createDefaultSignMetadata,
+  getSignSideForPlayer,
+  getSignTextForSide,
+  isSignBlockName,
+  isWallSignBlockName,
+  setSignTextForSide,
+  type SignSide,
+} from '../world/SignRules';
+import { resolveOpenableRedstoneState } from '../world/OpenableRules';
+import { isChestObstructingBlock } from '../world/ContainerRules';
+import { getFurnaceCookSpeed } from '../world/FurnaceRules';
+import { resolveBedUse } from '../world/BedRules';
 import { getDamageShake, normalizeDamageFlash } from '../systems/FeelRules';
 import { rollBlockLoot, rollLootTable, type LootTable } from '../world/LootSystem';
 import { getBlockXpRange, rollXp, BREEDING_XP_RANGE, FISHING_XP_RANGE } from '../world/XpRules';
@@ -253,6 +266,7 @@ export class Game {
   vehicles: VehicleSystem;
   riddenVehicle: Vehicle | null = null;
   editingSignPos: THREE.Vector3 | null = null;
+  private editingSignSide: SignSide = 'front';
   editingBookSlot: number | null = null;
   openMapSlot: number | null = null;
   lookedAtSignText: string[] | null = null;
@@ -617,6 +631,7 @@ export class Game {
           powered,
           signal: powered ? 15 : 0,
         });
+        this.applyRedstoneToNeighbors(position.x, position.y, position.z);
         this.sound.playLever();
         return { handled: true, cooldown: 0.25 };
       },
@@ -697,12 +712,32 @@ export class Game {
     this.behaviors.registerBlock([], {
       id: 'minecraft:sign',
       preventsItemUse: true,
-      interact: ({ position }) => {
-        this.editingSignPos = new THREE.Vector3(position.x, position.y, position.z);
-        this.openUI = 'sign_edit';
-        document.exitPointerLock();
+      interact: ({ position, heldItem }) => {
+        const block = BlockRegistry.get(this.chunks.getBlock(position.x, position.y, position.z));
+        if (!block) return { handled: false };
+        const currentMeta = this.chunks.getBlockMeta(position.x, position.y, position.z);
+        const side = getSignSideForPlayer(
+          block.name,
+          currentMeta,
+          position.x,
+          position.z,
+          this.player.position.x,
+          this.player.position.z,
+        );
+        const heldItemName = heldItem ? ItemRegistry.get(heldItem.id)?.name : undefined;
+        const result = applySignInteraction(currentMeta, heldItemName, side);
+        this.chunks.setBlockMeta(position.x, position.y, position.z, result.metadata, true);
+        if (result.consumeItem && heldItem && this.gameMode !== 'creative') {
+          this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+        }
+        if (result.opensEditor) {
+          this.editingSignPos = new THREE.Vector3(position.x, position.y, position.z);
+          this.editingSignSide = side;
+          this.openUI = 'sign_edit';
+          document.exitPointerLock();
+        }
         this.notifyState();
-        return { handled: true, cooldown: 0.25 };
+        return { handled: result.handled, cooldown: 0.25 };
       },
     });
 
@@ -1314,7 +1349,22 @@ export class Game {
     return null;
   }
 
+  private isChestBlockedAt(x: number, y: number, z: number): boolean {
+    const above = BlockRegistry.get(this.chunks.getBlock(x, y + 1, z));
+    return isChestObstructingBlock(above);
+  }
+
   openChestUI(x: number, y: number, z: number) {
+    const block = BlockRegistry.get(this.chunks.getBlock(x, y, z));
+    if (block?.name === 'chest') {
+      const partners = this.getDoubleChestPartners(x, y, z);
+      const blocked = partners
+        ? this.isChestBlockedAt(partners.leftPos.x, partners.leftPos.y, partners.leftPos.z)
+          || this.isChestBlockedAt(partners.rightPos.x, partners.rightPos.y, partners.rightPos.z)
+        : this.isChestBlockedAt(x, y, z);
+      if (blocked) return;
+    }
+
     const metadata = this.ensureChestMetadata(x, y, z);
     if (!metadata) return;
 
@@ -1506,16 +1556,22 @@ export class Game {
   getEditingSignText(): string[] {
     if (!this.editingSignPos) return ['', '', '', ''];
     const pos = this.editingSignPos;
-    const lines = this.chunks.getBlockMeta(pos.x, pos.y, pos.z)?.signText ?? [];
-    return Array.from({ length: 4 }, (_, index) => lines[index] ?? '');
+    return getSignTextForSide(this.chunks.getBlockMeta(pos.x, pos.y, pos.z), this.editingSignSide);
   }
 
   saveSignText(lines: string[]) {
     if (this.editingSignPos) {
       const pos = this.editingSignPos;
-      const currentMeta = this.chunks.getBlockMeta(pos.x, pos.y, pos.z) || {};
-      this.chunks.setBlockMeta(pos.x, pos.y, pos.z, { ...currentMeta, signText: lines }, true);
+      const currentMeta = this.chunks.getBlockMeta(pos.x, pos.y, pos.z);
+      this.chunks.setBlockMeta(
+        pos.x,
+        pos.y,
+        pos.z,
+        setSignTextForSide(currentMeta, this.editingSignSide, lines),
+        true,
+      );
       this.editingSignPos = null;
+      this.editingSignSide = 'front';
     }
     this.openUI = 'none';
     this.input.requestLock();
@@ -3301,6 +3357,7 @@ export class Game {
       if (plan.schedulesFluid) this.scheduleFluidNeighborhood(x, y, z);
       if (plan.opensSignEditor) {
         this.editingSignPos = new THREE.Vector3(x, y, z);
+        this.editingSignSide = 'front';
         this.openUI = 'sign_edit';
         document.exitPointerLock();
         this.notifyState();
@@ -5651,6 +5708,7 @@ export class Game {
       this.chunks.setBlockMeta(x, y, z, {
         facing: hingeFacing,
         open: false,
+        powered: false,
       }, true);
       return;
     }
@@ -5663,6 +5721,7 @@ export class Game {
       this.chunks.setBlockMeta(x, y, z, {
         facing: gateFacing,
         open: false,
+        powered: false,
       }, true);
       return;
     }
@@ -5686,13 +5745,24 @@ export class Game {
       return;
     }
 
-    if ((isSignBlockName(name) && !isWallSignBlockName(name)) || name === 'standing_banner') {
+    if (isSignBlockName(name) && !isWallSignBlockName(name)) {
+      const rotation = Math.round(((this.player.yaw + Math.PI) * 16) / (2 * Math.PI)) % 16;
+      this.chunks.setBlockMeta(x, y, z, createDefaultSignMetadata({ rotation }), true);
+      return;
+    }
+
+    if (isSignBlockName(name) && isWallSignBlockName(name)) {
+      this.chunks.setBlockMeta(x, y, z, createDefaultSignMetadata({ facing }), true);
+      return;
+    }
+
+    if (name === 'standing_banner') {
       const rotation = Math.round(((this.player.yaw + Math.PI) * 16) / (2 * Math.PI)) % 16;
       this.chunks.setBlockMeta(x, y, z, { rotation }, true);
       return;
     }
 
-    if ((isSignBlockName(name) && isWallSignBlockName(name)) || name === 'wall_banner') {
+    if (name === 'wall_banner') {
       this.chunks.setBlockMeta(x, y, z, { facing }, true);
       return;
     }
@@ -6253,6 +6323,7 @@ export class Game {
       doorHalf: 'lower',
       hinge,
       open: false,
+      powered: false,
     }, true);
     this.redstone.observeBlockChange(x, y, z);
 
@@ -6262,6 +6333,7 @@ export class Game {
       doorHalf: 'upper',
       hinge,
       open: false,
+      powered: false,
     }, true);
     this.redstone.observeBlockChange(x, y + 1, z);
 
@@ -6411,11 +6483,25 @@ export class Game {
   }
 
   private useBed(x: number, y: number, z: number) {
-    this.bedSpawnPoint = new THREE.Vector3(x + 0.5, y + 1, z + 0.5);
-    this.sound.playBlockPlace(35);
-    this.advancements.checkSleep();
+    const dimension = this.chunks.currentDimension === Dimension.Overworld
+      ? 'overworld'
+      : this.chunks.currentDimension === Dimension.Nether
+        ? 'nether'
+        : 'end';
+    const outcome = resolveBedUse(dimension, this.isNight());
 
-    if (this.isNight()) {
+    if (outcome.explodes) {
+      this.createExplosion(x + 0.5, y + 0.5, z + 0.5, 5);
+      return;
+    }
+
+    if (outcome.setsSpawn) {
+      this.bedSpawnPoint = new THREE.Vector3(x + 0.5, y + 1, z + 0.5);
+    }
+    this.sound.playBlockPlace(35);
+
+    if (outcome.canSleep) {
+      this.advancements.checkSleep();
       this.gameTime = 0.0;
       this.addChatMessage('You are now sleeping. Morning has come.');
       this.notifyState();
@@ -6424,7 +6510,7 @@ export class Game {
     }
   }
 
-  private setDoorOpen(x: number, y: number, z: number, open: boolean) {
+  private setDoorOpen(x: number, y: number, z: number, open: boolean, powered?: boolean) {
     const base = this.getDoorBase(x, y, z);
     if (!base) return;
 
@@ -6434,6 +6520,7 @@ export class Game {
 
     const facing = lowerMeta?.facing ?? upperMeta?.facing ?? 'north';
     const hinge = lowerMeta?.hinge ?? upperMeta?.hinge ?? 'left';
+    const nextPowered = powered ?? lowerMeta?.powered ?? upperMeta?.powered ?? false;
     const blockId = this.chunks.getBlock(base.x, base.y, base.z);
 
     this.chunks.setBlock(base.x, base.y, base.z, blockId);
@@ -6443,6 +6530,7 @@ export class Game {
       doorHalf: 'lower',
       hinge,
       open,
+      powered: nextPowered,
     }, true);
     this.redstone.observeBlockChange(base.x, base.y, base.z);
 
@@ -6454,6 +6542,7 @@ export class Game {
         doorHalf: 'upper',
         hinge,
         open,
+        powered: nextPowered,
       }, true);
       this.redstone.observeBlockChange(base.x, base.y + 1, base.z);
     }
@@ -6524,7 +6613,8 @@ export class Game {
     this.redstone.observeBlockChange(x, y, z);
     this.sound.playLever();
 
-    // Wooden buttons 10 ticks, stone-family buttons 30 ticks (Java 1.20.1).
+    // Java: wooden buttons stay pressed 30 ticks; stone-family buttons 20 ticks.
+    this.applyRedstoneToNeighbors(x, y, z);
     this.scheduleWorldTick('block_event', x, y, z, getButtonPressTicks(def.name), 'button_reset');
   }
 
@@ -6538,6 +6628,7 @@ export class Game {
     if (meta?.powered) {
       this.chunks.setBlockMeta(x, y, z, { ...meta, powered: false, signal: 0 }, true);
       this.redstone.observeBlockChange(x, y, z);
+      this.applyRedstoneToNeighbors(x, y, z);
     }
   }
 
@@ -6608,21 +6699,17 @@ export class Game {
     if (!isDoor && !isGate && !isTrapdoor) return;
 
     const meta = this.chunks.getBlockMeta(x, y, z);
-    const currentOpen = meta?.open ?? false;
-
-    let targetOpen: boolean | null = null;
-    if (isGate || isTrapdoor) {
-      targetOpen = powered;
-    } else if (isDoor) {
-      if (powered) targetOpen = true;
-      else if (name === 'iron_door') targetOpen = false;
-    }
-    if (targetOpen === null || targetOpen === currentOpen) return;
+    const decision = resolveOpenableRedstoneState(meta, powered);
+    if (!decision.changed) return;
 
     if (isDoor) {
-      this.setDoorOpen(x, y, z, targetOpen);
+      this.setDoorOpen(x, y, z, decision.open, decision.powered);
     } else {
-      this.chunks.setBlockMeta(x, y, z, { ...meta, open: targetOpen }, true);
+      this.chunks.setBlockMeta(x, y, z, {
+        ...meta,
+        open: decision.open,
+        powered: decision.powered,
+      }, true);
       this.redstone.observeBlockChange(x, y, z);
     }
   }
@@ -7574,7 +7661,7 @@ export class Game {
     const currentlyLit = meta.burnTime > 0;
 
     if (currentlyLit && canCook && input) {
-      const speed = (meta.containerType === 'smoker' || meta.containerType === 'blast_furnace') ? 2 : 1;
+      const speed = getFurnaceCookSpeed(meta.containerType);
       meta.cookTime += elapsed * speed;
 
       if (meta.cookTime >= recipeCookTime) {

@@ -78,7 +78,17 @@ export interface BlockMetadata {
   stairFacing?: BlockFacing;
   fenceConnections?: boolean[]; // [north, south, east, west]
   fluidLevel?: number; // 1-8: surface height = fluidLevel / 8 (8 = full block)
+  /** Legacy alias for front-side text. */
   signText?: string[];
+  signTextFront?: string[];
+  signTextBack?: string[];
+  signColorFront?: string;
+  signColorBack?: string;
+  signGlowingFront?: boolean;
+  signGlowingBack?: boolean;
+  signWaxed?: boolean;
+  /** Java 26.3 signs default this data-component capability to false. */
+  signAllowOpFeatures?: boolean;
   rotation?: number;
   burnTime?: number;
   cookTime?: number;

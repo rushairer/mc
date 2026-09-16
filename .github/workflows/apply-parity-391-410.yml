@@ -4,6 +4,7 @@ on:
   push:
     branches: [master]
     paths:
+      - 'src/world/FurnaceRules.ts'
       - 'scripts/patch-parity-391-410-game.mjs'
       - 'scripts/patch-parity-391-410-ui.mjs'
       - 'scripts/patch-parity-391-410-quickmove.mjs'

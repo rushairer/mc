@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  harden:
+  cleanup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,13 +21,23 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Harden Java sided hopper inventory rules
+      - name: Verify production and remove one-shot parity harnesses
         run: |
-          node scripts/parity-148-150-hopper-sides.mjs
           npm run audit:parity
           npm run check
           git config user.name "Aben"
           git config user.email "5195693+rushairer@users.noreply.github.com"
-          git add src/systems/BrewingSystem.ts src/systems/HopperSystem.ts tests/hopper-parity.test.ts
-          git commit -m "fix: enforce Java sided hopper inventory rules"
+          git rm \
+            .github/workflows/parity-111-130-runtime.yml \
+            .github/workflows/parity-131-150.yml \
+            scripts/.parity-111-130-trigger \
+            scripts/.parity-131-150-trigger \
+            scripts/parity-111-130-runtime.mjs \
+            scripts/parity-111-130-client-prep.mjs \
+            scripts/parity-111-130-client-fix.mjs \
+            scripts/parity-131-138-container-ui.mjs \
+            scripts/parity-139-143-respiration.mjs \
+            scripts/parity-144-147-burning.mjs \
+            scripts/parity-148-150-hopper-sides.mjs
+          git commit -m "chore: remove parity construction harnesses"
           git push origin HEAD:master

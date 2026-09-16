@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CHUNK_SIZE } from '../src/constants';
-import { HopperSystem } from '../src/systems/HopperSystem';
+import {
+  HopperSystem,
+  canHopperExtractSlot,
+  getHopperExtractionSlots,
+  getHopperInsertionSlots,
+  getHopperTargetSlotLimit,
+} from '../src/systems/HopperSystem';
 import { BlockRegistry } from '../src/world/BlockRegistry';
 
 function createHarness() {
@@ -85,4 +91,37 @@ test('hopper waits exactly eight game ticks before the next collection', () => {
   assert.equal(hopperMeta.inventory[0]?.count, 2, 'second entity is collected at the exact 8-tick boundary');
   assert.equal(items.size, 0);
   assert.equal(getChanges(), 2);
+});
+
+
+test('furnace hopper faces expose Java input fuel and output slots', () => {
+  assert.deepEqual(getHopperInsertionSlots('furnace', 'top', { id: 4, count: 1 }), [0]);
+  assert.deepEqual(getHopperInsertionSlots('smoker', 'side', { id: 263, count: 1 }), [1]);
+  assert.deepEqual(getHopperInsertionSlots('blast_furnace', 'side', { id: 4, count: 1 }), []);
+  assert.deepEqual(getHopperExtractionSlots('furnace', 3), [2, 1]);
+  assert.equal(canHopperExtractSlot('furnace', 2, { id: 265, count: 1 }), true);
+  assert.equal(canHopperExtractSlot('furnace', 1, { id: 325, count: 1 }), true);
+  assert.equal(canHopperExtractSlot('furnace', 1, { id: 263, count: 1 }), false);
+});
+
+test('brewing stand top accepts ingredients while side accepts fuel or bottles', () => {
+  assert.deepEqual(getHopperInsertionSlots('brewing_stand', 'top', { id: 372, count: 1 }), [3]);
+  assert.deepEqual(getHopperInsertionSlots('brewing_stand', 'top', { id: 373, count: 1 }), []);
+  assert.deepEqual(getHopperInsertionSlots('brewing_stand', 'side', { id: 377, count: 1 }), [4]);
+  assert.deepEqual(getHopperInsertionSlots('brewing_stand', 'side', { id: 373, count: 1 }), [0, 1, 2]);
+  assert.deepEqual(getHopperInsertionSlots('brewing_stand', 'side', { id: 374, count: 1 }), [0, 1, 2]);
+  assert.deepEqual(getHopperInsertionSlots('brewing_stand', 'side', { id: 353, count: 1 }), []);
+});
+
+test('brewing stand bottom exposes bottles plus the ingredient remainder edge case', () => {
+  assert.deepEqual(getHopperExtractionSlots('brewing_stand', 5), [0, 1, 2, 3]);
+  assert.equal(canHopperExtractSlot('brewing_stand', 0, { id: 373, count: 1 }), true);
+  assert.equal(canHopperExtractSlot('brewing_stand', 3, { id: 374, count: 1 }), true);
+  assert.equal(canHopperExtractSlot('brewing_stand', 3, { id: 372, count: 1 }), false);
+  assert.equal(canHopperExtractSlot('brewing_stand', 4, { id: 377, count: 1 }), false);
+});
+
+test('brewing bottle slots are single-item slots and generic containers expose their full size', () => {
+  assert.equal(getHopperTargetSlotLimit('brewing_stand', 0, 374), 1);
+  assert.deepEqual(getHopperExtractionSlots('chest', 54), Array.from({ length: 54 }, (_, i) => i));
 });

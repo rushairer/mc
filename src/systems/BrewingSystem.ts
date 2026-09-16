@@ -55,6 +55,12 @@ export const BrewingSystem = {
     return item?.id === POTION_ID;
   },
 
+  isBrewingIngredient(item: ItemStack | null): boolean {
+    if (!item) return false;
+    return BREWING_RECIPES.some((recipe) => recipe.ingredientId === item.id) ||
+      POTION_MODIFIERS.some((modifier) => modifier.ingredientId === item.id);
+  },
+
   getPotionKind(item: ItemStack): PotionKind {
     if (item.id === GLASS_BOTTLE_ID) return 'bottle';
     return item.potion?.kind ?? 'water';

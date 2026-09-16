@@ -1,10 +1,6 @@
 import fs from 'node:fs';
 const p='src/ui/FurnaceUI.tsx';
 let s=fs.readFileSync(p,'utf8');
-const importFrom=`import { isFurnaceRecipeAllowed } from '../world/FurnaceRules';`;
-const importTo=`import { getFurnaceQuickMoveTarget, isFurnaceRecipeAllowed } from '../world/FurnaceRules';`;
-if(!s.includes(importFrom))throw new Error('missing FurnaceRules import anchor');
-s=s.replace(importFrom,importTo);
 const from=`                onClick={() => {
                   if (!item) return;
                   const recipe = findSmeltingResult(item.id);

@@ -30,26 +30,26 @@ jobs:
           cache: npm
 
       - name: Apply item fundamentals patch
-        run: |
-          set +e
-          node scripts/patch-parity-291-310-v3.mjs > parity-291-310-run.log 2>&1
-          status=$?
-          cat parity-291-310-run.log
-          if [ "$status" -ne 0 ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add parity-291-310-run.log
-            git commit -m "chore: capture parity 291-310 v3 failure"
-            git push origin HEAD:master
-            exit "$status"
-          fi
-          rm parity-291-310-run.log
+        run: node scripts/patch-parity-291-310-v3.mjs
 
       - name: Install dependencies
         run: npm ci
 
       - name: Unit tests
-        run: npm run test:unit
+        run: |
+          set +e
+          npm run test:unit > parity-291-310-tests.log 2>&1
+          status=$?
+          cat parity-291-310-tests.log
+          if [ "$status" -ne 0 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add parity-291-310-tests.log
+            git commit -m "chore: capture parity 291-310 test failure"
+            git push origin HEAD:master
+            exit "$status"
+          fi
+          rm parity-291-310-tests.log
 
       - name: Latest stable target audit
         run: npm run audit:latest

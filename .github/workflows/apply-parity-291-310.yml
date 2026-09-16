@@ -30,7 +30,21 @@ jobs:
           cache: npm
 
       - name: Apply item fundamentals patch
-        run: node scripts/patch-parity-291-310-v2.mjs
+        run: |
+          set +e
+          node scripts/patch-parity-291-310-v2.mjs > parity-291-310-debug.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            cat parity-291-310-debug.log
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add parity-291-310-debug.log
+            git commit -m "chore: capture parity 291-310 patch failure"
+            git push origin HEAD:master
+            exit "$status"
+          fi
+          cat parity-291-310-debug.log
+          rm parity-291-310-debug.log
 
       - name: Install dependencies
         run: npm ci

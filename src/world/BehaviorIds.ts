@@ -45,7 +45,8 @@ export function inferBlockBehaviorId(rawName: string): string | undefined {
   if (name === 'note_block') return 'minecraft:note_block';
   if (isSignBlockName(name)) return 'minecraft:sign';
   if (name === 'bed' || (name.endsWith('_bed') && name !== 'bedrock')) return 'minecraft:bed';
-  if (name.includes('trapdoor') && name !== 'iron_trapdoor') return 'minecraft:trapdoor';
+  if (name === 'iron_trapdoor') return 'minecraft:iron_trapdoor';
+  if (name.includes('trapdoor')) return 'minecraft:trapdoor';
   if (name.endsWith('_button')) return 'minecraft:button';
   if (name.includes('fence_gate')) return 'minecraft:fence_gate';
   if (name.endsWith('_door')) {

@@ -98,7 +98,8 @@ test('363: dye changes only the interacted sign side', () => {
 });
 
 test('364: glow ink applies glow to only the interacted side', () => {
-  const result = applySignInteraction(undefined, 'glow_ink_sac', 'front');
+  const sign = setSignTextForSide(undefined, 'front', ['hello']);
+  const result = applySignInteraction(sign, 'glow_ink_sac', 'front');
   assert.equal(result.metadata.signGlowingFront, true);
   assert.equal(result.metadata.signGlowingBack, false);
 });
@@ -141,11 +142,11 @@ test('369: smoker and blast furnace share the Java 2x processing speed contract'
 });
 
 test('370: regular beds sleep in the Overworld and explode in Nether/End', () => {
-  assert.deepEqual(resolveBedUse('overworld', true), { canSleep: true, setsSpawn: true, explodes: false });
-  assert.deepEqual(resolveBedUse('overworld', false), { canSleep: false, setsSpawn: true, explodes: false });
-  assert.deepEqual(resolveBedUse('nether', true), { canSleep: false, setsSpawn: false, explodes: true });
-  assert.deepEqual(resolveBedUse('end', true), { canSleep: false, setsSpawn: false, explodes: true });
+  assert.deepEqual(resolveBedUse('overworld', true), { canSleep: true, setsSpawn: true, explodes: false, blockedByMonsters: false });
+  assert.deepEqual(resolveBedUse('overworld', false), { canSleep: false, setsSpawn: true, explodes: false, blockedByMonsters: false });
+  assert.deepEqual(resolveBedUse('nether', true), { canSleep: false, setsSpawn: false, explodes: true, blockedByMonsters: false });
+  assert.deepEqual(resolveBedUse('end', true), { canSleep: false, setsSpawn: false, explodes: true, blockedByMonsters: false });
   const source = gameSource();
-  assert.ok(source.includes('const outcome = resolveBedUse(dimension, this.isNight());'));
-  assert.ok(source.includes('this.createExplosion(x + 0.5, y + 0.5, z + 0.5, 5);'));
+  assert.ok(source.includes("this.isNight() || this.weather.getCurrentWeather() === 'thunder'"));
+  assert.ok(source.includes('this.createExplosion(head.x + 0.5, head.y + 0.5, head.z + 0.5, 5);'));
 });

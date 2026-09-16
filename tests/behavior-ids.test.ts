@@ -12,7 +12,7 @@ test('infers stable behavior ids for interactive block families', () => {
   assert.equal(inferBlockBehaviorId('oak_door'), 'minecraft:door');
   assert.equal(inferBlockBehaviorId('iron_door'), 'minecraft:iron_door');
   assert.equal(inferBlockBehaviorId('oak_trapdoor'), 'minecraft:trapdoor');
-  assert.equal(inferBlockBehaviorId('iron_trapdoor'), undefined);
+  assert.equal(inferBlockBehaviorId('iron_trapdoor'), 'minecraft:iron_trapdoor');
   assert.equal(inferBlockBehaviorId('stone_button'), 'minecraft:button');
   assert.equal(inferBlockBehaviorId('oak_fence_gate'), 'minecraft:fence_gate');
 });

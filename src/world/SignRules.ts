@@ -130,6 +130,11 @@ export function applySignInteraction(
     };
   }
   if (itemName === 'glow_ink_sac') {
+    const lines = getSignTextForSide(next, side);
+    const alreadyGlowing = side === 'front' ? next.signGlowingFront : next.signGlowingBack;
+    if (alreadyGlowing || lines.every(line => line.length === 0)) {
+      return { handled: true, opensEditor: true, consumeItem: false, metadata: next };
+    }
     return {
       handled: true,
       opensEditor: false,
@@ -138,6 +143,8 @@ export function applySignInteraction(
     };
   }
   if (itemName === 'ink_sac') {
+    const alreadyPlain = side === 'front' ? !next.signGlowingFront : !next.signGlowingBack;
+    if (alreadyPlain) return { handled: true, opensEditor: true, consumeItem: false, metadata: next };
     return {
       handled: true,
       opensEditor: false,

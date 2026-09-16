@@ -1,3 +1,6 @@
+import { ItemRegistry } from './ItemRegistry';
+import { BlockRegistry } from '../world/BlockRegistry';
+
 export interface SmeltingRecipe {
   input: number;
   output: number;
@@ -42,51 +45,86 @@ export const SMELTING_RECIPES: SmeltingRecipe[] = [
 ];
 
 export function findSmeltingResult(inputId: number): SmeltingRecipe | null {
-  // Support matching by packed ID first
+  const semanticInput = ItemRegistry.get(inputId);
+  const semanticBlock = BlockRegistry.get(inputId);
+  const semanticName = semanticInput?.name ?? semanticBlock?.name;
+  if (semanticName === 'wet_sponge') {
+    const spongeId = ItemRegistry.getByName('sponge')?.id ?? BlockRegistry.getByName('sponge')?.id;
+    if (spongeId !== undefined) {
+      return { input: inputId, output: spongeId, outputCount: 1, xp: 0.15, cookTime: 10 };
+    }
+  }
+
+  // Support matching by packed ID first.
   const exactMatch = SMELTING_RECIPES.find(r => r.input === inputId);
   if (exactMatch) return exactMatch;
 
-  // Fallback: match by base ID
+  // Legacy fallback only. Modern runtime IDs must not alias legacy recipes.
+  const semanticBaseId = semanticInput?.baseId ?? semanticBlock?.baseId;
+  if (semanticBaseId !== undefined && semanticBaseId >= 256) return null;
   const baseId = inputId & 0x3FF;
   const baseMatch = SMELTING_RECIPES.find(r => (r.input & 0x3FF) === baseId);
   return baseMatch ?? null;
 }
 
+const OVERWORLD_WOOD_PREFIXES = [
+  'oak_', 'spruce_', 'birch_', 'jungle_', 'acacia_', 'dark_oak_', 'mangrove_',
+  'cherry_', 'pale_oak_', 'poplar_', 'bamboo_',
+] as const;
+
+function isOverworldWoodName(name: string): boolean {
+  return OVERWORLD_WOOD_PREFIXES.some(prefix => name.startsWith(prefix));
+}
+
+function getSemanticFuelBurnTime(itemId: number): number {
+  const item = ItemRegistry.get(itemId);
+  if (!item) return 0;
+  const name = item.name;
+
+  if (name === 'lava_bucket') return 1000;
+  if (name === 'coal_block') return 800;
+  if (name === 'dried_kelp_block') return 200;
+  if (name === 'blaze_rod') return 120;
+  if (name === 'coal' || name === 'charcoal') return 80;
+  if (name.includes('boat') || name.includes('raft')) return 60;
+  if (isOverworldWoodName(name) && name.endsWith('_hanging_sign')) return 40;
+
+  if (item.toolMaterial === 'wood') return 10;
+  if (isOverworldWoodName(name)) {
+    if (name.endsWith('_door') && !name.includes('trapdoor')) return 10;
+    if (name.endsWith('_sign') && !name.endsWith('_hanging_sign')) return 10;
+    if (name.endsWith('_slab')) return 7.5;
+    if (name.endsWith('_button') || name.endsWith('_sapling')) return 5;
+    if (
+      name.includes('log') || name.endsWith('_wood') || name.includes('planks') ||
+      name.endsWith('_stairs') || name.includes('trapdoor') || name.includes('pressure_plate') ||
+      name.includes('fence') || name.includes('shelf')
+    ) return 15;
+  }
+  if (name === 'stick' || name === 'bowl' || name === 'dead_bush') return 5;
+  if (name === 'bow' || name === 'fishing_rod') return 10;
+  if (name === 'chest' || name === 'trapped_chest' || name === 'crafting_table' || name === 'bookshelf' || name === 'note_block') return 15;
+  return 0;
+}
+
 export function isSmeltingFuel(itemId: number): boolean {
-  const baseId = itemId & 0x3FF;
-
-  // Coal, charcoal
-  if (baseId === 263) return true;
-  // Planks
-  if (baseId === 5) return true;
-  // Logs / Wood
-  if (baseId === 17 || baseId === 162) return true;
-  // Block of coal
-  if (baseId === 173) return true;
-  // Stick
-  if (baseId === 280) return true;
-  // Lava bucket
-  if (baseId === 327) return true;
-  // Chest, Crafting Table
-  if (baseId === 54 || baseId === 58) return true;
-  // Sapling
-  if (baseId === 6) return true;
-  // Wooden tools (sword, shovel, pickaxe, axe, hoe)
-  if (baseId === 268 || baseId === 269 || baseId === 270 || baseId === 271 || baseId === 290) return true;
-  // Bow, fishing rod
-  if (baseId === 261 || baseId === 346) return true;
-
-  return false;
+  return getFuelBurnTime(itemId) > 0;
 }
 
 export function getFuelBurnTime(itemId: number): number {
+  const semanticTime = getSemanticFuelBurnTime(itemId);
+  if (semanticTime > 0) return semanticTime;
+
+  const item = ItemRegistry.get(itemId);
+  if (item && item.baseId >= 256) return 0;
+
   const baseId = itemId & 0x3FF;
-  if (baseId === 327) return 1000; // lava bucket
-  if (baseId === 173) return 800;  // coal block
-  if (baseId === 263) return 80;   // coal/charcoal
-  if (baseId === 17 || baseId === 162 || baseId === 5 || baseId === 54 || baseId === 58) return 15; // logs, planks, chest, crafting table
-  if (baseId === 268 || baseId === 269 || baseId === 270 || baseId === 271 || baseId === 290 || baseId === 261 || baseId === 346) return 10; // wooden tools/weapons
-  if (baseId === 280 || baseId === 6) return 5; // stick, sapling
+  if (baseId === 327) return 1000;
+  if (baseId === 173) return 800;
+  if (baseId === 263) return 80;
+  if (baseId === 17 || baseId === 162 || baseId === 5 || baseId === 54 || baseId === 58) return 15;
+  if (baseId === 268 || baseId === 269 || baseId === 270 || baseId === 271 || baseId === 290 || baseId === 261 || baseId === 346) return 10;
+  if (baseId === 280 || baseId === 6) return 5;
   return 0;
 }
 

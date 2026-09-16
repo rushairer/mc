@@ -77,10 +77,10 @@ import {
   setSignTextForSide,
   type SignSide,
 } from '../world/SignRules';
-import { resolveOpenableRedstoneState } from '../world/OpenableRules';
-import { isChestObstructingBlock } from '../world/ContainerRules';
-import { getFurnaceCookSpeed } from '../world/FurnaceRules';
-import { resolveBedUse } from '../world/BedRules';
+import { resolveFenceGateManualToggle, resolveOpenableRedstoneState } from '../world/OpenableRules';
+import { canPlaceChestFromNeighborDegrees, isChestObstructingBlock } from '../world/ContainerRules';
+import { canAcceptFurnaceOutput, getFurnaceCookSpeed, getWetSpongeFuelRemainder } from '../world/FurnaceRules';
+import { getBedHeadPosition, isMonsterWithinBedSleepRange, resolveBedUse } from '../world/BedRules';
 import { getDamageShake, normalizeDamageFlash } from '../systems/FeelRules';
 import { rollBlockLoot, rollLootTable, type LootTable } from '../world/LootSystem';
 import { getBlockXpRange, rollXp, BREEDING_XP_RANGE, FISHING_XP_RANGE } from '../world/XpRules';
@@ -692,6 +692,11 @@ export class Game {
       id: 'minecraft:iron_door',
       preventsItemUse: true,
       interact: () => ({ handled: true, cooldown: 0.25 }), // iron doors cannot be hand-opened
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:iron_trapdoor',
+      preventsItemUse: true,
+      interact: () => ({ handled: true, cooldown: 0.25 }), // iron trapdoors are redstone-only too
     });
     this.behaviors.registerBlock('bed', {
       id: 'minecraft:bed',
@@ -1352,6 +1357,25 @@ export class Game {
   private isChestBlockedAt(x: number, y: number, z: number): boolean {
     const above = BlockRegistry.get(this.chunks.getBlock(x, y + 1, z));
     return isChestObstructingBlock(above);
+  }
+
+  private canPlaceChestAt(x: number, y: number, z: number): boolean {
+    const directions: Array<[number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const adjacentChestDegrees: number[] = [];
+    for (const [dx, dz] of directions) {
+      const nx = x + dx;
+      const nz = z + dz;
+      if (BlockRegistry.get(this.chunks.getBlock(nx, y, nz))?.name !== 'chest') continue;
+      let degree = 0;
+      for (const [odx, odz] of directions) {
+        const ox = nx + odx;
+        const oz = nz + odz;
+        if (ox === x && oz === z) continue;
+        if (BlockRegistry.get(this.chunks.getBlock(ox, y, oz))?.name === 'chest') degree++;
+      }
+      adjacentChestDegrees.push(degree);
+    }
+    return canPlaceChestFromNeighborDegrees(adjacentChestDegrees);
   }
 
   openChestUI(x: number, y: number, z: number) {
@@ -3331,6 +3355,7 @@ export class Game {
 
     const { plan } = decision;
     const { x, y, z } = plan.position;
+    if (BlockRegistry.get(plan.blockId)?.name === 'chest' && !this.canPlaceChestAt(x, y, z)) return false;
     if (this.isMultiplayerNetworkConnected()) {
       this.network.send(PacketType.C2S_BLOCK_PLACE, {
         x,
@@ -6488,25 +6513,34 @@ export class Game {
       : this.chunks.currentDimension === Dimension.Nether
         ? 'nether'
         : 'end';
-    const outcome = resolveBedUse(dimension, this.isNight());
+    const metadata = this.chunks.getBlockMeta(x, y, z);
+    const head = getBedHeadPosition({ x, y, z }, metadata);
+    const canSleepNow = this.isNight() || this.weather.getCurrentWeather() === 'thunder';
+    const monstersNearby = Array.from(this.mobs.mobs.values()).some((mob) =>
+      mob.health > 0 && mob.def.hostile && isMonsterWithinBedSleepRange(head, mob.position),
+    );
+    const outcome = resolveBedUse(dimension, canSleepNow, monstersNearby);
 
     if (outcome.explodes) {
-      this.createExplosion(x + 0.5, y + 0.5, z + 0.5, 5);
+      this.createExplosion(head.x + 0.5, head.y + 0.5, head.z + 0.5, 5);
       return;
     }
 
     if (outcome.setsSpawn) {
-      this.bedSpawnPoint = new THREE.Vector3(x + 0.5, y + 1, z + 0.5);
+      this.bedSpawnPoint = new THREE.Vector3(head.x + 0.5, head.y + 1, head.z + 0.5);
     }
     this.sound.playBlockPlace(35);
 
     if (outcome.canSleep) {
       this.advancements.checkSleep();
       this.gameTime = 0.0;
+      if (this.weather.getCurrentWeather() !== 'clear') this.weather.setWeatherType('clear');
       this.addChatMessage('You are now sleeping. Morning has come.');
       this.notifyState();
+    } else if (outcome.blockedByMonsters) {
+      this.addChatMessage('You may not rest now; there are monsters nearby');
     } else {
-      this.addChatMessage('You can only sleep at night');
+      this.addChatMessage('You can only sleep at night or during thunderstorms');
     }
   }
 
@@ -6634,8 +6668,8 @@ export class Game {
 
   private toggleFenceGate(x: number, y: number, z: number) {
     const meta = this.chunks.getBlockMeta(x, y, z);
-    const open = !(meta?.open ?? false);
-    this.chunks.setBlockMeta(x, y, z, { ...meta, open }, true);
+    const next = resolveFenceGateManualToggle(meta, this.getPlayerHorizontalFacing());
+    this.chunks.setBlockMeta(x, y, z, { ...meta, open: next.open, facing: next.facing }, true);
     this.redstone.observeBlockChange(x, y, z);
   }
 
@@ -7628,11 +7662,12 @@ export class Game {
         recipeOutputCount = hasRecipe.outputCount;
         recipeCookTime = hasRecipe.cookTime;
 
-        if (!output) {
-          canCook = true;
-        } else if (output.id === recipeOutputId && output.count + recipeOutputCount <= 64) {
-          canCook = true;
-        }
+        canCook = canAcceptFurnaceOutput(
+          output,
+          recipeOutputId,
+          recipeOutputCount,
+          ItemRegistry.getMaxStackSize(recipeOutputId),
+        );
       }
     }
 
@@ -7679,6 +7714,9 @@ export class Game {
         } else {
           meta.inventory[2] = { ...output, count: output.count + recipeOutputCount };
         }
+
+        const wetSpongeRemainder = getWetSpongeFuelRemainder(ItemRegistry.get(input.id)?.name, meta.inventory[1]);
+        if (wetSpongeRemainder) meta.inventory[1] = wetSpongeRemainder;
 
         metadataChanged = true;
       }

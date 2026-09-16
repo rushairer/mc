@@ -1,15 +1,54 @@
+import type { BlockFacing, BlockMetadata } from '../types';
+
 export type BedDimension = 'overworld' | 'nether' | 'end';
 
 export interface BedUseDecision {
   canSleep: boolean;
   setsSpawn: boolean;
   explodes: boolean;
+  blockedByMonsters: boolean;
 }
 
-/** Base Java bed dimension contract. */
-export function resolveBedUse(dimension: BedDimension, isNight: boolean): BedUseDecision {
+/** Base Java bed dimension/time/safety contract. */
+export function resolveBedUse(
+  dimension: BedDimension,
+  canSleepNow: boolean,
+  monstersNearby = false,
+): BedUseDecision {
   if (dimension !== 'overworld') {
-    return { canSleep: false, setsSpawn: false, explodes: true };
+    return { canSleep: false, setsSpawn: false, explodes: true, blockedByMonsters: false };
   }
-  return { canSleep: isNight, setsSpawn: true, explodes: false };
+  const blockedByMonsters = canSleepNow && monstersNearby;
+  return {
+    canSleep: canSleepNow && !monstersNearby,
+    setsSpawn: !blockedByMonsters,
+    explodes: false,
+    blockedByMonsters,
+  };
+}
+
+export interface BedPosition { x: number; y: number; z: number }
+
+function horizontalOffset(facing: BlockFacing | undefined): { x: number; z: number } {
+  switch (facing) {
+    case 'east': return { x: 1, z: 0 };
+    case 'west': return { x: -1, z: 0 };
+    case 'south': return { x: 0, z: 1 };
+    case 'north':
+    default: return { x: 0, z: -1 };
+  }
+}
+
+/** Return the head block regardless of whether the player clicked head or foot. */
+export function getBedHeadPosition(position: BedPosition, metadata: Pick<BlockMetadata, 'facing' | 'bedPart'> | undefined): BedPosition {
+  if (metadata?.bedPart === 'head') return { ...position };
+  const offset = horizontalOffset(metadata?.facing);
+  return { x: position.x + offset.x, y: position.y, z: position.z + offset.z };
+}
+
+/** Java sleep safety box: 8 blocks horizontally and 5 vertically from the bed. */
+export function isMonsterWithinBedSleepRange(bed: BedPosition, monster: BedPosition): boolean {
+  return Math.abs(monster.x - bed.x) <= 8
+    && Math.abs(monster.z - bed.z) <= 8
+    && Math.abs(monster.y - bed.y) <= 5;
 }

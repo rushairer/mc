@@ -21,6 +21,15 @@ import {
 } from './ServerPlayerDamage';
 import { clampPlayerState, consumeOne, validateConsume } from './PlayerStateRules';
 import { applyContainerClick, containerKey, createContainerSlots, validateContainerClick, validateContainerSlots } from './ContainerRules';
+import {
+  canPlaceHeldBlock,
+  consumeHeldStack,
+  isBlockActionInReach,
+  isValidBlockCoordinate,
+  isValidHotbarSlot,
+  isValidInventoryStack,
+  isValidWorldY,
+} from './ServerWorldActionRules';
 import type { PotionEffectData } from '../systems/PotionEffect';
 
 import { WorldGen } from '../world/WorldGen';
@@ -623,6 +632,8 @@ export class GameServer {
     switch (packet.type) {
       case PacketType.C2S_PLAYER_MOVE: {
         const { x, y, z, yaw, pitch, flying } = packet.payload;
+        if (![x, y, z, yaw, pitch].every((value) => typeof value === 'number' && Number.isFinite(value))) break;
+        if (y < -64 || y > WORLD_HEIGHT + 64) break;
         session.x = x;
         session.y = y;
         session.z = z;
@@ -645,6 +656,10 @@ export class GameServer {
 
       case PacketType.C2S_CHUNK_REQUEST: {
         const { cx, cz } = packet.payload;
+        if (!Number.isInteger(cx) || !Number.isInteger(cz)) break;
+        const playerCx = Math.floor(session.x / CHUNK_SIZE);
+        const playerCz = Math.floor(session.z / CHUNK_SIZE);
+        if (Math.abs(cx - playerCx) > RENDER_DISTANCE + 2 || Math.abs(cz - playerCz) > RENDER_DISTANCE + 2) break;
         const chunk = this.getOrGenerateChunk(cx, cz, session.dimension);
         
         // Serialize block metadata
@@ -667,29 +682,42 @@ export class GameServer {
 
       case PacketType.C2S_BLOCK_BREAK: {
         const { x, y, z } = packet.payload;
+        if (!isValidBlockCoordinate(x) || !isValidWorldY(y, WORLD_HEIGHT) || !isValidBlockCoordinate(z)) break;
+        if (!isBlockActionInReach(session, x, y, z, 'survival')) break;
+        const blockId = this.getBlock(x, y, z, session.dimension);
+        if (blockId === 0) break;
+
         this.setBlock(x, y, z, 0, session.dimension);
-        // P5.2: damage the held tool server-side.
         const tool = session.inventory[session.selectedSlot];
-        if (tool && tool.durability !== undefined) {
-          tool.durability -= 1;
-          if (tool.durability <= 0) session.inventory[session.selectedSlot] = null;
-          this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, {
-            slots: session.inventory,
-            armor: session.armor,
-            offhand: session.offhand,
-          });
+        if (tool && ItemRegistry.isTool(tool.id)) {
+          session.inventory[session.selectedSlot] = damageDurableStack(tool, 1, 'tool');
+          this.syncPlayerInventory(session);
         }
-        this.broadcast(PacketType.S2C_BLOCK_UPDATE, { x, y, z, blockId: 0, dimension: session.dimension });
-        this.broadcast(PacketType.S2C_SOUND, { type: 'break', x, y, z });
+        this.broadcastDimension(session.dimension, PacketType.S2C_BLOCK_UPDATE, {
+          x, y, z, blockId: 0, dimension: session.dimension
+        });
+        this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, { type: 'break', x, y, z });
         break;
       }
 
       case PacketType.C2S_BLOCK_PLACE: {
         const { x, y, z, blockId, facing } = packet.payload;
-        const meta = facing ? { facing } : null;
+        if (!isValidBlockCoordinate(x) || !isValidWorldY(y, WORLD_HEIGHT) || !isValidBlockCoordinate(z)) break;
+        if (!Number.isInteger(blockId) || blockId <= 0) break;
+        if (!isBlockActionInReach(session, x, y, z, 'survival')) break;
+        if (this.getBlock(x, y, z, session.dimension) !== 0) break;
+
+        const held = session.inventory[session.selectedSlot];
+        if (!canPlaceHeldBlock(held, blockId)) break;
+        const validFacing = facing === 'north' || facing === 'south' || facing === 'east' || facing === 'west' || facing === 'up' || facing === 'down';
+        const meta = validFacing ? { facing } : null;
         this.setBlock(x, y, z, blockId, session.dimension, meta);
-        this.broadcast(PacketType.S2C_BLOCK_UPDATE, { x, y, z, blockId, metadata: meta, dimension: session.dimension });
-        this.broadcast(PacketType.S2C_SOUND, { type: 'place', x, y, z });
+        session.inventory[session.selectedSlot] = consumeHeldStack(held!);
+        this.syncPlayerInventory(session);
+        this.broadcastDimension(session.dimension, PacketType.S2C_BLOCK_UPDATE, {
+          x, y, z, blockId, metadata: meta, dimension: session.dimension
+        });
+        this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, { type: 'place', x, y, z });
         break;
       }
 
@@ -708,25 +736,31 @@ export class GameServer {
 
       case PacketType.C2S_HELD_ITEM_CHANGE: {
         const { slot } = packet.payload;
-        session.selectedSlot = slot;
+        if (isValidHotbarSlot(slot)) session.selectedSlot = slot;
         break;
       }
 
       case PacketType.C2S_INVENTORY_CLICK: {
-        const { slotIndex, type, heldItem } = packet.payload;
-        // Simple client-side inventory overwrite (can be made authoritative in future iterations)
+        const { slotIndex, heldItem } = packet.payload;
+        if (!Number.isInteger(slotIndex) || !isValidInventoryStack(heldItem)) break;
         if (slotIndex >= 0 && slotIndex < 36) {
-          session.inventory[slotIndex] = heldItem;
+          session.inventory[slotIndex] = heldItem ? { ...heldItem } : null;
         } else if (slotIndex >= 100 && slotIndex < 104) {
-          session.armor[slotIndex - 100] = heldItem;
+          if (heldItem && ItemRegistry.get(heldItem.id)?.category !== 'armor') break;
+          session.armor[slotIndex - 100] = heldItem ? { ...heldItem } : null;
         } else if (slotIndex === 200) {
-          session.offhand = heldItem;
+          session.offhand = heldItem ? { ...heldItem } : null;
+        } else {
+          break;
         }
+        this.syncPlayerInventory(session);
         break;
       }
 
       case PacketType.C2S_INTERACT_BLOCK: {
         const { x, y, z } = packet.payload;
+        if (!isValidBlockCoordinate(x) || !isValidWorldY(y, WORLD_HEIGHT) || !isValidBlockCoordinate(z)) break;
+        if (!isBlockActionInReach(session, x, y, z, 'survival')) break;
         const blockId = this.getBlock(x, y, z, session.dimension);
         // Chest or Furnace interaction sounds
         if ((blockId & 0x3FF) === 54) { // Chest
@@ -842,6 +876,7 @@ export class GameServer {
       // P5.2: server-validated consumable use.
       case PacketType.C2S_ITEM_CONSUME: {
         const { slot, itemId } = packet.payload;
+        if (!Number.isInteger(slot) || slot < 0 || slot >= session.inventory.length) break;
         const stack = session.inventory[slot];
         if (validateConsume(stack, itemId)) {
           const updated = consumeOne(stack!);
@@ -858,6 +893,8 @@ export class GameServer {
       // P5.3: container authority — the server owns chest contents.
       case PacketType.C2S_CONTAINER_OPEN: {
         const { x, y, z } = packet.payload;
+        if (!isValidBlockCoordinate(x) || !isValidWorldY(y, WORLD_HEIGHT) || !isValidBlockCoordinate(z)) break;
+        if (!isBlockActionInReach(session, x, y, z, 'survival')) break;
         const blockId = this.getBlock(x, y, z, session.dimension);
         const base = blockId & 0x3FF;
         const name = BlockRegistry.get(blockId)?.name ?? 'chest';
@@ -960,14 +997,14 @@ export class GameServer {
 
       case 'time': {
         if (args[0] === 'set' && args[1]) {
-          let timeVal = 0.25;
-          if (args[1] === 'day') timeVal = 0.25;
-          else if (args[1] === 'night') timeVal = 0.75;
-          else timeVal = parseFloat(args[1]) || 0;
-
-          this.gameTime = timeVal;
-          this.broadcast(PacketType.S2C_TIME, { gameTime: this.gameTime });
-          this.sendSystemMessage(`Set time to ${args[1]}`);
+          const presets: Record<string, number> = { day: 1000, noon: 6000, night: 13000, midnight: 18000 };
+          const raw = presets[args[1]] ?? Number(args[1]);
+          if (Number.isFinite(raw)) {
+            const ticks = ((Math.floor(raw) % 24000) + 24000) % 24000;
+            this.gameTime = ticks / 24000;
+            this.broadcast(PacketType.S2C_TIME, { gameTime: this.gameTime });
+            this.sendSystemMessage(`Set time to ${args[1]}`);
+          }
         }
         break;
       }

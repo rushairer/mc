@@ -27,13 +27,13 @@ test('server sums protection enchantments across every equipped armor piece', ()
 
 test('server mitigation applies armor toughness and enchantment protection', () => {
   const plain = [310, 311, 312, 313].map((id) => ({ id, count: 1 }));
-  const protected = plain.map((stack) => ({
+  const protectedArmor = plain.map((stack) => ({
     ...stack,
     enchantments: [{ id: 'protection' as const, level: 4 }],
   }));
   const raw = 10;
   const plainDamage = mitigateServerPlayerDamage(raw, 'mob', plain);
-  const protectedDamage = mitigateServerPlayerDamage(raw, 'mob', protected);
+  const protectedDamage = mitigateServerPlayerDamage(raw, 'mob', protectedArmor);
   assert.ok(plainDamage < raw);
   assert.ok(protectedDamage < plainDamage);
 });
@@ -59,6 +59,11 @@ test('Unbreaking is evaluated per durability point on server-owned stacks', () =
   };
   assert.equal(damageDurableStack(stack, 1, 'tool', () => 0.24)?.durability, 99);
   assert.equal(damageDurableStack(stack, 1, 'tool', () => 0.26)?.durability, 100);
+});
+
+test('shield durability is tracked even though shield is a material-category registry item', () => {
+  const shield = { id: 442, count: 1, durability: 336 };
+  assert.equal(damageDurableStack(shield, 7, 'tool', () => 0)?.durability, 329);
 });
 
 test('shield is inactive during its five-tick startup delay', () => {

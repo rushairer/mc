@@ -2411,13 +2411,31 @@ export class Game {
           return;
         }
 
-        // First: try to attack mob
+        // First: try server-authoritative player/mob attack in multiplayer.
         const dir = this.player.forward;
+        const entityReach = this.gameMode === 'creative' ? 5 : 3;
+        if (isNetworkConnected) {
+          const playerId = this.network.getOtherPlayerInRay(this.player.eyePosition, dir, entityReach);
+          if (playerId) {
+            this.network.send(PacketType.C2S_INTERACT_ENTITY, { entityId: playerId, type: 'attack' });
+            this.swordSwingTimer = 0.4;
+            this.startAttackCooldown(attackCooldownDuration);
+            return;
+          }
+          const networkMob = this.mobs.getMobInRay(this.player.eyePosition, dir, entityReach);
+          if (networkMob) {
+            this.network.send(PacketType.C2S_INTERACT_ENTITY, { entityId: networkMob.id, type: 'attack' });
+            this.swordSwingTimer = 0.4;
+            this.startAttackCooldown(attackCooldownDuration);
+            return;
+          }
+        }
+
       const mobHit = this.mobs.playerAttackMob(
         this.player.eyePosition,
         dir,
         meleeAttackDamage,
-        4.5,
+        entityReach,
         {
           smiteLevel: EnchantSystem.getLevel(selectedItemStack, 'smite'),
           fireTicks: EnchantSystem.getFireTicks(EnchantSystem.getLevel(selectedItemStack, 'fire_aspect')),
@@ -2672,6 +2690,7 @@ export class Game {
           health: this.player.health,
           hunger: this.player.hunger,
           oxygen: this.player.oxygen,
+          blocking: this.isShieldBlocking,
         });
       }
     }

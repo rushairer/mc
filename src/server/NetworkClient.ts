@@ -400,6 +400,28 @@ export class NetworkClient {
     }
   }
 
+  getOtherPlayerInRay(origin: THREE.Vector3, direction: THREE.Vector3, reach: number): string | null {
+    const ray = new THREE.Ray(origin, direction.clone().normalize());
+    let closestId: string | null = null;
+    let closestDistance = reach;
+    for (const [id, player] of this.otherPlayers.entries()) {
+      const pos = player.mesh.position;
+      const box = new THREE.Box3(
+        new THREE.Vector3(pos.x - 0.3, pos.y, pos.z - 0.3),
+        new THREE.Vector3(pos.x + 0.3, pos.y + 1.8, pos.z + 0.3),
+      );
+      const hit = new THREE.Vector3();
+      if (ray.intersectBox(box, hit)) {
+        const distance = hit.distanceTo(origin);
+        if (distance <= closestDistance) {
+          closestDistance = distance;
+          closestId = id;
+        }
+      }
+    }
+    return closestId;
+  }
+
   // --- Interpolation helper for other players ---
 
   update(dt: number) {

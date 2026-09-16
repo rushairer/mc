@@ -1,6 +1,24 @@
 import * as THREE from 'three';
 import { PacketType, Packet, compressBlocks } from './NetworkProtocol';
-import { getBowReleaseParams, parseItemAction } from './ItemActionRules';
+import {
+  getBowReleaseParams,
+  getServerBowPowerLevel,
+  getThrowableProjectileType,
+  isValidItemActionForHeldStack,
+  parseItemAction,
+} from './ItemActionRules';
+import {
+  getServerMeleeDamage,
+  getServerMeleeProfile,
+  isEntityAttackInReach,
+  parseEntityAttackIntent,
+} from './ServerCombatRules';
+import {
+  damageDurableStack,
+  damageServerArmorForHit,
+  mitigateServerPlayerDamage,
+  resolveServerShieldBlock,
+} from './ServerPlayerDamage';
 import { clampPlayerState, consumeOne, validateConsume } from './PlayerStateRules';
 import { applyContainerClick, containerKey, createContainerSlots, validateContainerClick, validateContainerSlots } from './ContainerRules';
 import type { PotionEffectData } from '../systems/PotionEffect';
@@ -13,6 +31,8 @@ import { ItemRegistry } from '../items/ItemRegistry';
 import { MOB_DEFS, Mob, type MobType } from '../entities/Mob';
 import { CHUNK_SIZE, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
 import type { ItemStack, BlockMetadata } from '../types';
+import { createHurtCooldownState, resolveHurtDamage, tickHurtCooldown, type HurtCooldownState } from '../systems/HurtCooldown';
+import type { PlayerDamageKind } from '../systems/DamageRules';
 import { SAVE_SCHEMA_VERSION, SaveSystem, type SaveData } from '../systems/SaveSystem';
 
 const WORLD_SPAWN_X = 8;
@@ -39,6 +59,12 @@ interface PlayerSession {
   armor: (ItemStack | null)[];
   offhand: ItemStack | null;
   selectedSlot: number;
+  isBlocking: boolean;
+  shieldUseSeconds: number;
+  shieldDisabledSeconds: number;
+  lastAttackTick: number | null;
+  hurtCooldown: HurtCooldownState;
+  healthAuthorityLockSeconds: number;
   /** P5.2 — guards one-time death handling. */
   dead?: boolean;
 }
@@ -110,6 +136,7 @@ export class GameServer {
   private currentSlot: string = 'world_1';
   
   private nextEntityId = 1000;
+  private gameTick = 0;
   private gameTime = 0.05; // Day/Night: 0=sunrise, 0.25=noon, 0.5=sunset, 0.75=midnight
   private weatherType: 'clear' | 'rain' | 'thunder' = 'clear';
   private weatherIntensity = 0;
@@ -169,7 +196,13 @@ export class GameServer {
       inventory: Array(36).fill(null),
       armor: Array(4).fill(null),
       offhand: null,
-      selectedSlot: 0
+      selectedSlot: 0,
+      isBlocking: false,
+      shieldUseSeconds: 0,
+      shieldDisabledSeconds: 0,
+      lastAttackTick: null,
+      hurtCooldown: createHurtCooldownState(),
+      healthAuthorityLockSeconds: 0
     };
 
     // Starter Pack items
@@ -703,24 +736,47 @@ export class GameServer {
       }
 
       case PacketType.C2S_INTERACT_ENTITY: {
-        const { entityId, type } = packet.payload;
-        if (type === 'attack') {
-          const mob = this.mobs.get(entityId);
-          if (mob && mob.health > 0) {
-            mob.health -= 5; // Default sword attack damage
-            mob.hurtTimer = 0.5;
-            this.broadcast(PacketType.S2C_MOB_STATE, {
-              id: mob.id,
-              health: mob.health,
-              hurtTimer: mob.hurtTimer
-            });
-            this.broadcast(PacketType.S2C_SOUND, { type: 'hit', x: mob.position.x, y: mob.position.y, z: mob.position.z });
-            
-            if (mob.health <= 0) {
-              this.handleMobDeath(mob);
-            }
-          }
+        const intent = parseEntityAttackIntent(packet.payload);
+        if (!intent) break;
+
+        const held = session.inventory[session.selectedSlot];
+        const profile = getServerMeleeProfile(held);
+        const damage = getServerMeleeDamage(held, session.lastAttackTick, this.gameTick);
+
+        if (typeof intent.entityId === 'number') {
+          const mob = this.mobs.get(intent.entityId);
+          if (!mob || mob.health <= 0 || mob.dimension !== session.dimension) break;
+          if (!isEntityAttackInReach(session, mob.position, 'survival')) break;
+
+          session.lastAttackTick = this.gameTick;
+          mob.health -= damage;
+          mob.hurtTimer = 0.5;
+          this.damageHeldMeleeItem(session, profile.durabilityCost);
+          this.broadcastDimension(session.dimension, PacketType.S2C_MOB_STATE, {
+            id: mob.id,
+            health: mob.health,
+            hurtTimer: mob.hurtTimer
+          });
+          this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+            type: 'hit', x: mob.position.x, y: mob.position.y, z: mob.position.z
+          });
+          if (mob.health <= 0) this.handleMobDeath(mob);
+          break;
         }
+
+        const target = this.players.get(intent.entityId);
+        if (!target || target.id === session.id || target.dimension !== session.dimension) break;
+        if (!isEntityAttackInReach(session, target, 'survival')) break;
+
+        session.lastAttackTick = this.gameTick;
+        this.damageHeldMeleeItem(session, profile.durabilityCost);
+        this.applyServerDamageToPlayer(
+          target,
+          damage,
+          'mob',
+          new THREE.Vector3(session.x, session.y + 1.62, session.z),
+          profile.isAxe,
+        );
         break;
       }
 
@@ -728,60 +784,56 @@ export class GameServer {
       case PacketType.C2S_ITEM_ACTION: {
         const request = parseItemAction(packet.payload);
         if (!request) break;
-        const { action, itemId, power, damageBonus } = request;
-        const payload = packet.payload as { dirX?: number; dirY?: number; dirZ?: number; potionEffect?: PotionEffectData };
-        const origin = new THREE.Vector3(session.x, session.y + 1.6, session.z);
-        const dir = new THREE.Vector3(
-          payload.dirX ?? 0,
-          payload.dirY ?? 0,
-          payload.dirZ ?? -1,
-        ).normalize();
+        const held = session.inventory[session.selectedSlot];
+        if (!isValidItemActionForHeldStack(request, held)) break;
 
-        if (action === 'bow_release') {
-          const ammoSlot = session.inventory.findIndex((slot) => slot && (slot.id & 0x3FF) === 262); // arrow
+        const origin = new THREE.Vector3(session.x, session.y + 1.6, session.z);
+        const dir = new THREE.Vector3(request.direction.x, request.direction.y, request.direction.z);
+
+        if (request.action === 'bow_release') {
+          const ammoSlot = session.inventory.findIndex((slot) => slot && (slot.id & 0x3FF) === 262);
           if (ammoSlot < 0) break;
           const ammo = session.inventory[ammoSlot]!;
           ammo.count -= 1;
           if (ammo.count <= 0) session.inventory[ammoSlot] = null;
-          // P5.2: server-authoritative bow durability.
-          const bow = session.inventory[session.selectedSlot];
-          if (bow) {
-            bow.durability = (bow.durability ?? 100) - 1;
-            if (bow.durability <= 0) session.inventory[session.selectedSlot] = null;
-          }
-          const params = getBowReleaseParams(power ?? 1, damageBonus ?? 0);
+
+          const params = getBowReleaseParams(request.power ?? 0, getServerBowPowerLevel(held));
+          session.inventory[session.selectedSlot] = damageDurableStack(held, 1, 'tool');
           this.spawnProjectile(session, 'arrow', origin, dir.multiplyScalar(params.speed), {
             damage: params.damage,
             velocityY: 0.5,
           });
-          this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, {
-            slots: session.inventory,
-            armor: session.armor,
-            offhand: session.offhand,
+          this.syncPlayerInventory(session);
+          this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+            type: 'bow_shoot', x: origin.x, y: origin.y, z: origin.z
           });
-          this.broadcast(PacketType.S2C_SOUND, { type: 'bow_shoot', x: origin.x, y: origin.y, z: origin.z });
-        } else if (action === 'throw') {
-          const baseId = itemId & 0x3FF;
-          const type = baseId === 332 ? 'snowball'
-            : baseId === 344 ? 'egg'
-              : baseId === 368 ? 'ender_pearl'
-                : baseId === 373 ? 'potion'
-                  : baseId === 505 ? 'trident'
-                    : null;
-          if (!type) break;
-          this.spawnProjectile(session, type, origin, dir.multiplyScalar(15), {
-            damage: type === 'trident' ? 9 : 1,
-            velocityY: 2.5,
-            potionEffect: payload.potionEffect,
-          });
+          break;
         }
+
+        const type = getThrowableProjectileType(held!.id);
+        if (!type) break;
+        const potionEffect = type === 'potion' ? held?.potion?.effect : undefined;
+        this.spawnProjectile(session, type, origin, dir.multiplyScalar(15), {
+          damage: type === 'trident' ? 9 : 1,
+          velocityY: 2.5,
+          potionEffect,
+        });
+        if (type === 'trident') {
+          session.inventory[session.selectedSlot] = damageDurableStack(held, 1, 'tool');
+        } else {
+          session.inventory[session.selectedSlot] = consumeOne(held!);
+        }
+        this.syncPlayerInventory(session);
         break;
       }
 
       // P5.2: client uploads its simulated state so server pushes stay convergent.
       case PacketType.C2S_PLAYER_STATE: {
         const clamped = clampPlayerState(packet.payload);
-        session.health = clamped.health;
+        session.isBlocking = packet.payload?.blocking === true;
+        session.health = session.healthAuthorityLockSeconds > 0
+          ? Math.min(session.health, clamped.health)
+          : clamped.health;
         session.hunger = clamped.hunger;
         session.oxygen = clamped.oxygen;
         break;
@@ -935,6 +987,120 @@ export class GameServer {
         this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: `Unknown command: ${label}` });
         break;
     }
+  }
+
+
+  private syncPlayerInventory(player: PlayerSession) {
+    this.sendTo(player, PacketType.S2C_INVENTORY_SYNC, {
+      slots: player.inventory,
+      armor: player.armor,
+      offhand: player.offhand,
+    });
+  }
+
+  private syncPlayerState(player: PlayerSession) {
+    const nextRequirement = this.getXpRequirement(player.xpLevel);
+    this.sendTo(player, PacketType.S2C_PLAYER_STATE, {
+      health: player.health,
+      hunger: player.hunger,
+      oxygen: player.oxygen,
+      level: player.xpLevel,
+      xpProgress: nextRequirement > 0 ? player.xpCurrent / nextRequirement : 0,
+    });
+  }
+
+  private getXpRequirement(level: number): number {
+    if (level < 15) return 7 + 2 * level;
+    if (level < 30) return 37 + 5 * (level - 15);
+    return 112 + 9 * (level - 30);
+  }
+
+  private getBlockingShieldSlot(player: PlayerSession): { kind: 'offhand' | 'hotbar'; index: number; stack: ItemStack } | null {
+    const offhand = player.offhand;
+    if (offhand && ItemRegistry.get(offhand.id)?.name === 'shield') {
+      return { kind: 'offhand', index: -1, stack: offhand };
+    }
+    const held = player.inventory[player.selectedSlot];
+    if (held && ItemRegistry.get(held.id)?.name === 'shield') {
+      return { kind: 'hotbar', index: player.selectedSlot, stack: held };
+    }
+    return null;
+  }
+
+  private setBlockingShieldStack(
+    player: PlayerSession,
+    slot: { kind: 'offhand' | 'hotbar'; index: number },
+    stack: ItemStack | null,
+  ) {
+    if (slot.kind === 'offhand') player.offhand = stack;
+    else player.inventory[slot.index] = stack;
+  }
+
+  private damageHeldMeleeItem(player: PlayerSession, amount: number) {
+    if (amount <= 0) return;
+    const held = player.inventory[player.selectedSlot];
+    if (!held) return;
+    player.inventory[player.selectedSlot] = damageDurableStack(held, amount, 'tool');
+    this.syncPlayerInventory(player);
+  }
+
+  private applyServerDamageToPlayer(
+    player: PlayerSession,
+    rawDamage: number,
+    kind: PlayerDamageKind,
+    source: THREE.Vector3,
+    isAxeHit = false,
+  ): number {
+    if (!Number.isFinite(rawDamage) || rawDamage <= 0 || player.health <= 0) return 0;
+
+    const shieldSlot = this.getBlockingShieldSlot(player);
+    if (shieldSlot) {
+      const shieldResult = resolveServerShieldBlock(
+        rawDamage,
+        kind,
+        {
+          isBlocking: player.isBlocking,
+          usingSeconds: player.shieldUseSeconds,
+          disabledSeconds: player.shieldDisabledSeconds,
+          x: player.x,
+          z: player.z,
+          yaw: player.yaw,
+        },
+        source.x,
+        source.z,
+        isAxeHit,
+      );
+      if (shieldResult.blocked) {
+        if (shieldResult.durabilityDamage > 0) {
+          this.setBlockingShieldStack(
+            player,
+            shieldSlot,
+            damageDurableStack(shieldSlot.stack, shieldResult.durabilityDamage, 'tool'),
+          );
+        }
+        if (shieldResult.disableSeconds > 0) {
+          player.shieldDisabledSeconds = Math.max(player.shieldDisabledSeconds, shieldResult.disableSeconds);
+          player.shieldUseSeconds = 0;
+        }
+        this.syncPlayerInventory(player);
+        return 0;
+      }
+    }
+
+    const hurt = resolveHurtDamage(player.hurtCooldown, rawDamage);
+    player.hurtCooldown = hurt.next;
+    if (!hurt.accepted || hurt.appliedDamage <= 0) return 0;
+
+    const mitigated = mitigateServerPlayerDamage(hurt.appliedDamage, kind, player.armor);
+    player.armor = damageServerArmorForHit(player.armor, hurt.appliedDamage, kind);
+    player.health = Math.max(0, player.health - mitigated);
+    player.healthAuthorityLockSeconds = Math.max(player.healthAuthorityLockSeconds, 1);
+    this.syncPlayerInventory(player);
+    this.syncPlayerState(player);
+    this.broadcastDimension(player.dimension, PacketType.S2C_SOUND, {
+      type: 'hurt', x: player.x, y: player.y, z: player.z
+    });
+    return mitigated;
   }
 
   // --- World interaction ---
@@ -1154,6 +1320,17 @@ export class GameServer {
         player.inventory[i] = null;
       }
     }
+    for (let i = 0; i < player.armor.length; i++) {
+      const stack = player.armor[i];
+      if (stack) {
+        this.spawnDroppedItem(stack.id, stack.count, player.x, player.y, player.z, player.dimension);
+        player.armor[i] = null;
+      }
+    }
+    if (player.offhand) {
+      this.spawnDroppedItem(player.offhand.id, player.offhand.count, player.x, player.y, player.z, player.dimension);
+      player.offhand = null;
+    }
     player.health = 20;
     player.hunger = 20;
     player.oxygen = 15;
@@ -1200,6 +1377,17 @@ export class GameServer {
 
   private tick() {
     const dt = 0.05; // 50ms
+    this.gameTick += 1;
+    for (const player of this.players.values()) {
+      player.hurtCooldown = tickHurtCooldown(player.hurtCooldown, dt);
+      player.shieldDisabledSeconds = Math.max(0, player.shieldDisabledSeconds - dt);
+      player.healthAuthorityLockSeconds = Math.max(0, player.healthAuthorityLockSeconds - dt);
+      if (player.isBlocking && player.shieldDisabledSeconds <= 0 && this.getBlockingShieldSlot(player)) {
+        player.shieldUseSeconds += dt;
+      } else {
+        player.shieldUseSeconds = 0;
+      }
+    }
 
     // Time cycle increment
     this.gameTime = (this.gameTime + dt / 600) % 1; // 10 mins full day length
@@ -1308,15 +1496,13 @@ export class GameServer {
             mob.shootTimer -= dt;
             if (mob.shootTimer <= 0) {
               mob.shootTimer = 1.5; // Cooldown
-              chaseTarget.health = Math.max(0, chaseTarget.health - (MOB_DEFS[mob.type]?.damage || 2));
-              this.broadcast(PacketType.S2C_SOUND, { type: 'hurt', x: chaseTarget.x, y: chaseTarget.y, z: chaseTarget.z });
-              this.sendTo(chaseTarget, PacketType.S2C_PLAYER_STATE, {
-                health: chaseTarget.health,
-                hunger: chaseTarget.hunger,
-                oxygen: chaseTarget.oxygen,
-                level: chaseTarget.xpLevel,
-                xpProgress: chaseTarget.xpCurrent / (7 + chaseTarget.xpLevel * 7)
-              });
+              this.applyServerDamageToPlayer(
+                chaseTarget,
+                MOB_DEFS[mob.type]?.damage || 2,
+                'mob',
+                mob.position,
+                false,
+              );
             }
           }
         }
@@ -1409,15 +1595,7 @@ export class GameServer {
         if (dist < radius * 1.5) {
           const dmg = Math.round(15 * (1 - dist / (radius * 1.5)));
           if (dmg > 0) {
-            player.health = Math.max(0, player.health - dmg);
-            this.broadcast(PacketType.S2C_SOUND, { type: 'hurt', x: player.x, y: player.y, z: player.z });
-            this.sendTo(player, PacketType.S2C_PLAYER_STATE, {
-              health: player.health,
-              hunger: player.hunger,
-              oxygen: player.oxygen,
-              level: player.xpLevel,
-              xpProgress: player.xpCurrent / (7 + player.xpLevel * 7)
-            });
+            this.applyServerDamageToPlayer(player, dmg, 'explosion', pos, false);
           }
         }
       }
@@ -1561,15 +1739,7 @@ export class GameServer {
         if (player.dimension === proj.dimension && player.id !== proj.ownerId) {
           const pPos = new THREE.Vector3(player.x, player.y + 0.9, player.z);
           if (proj.position.distanceTo(pPos) < 1.0) {
-            player.health = Math.max(0, player.health - 3); // arrow damage
-            this.broadcast(PacketType.S2C_SOUND, { type: 'hurt', x: player.x, y: player.y, z: player.z });
-            this.sendTo(player, PacketType.S2C_PLAYER_STATE, {
-              health: player.health,
-              hunger: player.hunger,
-              oxygen: player.oxygen,
-              level: player.xpLevel,
-              xpProgress: player.xpCurrent / (7 + player.xpLevel * 7)
-            });
+            this.applyServerDamageToPlayer(player, proj.damage, 'projectile', proj.position, false);
             this.projectiles.delete(proj.id);
             this.broadcast(PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
             hitSomeone = true;
@@ -1585,7 +1755,7 @@ export class GameServer {
         if (mob.dimension === proj.dimension) {
           const mPos = new THREE.Vector3(mob.position.x, mob.position.y + 0.8, mob.position.z);
           if (proj.position.distanceTo(mPos) < 0.8) {
-            mob.health -= 4;
+            mob.health -= proj.damage;
             mob.hurtTimer = 0.5;
             this.broadcast(PacketType.S2C_MOB_STATE, {
               id: mob.id,
@@ -1653,6 +1823,15 @@ export class GameServer {
     const packetStr = JSON.stringify({ type, payload });
     for (const player of this.players.values()) {
       if (player.socket.readyState === 1) {
+        player.socket.send(packetStr);
+      }
+    }
+  }
+
+  private broadcastDimension(dimension: number, type: PacketType, payload: any) {
+    const packetStr = JSON.stringify({ type, payload });
+    for (const player of this.players.values()) {
+      if (player.dimension === dimension && player.socket.readyState === 1) {
         player.socket.send(packetStr);
       }
     }

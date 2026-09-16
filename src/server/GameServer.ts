@@ -741,18 +741,9 @@ export class GameServer {
       }
 
       case PacketType.C2S_INVENTORY_CLICK: {
-        const { slotIndex, heldItem } = packet.payload;
-        if (!Number.isInteger(slotIndex) || !isValidInventoryStack(heldItem)) break;
-        if (slotIndex >= 0 && slotIndex < 36) {
-          session.inventory[slotIndex] = heldItem ? { ...heldItem } : null;
-        } else if (slotIndex >= 100 && slotIndex < 104) {
-          if (heldItem && ItemRegistry.get(heldItem.id)?.category !== 'armor') break;
-          session.armor[slotIndex - 100] = heldItem ? { ...heldItem } : null;
-        } else if (slotIndex === 200) {
-          session.offhand = heldItem ? { ...heldItem } : null;
-        } else {
-          break;
-        }
+        // A client-provided slot snapshot cannot prove where an item came from.
+        // Reject direct overwrites until an explicit server-validated transaction
+        // protocol is used; return the canonical server inventory instead.
         this.syncPlayerInventory(session);
         break;
       }
@@ -764,7 +755,7 @@ export class GameServer {
         const blockId = this.getBlock(x, y, z, session.dimension);
         // Chest or Furnace interaction sounds
         if ((blockId & 0x3FF) === 54) { // Chest
-          this.broadcast(PacketType.S2C_SOUND, { type: 'chest_open', x, y, z });
+          this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, { type: 'chest_open', x, y, z });
         }
         break;
       }
@@ -1346,9 +1337,13 @@ export class GameServer {
     return { chunks: this.overworldChunks.size, containers: this.containerData.size, players: this.players.size };
   }
 
-  /** P5.2 — drop the inventory to the world, respawn the player, sync. */
+  /** P5.2 — drop equipment, respawn in the Overworld, and sync canonical state. */
   private handlePlayerDeath(player: PlayerSession) {
     player.dead = true;
+    const deathX = player.x;
+    const deathY = player.y;
+    const deathZ = player.z;
+    const deathDimension = player.dimension;
     // Drop inventory in the world.
     for (let i = 0; i < 36; i++) {
       const stack = player.inventory[i];
@@ -1368,22 +1363,35 @@ export class GameServer {
       this.spawnDroppedItem(player.offhand.id, player.offhand.count, player.x, player.y, player.z, player.dimension);
       player.offhand = null;
     }
+    const spawn = this.findSafeWorldSpawnPosition();
+    player.x = spawn.x;
+    player.y = spawn.y;
+    player.z = spawn.z;
+    player.dimension = 0;
     player.health = 20;
     player.hunger = 20;
     player.oxygen = 15;
-    this.sendTo(player, PacketType.S2C_INVENTORY_SYNC, {
-      slots: player.inventory,
-      armor: player.armor,
-      offhand: player.offhand,
+    player.isBlocking = false;
+    player.shieldUseSeconds = 0;
+    player.shieldDisabledSeconds = 0;
+    player.hurtCooldown = createHurtCooldownState();
+    player.healthAuthorityLockSeconds = 0;
+    player.lastAttackTick = null;
+    player.dead = false;
+
+    this.syncPlayerInventory(player);
+    this.syncPlayerState(player);
+    this.sendTo(player, PacketType.S2C_JOIN_ACK, {
+      playerId: player.id,
+      seed: this.seed,
+      x: player.x,
+      y: player.y,
+      z: player.z,
+      gameMode: 'survival',
     });
-    this.sendTo(player, PacketType.S2C_PLAYER_STATE, {
-      health: player.health,
-      hunger: player.hunger,
-      oxygen: player.oxygen,
-      level: player.xpLevel,
-      xpProgress: player.xpCurrent / (7 + player.xpLevel * 7),
+    this.broadcastDimension(deathDimension, PacketType.S2C_SOUND, {
+      type: 'death', x: deathX, y: deathY, z: deathZ
     });
-    this.broadcast(PacketType.S2C_SOUND, { type: 'death', x: player.x, y: player.y, z: player.z });
   }
 
   spawnDroppedItem(itemId: number, count: number, x: number, y: number, z: number, dimension: number): ServerDroppedItem {
@@ -1400,11 +1408,12 @@ export class GameServer {
 
     this.droppedItems.set(id, item);
 
-    this.broadcast(PacketType.S2C_DROPPED_ITEM_SPAWN, {
+    this.broadcastDimension(dimension, PacketType.S2C_DROPPED_ITEM_SPAWN, {
       id,
       itemId,
       count,
-      x, y, z
+      x, y, z,
+      dimension,
     });
 
     return item;

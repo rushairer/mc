@@ -8,9 +8,14 @@ import {
   parseItemAction,
 } from './ItemActionRules';
 import {
+  applyKnockbackResistance,
+  getAttackStrength,
+  getNetheriteKnockbackResistance,
+  getServerKnockbackPlan,
   getServerMeleeDamage,
   getServerMeleeProfile,
   isEntityAttackInReach,
+  isServerCriticalHit,
   parseEntityAttackIntent,
 } from './ServerCombatRules';
 import {
@@ -20,7 +25,21 @@ import {
   resolveServerShieldBlock,
 } from './ServerPlayerDamage';
 import { clampPlayerState, consumeOne, validateConsume } from './PlayerStateRules';
-import { applyContainerClick, containerKey, createContainerSlots, validateContainerClick, validateContainerSlots } from './ContainerRules';
+import {
+  applyServerContainerClick,
+  containerKey,
+  createContainerSlots,
+  parseContainerClickIntent,
+  returnContainerCursorToInventory,
+} from './ContainerRules';
+import {
+  isDescendingAirborne,
+  isMoveTooFast,
+  isSurvivalFlightSpoof,
+  parseServerMoveIntent,
+} from './ServerMovementRules';
+import { getDeathXpDrop, resetXpAfterDeath, shouldDropStackOnDeath } from './ServerDeathRules';
+import { canExecuteServerCommand, clampGiveCount, isValidWeatherArgument } from './ServerCommandRules';
 import {
   canPlaceHeldBlock,
   consumeHeldStack,
@@ -57,6 +76,11 @@ interface PlayerSession {
   yaw: number;
   pitch: number;
   flying: boolean;
+  onGround: boolean;
+  sprinting: boolean;
+  descending: boolean;
+  gameMode: 'survival' | 'creative';
+  isOperator: boolean;
   dimension: number;
   health: number;
   hunger: number;
@@ -74,6 +98,7 @@ interface PlayerSession {
   lastAttackTick: number | null;
   hurtCooldown: HurtCooldownState;
   healthAuthorityLockSeconds: number;
+  openContainer?: { x: number; y: number; z: number; key: string; cursor: ItemStack | null };
   /** P5.2 — guards one-time death handling. */
   dead?: boolean;
 }
@@ -195,6 +220,11 @@ export class GameServer {
       yaw: 0,
       pitch: 0,
       flying: false,
+      onGround: false,
+      sprinting: false,
+      descending: false,
+      gameMode: 'survival',
+      isOperator: isLocalHost,
       dimension: 0, // Overworld
       health: 20,
       hunger: 20,
@@ -325,6 +355,7 @@ export class GameServer {
     const session = this.players.get(id);
     if (session) {
       console.log(`Player ${session.username} disconnected.`);
+      this.closeServerContainer(session);
       this.players.delete(id);
       
       // Auto-save local world if we are inside browser
@@ -630,26 +661,57 @@ export class GameServer {
     if (!session) return;
 
     switch (packet.type) {
-      case PacketType.C2S_PLAYER_MOVE: {
-        const { x, y, z, yaw, pitch, flying } = packet.payload;
-        if (![x, y, z, yaw, pitch].every((value) => typeof value === 'number' && Number.isFinite(value))) break;
-        if (y < -64 || y > WORLD_HEIGHT + 64) break;
-        session.x = x;
-        session.y = y;
-        session.z = z;
-        session.yaw = yaw;
-        session.pitch = pitch;
-        session.flying = flying;
+      case PacketType.C2S_JOIN: {
+        const requestedMode = packet.payload?.mode === 'creative' ? 'creative' : 'survival';
+        session.gameMode = session.isOperator ? requestedMode : 'survival';
+        session.flying = false;
+        this.sendTo(session, PacketType.S2C_JOIN_ACK, {
+          playerId: session.id,
+          seed: this.seed,
+          x: session.x,
+          y: session.y,
+          z: session.z,
+          gameMode: session.gameMode,
+        });
+        break;
+      }
 
-        // Broadcast move packet to other players
+      case PacketType.C2S_PLAYER_MOVE: {
+        const intent = parseServerMoveIntent(packet.payload);
+        const invalidY = !intent || intent.y < -64 || intent.y > WORLD_HEIGHT + 64;
+        const flightSpoof = intent ? isSurvivalFlightSpoof(intent, session.gameMode === 'creative') : true;
+        const tooFast = intent ? isMoveTooFast(session, intent) : true;
+        if (!intent || invalidY || flightSpoof || tooFast) {
+          this.sendTo(session, PacketType.S2C_POSITION_CORRECTION, {
+            x: session.x, y: session.y, z: session.z,
+            yaw: session.yaw, pitch: session.pitch,
+          });
+          break;
+        }
+
+        session.descending = isDescendingAirborne(
+          { x: session.x, y: session.y, z: session.z, onGround: session.onGround, sprinting: session.sprinting },
+          intent,
+        );
+        session.x = intent.x;
+        session.y = intent.y;
+        session.z = intent.z;
+        session.yaw = intent.yaw;
+        session.pitch = intent.pitch;
+        session.onGround = intent.onGround;
+        session.sprinting = intent.sprinting && session.hunger > 6 && !session.flying;
+        session.flying = session.gameMode === 'creative' && intent.flying;
+
         this.broadcastExcept(playerId, PacketType.S2C_PLAYER_MOVE, {
           playerId,
-          x,
-          y,
-          z,
-          yaw,
-          pitch,
-          flying
+          x: session.x,
+          y: session.y,
+          z: session.z,
+          yaw: session.yaw,
+          pitch: session.pitch,
+          flying: session.flying,
+          onGround: session.onGround,
+          sprinting: session.sprinting,
         });
         break;
       }
@@ -722,11 +784,12 @@ export class GameServer {
       }
 
       case PacketType.C2S_CHAT: {
-        const { text } = packet.payload;
+        const text = typeof packet.payload?.text === 'string' ? packet.payload.text.slice(0, 256) : '';
+        if (!text) break;
         if (text.startsWith('/')) {
           this.executeCommand(session, text);
         } else {
-          this.broadcast(PacketType.S2C_CHAT, {
+          this.broadcastDimension(session.dimension, PacketType.S2C_CHAT, {
             sender: session.username,
             text
           });
@@ -766,16 +829,28 @@ export class GameServer {
 
         const held = session.inventory[session.selectedSlot];
         const profile = getServerMeleeProfile(held);
-        const damage = getServerMeleeDamage(held, session.lastAttackTick, this.gameTick);
+        const attackStrength = getAttackStrength(session.lastAttackTick, this.gameTick, profile.cooldownTicks);
+        const feetBlock = this.getBlock(Math.floor(session.x), Math.floor(session.y), Math.floor(session.z), session.dimension);
+        const critical = isServerCriticalHit(attackStrength, {
+          descending: session.descending,
+          onGround: session.onGround,
+          sprinting: session.sprinting,
+          flying: session.flying,
+          inWater: BlockRegistry.isFluid(feetBlock),
+        });
+        const damage = getServerMeleeDamage(held, session.lastAttackTick, this.gameTick, critical);
+        const knockback = getServerKnockbackPlan(held, attackStrength, session.sprinting);
 
         if (typeof intent.entityId === 'number') {
           const mob = this.mobs.get(intent.entityId);
           if (!mob || mob.health <= 0 || mob.dimension !== session.dimension) break;
-          if (!isEntityAttackInReach(session, mob.position, 'survival')) break;
+          if (!isEntityAttackInReach(session, mob.position, session.gameMode)) break;
 
           session.lastAttackTick = this.gameTick;
           mob.health -= damage;
           mob.hurtTimer = 0.5;
+          this.applyMeleeKnockbackToMob(session, mob, knockback.strength);
+          if (knockback.sprintKnockback) session.sprinting = false;
           this.damageHeldMeleeItem(session, profile.durabilityCost);
           this.broadcastDimension(session.dimension, PacketType.S2C_MOB_STATE, {
             id: mob.id,
@@ -783,7 +858,7 @@ export class GameServer {
             hurtTimer: mob.hurtTimer
           });
           this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
-            type: 'hit', x: mob.position.x, y: mob.position.y, z: mob.position.z
+            type: critical ? 'critical_hit' : 'hit', x: mob.position.x, y: mob.position.y, z: mob.position.z
           });
           if (mob.health <= 0) this.handleMobDeath(mob);
           break;
@@ -791,17 +866,22 @@ export class GameServer {
 
         const target = this.players.get(intent.entityId);
         if (!target || target.id === session.id || target.dimension !== session.dimension) break;
-        if (!isEntityAttackInReach(session, target, 'survival')) break;
+        if (!isEntityAttackInReach(session, target, session.gameMode)) break;
 
         session.lastAttackTick = this.gameTick;
         this.damageHeldMeleeItem(session, profile.durabilityCost);
-        this.applyServerDamageToPlayer(
+        const applied = this.applyServerDamageToPlayer(
           target,
           damage,
           'mob',
           new THREE.Vector3(session.x, session.y + 1.62, session.z),
           profile.isAxe,
         );
+        if (applied > 0) {
+          const resistance = getNetheriteKnockbackResistance(target.armor);
+          this.applyMeleeKnockbackToPlayer(session, target, applyKnockbackResistance(knockback.strength, resistance));
+        }
+        if (knockback.sprintKnockback) session.sprinting = false;
         break;
       }
 
@@ -881,33 +961,59 @@ export class GameServer {
         break;
       }
 
-      // P5.3: container authority — the server owns chest contents.
+      // P5.3: authoritative container transaction session.
       case PacketType.C2S_CONTAINER_OPEN: {
         const { x, y, z } = packet.payload;
         if (!isValidBlockCoordinate(x) || !isValidWorldY(y, WORLD_HEIGHT) || !isValidBlockCoordinate(z)) break;
-        if (!isBlockActionInReach(session, x, y, z, 'survival')) break;
+        if (!isBlockActionInReach(session, x, y, z, session.gameMode)) break;
         const blockId = this.getBlock(x, y, z, session.dimension);
-        const base = blockId & 0x3FF;
-        const name = BlockRegistry.get(blockId)?.name ?? 'chest';
-        const key = containerKey(x, y, z);
-        if (!this.containerData.has(key)) {
-          this.containerData.set(key, createContainerSlots(name.includes('hopper') ? 'hopper' : 'chest'));
+        const name = BlockRegistry.get(blockId)?.name ?? '';
+        const kind = name.includes('hopper') ? 'hopper' : (name.includes('chest') || name.includes('barrel') ? 'chest' : null);
+        if (!kind) break;
+        this.closeServerContainer(session);
+        const key = this.dimensionContainerKey(session.dimension, x, y, z);
+        if (!this.containerData.has(key)) this.containerData.set(key, createContainerSlots(kind));
+        session.openContainer = { x, y, z, key, cursor: null };
+        this.sendOpenContainerState(session);
+        break;
+      }
+
+      case PacketType.C2S_CONTAINER_CLICK: {
+        const intent = parseContainerClickIntent(packet.payload);
+        const open = session.openContainer;
+        if (!intent || !open) break;
+        if (!isBlockActionInReach(session, open.x, open.y, open.z, session.gameMode)) {
+          this.closeServerContainer(session);
+          break;
         }
-        this.sendTo(session, PacketType.S2C_CONTAINER_DATA, {
-          x, y, z, slots: this.containerData.get(key),
-        });
+        const slots = this.containerData.get(open.key);
+        if (!slots) break;
+        const next = applyServerContainerClick({
+          containerSlots: slots,
+          playerSlots: session.inventory,
+          cursor: open.cursor,
+        }, intent);
+        if (!next) {
+          this.sendOpenContainerState(session);
+          break;
+        }
+        this.containerData.set(open.key, next.containerSlots);
+        session.inventory = next.playerSlots;
+        open.cursor = next.cursor;
+        this.syncPlayerInventory(session);
+        this.sendOpenContainerState(session);
+        break;
+      }
+
+      case PacketType.C2S_CONTAINER_CLOSE: {
+        this.closeServerContainer(session);
         break;
       }
 
       case PacketType.C2S_CONTAINER_UPDATE: {
-        const { x, y, z, slots } = packet.payload;
-        const key = containerKey(x, y, z);
-        const existing = this.containerData.get(key);
-        if (!existing || !validateContainerSlots(slots, existing.length)) break;
-        // Adopt the client's (optimistic) contents, server-validated per slot.
-        const adopted = slots.map((slot: ItemStack | null) => (slot ? { ...slot } : null));
-        this.containerData.set(key, adopted);
-        this.sendTo(session, PacketType.S2C_CONTAINER_DATA, { x, y, z, slots: adopted });
+        // Legacy whole-container snapshots are never authoritative. A stale or
+        // malicious client receives the canonical server state instead.
+        this.sendOpenContainerState(session);
         break;
       }
     }
@@ -916,7 +1022,11 @@ export class GameServer {
   // --- Commands ---
 
   private executeCommand(session: PlayerSession, cmdText: string) {
-    const parts = cmdText.substring(1).split(' ');
+    if (!canExecuteServerCommand(cmdText, session.isOperator)) {
+      this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: 'You do not have permission to use that command.' });
+      return;
+    }
+    const parts = cmdText.substring(1).trim().split(/\s+/);
     const label = parts[0].toLowerCase();
     const args = parts.slice(1);
 
@@ -959,8 +1069,10 @@ export class GameServer {
       case 'give': {
         if (args.length >= 1) {
           const itemId = parseInt(args[0]);
-          const count = args[1] ? parseInt(args[1]) : 64;
-          
+          const def = ItemRegistry.get(itemId);
+          const count = def ? clampGiveCount(args[1] ?? def.maxStackSize, def.maxStackSize) : null;
+          if (!def || count === null) break;
+
           // Find empty slot or matching slot
           let added = false;
           for (let i = 0; i < 36; i++) {
@@ -969,7 +1081,7 @@ export class GameServer {
               session.inventory[i] = { id: itemId, count };
               added = true;
               break;
-            } else if (slot.id === itemId && slot.count + count <= 64) {
+            } else if (slot.id === itemId && slot.count + count <= def.maxStackSize) {
               slot.count += count;
               added = true;
               break;
@@ -1001,8 +1113,8 @@ export class GameServer {
       }
 
       case 'weather': {
-        if (args[0]) {
-          const w = args[0] as 'clear' | 'rain' | 'thunder';
+        if (isValidWeatherArgument(args[0])) {
+          const w = args[0];
           this.weatherType = w;
           this.weatherIntensity = w === 'clear' ? 0 : 0.8;
           this.broadcast(PacketType.S2C_WEATHER, { type: this.weatherType, intensity: this.weatherIntensity });
@@ -1017,6 +1129,66 @@ export class GameServer {
     }
   }
 
+
+
+  private dimensionContainerKey(dimension: number, x: number, y: number, z: number): string {
+    return `${dimension}:${containerKey(x, y, z)}`;
+  }
+
+  private sendOpenContainerState(player: PlayerSession) {
+    const open = player.openContainer;
+    if (!open) return;
+    this.sendTo(player, PacketType.S2C_CONTAINER_DATA, {
+      x: open.x,
+      y: open.y,
+      z: open.z,
+      slots: this.containerData.get(open.key) ?? [],
+      cursor: open.cursor,
+    });
+  }
+
+  private closeServerContainer(player: PlayerSession) {
+    const open = player.openContainer;
+    if (!open) return;
+    const slots = this.containerData.get(open.key) ?? [];
+    const next = returnContainerCursorToInventory({
+      containerSlots: slots,
+      playerSlots: player.inventory,
+      cursor: open.cursor,
+    });
+    this.containerData.set(open.key, next.containerSlots);
+    player.inventory = next.playerSlots;
+    if (next.cursor) {
+      this.spawnDroppedItem(next.cursor.id, next.cursor.count, player.x, player.y + 0.5, player.z, player.dimension);
+    }
+    player.openContainer = undefined;
+    this.syncPlayerInventory(player);
+  }
+
+  private applyMeleeKnockbackToMob(attacker: PlayerSession, target: ServerMob, strength: number) {
+    if (strength <= 0) return;
+    const dx = target.position.x - attacker.x;
+    const dz = target.position.z - attacker.z;
+    const length = Math.hypot(dx, dz);
+    if (length <= 1e-9) return;
+    const scale = 0.5 * strength / length;
+    target.velocity.x = target.velocity.x * 0.5 + dx * scale;
+    target.velocity.z = target.velocity.z * 0.5 + dz * scale;
+    target.velocity.y = Math.min(0.4, target.velocity.y * 0.5 + 0.4);
+  }
+
+  private applyMeleeKnockbackToPlayer(attacker: PlayerSession, target: PlayerSession, strength: number) {
+    if (strength <= 0) return;
+    const dx = target.x - attacker.x;
+    const dz = target.z - attacker.z;
+    const length = Math.hypot(dx, dz);
+    if (length <= 1e-9) return;
+    this.sendTo(target, PacketType.S2C_PLAYER_VELOCITY, {
+      x: dx / length * 0.5 * strength,
+      y: 0.4,
+      z: dz / length * 0.5 * strength,
+    });
+  }
 
   private syncPlayerInventory(player: PlayerSession) {
     this.sendTo(player, PacketType.S2C_INVENTORY_SYNC, {
@@ -1344,23 +1516,31 @@ export class GameServer {
     const deathY = player.y;
     const deathZ = player.z;
     const deathDimension = player.dimension;
+    this.closeServerContainer(player);
+    const deathXp = getDeathXpDrop(player.xpLevel);
     // Drop inventory in the world.
     for (let i = 0; i < 36; i++) {
       const stack = player.inventory[i];
       if (stack) {
-        this.spawnDroppedItem(stack.id, stack.count, player.x, player.y, player.z, player.dimension);
+        if (shouldDropStackOnDeath(stack)) {
+          this.spawnDroppedItem(stack.id, stack.count, player.x, player.y, player.z, player.dimension);
+        }
         player.inventory[i] = null;
       }
     }
     for (let i = 0; i < player.armor.length; i++) {
       const stack = player.armor[i];
       if (stack) {
-        this.spawnDroppedItem(stack.id, stack.count, player.x, player.y, player.z, player.dimension);
+        if (shouldDropStackOnDeath(stack)) {
+          this.spawnDroppedItem(stack.id, stack.count, player.x, player.y, player.z, player.dimension);
+        }
         player.armor[i] = null;
       }
     }
     if (player.offhand) {
-      this.spawnDroppedItem(player.offhand.id, player.offhand.count, player.x, player.y, player.z, player.dimension);
+      if (shouldDropStackOnDeath(player.offhand)) {
+        this.spawnDroppedItem(player.offhand.id, player.offhand.count, player.x, player.y, player.z, player.dimension);
+      }
       player.offhand = null;
     }
     const spawn = this.findSafeWorldSpawnPosition();
@@ -1371,12 +1551,25 @@ export class GameServer {
     player.health = 20;
     player.hunger = 20;
     player.oxygen = 15;
+    const resetXp = resetXpAfterDeath({ level: player.xpLevel, current: player.xpCurrent, progress: player.xpProgress });
+    player.xpLevel = resetXp.level;
+    player.xpCurrent = resetXp.current;
+    player.xpProgress = resetXp.progress;
+    if (deathXp > 0) {
+      this.broadcastDimension(deathDimension, PacketType.S2C_SOUND, {
+        type: 'xp_drop', amount: deathXp, x: deathX, y: deathY, z: deathZ,
+      });
+    }
     player.isBlocking = false;
     player.shieldUseSeconds = 0;
     player.shieldDisabledSeconds = 0;
     player.hurtCooldown = createHurtCooldownState();
     player.healthAuthorityLockSeconds = 0;
     player.lastAttackTick = null;
+    player.onGround = false;
+    player.sprinting = false;
+    player.descending = false;
+    player.flying = false;
     player.dead = false;
 
     this.syncPlayerInventory(player);

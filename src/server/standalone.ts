@@ -1,5 +1,8 @@
 import { WebSocketServer } from 'ws';
 import { GameServer } from './GameServer';
+import { registerWildernessBound26_3 } from '../world/registerWildernessBound26_3';
+
+registerWildernessBound26_3();
 
 const PORT = parseInt(process.env.PORT || '8080');
 const wss = new WebSocketServer({ port: PORT });

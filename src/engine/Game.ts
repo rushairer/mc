@@ -63,6 +63,7 @@ import {
 import { planBlockPlacement } from '../world/BlockPlacement';
 import { fallingLeafParticle26_3, shouldPrioritizeShieldUse26_3 } from '../world/WildernessBoundChanges26_3';
 import { applySaturationStew26_3 } from '../world/SuspiciousStew26_3';
+import { findChorusFruitDestination26_3 } from '../world/TeleportRules26_3';
 import { getButtonPressTicks } from '../world/ButtonRules';
 import { getDamageShake, normalizeDamageFlash } from '../systems/FeelRules';
 import { rollBlockLoot, rollLootTable, type LootTable } from '../world/LootSystem';
@@ -3419,7 +3420,7 @@ export class Game {
     }
     this.sound.playBurp();
     // P5.2: server-validated consumable use in multiplayer.
-    if (this.isMultiplayerNetworkConnected()) {
+    if ((this.isMultiplayerNetworkConnected())) {
       this.network.send(PacketType.C2S_ITEM_CONSUME, {
         slot: this.player.selectedSlot,
         itemId: stack.id,
@@ -3429,6 +3430,28 @@ export class Game {
     }
     this.notifyState();
     return { handled: true, completed: true, cooldown: 0.5 };
+  }
+
+  private applyChorusFruitTeleport26_3(): boolean {
+    const from = this.player.position.clone();
+    const destination = findChorusFruitDestination26_3(
+      { x: from.x, y: from.y, z: from.z },
+      (x, y, z) => this.chunks.getBlock(x, y, z),
+      Math.random,
+      WORLD_HEIGHT,
+    );
+    if (!destination) return false;
+
+    const to = new THREE.Vector3(destination.x, destination.y, destination.z);
+    this.player.position.copy(to);
+    this.player.onGround = false;
+    this.particles.spawnTeleportTrail26_3(
+      from.clone().add(new THREE.Vector3(0, this.player.eyeHeight * 0.5, 0)),
+      to.clone().add(new THREE.Vector3(0, this.player.eyeHeight * 0.5, 0)),
+      24,
+    );
+    this.sound.playNamedEvent26_3('item.chorus_fruit.teleport');
+    return true;
   }
 
   private continueFoodUse(stack: ItemStack, dt: number) {
@@ -3492,6 +3515,10 @@ export class Game {
 
     this.sound.playBurp();
     // P5.2: in multiplayer the server validates and deducts consumables.
+    if (foodDef.name === 'chorus_fruit') {
+      this.applyChorusFruitTeleport26_3();
+    }
+
     if (this.isMultiplayerNetworkConnected()) {
       this.network.send(PacketType.C2S_ITEM_CONSUME, {
         slot: this.player.selectedSlot,

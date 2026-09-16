@@ -3,6 +3,7 @@ import { BlockRegistry } from '../world/BlockRegistry';
 import type { VillagerProfession } from '../systems/VillageSystem';
 import { shouldRunRandomMovement26_3 } from '../world/WildernessBoundChanges26_3';
 import { resolveShelfMushroomLanding26_3 } from '../world/WildernessBoundGameplay26_3';
+import { isSafeTeleportDestination26_3 } from '../world/TeleportRules26_3';
 
 export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker' | 'pillager' | 'wither' | 'guardian' | 'vex';
 
@@ -2088,28 +2089,28 @@ export class Mob {
     }
   }
 
-  teleportRandomly(getBlock: (x: number, y: number, z: number) => number) {
+  teleportRandomly(
+    getBlock: (x: number, y: number, z: number) => number,
+    random: () => number = Math.random,
+  ): boolean {
+    const actor = this.def.type === 'shulker' ? 'shulker' : 'enderman';
+    const clearance = this.def.type === 'enderman' ? 3 : 2;
     for (let attempts = 0; attempts < 16; attempts++) {
-      const dx = (Math.random() - 0.5) * 16;
-      const dy = (Math.random() - 0.5) * 6;
-      const dz = (Math.random() - 0.5) * 16;
+      const dx = (random() - 0.5) * 16;
+      const dy = (random() - 0.5) * 6;
+      const dz = (random() - 0.5) * 16;
       const tx = Math.floor(this.position.x + dx);
       const ty = Math.floor(this.position.y + dy);
       const tz = Math.floor(this.position.z + dz);
       
-      if (ty >= 0 && ty < 254) {
-        const foot = getBlock(tx, ty, tz);
-        const body = getBlock(tx, ty + 1, tz);
-        const head = getBlock(tx, ty + 2, tz);
-        const below = getBlock(tx, ty - 1, tz);
-        if (foot === 0 && body === 0 && head === 0 && below !== 0 && !BlockRegistry.isFluid(below)) {
-          this.position.set(tx + 0.5, ty + 0.05, tz + 0.5);
-          this.velocity.set(0, 0, 0);
-          this.wanderTarget = null;
-          break;
-        }
+      if (ty >= 0 && ty < 254 && isSafeTeleportDestination26_3(actor, tx, ty, tz, getBlock, clearance, 256)) {
+        this.position.set(tx + 0.5, ty + 0.05, tz + 0.5);
+        this.velocity.set(0, 0, 0);
+        this.wanderTarget = null;
+        return true;
       }
     }
+    return false;
   }
 
   takeDamage(amount: number, knockbackDir?: THREE.Vector3) {

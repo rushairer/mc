@@ -171,6 +171,7 @@ export interface GameState {
   openUI: UIType;
   inventory: Inventory;
   chestInventory: (ItemStack | null)[] | null;
+  serverContainerCursor: ItemStack | null;
   chestTitleKey: 'chest' | 'doubleChest' | 'barrel';
   hopperInventory: (ItemStack | null)[] | null;
   furnaceInventory: (ItemStack | null)[] | null;
@@ -307,6 +308,7 @@ export class Game {
   private fpArmGroup!: THREE.Group;
   private fpLastHeldItemId = -1;
   private openChestPos: THREE.Vector3 | null = null;
+  private serverContainerCursor: ItemStack | null = null;
   private openHopperPos: THREE.Vector3 | null = null;
   private openFurnacePos: THREE.Vector3 | null = null;
   private openBrewingPos: THREE.Vector3 | null = null;
@@ -1302,7 +1304,8 @@ export class Game {
   }
 
   /** P5.3 — apply server container contents to the open chest. */
-  applyServerContainerData(x: number, y: number, z: number, slots: (ItemStack | null)[]) {
+  applyServerContainerData(x: number, y: number, z: number, slots: (ItemStack | null)[], cursor: ItemStack | null = null) {
+    this.serverContainerCursor = cursor;
     if (!this.openChestPos || this.openChestPos.x !== x || this.openChestPos.y !== y || this.openChestPos.z !== z) return;
     const metadata = this.chunks.getBlockMeta(x, y, z);
     if (!metadata) return;
@@ -2159,7 +2162,9 @@ export class Game {
         z: this.player.position.z,
         yaw: this.player.yaw,
         pitch: this.player.pitch,
-        flying: this.player.flying
+        flying: this.player.flying,
+        onGround: this.player.onGround,
+        sprinting: this.input.isKeyDown('control') && this.input.isKeyDown('w') && this.player.hunger > 6 && !this.player.flying,
       });
       this.network.update(dt);
     }
@@ -4533,7 +4538,7 @@ export class Game {
       this.player.position.z
     );
 
-    if (this.player.health <= 0) {
+    if (this.player.health <= 0 && !this.network.isConnected) {
       this.openUI = 'death';
       const keepInv = this.gamerules.getRule('keepInventory');
       if (!keepInv) {
@@ -4639,6 +4644,7 @@ export class Game {
       openUI: this.openUI,
       inventory: this.inventory,
       chestInventory: this.getOpenChestInventory(),
+      serverContainerCursor: this.serverContainerCursor,
       chestTitleKey: this.getOpenChestTitleKey(),
       hopperInventory: this.getOpenHopperInventory(),
       furnaceInventory: this.getOpenFurnaceInventory(),
@@ -6677,27 +6683,16 @@ export class Game {
     return null;
   }
 
-  private saveOpenChestInventory() {
-    if (!this.openChestPos) return;
+  saveOpenChestInventory() {
+    if (!this.openChestPos || !this.network.isConnected) return;
+    this.network.send(PacketType.C2S_CONTAINER_CLOSE, {});
+    this.serverContainerCursor = null;
+  }
 
-    const x = this.openChestPos.x;
-    const y = this.openChestPos.y;
-    const z = this.openChestPos.z;
-
-    const partners = this.getDoubleChestPartners(x, y, z);
-    if (partners) {
-      const leftMeta = this.ensureChestMetadata(partners.leftPos.x, partners.leftPos.y, partners.leftPos.z);
-      const rightMeta = this.ensureChestMetadata(partners.rightPos.x, partners.rightPos.y, partners.rightPos.z);
-      if (leftMeta && rightMeta) {
-        this.chunks.setBlockMeta(partners.leftPos.x, partners.leftPos.y, partners.leftPos.z, leftMeta, true);
-        this.chunks.setBlockMeta(partners.rightPos.x, partners.rightPos.y, partners.rightPos.z, rightMeta, true);
-      }
-    } else {
-      const metadata = this.ensureChestMetadata(x, y, z);
-      if (metadata) {
-        this.chunks.setBlockMeta(x, y, z, metadata, true);
-      }
-    }
+  serverContainerClick(area: 'container' | 'player', slotIndex: number) {
+    if (!this.network.isConnected || !this.openChestPos) return false;
+    this.network.send(PacketType.C2S_CONTAINER_CLICK, { area, slotIndex });
+    return true;
   }
 
   private getOpenHopperInventory(): (ItemStack | null)[] | null {

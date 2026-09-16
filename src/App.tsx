@@ -48,6 +48,7 @@ const initialGameState: GameState = {
   openUI: 'none',
   inventory: null as any,
   chestInventory: null,
+  serverContainerCursor: null,
   chestTitleKey: 'chest',
   hopperInventory: null,
   furnaceInventory: null,

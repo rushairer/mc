@@ -205,6 +205,23 @@ export class NetworkClient {
         break;
       }
 
+      case PacketType.S2C_POSITION_CORRECTION: {
+        const { x, y, z, yaw, pitch } = packet.payload;
+        this.game.player.position.set(x, y, z);
+        this.game.player.velocity.set(0, 0, 0);
+        if (Number.isFinite(yaw)) this.game.player.yaw = yaw;
+        if (Number.isFinite(pitch)) this.game.player.pitch = pitch;
+        break;
+      }
+
+      case PacketType.S2C_PLAYER_VELOCITY: {
+        const { x, y, z } = packet.payload;
+        if ([x, y, z].every(Number.isFinite)) {
+          this.game.player.velocity.add(new THREE.Vector3(x, y, z));
+        }
+        break;
+      }
+
       case PacketType.S2C_PLAYER_STATE: {
         const { health, hunger, oxygen, level, xpProgress } = packet.payload;
         this.game.player.health = health;
@@ -356,8 +373,8 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_CONTAINER_DATA: {
-        const { x, y, z, slots } = packet.payload;
-        this.game.applyServerContainerData(x, y, z, slots);
+        const { x, y, z, slots, cursor } = packet.payload;
+        this.game.applyServerContainerData(x, y, z, slots, cursor ?? null);
         break;
       }
 

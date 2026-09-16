@@ -32,6 +32,7 @@ jobs:
           git commit -m "fix: wire server movement combat and container authority"
       - name: Wire client correction and authority intents
         run: |
+          node scripts/parity-111-130-client-prep.mjs
           node scripts/parity-111-130-runtime.mjs client
           npm run audit:parity
           npm run check

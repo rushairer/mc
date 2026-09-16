@@ -38,8 +38,9 @@ const to=`                onClick={() => {
                   const recipe = findSmeltingResult(item.id);
                   const canSmelt = !!recipe && isFurnaceRecipeAllowed(containerType, item.id, recipe.output);
                   const isFuel = isSmeltingFuel(item.id);
-                  const source: 'player_hotbar' | 'player_main' = i < 9 ? 'player_hotbar' : 'player_main';
-                  const target = getFurnaceQuickMoveTarget(source, { canSmelt, isFuel });
+                  const target = i < 9
+                    ? getFurnaceQuickMoveTarget('player_hotbar', { canSmelt, isFuel })
+                    : getFurnaceQuickMoveTarget('player_main', { canSmelt, isFuel });
 
                   setHoveredSlot(null);
 

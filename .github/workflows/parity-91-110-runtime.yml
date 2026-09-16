@@ -24,6 +24,7 @@ jobs:
       - name: Wire combat and projectile authority
         run: |
           node scripts/parity-91-110-runtime.mjs combat
+          node scripts/remove-parity-91-110-duplicate-ray.mjs
           npm run audit:parity
           npm run check
           git config user.name "Aben"

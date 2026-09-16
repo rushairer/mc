@@ -28,8 +28,8 @@ test('very large hits still retain the Java minimum armor contribution', () => {
   close(applyArmorReduction(100, 20, 0), 84);
 });
 
-test('fall drowning magic wither and starvation bypass base armor', () => {
-  for (const kind of ['fall', 'drown', 'magic', 'wither', 'starve'] as const) {
+test('fall drowning magic wither starvation and generic bypass base armor', () => {
+  for (const kind of ['fall', 'drown', 'magic', 'wither', 'starve', 'generic'] as const) {
     assert.equal(baseArmorApplies(kind), false, kind);
   }
 });

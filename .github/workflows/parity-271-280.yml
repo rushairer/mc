@@ -6,6 +6,7 @@ on:
       - parity-271-280-staging
     paths:
       - scripts/patch-parity-271-280.mjs
+      - scripts/patch-parity-271-280-v2.mjs
       - .github/workflows/parity-271-280.yml
 
 permissions:
@@ -23,7 +24,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: node scripts/patch-parity-271-280.mjs
+      - run: node scripts/patch-parity-271-280-v2.mjs
       - run: npm run check
       - name: Commit parity batch
         run: |

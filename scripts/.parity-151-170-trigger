@@ -1,1 +1,1 @@
-run parity 151-170
+run parity 151-170 retry 2

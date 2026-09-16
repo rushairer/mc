@@ -2,6 +2,11 @@ import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { EnchantSystem } from '../systems/EnchantSystem';
 import { getArmorToughness } from '../items/ArmorAttributes';
+import {
+  getArmorDurabilityDamage,
+  getMendingRepairCapacity,
+  getMendingXpCost,
+} from '../systems/DurabilityRules';
 
 export const INVENTORY_SIZE = 36;  // 0-8 = hotbar, 9-35 = main
 export const HOTBAR_SIZE = 9;
@@ -149,24 +154,22 @@ export class Inventory {
     return null;
   }
 
-  /** Damage a tool in the given slot by 1. Remove if broken. */
-  damageTool(slotIndex: number): boolean {
+  /** Damage a tool by the requested durability cost, applying Unbreaking per point. */
+  damageTool(slotIndex: number, amount: number = 1): boolean {
     const slot = this.slots[slotIndex];
-    if (!slot) return false;
+    if (!slot || !ItemRegistry.isTool(slot.id)) return false;
 
-    if (ItemRegistry.isTool(slot.id)) {
-      const def = ItemRegistry.get(slot.id);
-      if (slot.durability === undefined) {
-        slot.durability = def?.durability ?? 100;
-      }
+    const def = ItemRegistry.get(slot.id);
+    if (slot.durability === undefined) {
+      slot.durability = def?.durability ?? 100;
+    }
 
-      if (!EnchantSystem.shouldUseDurability(slot)) {
-        return false;
-      }
-
+    const cost = Math.max(0, Math.floor(amount));
+    for (let i = 0; i < cost; i++) {
+      if (!EnchantSystem.shouldUseDurability(slot)) continue;
       slot.durability -= 1;
       if (slot.durability <= 0) {
-        this.slots[slotIndex] = null; // tool broke!
+        this.slots[slotIndex] = null;
         return true;
       }
     }
@@ -259,36 +262,69 @@ export class Inventory {
     return total;
   }
 
-  /** Damage equipped armor items. */
-  damageArmor(amount: number): void {
+  /**
+   * Damage every equipped armor item from the same raw hit. Java computes the
+   * durability cost from pre-mitigation damage and applies Unbreaking to each
+   * durability point independently for every worn piece.
+   */
+  damageArmor(rawDamage: number): void {
     if (!this.armor || !Array.isArray(this.armor)) {
       this.armor = new Array(ARMOR_SLOTS).fill(null);
     }
-    const equippedIndices: number[] = [];
-    for (let i = 0; i < ARMOR_SLOTS; i++) {
-      if (this.armor[i]) {
-        equippedIndices.push(i);
-      }
-    }
+    const durabilityCost = getArmorDurabilityDamage(rawDamage);
+    if (durabilityCost <= 0) return;
 
-    if (equippedIndices.length === 0) return;
+    for (let armorIndex = 0; armorIndex < ARMOR_SLOTS; armorIndex++) {
+      const armorItem = this.armor[armorIndex];
+      if (!armorItem) continue;
 
-    // Pick a random equipped piece to damage
-    const randomIndex = equippedIndices[Math.floor(Math.random() * equippedIndices.length)];
-    const armorItem = this.armor[randomIndex];
-    if (armorItem) {
       const def = ItemRegistry.get(armorItem.id);
       if (armorItem.durability === undefined) {
         armorItem.durability = def?.durability ?? 100;
       }
-      if (!EnchantSystem.shouldUseDurability(armorItem)) {
-        return;
-      }
 
-      armorItem.durability -= amount;
-      if (armorItem.durability <= 0) {
-        this.armor[randomIndex] = null; // armor broke!
+      for (let point = 0; point < durabilityCost; point++) {
+        if (!EnchantSystem.shouldUseDurability(armorItem)) continue;
+        armorItem.durability -= 1;
+        if (armorItem.durability <= 0) {
+          this.armor[armorIndex] = null;
+          break;
+        }
       }
     }
+  }
+
+  /**
+   * Route one collected XP orb through Java-style Mending eligibility: selected
+   * main-hand item, offhand, or equipped armor. Returns XP left for the player.
+   */
+  repairWithMendingXP(
+    selectedSlot: number,
+    xpAmount: number,
+    random: () => number = Math.random,
+  ): number {
+    const xp = Math.max(0, Math.floor(xpAmount));
+    if (xp <= 0) return 0;
+
+    const candidates: ItemStack[] = [];
+    const selected = this.getSelected(selectedSlot);
+    const equipped = [selected, this.offhand, ...this.armor];
+    for (const item of equipped) {
+      if (!item || EnchantSystem.getLevel(item, 'mending') <= 0) continue;
+      const maxDurability = ItemRegistry.get(item.id)?.durability;
+      if (!maxDurability || item.durability === undefined || item.durability >= maxDurability) continue;
+      candidates.push(item);
+    }
+
+    if (candidates.length === 0) return xp;
+    const rawIndex = Math.floor(random() * candidates.length);
+    const chosen = candidates[Math.min(candidates.length - 1, Math.max(0, rawIndex))];
+    const maxDurability = ItemRegistry.get(chosen.id)?.durability;
+    if (!maxDurability || chosen.durability === undefined) return xp;
+
+    const missing = Math.max(0, maxDurability - chosen.durability);
+    const repaired = Math.min(missing, getMendingRepairCapacity(xp));
+    chosen.durability += repaired;
+    return Math.max(0, xp - getMendingXpCost(repaired));
   }
 }

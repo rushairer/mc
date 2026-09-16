@@ -1,5 +1,6 @@
 name: Apply parity 291-310 item fundamentals
 
+# Validation trigger revision: placement-base-id-fix
 on:
   push:
     branches: [master]

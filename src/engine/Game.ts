@@ -68,7 +68,22 @@ import { getBlockXpRange, rollXp, BREEDING_XP_RANGE, FISHING_XP_RANGE } from '..
 import type { WorldTickPayload, WorldTickType } from '../world/WorldTick';
 import { getAttackCooldownSeconds } from '../items/CombatAttributes';
 import { calculateMeleeDamage, getSweepDamage, isChargedMeleeAttack } from '../systems/CombatRules';
-import { applyDamageProtection, baseArmorApplies } from '../systems/DamageRules';
+import { applyDamageProtection, baseArmorApplies, type PlayerDamageKind } from '../systems/DamageRules';
+import {
+  SHIELD_MOVEMENT_MULTIPLIER,
+  getBlockedShieldDurabilityDamage,
+  isShieldBlockActive,
+  shieldCanBlockDamage,
+  shieldFacesSource,
+} from '../systems/ShieldRules';
+import { createHurtCooldownState, resolveHurtDamage, tickHurtCooldown } from '../systems/HurtCooldown';
+import { getMeleeDurabilityCost } from '../systems/DurabilityRules';
+import {
+  BOW_FULL_CHARGE_SECONDS,
+  canReleaseBow,
+  getBowPower as getJavaBowPower,
+  getCrossbowChargeSeconds,
+} from '../systems/RangedRules';
 
 const HONEY_BOTTLE_ID = 454;
 const GLASS_BOTTLE_ID = 374;
@@ -105,12 +120,9 @@ const WRITTEN_BOOK_ID = 387;
 const EMPTY_MAP_ID = 395;
 const SHIELD_ID = 442;
 const SHIELD_MAX_DURABILITY = 336;
-const BOW_FULL_CHARGE_TIME = 1.0;
-const BOW_MIN_RELEASE_TIME = 0.15;
 const BOW_BASE_DAMAGE = 6;
 const BOW_MIN_SPEED = 7;
 const BOW_MAX_SPEED = 30;
-const CROSSBOW_CHARGE_TIME = 1.25;
 const WORLD_SPAWN_X = 8;
 const WORLD_SPAWN_Z = 8;
 const CAMPFIRE_COOK_TICKS = 30 * 20;
@@ -280,6 +292,9 @@ export class Game {
   private attackCooldownTimer = 0;
   private attackCooldownDuration = 0.625;
   private isShieldBlocking = false;
+  private shieldUseTimer = 0;
+  private shieldDisableTimer = 0;
+  private hurtCooldown = createHurtCooldownState();
   private bowChargeTimer = 0;
   private bowChargeActive = false;
   private fishingBobber: FishingBobberState | null = null;
@@ -717,8 +732,11 @@ export class Game {
         return { handled: true };
       },
       continueUse: ({ stack }, progress) => {
-        this.bowChargeTimer = progress.elapsedSeconds / CROSSBOW_CHARGE_TIME * BOW_FULL_CHARGE_TIME;
-        if (progress.elapsedSeconds < CROSSBOW_CHARGE_TIME) return { handled: true };
+        const chargeTime = getCrossbowChargeSeconds(EnchantSystem.getLevel(stack, 'quick_charge'));
+        this.bowChargeTimer = chargeTime <= 0
+          ? BOW_FULL_CHARGE_SECONDS
+          : progress.elapsedSeconds / chargeTime * BOW_FULL_CHARGE_SECONDS;
+        if (progress.elapsedSeconds < chargeTime) return { handled: true };
 
         const projectileId = this.getBowAmmoItemId() ?? ItemRegistry.getByName('arrow')?.id ?? 262;
         if (this.gameMode !== 'creative') {
@@ -1635,6 +1653,8 @@ export class Game {
     }
     this.lockCooldown = Math.max(0, this.lockCooldown - dt);
     this.spawnProtectionTimer = Math.max(0, this.spawnProtectionTimer - dt);
+    this.shieldDisableTimer = Math.max(0, this.shieldDisableTimer - dt);
+    this.hurtCooldown = tickHurtCooldown(this.hurtCooldown, dt);
     this.updateFishingBobber(dt);
 
     // Game time (day/night cycle)
@@ -1833,8 +1853,8 @@ export class Game {
     }
 
     // Player update
-    this.updateShieldBlockingState();
-    this.player.speedMultiplier = this.potionEffects.getSpeedMultiplier() * (this.isShieldBlocking ? 0.35 : 1.0);
+    this.updateShieldBlockingState(dt);
+    this.player.speedMultiplier = this.potionEffects.getSpeedMultiplier() * (this.isShieldBlocking ? SHIELD_MOVEMENT_MULTIPLIER : 1.0);
     // P3.3: Jump Boost raises jump; Depth Strider raises swim speed.
     this.player.jumpBoostMultiplier = 1 + this.potionEffects.getLevel('jump_boost') * 0.4;
     this.player.swimSpeedMultiplier = 1 + EnchantSystem.getArmorLevel(this.inventory.armor, 'depth_strider') * 0.33;
@@ -2095,7 +2115,8 @@ export class Game {
           this.sound.playXP();
           this.particles.spawnXP(this.player.position.x, this.player.position.y + 0.5, this.player.position.z, 8);
         },
-        () => this.notifyState()
+        () => this.notifyState(),
+        (amount) => this.inventory.repairWithMendingXP(this.player.selectedSlot, amount)
       );
 
       // Resolve collisions (mob-mob, player-mob)
@@ -2502,7 +2523,11 @@ export class Game {
               // Damage tool
               const heldItemStack = this.inventory.getSlot(this.player.selectedSlot);
               if (heldItemStack && ItemRegistry.isTool(heldItemStack.id)) {
-                this.inventory.damageTool(this.player.selectedSlot);
+                const heldDef = ItemRegistry.get(heldItemStack.id);
+                const meleeDurabilityCost = getMeleeDurabilityCost(heldDef?.toolType);
+                if (meleeDurabilityCost > 0) {
+                  this.inventory.damageTool(this.player.selectedSlot, meleeDurabilityCost);
+                }
               }
             }
             // P2.7: a wrong-tier tool (e.g. stone pickaxe on diamond ore)
@@ -4135,16 +4160,24 @@ export class Game {
     }
   }
 
-  private updateShieldBlockingState() {
+  private updateShieldBlockingState(dt: number) {
     const selected = this.inventory.getSlot(this.player.selectedSlot);
     const wantsToBlock = !this.bowChargeActive &&
       !this.isBowStack(selected) &&
       !this.chatOpen &&
       this.openUI === 'none' &&
-      this.input.isMouseDown(2);
-    const nextBlocking = wantsToBlock && this.getActiveShieldSlot() !== null;
-    if (nextBlocking !== this.isShieldBlocking) {
-      this.isShieldBlocking = nextBlocking;
+      this.input.isMouseDown(2) &&
+      this.shieldDisableTimer <= 0 &&
+      this.getActiveShieldSlot() !== null;
+
+    if (wantsToBlock) {
+      this.shieldUseTimer += dt;
+    } else {
+      this.shieldUseTimer = 0;
+    }
+
+    if (wantsToBlock !== this.isShieldBlocking) {
+      this.isShieldBlocking = wantsToBlock;
       this.notifyState();
     }
   }
@@ -4169,8 +4202,7 @@ export class Game {
   }
 
   private getBowPower(chargeTime: number): number {
-    const normalized = Math.min(1, Math.max(0, chargeTime / BOW_FULL_CHARGE_TIME));
-    return Math.min(1, (normalized * normalized + normalized * 2) / 3);
+    return getJavaBowPower(chargeTime);
   }
 
   private getItemInteractionContext(stack: ItemStack): GameItemInteractionContext | null {
@@ -4265,7 +4297,7 @@ export class Game {
     this.bowChargeActive = false;
     this.bowChargeTimer = 0;
 
-    if (!stillHoldingBow || chargeTime < BOW_MIN_RELEASE_TIME || !this.canUseBow()) {
+    if (!stillHoldingBow || !canReleaseBow(chargeTime) || !this.canUseBow()) {
       this.notifyState();
       return;
     }
@@ -4359,8 +4391,15 @@ export class Game {
     const shield = this.getActiveShieldSlot();
     if (!shield) return;
 
+    const durabilityCost = getBlockedShieldDurabilityDamage(amount);
+    if (durabilityCost <= 0) return;
+
     shield.stack.durability ??= SHIELD_MAX_DURABILITY;
-    shield.stack.durability -= Math.max(1, Math.ceil(amount));
+    for (let point = 0; point < durabilityCost; point++) {
+      if (!EnchantSystem.shouldUseDurability(shield.stack)) continue;
+      shield.stack.durability -= 1;
+      if (shield.stack.durability <= 0) break;
+    }
 
     if (shield.stack.durability <= 0) {
       if (shield.source === 'mainhand') {
@@ -4368,39 +4407,35 @@ export class Game {
       } else {
         this.inventory.setOffhand(null);
       }
+      this.isShieldBlocking = false;
+      this.shieldUseTimer = 0;
       this.sound.playBlockBreak(5);
     }
   }
 
-  private canShieldBlock(knockback?: THREE.Vector3): boolean {
-    if (!this.isShieldBlocking || !knockback || knockback.lengthSq() === 0) return false;
-    const directionToDamageSource = knockback.clone().setY(0);
+  private canShieldBlock(type: PlayerDamageKind, knockback?: THREE.Vector3): boolean {
+    if (!shieldCanBlockDamage(type)) return false;
+    if (!isShieldBlockActive(this.shieldUseTimer, this.shieldDisableTimer)) return false;
+    if (!knockback || knockback.lengthSq() === 0) return false;
     const facing = this.player.forward.clone().setY(0);
-    if (directionToDamageSource.lengthSq() === 0 || facing.lengthSq() === 0) return false;
-    directionToDamageSource.normalize().negate();
-    facing.normalize();
-    return facing.dot(directionToDamageSource) > 0.25;
+    const sourceToPlayer = knockback.clone().setY(0);
+    if (facing.lengthSq() === 0 || sourceToPlayer.lengthSq() === 0) return false;
+    return shieldFacesSource(facing.x, facing.z, sourceToPlayer.x, sourceToPlayer.z);
   }
 
   damagePlayer(
     amount: number,
-    type: 'mob' | 'projectile' | 'fall' | 'drown' | 'starve' | 'wither' | 'magic' | 'fire' | 'lava' | 'explosion',
+    type: PlayerDamageKind,
     knockback?: THREE.Vector3,
     attacker?: Mob
   ) {
     if (this.gameMode === 'creative' || this.spawnProtectionTimer > 0) return;
 
-    // P3.3: Thorns reflects damage back to the attacking mob.
-    if (attacker && (type === 'mob' || type === 'projectile')) {
-      const thornsLevel = this.inventory.armor.reduce((max, item) => Math.max(max, EnchantSystem.getLevel(item, 'thorns')), 0);
-      if (thornsLevel > 0 && Math.random() < EnchantSystem.getThornsChance(thornsLevel)) {
-        attacker.takeDamage(EnchantSystem.getThornsDamage(thornsLevel));
-      }
-    }
-
-    if (type === 'mob' && this.canShieldBlock(knockback)) {
+    if (this.canShieldBlock(type, knockback)) {
       this.damageActiveShield(amount);
-      if (knockback) {
+      // Direct melee/projectiles lose their knockback when blocked;
+      // explosions retain only the project's reduced shielded impulse.
+      if (type === 'explosion' && knockback) {
         this.player.velocity.add(knockback.clone().multiplyScalar(0.25));
       }
       this.sound.playBlockPlace(5);
@@ -4413,6 +4448,19 @@ export class Game {
       );
       this.notifyState();
       return;
+    }
+
+    const hurtResult = resolveHurtDamage(this.hurtCooldown, amount);
+    this.hurtCooldown = hurtResult.next;
+    if (!hurtResult.accepted || hurtResult.appliedDamage <= 0) return;
+    const effectiveRawDamage = hurtResult.appliedDamage;
+
+    // P3.3: Thorns reflects damage back to the attacking mob.
+    if (attacker && (type === 'mob' || type === 'projectile')) {
+      const thornsLevel = this.inventory.armor.reduce((max, item) => Math.max(max, EnchantSystem.getLevel(item, 'thorns')), 0);
+      if (thornsLevel > 0 && Math.random() < EnchantSystem.getThornsChance(thornsLevel)) {
+        attacker.takeDamage(EnchantSystem.getThornsDamage(thornsLevel));
+      }
     }
 
     const protectionLevels = this.inventory.armor.reduce((totals, item) => {
@@ -4432,7 +4480,7 @@ export class Game {
 
     const defense = this.inventory.getTotalArmorDefense();
     const toughness = this.inventory.getTotalArmorToughness();
-    let finalDamage = applyDamageProtection(amount, type, defense, toughness, protectionLevels);
+    let finalDamage = applyDamageProtection(effectiveRawDamage, type, defense, toughness, protectionLevels);
 
     // Starvation is tagged bypasses_effects in Java; other project damage kinds
     // are reduced by Resistance after the armor-dependent calculation.
@@ -4441,7 +4489,7 @@ export class Game {
     }
 
     if (baseArmorApplies(type) && defense > 0 && finalDamage > 0) {
-      this.inventory.damageArmor(1);
+      this.inventory.damageArmor(effectiveRawDamage);
     }
 
     // P3.3: Absorption absorbs damage before health.

@@ -3,7 +3,7 @@ import { ItemRegistry } from '../items/ItemRegistry';
 import { getDurabilityUseChance as getJavaDurabilityUseChance } from './DurabilityRules';
 
 export type EnchantmentId =
-  | 'sharpness' | 'efficiency' | 'protection' | 'unbreaking' | 'mending'
+  | 'sharpness' | 'efficiency' | 'protection' | 'unbreaking' | 'mending' | 'quick_charge'
   | 'power' | 'punch' | 'flame' | 'fire_aspect' | 'knockback' | 'smite'
   | 'looting' | 'fortune' | 'silk_touch' | 'feather_falling' | 'thorns'
   | 'projectile_protection' | 'blast_protection' | 'fire_protection'
@@ -21,7 +21,7 @@ export interface EnchantOption {
   description: string;
 }
 
-type EnchantCategory = 'weapon' | 'sword' | 'bow' | 'tool' | 'armor' | 'breakable';
+type EnchantCategory = 'weapon' | 'sword' | 'bow' | 'crossbow' | 'tool' | 'armor' | 'breakable';
 
 const ENCHANTMENT_DEFS: Record<EnchantmentId, {
   displayName: string;
@@ -60,6 +60,10 @@ const ENCHANTMENT_DEFS: Record<EnchantmentId, {
   flame: {
     displayName: 'Flame', maxLevel: 1, appliesTo: ['bow'],
     description: () => 'Arrows ignite targets',
+  },
+  quick_charge: {
+    displayName: 'Quick Charge', maxLevel: 3, appliesTo: ['crossbow'],
+    description: (level) => `Reduces crossbow load time by ${level * 0.25}s`,
   },
   efficiency: {
     displayName: 'Efficiency', maxLevel: 5, appliesTo: ['tool'],
@@ -147,6 +151,7 @@ export const EnchantSystem = {
       categories.add('breakable');
       if (itemDef.toolType === 'sword') categories.add('sword');
       else if (itemDef.toolType === 'bow') categories.add('bow');
+      else if (itemDef.toolType === 'crossbow') categories.add('crossbow');
       else categories.add('tool');
     }
 

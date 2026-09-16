@@ -37,7 +37,7 @@ jobs:
           node scripts/patch-parity-391-410-quickmove.mjs
 
       - name: Inspect patched Furnace UI type site
-        run: nl -ba src/ui/FurnaceUI.tsx | sed -n '226,240p'
+        run: nl -ba src/ui/FurnaceUI.tsx | sed -n '400,418p'
 
       - name: Install dependencies
         run: npm ci

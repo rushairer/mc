@@ -108,7 +108,7 @@ test('386: wet sponge block-as-item has a semantic smelting recipe back to spong
 test('387: wet sponge turns an empty fuel-slot bucket into a water bucket', () => {
   assert.deepEqual(getWetSpongeFuelRemainder('wet_sponge', { id: 325, count: 1 }), { id: 326, count: 1 });
   assert.equal(getWetSpongeFuelRemainder('wet_sponge', { id: 263, count: 1 }), undefined);
-  assert.ok(gameSource().includes('getWetSpongeFuelRemainder(ItemRegistry.get(input.id)?.name, meta.inventory[1])'));
+  assert.ok(gameSource().includes("getWetSpongeFuelRemainder(ItemRegistry.get(input.id)?.name ?? BlockRegistry.get(input.id)?.name, meta.inventory[1])"));
 });
 
 test('388: a daytime thunderstorm satisfies the bed sleep-time contract', () => {

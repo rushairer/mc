@@ -38,23 +38,28 @@ const to=`                onClick={() => {
                   const recipe = findSmeltingResult(item.id);
                   const canSmelt = !!recipe && isFurnaceRecipeAllowed(containerType, item.id, recipe.output);
                   const isFuel = isSmeltingFuel(item.id);
-                  const source = i < 9 ? 'player_hotbar' : 'player_main';
+                  const source: 'player_hotbar' | 'player_main' = i < 9 ? 'player_hotbar' : 'player_main';
                   const target = getFurnaceQuickMoveTarget(source, { canSmelt, isFuel });
 
                   setHoveredSlot(null);
+
+                  const removeMoved = (count: number) => {
+                    item.count -= count;
+                    if (item.count <= 0) inventory.setSlot(i, null);
+                  };
 
                   if (target === 'input') {
                     const max = ItemRegistry.getMaxStackSize(item.id);
                     if (!inputSlot) {
                       const moveCount = Math.min(item.count, max);
                       setInputSlot({ ...item, count: moveCount });
-                      inventory.removeFromSlot(i, moveCount);
+                      removeMoved(moveCount);
                       onInventoryChange();
                     } else if (inputSlot.id === item.id && inputSlot.count < max) {
                       const moveCount = Math.min(item.count, max - inputSlot.count);
                       if (moveCount > 0) {
                         setInputSlot({ ...inputSlot, count: inputSlot.count + moveCount });
-                        inventory.removeFromSlot(i, moveCount);
+                        removeMoved(moveCount);
                         onInventoryChange();
                       }
                     }
@@ -66,13 +71,13 @@ const to=`                onClick={() => {
                     if (!fuelSlot) {
                       const moveCount = Math.min(item.count, max);
                       setFuelSlot({ ...item, count: moveCount });
-                      inventory.removeFromSlot(i, moveCount);
+                      removeMoved(moveCount);
                       onInventoryChange();
                     } else if (fuelSlot.id === item.id && fuelSlot.count < max) {
                       const moveCount = Math.min(item.count, max - fuelSlot.count);
                       if (moveCount > 0) {
                         setFuelSlot({ ...fuelSlot, count: fuelSlot.count + moveCount });
-                        inventory.removeFromSlot(i, moveCount);
+                        removeMoved(moveCount);
                         onInventoryChange();
                       }
                     }

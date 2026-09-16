@@ -11,6 +11,10 @@ export interface MapData {
   playerMarker: { x: number; z: number };
   /** P3.5 — cartography table lock. */
   locked?: boolean;
+  /** Java 26.3 dedicated Explorer Map item type, when this is not a normal Filled Map. */
+  explorerItemName?: string;
+  /** Marker for the located structure represented by an Explorer Map. */
+  targetMarker?: { x: number; z: number; structure: string };
 }
 
 const MAP_SIZE = 128;
@@ -90,6 +94,33 @@ export class MapSystem {
     };
   }
 
+  /** Create a Java 26.3 dedicated Explorer Map centered on a located structure. */
+  createExplorerMap(
+    worldGen: WorldGen,
+    playerX: number,
+    playerZ: number,
+    dimension: number,
+    explorerItemName: string,
+    targetX: number,
+    targetZ: number,
+    scale = 2,
+  ): MapData {
+    const map = this.createFilledMap(worldGen, targetX, targetZ, dimension, scale);
+    return {
+      ...map,
+      explorerItemName,
+      playerMarker: {
+        x: markerCoordinate(playerX, map.centerX, map.scale),
+        z: markerCoordinate(playerZ, map.centerZ, map.scale),
+      },
+      targetMarker: {
+        x: markerCoordinate(targetX, map.centerX, map.scale),
+        z: markerCoordinate(targetZ, map.centerZ, map.scale),
+        structure: explorerItemName,
+      },
+    };
+  }
+
   restoreFromMaps(maps: MapData[]) {
     const maxId = maps.reduce((max, map) => Math.max(max, map.id), 0);
     this.nextMapId = Math.max(this.nextMapId, maxId + 1);
@@ -104,14 +135,28 @@ export class MapSystem {
       id: this.nextMapId++,
       pixels: [...map.pixels],
       playerMarker: { ...map.playerMarker },
+      targetMarker: map.targetMarker ? { ...map.targetMarker } : undefined,
     };
+  }
+
+  /** Java 26.3: only maps in #minecraft:extendable_maps may be zoomed out. */
+  canZoomOutMap(map: MapData): boolean {
+    return !map.explorerItemName && !map.locked && clampScale(map.scale) < MAX_SCALE;
   }
 
   /**
    * Zoom out by one Java scale level (max 4) and re-sample on that scale's
-   * global grid. Returns the updated map; callers replace the original.
+   * global grid. Explorer Maps deliberately remain unchanged in Java 26.3.
    */
   zoomOutMap(map: MapData, worldGen: WorldGen): MapData {
+    if (!this.canZoomOutMap(map)) {
+      return {
+        ...map,
+        pixels: [...map.pixels],
+        playerMarker: { ...map.playerMarker },
+        targetMarker: map.targetMarker ? { ...map.targetMarker } : undefined,
+      };
+    }
     const scale = Math.min(MAX_SCALE, clampScale(map.scale) + 1);
     const reSampled = this.createFilledMap(worldGen, map.centerX, map.centerZ, map.dimension, scale);
     return { ...reSampled, locked: map.locked };
@@ -119,7 +164,13 @@ export class MapSystem {
 
   /** Lock a map so its terrain data can no longer update or be zoomed. */
   lockMap(map: MapData): MapData {
-    return { ...map, locked: true, pixels: [...map.pixels], playerMarker: { ...map.playerMarker } };
+    return {
+      ...map,
+      locked: true,
+      pixels: [...map.pixels],
+      playerMarker: { ...map.playerMarker },
+      targetMarker: map.targetMarker ? { ...map.targetMarker } : undefined,
+    };
   }
 
   private tintForHeight(hex: string, height: number): string {

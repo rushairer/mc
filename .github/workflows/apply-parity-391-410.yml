@@ -8,6 +8,7 @@ on:
       - 'scripts/patch-parity-391-410-game.mjs'
       - 'scripts/patch-parity-391-410-ui.mjs'
       - 'scripts/patch-parity-391-410-quickmove.mjs'
+      - 'tests/parity-371-390.test.ts'
       - 'tests/parity-391-410.test.ts'
       - '.github/workflows/apply-parity-391-410.yml'
   workflow_dispatch:

@@ -1,5 +1,7 @@
 import { CHUNK_SIZE, WORLD_HEIGHT } from '../constants';
 import { coordinateRandom } from '../engine/DeterministicRandom';
+import { decorateAbandonedCampChunk26_3 } from './AbandonedCamp26_3';
+import { BlockRegistry } from './BlockRegistry';
 import { Chunk } from './Chunk';
 import { BiomeType, WorldGen } from './WorldGen';
 import {
@@ -52,6 +54,31 @@ function placeShelfMushroom(chunk: Chunk, x: number, y: number, z: number, salt:
   setIfAir(chunk, x + dx, y, z + dz, shelf);
 }
 
+function placeLeafLitterAroundPoplar(
+  worldGen: WorldGen,
+  chunk: Chunk,
+  x: number,
+  z: number,
+  wx: number,
+  wz: number,
+): void {
+  const leafLitter = BlockRegistry.getByName('leaf_litter')?.id;
+  if (leafLitter === undefined) return;
+  for (let dx = -3; dx <= 3; dx++) {
+    for (let dz = -3; dz <= 3; dz++) {
+      if (dx === 0 && dz === 0) continue;
+      if (Math.abs(dx) + Math.abs(dz) > 5) continue;
+      if (coordinateRandom(worldGen.seed, wx + dx, 2641, wz + dz) > 0.22) continue;
+      const lx = x + dx;
+      const lz = z + dz;
+      if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) continue;
+      const surfaceY = worldGen.getTerrainHeight(wx + dx, wz + dz);
+      if (!isGrassSurface(chunk, lx, surfaceY, lz)) continue;
+      setIfAir(chunk, lx, surfaceY + 1, lz, leafLitter);
+    }
+  }
+}
+
 function placePoplarTree(worldGen: WorldGen, chunk: Chunk, x: number, z: number, wx: number, wz: number): boolean {
   const surfaceY = worldGen.getTerrainHeight(wx, wz);
   if (!isGrassSurface(chunk, x, surfaceY, z)) return false;
@@ -88,6 +115,7 @@ function placePoplarTree(worldGen: WorldGen, chunk: Chunk, x: number, z: number,
     const shelfY = surfaceY + 2 + Math.floor(coordinateRandom(worldGen.seed, wx, 2634, wz) * (trunkHeight - 4));
     placeShelfMushroom(chunk, x, shelfY, z, Math.floor(coordinateRandom(worldGen.seed, wx, 2635, wz) * 4));
   }
+  placeLeafLitterAroundPoplar(worldGen, chunk, x, z, wx, wz);
   return true;
 }
 
@@ -120,7 +148,16 @@ function placeFallenPoplar(worldGen: WorldGen, chunk: Chunk, x: number, z: numbe
   const mx = x + (alongX ? middle : 0);
   const mz = z + (alongX ? 0 : middle);
   placeShelfMushroom(chunk, mx, surfaceY + 2, mz, alongX ? 2 : 0);
+  placeLeafLitterAroundPoplar(worldGen, chunk, mx, mz, worldXForLocal(chunk, mx), worldZForLocal(chunk, mz));
   return true;
+}
+
+function worldXForLocal(chunk: Chunk, x: number): number {
+  return chunk.cx * CHUNK_SIZE + x;
+}
+
+function worldZForLocal(chunk: Chunk, z: number): number {
+  return chunk.cz * CHUNK_SIZE + z;
 }
 
 function placeRedShrubPatch(worldGen: WorldGen, chunk: Chunk, wx: number, wz: number): void {
@@ -166,9 +203,9 @@ export function decorateWildernessBoundChunk(worldGen: WorldGen, chunk: Chunk): 
 }
 
 /**
- * Hook the 26.3 decorator after the legacy generator completes all structures.
- * It is deliberately idempotent and keeps existing seed terrain hashes stable
- * when the latest-version bridge is not installed.
+ * Hook 26.3 vegetation and Abandoned Camps after the legacy generator completes
+ * its own structures. This keeps old biome numeric ids/save compatibility while
+ * making the latest stable content participate in real generated chunks.
  */
 export function installWildernessBoundWorldGen26_3(): void {
   if (installed) return;
@@ -177,6 +214,7 @@ export function installWildernessBoundWorldGen26_3(): void {
   WorldGen.prototype.generateChunk = function generateChunkWithWildernessBound(chunk: Chunk): void {
     originalGenerateChunk.call(this, chunk);
     decorateWildernessBoundChunk(this, chunk);
+    decorateAbandonedCampChunk26_3(this, chunk);
   };
 }
 

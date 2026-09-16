@@ -7,22 +7,25 @@ export const WILDERNESS_BOUND_MUSHROOMS_26_3 = [
   'shelf_mushroom',
 ] as const;
 
-/** Flowers that retain the vanilla Suspicious Stew recipe role in 26.3. */
+/**
+ * Modern flower names with the legacy registry fallback used by this clone.
+ * The old data set stores Dandelion/Poppy as yellow_flower/red_flower.
+ */
 export const SUSPICIOUS_STEW_FLOWERS_26_3 = [
-  'dandelion',
-  'poppy',
-  'blue_orchid',
-  'allium',
-  'azure_bluet',
-  'red_tulip',
-  'orange_tulip',
-  'white_tulip',
-  'pink_tulip',
-  'oxeye_daisy',
-  'cornflower',
-  'lily_of_the_valley',
-  'wither_rose',
-  'torchflower',
+  ['dandelion', 'yellow_flower'],
+  ['poppy', 'red_flower'],
+  ['blue_orchid'],
+  ['allium'],
+  ['azure_bluet'],
+  ['red_tulip'],
+  ['orange_tulip'],
+  ['white_tulip'],
+  ['pink_tulip'],
+  ['oxeye_daisy'],
+  ['cornflower'],
+  ['lily_of_the_valley'],
+  ['wither_rose'],
+  ['torchflower'],
 ] as const;
 
 export function isWildernessBoundMushroom26_3(name: string): boolean {
@@ -51,9 +54,11 @@ export function buildWildernessBoundChangeRecipes26_3(
 
   const anyMushroom = [...mushrooms];
   const entries: RawRecipe[] = [];
-  for (const flowerName of SUSPICIOUS_STEW_FLOWERS_26_3) {
-    const flower = resolveId(flowerName);
-    if (flower === undefined) continue;
+  const registeredFlowers = new Set<number>();
+  for (const aliases of SUSPICIOUS_STEW_FLOWERS_26_3) {
+    const flower = aliases.map(resolveId).find((id): id is number => id !== undefined);
+    if (flower === undefined || registeredFlowers.has(flower)) continue;
+    registeredFlowers.add(flower);
     entries.push({
       ingredients: [bowl, anyMushroom, anyMushroom, flower],
       result: { id: suspiciousStew, count: 1 },

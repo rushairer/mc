@@ -62,7 +62,7 @@ test('new maps use Java 128x128 pixels and default scale level zero', () => {
   const map = maps.createFilledMap(worldGen, 0, 0, 0);
   assert.equal(map.scale, 0);
   assert.equal(map.pixels.length, 128 * 128);
-  assert.deepEqual(map.playerMarker, { x: 64, z: 64 });
+  assert.deepEqual(map.playerMarker, { x: 64, z: 64, rotation: 0 });
 });
 
 test('map scale is a level whose sample stride doubles as 2^scale', () => {
@@ -90,7 +90,7 @@ test('maps snap their centers to the Java global map grid', () => {
 
   const eastSouth = maps.createFilledMap(fakeWorldGen, 70, -70, 0, 0);
   assert.deepEqual([eastSouth.centerX, eastSouth.centerZ], [128, -128]);
-  assert.deepEqual(eastSouth.playerMarker, { x: 6, z: 122 });
+  assert.deepEqual(eastSouth.playerMarker, { x: 6, z: 122, rotation: 0 });
 
   const scaleTwo = maps.createFilledMap(fakeWorldGen, 0, 0, 0, 2);
   assert.deepEqual([scaleTwo.centerX, scaleTwo.centerZ], [192, 192]);

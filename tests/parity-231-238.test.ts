@@ -42,7 +42,7 @@ test('232: Suspicious Stew accepts any two mushrooms including Shelf Mushroom', 
   const bowl = itemId('bowl');
   const shelf = itemId('shelf_mushroom');
   const brown = itemId('brown_mushroom');
-  const flower = itemId('dandelion');
+  const flower = itemId('yellow_flower');
   const suspicious = itemId('suspicious_stew');
   assert.deepEqual(
     findCraftingResult(craftingGrid(bowl, shelf, brown, flower)),
@@ -53,7 +53,7 @@ test('232: Suspicious Stew accepts any two mushrooms including Shelf Mushroom', 
 test('233: Suspicious Stew still requires two mushrooms plus its effect flower', () => {
   const bowl = itemId('bowl');
   const shelf = itemId('shelf_mushroom');
-  const flower = itemId('dandelion');
+  const flower = itemId('yellow_flower');
   const result = findCraftingResult(craftingGrid(bowl, shelf, flower));
   assert.notEqual(result?.id, itemId('suspicious_stew'));
 });

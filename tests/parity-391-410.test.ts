@@ -122,6 +122,7 @@ test('410: Game runtime and Furnace UI consume the same centralized station rule
   assert.ok(game.includes('getFurnaceFuelRemainder(fuel)'));
   assert.ok(game.includes("ItemRegistry.get(input.id)?.name ?? BlockRegistry.get(input.id)?.name"));
   assert.ok(ui.includes('const availableRecipes = useMemo('));
-  assert.ok(ui.includes('getFurnaceQuickMoveTarget(source, { canSmelt, isFuel })'));
+  assert.ok(ui.includes("getFurnaceQuickMoveTarget('player_hotbar', { canSmelt, isFuel })"));
+  assert.ok(ui.includes("getFurnaceQuickMoveTarget('player_main', { canSmelt, isFuel })"));
   assert.ok(!ui.includes("itemDef.name.includes('ore')"));
 });

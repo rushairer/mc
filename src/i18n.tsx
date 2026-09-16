@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { BlockRegistry } from './world/BlockRegistry';
 import { ItemRegistry } from './items/ItemRegistry';
 import { localizeItemDisplayName } from './i18nItemNames';
+import { resolveItemPresentationIdentity } from './items/ItemPresentation';
 
 export type Locale = 'en' | 'zh-CN' | 'zh-TW';
 
@@ -890,35 +891,18 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const getLocalizedItemName = (id: number, fallbackName?: string): string => {
-    const isBlock = (id & 0x3FF) < 256;
-    const prefix = isBlock ? 'block_' : 'item_';
-
-    let lookupName = '';
-
-    // Get exact name from registry
-    if (isBlock) {
-      lookupName = BlockRegistry.get(id)?.name ?? '';
-    } else {
-      lookupName = ItemRegistry.get(id)?.name ?? '';
-    }
-
-    if (!lookupName && fallbackName) {
-      lookupName = fallbackName.toLowerCase().replace(/\s+/g, '_');
-    }
-    // Remove namespaces
-    lookupName = lookupName.replace(/^minecraft:/, '');
-
-    // Check direct static translation first
+    const identity = resolveItemPresentationIdentity(id, fallbackName);
+    const lookupName = identity.registryName;
+    const prefix = identity.kind === 'block' ? 'block_' : 'item_';
     const key = `${prefix}${lookupName}` as keyof TranslationsSchema;
     const localized = translations[locale][key] as string;
-    if (localized) {
-      return localized;
-    }
+    if (localized) return localized;
 
     if (locale !== 'en' && lookupName) {
-      return localizeItemDisplayName(locale, lookupName, fallbackName);
+      return localizeItemDisplayName(locale, lookupName, identity.displayName ?? fallbackName);
     }
 
+    if (identity.displayName) return identity.displayName;
     if (fallbackName) return fallbackName;
     return lookupName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Unknown';
   };

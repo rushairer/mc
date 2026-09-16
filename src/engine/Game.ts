@@ -62,6 +62,7 @@ import {
 } from '../world/BehaviorRegistry';
 import { planBlockPlacement } from '../world/BlockPlacement';
 import { fallingLeafParticle26_3, shouldPrioritizeShieldUse26_3 } from '../world/WildernessBoundChanges26_3';
+import { useStrawBed as resolveStrawBedUse26_3 } from '../world/WildernessBound26_3';
 import { applySaturationStew26_3 } from '../world/SuspiciousStew26_3';
 import { findChorusFruitDestination26_3 } from '../world/TeleportRules26_3';
 import { getButtonPressTicks } from '../world/ButtonRules';
@@ -680,6 +681,14 @@ export class Game {
       preventsItemUse: true,
       interact: ({ position }) => {
         this.useBed(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:straw_bed',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.useStrawBed26_3(position.x, position.y, position.z);
         return { handled: true, cooldown: 0.25 };
       },
     });
@@ -6341,6 +6350,46 @@ export class Game {
       open: newMeta >= 4,
     }, true);
     this.sound.playLever();
+  }
+
+  private useStrawBed26_3(x: number, y: number, z: number) {
+    const dimensionName = this.chunks.currentDimension === Dimension.Overworld
+      ? 'overworld'
+      : this.chunks.currentDimension === Dimension.Nether
+        ? 'nether'
+        : 'end';
+    const outcome = resolveStrawBedUse26_3(dimensionName);
+    const metadata = this.chunks.getBlockMeta(x, y, z);
+    const facing = metadata?.facing ?? 'north';
+    const forward = facing === 'east'
+      ? { x: 1, z: 0 }
+      : facing === 'west'
+        ? { x: -1, z: 0 }
+        : facing === 'south'
+          ? { x: 0, z: 1 }
+          : { x: 0, z: -1 };
+    const direction = metadata?.bedPart === 'head' ? -1 : 1;
+    const positions = [
+      { x, y, z },
+      { x: x + forward.x * direction, y, z: z + forward.z * direction },
+    ];
+
+    for (const position of positions) {
+      const id = this.chunks.getBlock(position.x, position.y, position.z);
+      if (BlockRegistry.get(id)?.name !== 'straw_bed') continue;
+      this.chunks.setBlock(position.x, position.y, position.z, 0);
+      this.chunks.setBlockMeta(position.x, position.y, position.z, null, true);
+      this.redstone.observeBlockChange(position.x, position.y, position.z);
+    }
+
+    if (outcome.canSleep) {
+      if (this.gameTime >= 0.5) this.gameTime = 0.05;
+      this.advancements.checkSleep();
+      this.sound.playBlockPlace(35);
+    } else {
+      this.sound.playBlockBreak(35);
+    }
+    this.notifyState();
   }
 
   private useBed(x: number, y: number, z: number) {

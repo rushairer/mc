@@ -127,17 +127,26 @@ export function planBlockPlacement(
     return { ok: false, reason: 'inside_player' };
   }
 
-  const baseId = blockId & 0x3FF;
-  const blockBelow = world.getBlock({ x: position.x, y: position.y - 1, z: position.z }) & 0x3FF;
-  if (baseId === 115 && blockBelow !== 88) {
+  // Legacy packed block IDs must not leak into modern high runtime IDs.
+  const registeredBaseId = block?.baseId ?? blockId;
+  const legacyBaseId = registeredBaseId < 256 ? registeredBaseId & 0x3FF : undefined;
+  const blockBelowId = world.getBlock({ x: position.x, y: position.y - 1, z: position.z });
+  const blockBelow = BlockRegistry.get(blockBelowId);
+  const registeredBelowBaseId = blockBelow?.baseId ?? blockBelowId;
+  const legacyBelowBaseId = registeredBelowBaseId < 256 ? registeredBelowBaseId & 0x3FF : undefined;
+  if ((legacyBaseId === 115 || blockName === 'nether_wart') && legacyBelowBaseId !== 88 && blockBelow?.name !== 'soul_sand') {
     return { ok: false, reason: 'invalid_support' };
   }
-  if ((baseId === 59 || baseId === 141 || baseId === 142) && blockBelow !== 60) {
+  if (
+    (legacyBaseId === 59 || legacyBaseId === 141 || legacyBaseId === 142 || ['wheat', 'carrots', 'potatoes'].includes(blockName))
+    && legacyBelowBaseId !== 60
+    && blockBelow?.name !== 'farmland'
+  ) {
     return { ok: false, reason: 'invalid_support' };
   }
 
   const isDoor = isDoorName(request.item.name) || isDoorName(blockName);
-  const isBed = baseId === 26 || blockName === 'bed' || blockName.endsWith('_bed');
+  const isBed = legacyBaseId === 26 || blockName === 'bed' || blockName.endsWith('_bed');
   return {
     ok: true,
     plan: {
@@ -148,7 +157,7 @@ export function planBlockPlacement(
       slabHalf,
       opensSignEditor: blockId === 63 || blockId === 68,
       schedulesFluid: BlockRegistry.isFluid(blockId),
-      checksWitherSpawn: baseId === 144 && ((blockId >> 10) & 0xF) === 1,
+      checksWitherSpawn: legacyBaseId === 144 && ((blockId >> 10) & 0xF) === 1,
     },
   };
 }

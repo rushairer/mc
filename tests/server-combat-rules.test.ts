@@ -92,14 +92,15 @@ test('first hit is fully charged and immediate spam follows the cooldown damage 
   assert.equal(getServerMeleeDamage(sword, 100, 112), 5);
 });
 
-test('server criticals require charged descending non-sprinting airborne state', () => {
+test('server criticals require strictly charged descending non-sprinting airborne state', () => {
   assert.equal(CHARGED_ATTACK_THRESHOLD, 0.9);
   const base = { descending: true, onGround: false, sprinting: false };
-  assert.equal(isServerCriticalHit(0.9, base), true);
-  assert.equal(isServerCriticalHit(0.899, base), false);
+  assert.equal(isServerCriticalHit(0.9, base), false);
+  assert.equal(isServerCriticalHit(0.901, base), true);
   assert.equal(isServerCriticalHit(1, { ...base, descending: false }), false);
   assert.equal(isServerCriticalHit(1, { ...base, onGround: true }), false);
   assert.equal(isServerCriticalHit(1, { ...base, sprinting: true }), false);
+  assert.equal(isServerCriticalHit(1, { ...base, flying: true }), false);
   assert.equal(isServerCriticalHit(1, { ...base, inWater: true }), false);
   assert.equal(isServerCriticalHit(1, { ...base, climbing: true }), false);
   assert.equal(isServerCriticalHit(1, { ...base, riding: true }), false);
@@ -116,10 +117,10 @@ test('Java critical multiplies base attack damage but not Sharpness bonus', () =
   assert.equal(getServerMeleeDamage(sword, null, 100, true), 9.5);
 });
 
-test('sprint knockback adds one level only for charged attacks', () => {
+test('sprint knockback adds one level only for strictly charged attacks', () => {
   const sword = { id: 272, count: 1 };
-  assert.deepEqual(getServerKnockbackPlan(sword, 0.89, true), { strength: 0, sprintKnockback: false });
-  assert.deepEqual(getServerKnockbackPlan(sword, 0.9, true), { strength: 1, sprintKnockback: true });
+  assert.deepEqual(getServerKnockbackPlan(sword, 0.9, true), { strength: 0, sprintKnockback: false });
+  assert.deepEqual(getServerKnockbackPlan(sword, 0.901, true), { strength: 1, sprintKnockback: true });
   assert.deepEqual(
     getServerKnockbackPlan({ id: 272, count: 1, enchantments: [{ id: 'knockback', level: 2 }] }, 1, true),
     { strength: 3, sprintKnockback: true },

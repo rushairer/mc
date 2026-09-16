@@ -2,7 +2,10 @@
   "schemaVersion": 1,
   "target": {
     "edition": "java",
-    "version": "1.20.1",
+    "version": "26.3",
+    "releaseName": "Wilderness Bound",
+    "releaseDate": "2026-09-15",
+    "policy": "latest-stable",
     "scope": "gameplay-and-presentation",
     "protocolCompatible": false,
     "seedExact": false
@@ -10,7 +13,7 @@
   "axes": {
     "definitions": {
       "state": "partial",
-      "evidence": ["npm run audit:vanilla", "npm run audit:items"]
+      "evidence": ["npm run audit:latest", "npm run audit:vanilla", "npm run audit:items"]
     },
     "visualModels": {
       "state": "partial",
@@ -47,9 +50,11 @@
     "combatAndProgression": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
     "redstone": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
     "audioAndUi": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
-    "multiplayer": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" }
+    "multiplayer": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "wildernessBound26_3": { "definitions": "missing", "visualModels": "missing", "behavior": "missing", "automatedAcceptance": "missing" }
   },
   "releaseGates": {
+    "latestStableTarget": "required",
     "unitTests": "required",
     "typeCheck": "required",
     "productionBuild": "required",

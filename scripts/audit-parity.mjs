@@ -9,9 +9,14 @@ const allowedStates = new Set(['complete', 'partial', 'missing', 'unknown', 'not
 const requiredAxes = ['definitions', 'visualModels', 'behavior', 'automatedAcceptance'];
 
 if (manifest.schemaVersion !== 1) errors.push('Unsupported parity manifest schema.');
-if (manifest.target?.edition !== 'java' || manifest.target?.version !== '1.20.1') {
-  errors.push('Parity target must remain fixed to Minecraft Java 1.20.1.');
+if (manifest.target?.edition !== 'java') errors.push('Parity target edition must be Minecraft Java.');
+if (!/^\d+(?:\.\d+){1,2}$/.test(manifest.target?.version ?? '')) {
+  errors.push(`Invalid Minecraft Java target version: ${manifest.target?.version ?? '<missing>'}.`);
 }
+if (manifest.target?.policy !== 'latest-stable') {
+  errors.push('Parity target policy must remain latest-stable.');
+}
+if (!manifest.target?.releaseDate) errors.push('Parity target releaseDate is required.');
 if ('overallCompletion' in manifest || 'completionPercent' in manifest) {
   errors.push('Do not collapse parity into a single completion percentage.');
 }
@@ -33,7 +38,7 @@ if (manifest.inventory?.baseItemDefinitions !== items.length) {
 }
 
 const requiredGates = [
-  'unitTests', 'typeCheck', 'productionBuild', 'browserSmoke',
+  'latestStableTarget', 'unitTests', 'typeCheck', 'productionBuild', 'browserSmoke',
   'newWorldInteractiveSecondsMax', 'targetFpsAt1080pRenderDistance8',
   'longRunMinutes', 'unboundedEntityGrowthAllowed', 'consoleErrorsAllowed',
 ];
@@ -42,6 +47,7 @@ for (const gate of requiredGates) {
 }
 
 console.log(`Parity target: Minecraft Java ${manifest.target?.version}`);
+console.log(`Target policy: ${manifest.target?.policy}`);
 for (const axis of requiredAxes) console.log(`${axis}: ${manifest.axes?.[axis]?.state}`);
 console.log(`Tracked systems: ${Object.keys(manifest.systems ?? {}).length}`);
 

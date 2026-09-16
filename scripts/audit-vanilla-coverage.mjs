@@ -2,10 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-const TARGET_VERSION = process.env.MINECRAFT_TARGET_VERSION ?? '1.20.1';
+const parityManifest = JSON.parse(fs.readFileSync('docs/parity-manifest.json', 'utf8'));
+const TARGET_VERSION = process.env.MINECRAFT_TARGET_VERSION ?? parityManifest.target?.version;
+if (!TARGET_VERSION) throw new Error('Missing Minecraft target version in docs/parity-manifest.json');
+
 const cacheDir = path.join('scripts/tmp-minecraft-official', TARGET_VERSION);
 const officialRoot = process.argv[2] ?? path.join(cacheDir, 'extract/assets/minecraft');
-const reportPath = process.argv[3] ?? 'docs/VANILLA_1_20_1_COVERAGE.md';
+const reportSlug = TARGET_VERSION.replace(/[^0-9A-Za-z]+/g, '_');
+const reportPath = process.argv[3] ?? `docs/VANILLA_${reportSlug}_COVERAGE.md`;
 
 async function downloadJson(url, file) {
   const response = await fetch(url);

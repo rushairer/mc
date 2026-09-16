@@ -1,4 +1,4 @@
-name: Parity 91-110 Runtime Wiring
+name: Parity 91-110 Finalize
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  wire-runtime:
+  finalize-authority:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,22 +21,13 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Wire combat and projectile authority
+      - name: Close remaining authority gaps
         run: |
-          node scripts/parity-91-110-runtime.mjs combat
-          node scripts/remove-parity-91-110-duplicate-ray.mjs
+          node scripts/parity-91-110-finalize.mjs
           npm run audit:parity
           npm run check
           git config user.name "Aben"
           git config user.email "5195693+rushairer@users.noreply.github.com"
-          git add src/server/GameServer.ts src/server/NetworkClient.ts src/systems/MobSystem.ts src/engine/Game.ts
-          git commit -m "fix: wire server combat and projectile authority"
-      - name: Enforce world action validation
-        run: |
-          node scripts/parity-91-110-runtime.mjs world
-          npm run audit:parity
-          npm run check
-          git add src/server/GameServer.ts
-          git commit -m "fix: enforce server world action validation"
-      - name: Push staged parity work
-        run: git push origin HEAD:master
+          git add src/server/GameServer.ts tests/server-authority-contract.test.ts
+          git commit -m "fix: close server respawn and inventory authority gaps"
+          git push origin HEAD:master

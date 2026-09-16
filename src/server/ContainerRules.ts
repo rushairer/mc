@@ -38,10 +38,11 @@ export function createContainerSlots(name: string): (ItemStack | null)[] {
 
 function cloneStack(stack: ItemStack | null): ItemStack | null {
   if (!stack) return null;
-  return {
-    ...stack,
-    enchantments: stack.enchantments?.map((enchantment) => ({ ...enchantment })),
-  };
+  const clone: ItemStack = { ...stack };
+  if (stack.enchantments) {
+    clone.enchantments = stack.enchantments.map((enchantment) => ({ ...enchantment }));
+  }
+  return clone;
 }
 
 function stackIdentity(stack: ItemStack): string {

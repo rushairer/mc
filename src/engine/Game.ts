@@ -2103,14 +2103,15 @@ export class Game {
       );
       this.handleDragonProjectileHits();
 
-      // Update dropped items
+      // Update dropped items. Multiplayer item pickup/merge is server authoritative.
       this.droppedItems.update(
         dt,
         this.player.position,
         (x, y, z) => this.chunks.isSolidBlock(x, y, z),
         this.inventory,
         () => this.sound.playPickup(),
-        () => this.notifyState()
+        () => this.notifyState(),
+        !this.isMultiplayerNetworkConnected(),
       );
 
       this.xp.update(

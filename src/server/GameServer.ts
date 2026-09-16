@@ -56,6 +56,16 @@ import { Dimension, DimensionGenerator } from '../world/DimensionGenerator';
 import { Chunk } from '../world/Chunk';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { cloneItemStack } from '../items/ItemStackRules';
+import {
+  ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
+  ITEM_ENTITY_DESPAWN_SECONDS,
+  ITEM_ENTITY_MERGE_INTERVAL_SECONDS,
+  canItemEntityPositionsMerge,
+  insertItemStackIntoSlots,
+  isWithinItemPickupBounds,
+  mergeItemEntityStacks,
+} from '../items/ItemEntityRules';
 import { MOB_DEFS, Mob, type MobType } from '../entities/Mob';
 import { CHUNK_SIZE, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
 import type { ItemStack, BlockMetadata } from '../types';
@@ -130,11 +140,11 @@ interface ServerMob {
 
 interface ServerDroppedItem {
   id: number;
-  itemId: number;
-  count: number;
+  stack: ItemStack;
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   age: number;
+  pickupDelay: number;
   dimension: number;
 }
 
@@ -155,6 +165,7 @@ export class GameServer {
   private players: Map<string, PlayerSession> = new Map();
   private mobs: Map<number, ServerMob> = new Map();
   private droppedItems: Map<number, ServerDroppedItem> = new Map();
+  private droppedItemMergeTimer = 0;
   private projectiles: Map<number, ServerProjectile> = new Map();
   private nextProjectileId = 1;
   /** P5.3 — server-owned container contents keyed by position. */
@@ -327,16 +338,20 @@ export class GameServer {
       }
     }
 
-    // Send active dropped items
+    // Send active dropped items with their complete stack identity.
     for (const item of this.droppedItems.values()) {
       if (item.dimension === session.dimension) {
         this.sendTo(session, PacketType.S2C_DROPPED_ITEM_SPAWN, {
           id: item.id,
-          itemId: item.itemId,
-          count: item.count,
+          stack: cloneItemStack(item.stack),
+          itemId: item.stack.id,
+          count: item.stack.count,
           x: item.position.x,
           y: item.position.y,
-          z: item.position.z
+          z: item.position.z,
+          pickupDelay: item.pickupDelay,
+          age: item.age,
+          dimension: item.dimension,
         });
       }
     }
@@ -1159,7 +1174,7 @@ export class GameServer {
     this.containerData.set(open.key, next.containerSlots);
     player.inventory = next.playerSlots;
     if (next.cursor) {
-      this.spawnDroppedItem(next.cursor.id, next.cursor.count, player.x, player.y + 0.5, player.z, player.dimension);
+      this.spawnDroppedStack(next.cursor, player.x, player.y + 0.5, player.z, player.dimension);
     }
     player.openContainer = undefined;
     this.syncPlayerInventory(player);
@@ -1523,7 +1538,7 @@ export class GameServer {
       const stack = player.inventory[i];
       if (stack) {
         if (shouldDropStackOnDeath(stack)) {
-          this.spawnDroppedItem(stack.id, stack.count, player.x, player.y, player.z, player.dimension);
+          this.spawnDroppedStack(stack, player.x, player.y, player.z, player.dimension);
         }
         player.inventory[i] = null;
       }
@@ -1532,14 +1547,14 @@ export class GameServer {
       const stack = player.armor[i];
       if (stack) {
         if (shouldDropStackOnDeath(stack)) {
-          this.spawnDroppedItem(stack.id, stack.count, player.x, player.y, player.z, player.dimension);
+          this.spawnDroppedStack(stack, player.x, player.y, player.z, player.dimension);
         }
         player.armor[i] = null;
       }
     }
     if (player.offhand) {
       if (shouldDropStackOnDeath(player.offhand)) {
-        this.spawnDroppedItem(player.offhand.id, player.offhand.count, player.x, player.y, player.z, player.dimension);
+        this.spawnDroppedStack(player.offhand, player.x, player.y, player.z, player.dimension);
       }
       player.offhand = null;
     }
@@ -1587,30 +1602,55 @@ export class GameServer {
     });
   }
 
-  spawnDroppedItem(itemId: number, count: number, x: number, y: number, z: number, dimension: number): ServerDroppedItem {
+  spawnDroppedStack(
+    stack: ItemStack,
+    x: number,
+    y: number,
+    z: number,
+    dimension: number,
+    pickupDelay = ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
+  ): ServerDroppedItem {
+    const ownedStack = cloneItemStack(stack)!;
+    const maxStack = ItemRegistry.getMaxStackSize(ownedStack.id);
+    ownedStack.count = Math.max(1, Math.min(maxStack, Math.floor(ownedStack.count)));
+
     const id = this.nextEntityId++;
     const item: ServerDroppedItem = {
       id,
-      itemId,
-      count,
+      stack: ownedStack,
       position: new THREE.Vector3(x, y, z),
       velocity: new THREE.Vector3((Math.random() - 0.5) * 2, 3, (Math.random() - 0.5) * 2),
       age: 0,
-      dimension
+      pickupDelay: Math.max(0, pickupDelay),
+      dimension,
     };
 
     this.droppedItems.set(id, item);
-
     this.broadcastDimension(dimension, PacketType.S2C_DROPPED_ITEM_SPAWN, {
       id,
-      itemId,
-      count,
+      stack: cloneItemStack(item.stack),
+      itemId: item.stack.id,
+      count: item.stack.count,
       x, y, z,
+      pickupDelay: item.pickupDelay,
+      age: item.age,
       dimension,
     });
-
     return item;
   }
+
+  spawnDroppedItem(
+    itemId: number,
+    count: number,
+    x: number,
+    y: number,
+    z: number,
+    dimension: number,
+    pickupDelay = ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
+  ): ServerDroppedItem {
+    return this.spawnDroppedStack({ id: itemId, count }, x, y, z, dimension, pickupDelay);
+  }
+
 
   // --- Main Tick (20Hz) ---
 
@@ -1844,71 +1884,109 @@ export class GameServer {
     this.broadcast(PacketType.S2C_SOUND, { type: 'explode', x: pos.x, y: pos.y, z: pos.z });
   }
 
-  private tickDroppedItems(dt: number) {
-    for (const item of this.droppedItems.values()) {
-      item.age += dt;
-      if (item.age > 300) { // Despawn after 5 mins
-        this.droppedItems.delete(item.id);
-        this.broadcast(PacketType.S2C_DROPPED_ITEM_DESPAWN, { id: item.id });
-        continue;
-      }
+  private broadcastDroppedItemUpdate(item: ServerDroppedItem) {
+    this.broadcastDimension(item.dimension, PacketType.S2C_DROPPED_ITEM_UPDATE, {
+      id: item.id,
+      stack: cloneItemStack(item.stack),
+      itemId: item.stack.id,
+      count: item.stack.count,
+      pickupDelay: item.pickupDelay,
+      age: item.age,
+    });
+  }
 
-      // Simple physics: fall down
-      item.velocity.y -= 9.8 * dt;
-      item.position.addScaledVector(item.velocity, dt);
-      
-      const ix = Math.floor(item.position.x);
-      const iy = Math.floor(item.position.y);
-      const iz = Math.floor(item.position.z);
-      
-      const isSolidBelow = this.isSolidBlock(ix, iy, iz, item.dimension);
-      if (isSolidBelow) {
-        item.position.y = iy + 1.05;
-        item.velocity.set(0, 0, 0); // resting on ground
-      }
+  private despawnDroppedItem(item: ServerDroppedItem) {
+    this.droppedItems.delete(item.id);
+    this.broadcastDimension(item.dimension, PacketType.S2C_DROPPED_ITEM_DESPAWN, { id: item.id });
+  }
 
-      // Hover movement broadcast
-      this.broadcast(PacketType.S2C_DROPPED_ITEM_MOVE, {
-        id: item.id,
-        x: item.position.x,
-        y: item.position.y,
-        z: item.position.z
-      });
+  private mergeServerDroppedItems() {
+    const list = Array.from(this.droppedItems.values());
+    for (let i = 0; i < list.length; i++) {
+      const receiver = list[i];
+      if (!this.droppedItems.has(receiver.id)) continue;
 
-      // Player magnetic pickup check
-      for (const player of this.players.values()) {
-        if (player.dimension === item.dimension) {
-          const pPos = new THREE.Vector3(player.x, player.y + 0.8, player.z);
-          const dist = item.position.distanceTo(pPos);
-          
-          if (dist < 1.6) {
-            // Pickup item
-            let added = false;
-            for (let i = 0; i < 36; i++) {
-              const slot = player.inventory[i];
-              if (!slot) {
-                player.inventory[i] = { id: item.itemId, count: item.count };
-                added = true;
-                break;
-              } else if (slot.id === item.itemId && slot.count + item.count <= 64) {
-                slot.count += item.count;
-                added = true;
-                break;
-              }
-            }
+      for (let j = i + 1; j < list.length; j++) {
+        const donor = list[j];
+        if (!this.droppedItems.has(donor.id) || donor.dimension !== receiver.dimension) continue;
+        if (!canItemEntityPositionsMerge(receiver.position, donor.position)) continue;
 
-            if (added) {
-              this.droppedItems.delete(item.id);
-              this.broadcast(PacketType.S2C_DROPPED_ITEM_DESPAWN, { id: item.id });
-              this.broadcast(PacketType.S2C_SOUND, { type: 'pickup', x: player.x, y: player.y, z: player.z });
-              this.sendTo(player, PacketType.S2C_INVENTORY_SYNC, { slots: player.inventory, armor: player.armor, offhand: player.offhand });
-              break;
-            }
-          }
+        const transferred = mergeItemEntityStacks(receiver.stack, donor.stack);
+        if (transferred <= 0) continue;
+        receiver.pickupDelay = Math.max(receiver.pickupDelay, donor.pickupDelay);
+        receiver.age = Math.min(receiver.age, donor.age);
+        this.broadcastDroppedItemUpdate(receiver);
+
+        if (donor.stack.count <= 0) {
+          this.despawnDroppedItem(donor);
+        } else {
+          this.broadcastDroppedItemUpdate(donor);
         }
       }
     }
   }
+
+  private tickDroppedItems(dt: number) {
+    for (const item of Array.from(this.droppedItems.values())) {
+      item.age += dt;
+      item.pickupDelay = Math.max(0, item.pickupDelay - dt);
+      if (item.age >= ITEM_ENTITY_DESPAWN_SECONDS) {
+        this.despawnDroppedItem(item);
+        continue;
+      }
+
+      // Server-authoritative item physics. Keep the same Java gravity constant
+      // used by the client presentation path.
+      item.velocity.y -= 16 * dt;
+      item.position.addScaledVector(item.velocity, dt);
+
+      const ix = Math.floor(item.position.x);
+      const iy = Math.floor(item.position.y);
+      const iz = Math.floor(item.position.z);
+      const isSolidBelow = this.isSolidBlock(ix, iy, iz, item.dimension);
+      if (isSolidBelow) {
+        item.position.y = iy + 1.05;
+        item.velocity.set(0, 0, 0);
+      }
+
+      this.broadcastDimension(item.dimension, PacketType.S2C_DROPPED_ITEM_MOVE, {
+        id: item.id,
+        x: item.position.x,
+        y: item.position.y,
+        z: item.position.z,
+      });
+
+      if (item.pickupDelay > 0) continue;
+
+      for (const player of this.players.values()) {
+        if (player.dimension !== item.dimension) continue;
+        if (!isWithinItemPickupBounds(item.position, { x: player.x, y: player.y, z: player.z })) continue;
+
+        const result = insertItemStackIntoSlots(player.inventory, item.stack);
+        if (result.inserted <= 0) continue;
+
+        if (result.remaining) {
+          item.stack = result.remaining;
+          this.broadcastDroppedItemUpdate(item);
+        } else {
+          this.despawnDroppedItem(item);
+        }
+
+        this.broadcastDimension(item.dimension, PacketType.S2C_SOUND, {
+          type: 'pickup', x: player.x, y: player.y, z: player.z,
+        });
+        this.syncPlayerInventory(player);
+        break;
+      }
+    }
+
+    this.droppedItemMergeTimer += dt;
+    if (this.droppedItemMergeTimer >= ITEM_ENTITY_MERGE_INTERVAL_SECONDS) {
+      this.droppedItemMergeTimer -= ITEM_ENTITY_MERGE_INTERVAL_SECONDS;
+      this.mergeServerDroppedItems();
+    }
+  }
+
 
   /** P5.1 — create a server-authoritative projectile and broadcast it. */
   private spawnProjectile(

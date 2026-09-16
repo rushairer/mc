@@ -262,7 +262,8 @@ export class HopperSystem {
       ) {
         // Hopper suction is independent from the player's pickupDelay and can
         // absorb as much of one item entity stack as its five slots can accept.
-        const addedCount = this.pushItem(hopperInventory, { id: item.itemId, count: item.count });
+        const droppedStack = item.stack ?? { id: item.itemId, count: item.count };
+        const addedCount = this.pushItem(hopperInventory, droppedStack);
         if (addedCount > 0) {
           item.count -= addedCount;
           if (item.count <= 0) {

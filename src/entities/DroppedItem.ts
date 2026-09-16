@@ -1,21 +1,34 @@
 import * as THREE from 'three';
+import type { ItemStack } from '../types';
+import { cloneItemStack } from '../items/ItemStackRules';
+import { ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS } from '../items/ItemEntityRules';
 
 const TICKS_PER_SECOND = 20;
 const AIR_DRAG_PER_TICK = 0.98;
 const GROUND_DRAG_PER_TICK = 0.588;
-const DEFAULT_PICKUP_DELAY_SECONDS = 0.5;
 
 export class DroppedItem {
   static nextId = 1;
   id: number;
-  itemId: number;
-  count: number;
+  stack: ItemStack;
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   mesh: THREE.Object3D;
   age = 0;
   pickupDelay: number;
   onGround = false;
+
+  get itemId(): number {
+    return this.stack.id;
+  }
+
+  get count(): number {
+    return this.stack.count;
+  }
+
+  set count(value: number) {
+    this.stack.count = value;
+  }
 
   constructor(
     itemId: number,
@@ -24,19 +37,19 @@ export class DroppedItem {
     y: number,
     z: number,
     velocity: THREE.Vector3 = new THREE.Vector3(0, 0, 0),
-    pickupDelay = DEFAULT_PICKUP_DELAY_SECONDS,
-    createMesh: (itemId: number) => THREE.Object3D | null
+    pickupDelay = ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
+    createMesh: (itemId: number) => THREE.Object3D | null,
+    stack?: ItemStack,
   ) {
     this.id = DroppedItem.nextId++;
-    this.itemId = itemId;
-    this.count = count;
+    this.stack = cloneItemStack(stack ?? { id: itemId, count })!;
     this.position = new THREE.Vector3(x, y, z);
     this.velocity = velocity.clone();
     this.pickupDelay = pickupDelay;
 
     this.mesh = new THREE.Group();
 
-    const innerMesh = createMesh(itemId);
+    const innerMesh = createMesh(this.stack.id);
     if (innerMesh) {
       innerMesh.scale.set(0.4, 0.4, 0.4);
       innerMesh.position.set(0, 0.1, 0);
@@ -50,6 +63,10 @@ export class DroppedItem {
     }
 
     this.mesh.position.copy(this.position);
+  }
+
+  setStack(stack: ItemStack) {
+    this.stack = cloneItemStack(stack)!;
   }
 
   update(

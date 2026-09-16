@@ -292,15 +292,28 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_DROPPED_ITEM_SPAWN: {
-        const { id, itemId, count, x, y, z } = packet.payload;
-        this.game.droppedItems.spawnItem(itemId, count, new THREE.Vector3(x, y, z), new THREE.Vector3(0, 0, 0));
-        // Find newest spawned item in DroppedItemSystem and sync its server ID
-        const list = Array.from(this.game.droppedItems.items.values());
-        if (list.length > 0) {
-          const newest = list[list.length - 1] as any;
-          this.game.droppedItems.items.delete(newest.id);
-          newest.id = id;
-          this.game.droppedItems.items.set(id, newest);
+        const { id, stack, itemId, count, x, y, z, pickupDelay, age } = packet.payload;
+        const authoritativeStack = stack ?? { id: itemId, count };
+        const spawned = this.game.droppedItems.spawnStack(
+          authoritativeStack,
+          new THREE.Vector3(x, y, z),
+          new THREE.Vector3(0, 0, 0),
+          Number.isFinite(pickupDelay) ? pickupDelay : 0.5,
+        );
+        this.game.droppedItems.items.delete(spawned.id);
+        spawned.id = id;
+        if (Number.isFinite(age)) spawned.age = age;
+        this.game.droppedItems.items.set(id, spawned);
+        break;
+      }
+
+      case PacketType.S2C_DROPPED_ITEM_UPDATE: {
+        const { id, stack, itemId, count, pickupDelay, age } = packet.payload;
+        const item = this.game.droppedItems.items.get(id);
+        if (item) {
+          item.setStack(stack ?? { id: itemId ?? item.itemId, count: count ?? item.count });
+          if (Number.isFinite(pickupDelay)) item.pickupDelay = pickupDelay;
+          if (Number.isFinite(age)) item.age = age;
         }
         break;
       }

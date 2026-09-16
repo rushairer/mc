@@ -1,21 +1,16 @@
 import * as THREE from 'three';
 import { DroppedItem } from '../entities/DroppedItem';
 import { Inventory } from '../player/Inventory';
-import { ItemRegistry } from '../items/ItemRegistry';
-
-const PLAYER_HALF_WIDTH = 0.3;
-const PLAYER_HEIGHT = 1.8;
-const PICKUP_EXPAND_XZ = 1.0;
-const PICKUP_EXPAND_Y = 0.5;
-
-// Java 1.20.1 item entities are 0.25 x 0.25. Vanilla searches the current
-// entity AABB inflated by (0.5, 0, 0.5), so compatible entity AABBs may
-// intersect at up to 0.75 blocks horizontally but only 0.25 vertically.
-const ITEM_ENTITY_WIDTH = 0.25;
-const ITEM_ENTITY_HEIGHT = 0.25;
-const MERGE_EXPAND_XZ = 0.5;
-const MERGE_CENTER_XZ = ITEM_ENTITY_WIDTH + MERGE_EXPAND_XZ;
-const MERGE_CENTER_Y = ITEM_ENTITY_HEIGHT;
+import type { ItemStack } from '../types';
+import {
+  ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
+  ITEM_ENTITY_DESPAWN_SECONDS,
+  ITEM_ENTITY_MERGE_INTERVAL_SECONDS,
+  canItemEntityPositionsMerge,
+  insertItemStackIntoSlots,
+  isWithinItemPickupBounds,
+  mergeItemEntityStacks,
+} from '../items/ItemEntityRules';
 
 export class DroppedItemSystem {
   items: Map<number, DroppedItem> = new Map();
@@ -31,22 +26,22 @@ export class DroppedItemSystem {
     this.createHeldItemMesh = createHeldItemMesh;
   }
 
-  spawnItem(
-    itemId: number,
-    count: number,
+  spawnStack(
+    stack: ItemStack,
     position: THREE.Vector3,
     velocity?: THREE.Vector3,
-    pickupDelay = 0.5
+    pickupDelay = ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
   ): DroppedItem {
     const item = new DroppedItem(
-      itemId,
-      count,
+      stack.id,
+      stack.count,
       position.x,
       position.y,
       position.z,
       velocity,
       pickupDelay,
-      this.createHeldItemMesh
+      this.createHeldItemMesh,
+      stack,
     );
     this.items.set(item.id, item);
     item.mesh.traverse(child => {
@@ -59,88 +54,88 @@ export class DroppedItemSystem {
     return item;
   }
 
+  spawnItem(
+    itemId: number,
+    count: number,
+    position: THREE.Vector3,
+    velocity?: THREE.Vector3,
+    pickupDelay = ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS
+  ): DroppedItem {
+    return this.spawnStack({ id: itemId, count }, position, velocity, pickupDelay);
+  }
+
   update(
     dt: number,
     playerPos: THREE.Vector3,
     isSolidBlock: (x: number, y: number, z: number) => boolean,
     inventory: Inventory,
     playPickupSound: () => void,
-    onInventoryChange: () => void
+    onInventoryChange: () => void,
+    allowLocalInteractions = true,
   ) {
     for (const [id, item] of this.items) {
       item.update(dt, isSolidBlock);
 
-      if (item.age >= 300) {
+      if (item.age >= ITEM_ENTITY_DESPAWN_SECONDS) {
         this.removeItem(id);
         continue;
       }
 
-      if (item.pickupDelay <= 0 && this.isWithinVanillaPickupBounds(item.position, playerPos)) {
-        const remaining = inventory.addItem(item.itemId, item.count);
-        if (remaining !== item.count) {
+      if (
+        allowLocalInteractions
+        && item.pickupDelay <= 0
+        && isWithinItemPickupBounds(item.position, playerPos)
+      ) {
+        const result = insertItemStackIntoSlots(inventory.slots, item.stack);
+        if (result.inserted > 0) {
           playPickupSound();
           onInventoryChange();
 
-          if (remaining <= 0) {
+          if (!result.remaining) {
             this.removeItem(id);
           } else {
-            item.count = remaining;
+            item.setStack(result.remaining);
           }
         }
       }
     }
 
-    // Vanilla item entities periodically look for nearby compatible stacks.
+    // Multiplayer clients render server-owned item entities but must not merge
+    // or pick them up locally. The authoritative server sends stack/despawn updates.
+    if (!allowLocalInteractions) {
+      this.mergeTimer = 0;
+      return;
+    }
+
     this.mergeTimer += dt;
-    if (this.mergeTimer >= 0.5) {
-      this.mergeTimer -= 0.5;
+    if (this.mergeTimer >= ITEM_ENTITY_MERGE_INTERVAL_SECONDS) {
+      this.mergeTimer -= ITEM_ENTITY_MERGE_INTERVAL_SECONDS;
       this.mergeItems();
     }
   }
 
+  /** Compatibility seam for existing parity probes; shared behavior lives in ItemEntityRules. */
   private isWithinVanillaPickupBounds(itemPos: THREE.Vector3, playerPos: THREE.Vector3): boolean {
-    const dx = Math.abs(itemPos.x - playerPos.x);
-    const dy = itemPos.y - playerPos.y;
-    const dz = Math.abs(itemPos.z - playerPos.z);
-
-    return dx <= PLAYER_HALF_WIDTH + PICKUP_EXPAND_XZ
-      && dz <= PLAYER_HALF_WIDTH + PICKUP_EXPAND_XZ
-      && dy >= -PICKUP_EXPAND_Y
-      && dy <= PLAYER_HEIGHT + PICKUP_EXPAND_Y;
+    return isWithinItemPickupBounds(itemPos, playerPos);
   }
 
   private mergeItems() {
     const list = Array.from(this.items.values());
     for (let i = 0; i < list.length; i++) {
-      const a = list[i];
-      if (!this.items.has(a.id)) continue;
-      const maxStack = ItemRegistry.getMaxStackSize(a.itemId);
-      if (a.count >= maxStack) continue;
+      const receiver = list[i];
+      if (!this.items.has(receiver.id)) continue;
 
       for (let j = i + 1; j < list.length; j++) {
-        const b = list[j];
-        if (!this.items.has(b.id)) continue;
-        if (a.itemId !== b.itemId) continue;
-        if (b.count <= 0) continue;
+        const donor = list[j];
+        if (!this.items.has(donor.id)) continue;
+        if (!canItemEntityPositionsMerge(receiver.position, donor.position)) continue;
 
-        const closeEnough = Math.abs(a.position.x - b.position.x) <= MERGE_CENTER_XZ
-          && Math.abs(a.position.y - b.position.y) <= MERGE_CENTER_Y
-          && Math.abs(a.position.z - b.position.z) <= MERGE_CENTER_XZ;
-        if (!closeEnough) continue;
+        const transferred = mergeItemEntityStacks(receiver.stack, donor.stack);
+        if (transferred <= 0) continue;
+        receiver.pickupDelay = Math.max(receiver.pickupDelay, donor.pickupDelay);
+        receiver.age = Math.min(receiver.age, donor.age);
 
-        // A full donor entity may still top up a partial receiver. Only the
-        // receiving stack needs free capacity.
-        const transfer = Math.min(b.count, maxStack - a.count);
-        if (transfer <= 0) continue;
-        a.count += transfer;
-        b.count -= transfer;
-        a.pickupDelay = Math.max(a.pickupDelay, b.pickupDelay);
-        a.age = Math.min(a.age, b.age);
-
-        if (b.count <= 0) {
-          this.removeItem(b.id);
-        }
-        if (a.count >= maxStack) break;
+        if (donor.count <= 0) this.removeItem(donor.id);
       }
     }
   }

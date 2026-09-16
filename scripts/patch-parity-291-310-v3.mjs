@@ -16,6 +16,17 @@ source = source.replace(
 fs.writeFileSync(fixedPath, source);
 try {
   await import(`${pathToFileURL(process.cwd() + '/' + fixedPath).href}?v=${Date.now()}`);
+
+  // The modern placement rewrite retires the legacy `baseId` local. Keep the
+  // Wither skull special-case on the new legacy-only ID variable as well.
+  const placementPath = 'src/world/BlockPlacement.ts';
+  let placement = fs.readFileSync(placementPath, 'utf8');
+  const before = 'checksWitherSpawn: baseId === 144';
+  if (!placement.includes(before)) {
+    throw new Error(`witherspawn parity anchor missing in ${placementPath}`);
+  }
+  placement = placement.replace(before, 'checksWitherSpawn: legacyBaseId === 144');
+  fs.writeFileSync(placementPath, placement);
 } finally {
   if (fs.existsSync(fixedPath)) fs.unlinkSync(fixedPath);
 }

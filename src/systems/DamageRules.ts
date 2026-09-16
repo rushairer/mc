@@ -27,7 +27,6 @@ export function baseArmorApplies(kind: PlayerDamageKind): boolean {
     case 'fire':
     case 'lava':
     case 'explosion':
-    case 'generic':
       return true;
     default:
       return false;

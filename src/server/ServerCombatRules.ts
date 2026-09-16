@@ -33,6 +33,7 @@ export interface ServerCriticalContext {
   descending: boolean;
   onGround: boolean;
   sprinting: boolean;
+  flying?: boolean;
   inWater?: boolean;
   climbing?: boolean;
   riding?: boolean;
@@ -65,11 +66,6 @@ export function getEntityInteractionReach(gameMode: 'survival' | 'creative' = 's
   return gameMode === 'creative' ? CREATIVE_ENTITY_REACH : SURVIVAL_ENTITY_REACH;
 }
 
-/**
- * Server-side entity reach check. Player positions are feet positions, so use
- * the Java eye height and a representative target body center instead of the
- * feet-to-feet distance used by the old multiplayer path.
- */
 export function isEntityAttackInReach(
   attacker: ServerPosition,
   target: ServerPosition,
@@ -82,11 +78,7 @@ export function isEntityAttackInReach(
   return dx * dx + dy * dy + dz * dz <= reach * reach + 1e-9;
 }
 
-/**
- * Java resolves attack-speed cooldown in whole game ticks. Exactly .5 rounds
- * down; larger fractions round up. For example a sword's 12.5 theoretical
- * ticks resolves to a 12-tick full-damage cooldown.
- */
+/** Java resolves attack-speed cooldown in whole ticks; an exact .5 rounds down. */
 export function roundAttackCooldownTicks(theoreticalTicks: number): number {
   if (!Number.isFinite(theoreticalTicks) || theoreticalTicks <= 0) return 1;
   const floor = Math.floor(theoreticalTicks);
@@ -96,10 +88,9 @@ export function roundAttackCooldownTicks(theoreticalTicks: number): number {
 export function getServerMeleeProfile(stack: ItemStack | null | undefined): ServerMeleeProfile {
   const def = stack ? ItemRegistry.get(stack.id) : undefined;
   const baseAttributeDamage = def?.damage ?? getMeleeAttackDamage(def?.toolType, def?.toolMaterial);
-  const sharpnessLevel = EnchantSystem.getLevel(stack, 'sharpness');
   return {
     baseAttributeDamage,
-    enchantmentDamage: EnchantSystem.getSharpnessBonus(sharpnessLevel),
+    enchantmentDamage: EnchantSystem.getSharpnessBonus(EnchantSystem.getLevel(stack, 'sharpness')),
     cooldownTicks: roundAttackCooldownTicks(getAttackCooldownSeconds(def?.toolType, def?.toolMaterial) * 20),
     isAxe: def?.toolType === 'axe',
     isSword: def?.toolType === 'sword',
@@ -121,10 +112,11 @@ export function getAttackStrength(
 }
 
 export function isServerCriticalHit(attackStrength: number, context: ServerCriticalContext): boolean {
-  return attackStrength >= CHARGED_ATTACK_THRESHOLD
+  return attackStrength > CHARGED_ATTACK_THRESHOLD
     && context.descending
     && !context.onGround
     && !context.sprinting
+    && !context.flying
     && !context.inWater
     && !context.climbing
     && !context.riding
@@ -137,7 +129,7 @@ export function getServerKnockbackPlan(
   sprinting: boolean,
 ): ServerKnockbackPlan {
   const profile = getServerMeleeProfile(stack);
-  const sprintKnockback = sprinting && attackStrength >= CHARGED_ATTACK_THRESHOLD;
+  const sprintKnockback = sprinting && attackStrength > CHARGED_ATTACK_THRESHOLD;
   return {
     strength: profile.knockbackLevel + (sprintKnockback ? 1 : 0),
     sprintKnockback,
@@ -159,10 +151,6 @@ export function getNetheriteKnockbackResistance(armor: Array<ItemStack | null | 
   return Math.min(0.4, pieces * 0.1);
 }
 
-/**
- * Derive melee damage exclusively from the server-owned held stack and attack
- * cadence. Client-provided damage and critical flags are deliberately absent.
- */
 export function getServerMeleeDamage(
   stack: ItemStack | null | undefined,
   lastAttackTick: number | null | undefined,

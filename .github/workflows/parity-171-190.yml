@@ -1,0 +1,36 @@
+name: Parity 171-190 Hardening
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - scripts/.parity-171-190-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: python3 scripts/.parity-171-190.py
+      - run: npm ci
+      - run: npm run audit:parity
+      - run: npm run check
+
+      - name: Commit production hardening
+        run: |
+          git config user.name "Aben"
+          git config user.email "5195693+rushairer@users.noreply.github.com"
+          git add src tests
+          git commit -m "fix: make dropped item stacks server authoritative"
+          git push origin HEAD:master

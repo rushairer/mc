@@ -20,7 +20,12 @@ export enum PacketType {
   C2S_ITEM_CONSUME = 'C2S_ITEM_CONSUME',
   /** P5.3 — container interaction authority (chests, barrels, hoppers...). */
   C2S_CONTAINER_OPEN = 'C2S_CONTAINER_OPEN',
+  /** Legacy snapshot packet: retained for compatibility but never authoritative. */
   C2S_CONTAINER_UPDATE = 'C2S_CONTAINER_UPDATE',
+  /** Server-owned cursor transaction: client supplies only area + slot index. */
+  C2S_CONTAINER_CLICK = 'C2S_CONTAINER_CLICK',
+  /** Close the currently opened server container and reconcile its cursor. */
+  C2S_CONTAINER_CLOSE = 'C2S_CONTAINER_CLOSE',
 
   // Server to Client
   S2C_JOIN_ACK = 'S2C_JOIN_ACK',
@@ -28,6 +33,10 @@ export enum PacketType {
   S2C_PLAYER_JOIN = 'S2C_PLAYER_JOIN',
   S2C_PLAYER_LEAVE = 'S2C_PLAYER_LEAVE',
   S2C_PLAYER_MOVE = 'S2C_PLAYER_MOVE',
+  /** Rubber-band a local player to the last accepted server position. */
+  S2C_POSITION_CORRECTION = 'S2C_POSITION_CORRECTION',
+  /** Authoritative combat knockback / external velocity impulse. */
+  S2C_PLAYER_VELOCITY = 'S2C_PLAYER_VELOCITY',
   S2C_PLAYER_STATE = 'S2C_PLAYER_STATE',
   S2C_BLOCK_UPDATE = 'S2C_BLOCK_UPDATE',
   S2C_MOB_SPAWN = 'S2C_MOB_SPAWN',
@@ -47,7 +56,7 @@ export enum PacketType {
   S2C_WEATHER = 'S2C_WEATHER',
   S2C_TIME = 'S2C_TIME',
   S2C_BOSS_BAR = 'S2C_BOSS_BAR',
-  /** P5.3 — server container contents. */
+  /** Server container contents plus server-owned cursor. */
   S2C_CONTAINER_DATA = 'S2C_CONTAINER_DATA'
 }
 

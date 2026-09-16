@@ -8,6 +8,11 @@ export type FurnaceQuickMoveTarget = 'input' | 'fuel' | 'player_inventory' | 'ma
 
 const normalizeName = (name: string | undefined) => name?.toLowerCase().replace(/^minecraft:/, '');
 
+function resolveLegacyCompatibleItemId(legacyId: number, name: string): number {
+  if (ItemRegistry.get(legacyId) || BlockRegistry.get(legacyId)) return legacyId;
+  return ItemRegistry.getByName(name)?.id ?? BlockRegistry.getByName(name)?.id ?? legacyId;
+}
+
 export function getFurnaceSemanticName(itemId: number): string | undefined {
   return normalizeName(ItemRegistry.get(itemId)?.name ?? BlockRegistry.get(itemId)?.name);
 }
@@ -77,8 +82,7 @@ export function getFurnaceFuelRemainder(fuel: ItemStack | null | undefined): Ite
   const def = ItemRegistry.get(fuel.id) ?? BlockRegistry.get(fuel.id);
   const legacyBaseId = def && def.baseId >= 256 ? -1 : (fuel.id & 0x3FF);
   if (name !== 'lava_bucket' && legacyBaseId !== 327) return undefined;
-  const bucketId = ItemRegistry.getByName('bucket')?.id ?? 325;
-  return { id: bucketId, count: 1 };
+  return { id: resolveLegacyCompatibleItemId(325, 'bucket'), count: 1 };
 }
 
 /** Empty bucket in the fuel slot collects the water released by a wet sponge. */
@@ -86,11 +90,12 @@ export function getWetSpongeFuelRemainder(
   inputName: string | undefined,
   fuelSlot: ItemStack | null | undefined,
 ): ItemStack | undefined {
-  if (normalizeName(inputName) !== 'wet_sponge') return undefined;
-  const bucketId = ItemRegistry.getByName('bucket')?.id ?? 325;
-  if (fuelSlot?.id !== bucketId) return undefined;
-  const waterBucketId = ItemRegistry.getByName('water_bucket')?.id ?? 326;
-  return { id: waterBucketId, count: 1 };
+  if (normalizeName(inputName) !== 'wet_sponge' || !fuelSlot) return undefined;
+  const fuelName = getFurnaceSemanticName(fuelSlot.id);
+  const fuelDef = ItemRegistry.get(fuelSlot.id) ?? BlockRegistry.get(fuelSlot.id);
+  const legacyBaseId = fuelDef && fuelDef.baseId >= 256 ? -1 : (fuelSlot.id & 0x3FF);
+  if (fuelName !== 'bucket' && legacyBaseId !== 325) return undefined;
+  return { id: resolveLegacyCompatibleItemId(326, 'water_bucket'), count: 1 };
 }
 
 /**

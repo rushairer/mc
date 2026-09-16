@@ -84,7 +84,9 @@ export function mitigateServerPlayerDamage(
 
 /**
  * Damage a breakable stack using its registry max durability and Unbreaking.
- * Durability in ItemStack is remaining durability in this project.
+ * Durability in ItemStack is remaining durability in this project. Shield is a
+ * material-category item in the registry, so keep its Java 336-point maximum
+ * explicit until ItemRegistry models shield as its own durable category.
  */
 export function damageDurableStack(
   stack: ItemStack | null | undefined,
@@ -94,7 +96,7 @@ export function damageDurableStack(
 ): ItemStack | null {
   if (!stack) return null;
   const def = ItemRegistry.get(stack.id);
-  const maxDurability = def?.durability;
+  const maxDurability = def?.durability ?? (def?.name === 'shield' ? 336 : undefined);
   if (!maxDurability || !Number.isFinite(amount) || amount <= 0) return { ...stack };
 
   let remaining = stack.durability ?? maxDurability;

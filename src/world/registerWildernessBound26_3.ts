@@ -14,6 +14,7 @@ import {
   WILDERNESS_BOUND_SUPPLEMENT_BLOCKS,
   WILDERNESS_BOUND_SUPPLEMENT_ITEMS,
 } from './WildernessBound26_3Supplement';
+import { installWildernessBoundWorldGen26_3 } from './WildernessBoundWorldGen26_3';
 
 let registered = false;
 
@@ -78,6 +79,7 @@ export function registerWildernessBound26_3(): void {
     ...WILDERNESS_BOUND_ALL_ITEMS,
     ...WILDERNESS_BOUND_SUPPLEMENT_ITEMS,
   ]);
+  installWildernessBoundWorldGen26_3();
 
   const resolveId = (name: string) =>
     ItemRegistry.getByName(name)?.id

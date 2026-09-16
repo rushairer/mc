@@ -21,6 +21,11 @@ export type BrewAction =
   | { kind: 'brew'; recipe: BrewingRecipe }
   | { kind: 'modify'; modifier: PotionModifier };
 
+export interface ConsumedBrewingIngredient {
+  ingredient: ItemStack | null;
+  returnedContainer: ItemStack | null;
+}
+
 const POTION_ID = 373;
 const GLASS_BOTTLE_ID = 374;
 const NETHER_WART_ID = 372;
@@ -39,7 +44,7 @@ export const BREWING_RECIPES: BrewingRecipe[] = [
   { ingredientId: SUGAR_ID, inputKind: 'awkward', outputKind: 'speed', outputName: 'Potion of Swiftness', effect: { id: 'speed', level: 1, duration: 180 } },
   { ingredientId: SPIDER_EYE_ID, inputKind: 'awkward', outputKind: 'poison', outputName: 'Potion of Poison', effect: { id: 'poison', level: 1, duration: 45 } },
   { ingredientId: BLAZE_POWDER_ID, inputKind: 'awkward', outputKind: 'strength', outputName: 'Potion of Strength', effect: { id: 'strength', level: 1, duration: 180 } },
-  { ingredientId: 382, inputKind: 'awkward', outputKind: 'healing', outputName: 'Potion of Healing', effect: { id: 'healing', level: 1, duration: 0 } }, // speckled_melon
+  { ingredientId: 382, inputKind: 'awkward', outputKind: 'healing', outputName: 'Potion of Healing', effect: { id: 'healing', level: 1, duration: 0 } },
   { ingredientId: MAGMA_CREAM_ID, inputKind: 'awkward', outputKind: 'fire_resistance', outputName: 'Potion of Fire Resistance', effect: { id: 'fire_resistance', level: 1, duration: 180 } },
   { ingredientId: FERMENTED_SPIDER_EYE_ID, inputKind: 'speed', outputKind: 'slowness', outputName: 'Potion of Slowness', effect: { id: 'slowness', level: 1, duration: 90 } },
   { ingredientId: PUFFERFISH_ID, inputKind: 'awkward', outputKind: 'water_breathing', outputName: 'Potion of Water Breathing', effect: { id: 'water_breathing', level: 1, duration: 180 } },
@@ -85,10 +90,6 @@ export const BrewingSystem = {
     ) ?? null;
   },
 
-  /**
-   * P3.4 — resolve the brewing action for an ingredient: a base recipe or a
-   * potion modifier (redstone/glowstone/gunpowder/dragon's breath).
-   */
   findBrewAction(ingredient: ItemStack | null, bottles: Array<ItemStack | null>): BrewAction | null {
     if (!ingredient) return null;
     const modifier = POTION_MODIFIERS.find((mod) =>
@@ -98,6 +99,30 @@ export const BrewingSystem = {
     if (modifier) return { kind: 'modify', modifier };
     const recipe = this.findRecipe(ingredient, bottles);
     return recipe ? { kind: 'brew', recipe } : null;
+  },
+
+  /**
+   * Consume exactly one brewing ingredient. Java 26.3 fixes MC-259583: the
+   * final Dragon's Breath now leaves its glass bottle in the ingredient slot.
+   * For a larger stack the remaining breath stays in the slot and the returned
+   * bottle is surfaced separately for the UI/inventory to receive.
+   */
+  consumeIngredient(ingredient: ItemStack | null): ConsumedBrewingIngredient {
+    if (!ingredient || ingredient.count <= 0) return { ingredient: null, returnedContainer: null };
+    if (ingredient.id === DRAGON_BREATH_ID) {
+      if (ingredient.count === 1) {
+        return { ingredient: { id: GLASS_BOTTLE_ID, count: 1 }, returnedContainer: null };
+      }
+      return {
+        ingredient: { ...ingredient, count: ingredient.count - 1 },
+        returnedContainer: { id: GLASS_BOTTLE_ID, count: 1 },
+      };
+    }
+    const remaining = ingredient.count - 1;
+    return {
+      ingredient: remaining > 0 ? { ...ingredient, count: remaining } : null,
+      returnedContainer: null,
+    };
   },
 
   brewBottle(bottle: ItemStack, recipe: BrewingRecipe): ItemStack {
@@ -116,7 +141,6 @@ export const BrewingSystem = {
   },
 };
 
-/** Java 1.20.1 canonical extended potion durations in seconds. */
 const EXTENDED_DURATION: Record<string, number> = {
   regeneration: 90,
   speed: 480,
@@ -128,7 +152,6 @@ const EXTENDED_DURATION: Record<string, number> = {
   jump_boost: 480,
 };
 
-/** Java 1.20.1 canonical glowstone upgrades. */
 const STRONG_EFFECT: Record<string, { level: number; duration: number }> = {
   regeneration: { level: 2, duration: 22 },
   speed: { level: 2, duration: 90 },
@@ -139,11 +162,6 @@ const STRONG_EFFECT: Record<string, { level: number; duration: number }> = {
   jump_boost: { level: 2, duration: 90 },
 };
 
-/**
- * P3.4 — potion modifiers (Java 1.20.1): redstone and glowstone use
- * potion-specific vanilla outcomes; gunpowder makes a splash potion and
- * dragon's breath turns a splash potion into a lingering potion.
- */
 const REDSTONE_ID = 331;
 const GLOWSTONE_ID = 348;
 const GUNPOWDER_ID = 289;

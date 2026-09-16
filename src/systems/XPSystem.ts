@@ -53,7 +53,8 @@ export class XPSystem {
     playerPos: THREE.Vector3,
     isSolidBlock: (x: number, y: number, z: number) => boolean,
     onPickup: () => void,
-    onChange: () => void
+    onChange: () => void,
+    routePickedXp?: (amount: number) => number,
   ) {
     const target = playerPos.clone().add(new THREE.Vector3(0, 0.9, 0));
     let changed = false;
@@ -102,9 +103,13 @@ export class XPSystem {
       orb.velocity.z *= drag;
 
       // Player contact is evaluated after movement, mirroring entity collision.
-      // The two-tick player cooldown ensures only one touching orb is collected.
+      // Mending gets first claim on the orb; only leftover XP reaches the bar.
       if (orb.position.distanceTo(target) < TOUCH_RADIUS && this.pickupCooldown <= 0) {
-        this.addXP(orb.value);
+        const routed = routePickedXp ? routePickedXp(orb.value) : orb.value;
+        const remainingXp = Math.max(0, Math.floor(routed));
+        if (remainingXp > 0) {
+          this.addXP(remainingXp);
+        }
         this.removeOrb(id);
         this.pickupCooldown = PLAYER_PICKUP_COOLDOWN;
         onPickup();

@@ -51,7 +51,12 @@
     "redstone": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
     "audioAndUi": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
     "multiplayer": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
-    "wildernessBound26_3": { "definitions": "missing", "visualModels": "missing", "behavior": "missing", "automatedAcceptance": "missing" }
+    "wildernessBound26_3": {
+      "definitions": "partial",
+      "visualModels": "partial",
+      "behavior": "partial",
+      "automatedAcceptance": "partial"
+    }
   },
   "releaseGates": {
     "latestStableTarget": "required",

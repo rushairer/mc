@@ -109,9 +109,11 @@ test('198: all sixteen wool colors get stair and slab variants', () => {
 test('199: all sixteen concrete colors get stairs/slabs and stonecutter outputs', () => {
   assert.equal(CONCRETE_SHAPE_BLOCKS.size, 16);
   for (const color of DYE_COLORS) {
-    const concrete = BlockRegistry.getByName(`${color}_concrete`);
-    if (!concrete) continue;
-    const outputs = getStonecuttingResults(concrete.id);
+    const concrete = ItemRegistry.getByName('concrete');
+    const metadata = DYE_COLORS.indexOf(color);
+    const concreteId = concrete ? (metadata << 10) | concrete.baseId : undefined;
+    if (concreteId === undefined) continue;
+    const outputs = getStonecuttingResults(concreteId);
     const names = outputs.map(output => BlockRegistry.get(output.outputBlockId)?.name);
     assert.ok(names.includes(`${color}_concrete_slab`));
     assert.ok(names.includes(`${color}_concrete_stairs`));
@@ -194,9 +196,8 @@ test('210: 26.3 crafting bridge produces wool/concrete shapes and colored cushio
   const woolSlab = ItemRegistry.getByName('white_wool_slab')!.id;
   assert.deepEqual(findCraftingResult(grid(whiteWool, whiteWool, whiteWool)), { id: woolSlab, count: 6 });
 
-  // Legacy concrete colors are block metadata variants; use the canonical block
-  // runtime id so the modern 26.3 recipe bridge can coexist with the old item table.
-  const whiteConcrete = BlockRegistry.getByName('white_concrete')!.id;
+  const concrete = ItemRegistry.getByName('concrete')!;
+  const whiteConcrete = concrete.baseId; // metadata 0 is white concrete
   const concreteSlab = ItemRegistry.getByName('white_concrete_slab')!.id;
   assert.deepEqual(findCraftingResult(grid(whiteConcrete, whiteConcrete, whiteConcrete)), { id: concreteSlab, count: 6 });
 

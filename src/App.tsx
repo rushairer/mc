@@ -206,6 +206,10 @@ export const App: React.FC = () => {
     }
   }, []);
 
+  const handleServerContainerClick = useCallback((area: 'container' | 'player', slotIndex: number) => {
+    gameRef.current?.serverContainerClick(area, slotIndex);
+  }, []);
+
   const handleDropItem = useCallback((itemId: number, count: number) => {
     if (gameRef.current) {
       gameRef.current.dropItemFromUI(itemId, count);
@@ -619,6 +623,8 @@ export const App: React.FC = () => {
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
           onDropItem={handleDropItem}
+          serverCursor={gameState.serverContainerCursor}
+          onServerSlotClick={gameState.networkStatus === 'connected' ? handleServerContainerClick : undefined}
           titleKey={gameState.chestTitleKey}
         />
       )}
@@ -632,6 +638,8 @@ export const App: React.FC = () => {
           onInventoryChange={handleInventoryChange}
           getItemIconStyle={getItemIconStyle}
           onDropItem={handleDropItem}
+          serverCursor={gameState.serverContainerCursor}
+          onServerSlotClick={gameState.networkStatus === 'connected' ? handleServerContainerClick : undefined}
         />
       )}
 

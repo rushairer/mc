@@ -265,8 +265,6 @@ export class Game {
   private caveDripTimer = 0;
   /** P5.2 — throttle for uploading local player state in multiplayer. */
   private playerStateSyncTimer = 0;
-  /** P5.3 — throttle for uploading open-container contents. */
-  private containerSyncTimer = 0;
   /** P3.4 — lingering potion area clouds. */
   private lingeringClouds: Array<{
     pos: THREE.Vector3;
@@ -1305,8 +1303,9 @@ export class Game {
 
   /** P5.3 — apply server container contents to the open chest. */
   applyServerContainerData(x: number, y: number, z: number, slots: (ItemStack | null)[], cursor: ItemStack | null = null) {
+    const openPos = this.openChestPos ?? this.openHopperPos;
+    if (!openPos || openPos.x !== x || openPos.y !== y || openPos.z !== z) return;
     this.serverContainerCursor = cursor;
-    if (!this.openChestPos || this.openChestPos.x !== x || this.openChestPos.y !== y || this.openChestPos.z !== z) return;
     const metadata = this.chunks.getBlockMeta(x, y, z);
     if (!metadata) return;
     metadata.inventory = slots.map((slot) => (slot ? { ...slot } : null));
@@ -1321,6 +1320,9 @@ export class Game {
     this.openHopperPos = new THREE.Vector3(x, y, z);
     this.openUI = 'hopper';
     document.exitPointerLock();
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_CONTAINER_OPEN, { x, y, z });
+    }
   }
 
   openEnchantUI() {
@@ -1453,9 +1455,10 @@ export class Game {
 
   closeUI() {
     if (this.openUI === 'chest') {
-      this.saveOpenChestInventory();
+      this.closeServerContainerSession();
       this.openChestPos = null;
     } else if (this.openUI === 'hopper') {
+      this.closeServerContainerSession();
       this.openHopperPos = null;
     } else if (this.openUI === 'furnace') {
       this.openFurnacePos = null;
@@ -2665,26 +2668,6 @@ export class Game {
       }
     );
 
-    // P5.3: upload open-container contents (server-validated authority).
-    if (this.isMultiplayerNetworkConnected() && (this.openUI as UIType) === 'chest' && this.openChestPos) {
-      this.containerSyncTimer -= dt;
-      if (this.containerSyncTimer <= 0) {
-        this.containerSyncTimer = 0.4;
-        const metadata = this.chunks.getBlockMeta(
-          Math.floor(this.openChestPos.x),
-          Math.floor(this.openChestPos.y),
-          Math.floor(this.openChestPos.z),
-        );
-        if (metadata?.inventory) {
-          this.network.send(PacketType.C2S_CONTAINER_UPDATE, {
-            x: Math.floor(this.openChestPos.x),
-            y: Math.floor(this.openChestPos.y),
-            z: Math.floor(this.openChestPos.z),
-            slots: metadata.inventory,
-          });
-        }
-      }
-    }
 
     // P5.2: upload simulated player state so the server's pushes stay convergent.
     if (this.isMultiplayerNetworkConnected()) {
@@ -4585,9 +4568,6 @@ export class Game {
   }
 
   private notifyState() {
-    if (this.openUI === 'chest') {
-      this.saveOpenChestInventory();
-    }
     this.player.updateArmorMesh(this.inventory.armor);
     this.updateFpArmArmor();
 
@@ -6683,14 +6663,14 @@ export class Game {
     return null;
   }
 
-  saveOpenChestInventory() {
-    if (!this.openChestPos || !this.network.isConnected) return;
+  private closeServerContainerSession() {
+    if (!this.network.isConnected || (!this.openChestPos && !this.openHopperPos)) return;
     this.network.send(PacketType.C2S_CONTAINER_CLOSE, {});
     this.serverContainerCursor = null;
   }
 
   serverContainerClick(area: 'container' | 'player', slotIndex: number) {
-    if (!this.network.isConnected || !this.openChestPos) return false;
+    if (!this.network.isConnected || (!this.openChestPos && !this.openHopperPos)) return false;
     this.network.send(PacketType.C2S_CONTAINER_CLICK, { area, slotIndex });
     return true;
   }

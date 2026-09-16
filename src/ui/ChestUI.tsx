@@ -12,6 +12,8 @@ interface ChestUIProps {
   getItemIconStyle: (id: number, size?: number) => any;
   onDropItem?: (itemId: number, count: number) => void;
   titleKey?: 'chest' | 'doubleChest' | 'barrel';
+  serverCursor?: ItemStack | null;
+  onServerSlotClick?: (area: 'container' | 'player', slotIndex: number) => void;
 }
 
 const SLOT_SIZE = 48;
@@ -56,9 +58,13 @@ export const ChestUI: React.FC<ChestUIProps> = ({
   getItemIconStyle,
   onDropItem,
   titleKey,
+  serverCursor,
+  onServerSlotClick,
 }) => {
   const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
+  const authoritative = Boolean(onServerSlotClick);
+  const displayHeldItem = authoritative ? (serverCursor ?? null) : heldItem;
   const [, forceRender] = useState(0);
   const [hoveredSlot, setHoveredSlot] = useState<{
     item: ItemStack;
@@ -103,6 +109,11 @@ export const ChestUI: React.FC<ChestUIProps> = ({
   }, [onInventoryChange]);
 
   const handleSlotClick = useCallback((target: SlotTarget) => {
+    if (authoritative) {
+      setHoveredSlot(null);
+      onServerSlotClick?.(target.type === 'chest' ? 'container' : 'player', target.index);
+      return;
+    }
     const slotItem = getSlot(target);
 
     if (heldItem && slotItem && heldItem.id === slotItem.id) {
@@ -125,9 +136,13 @@ export const ChestUI: React.FC<ChestUIProps> = ({
     }
 
     notifyChanged();
-  }, [getSlot, heldItem, notifyChanged, setSlot]);
+  }, [authoritative, getSlot, heldItem, notifyChanged, onServerSlotClick, setSlot]);
 
   const handleClose = useCallback(() => {
+    if (authoritative) {
+      onClose();
+      return;
+    }
     if (heldItem) {
       let leftover = inventory.addItem(heldItem.id, heldItem.count);
       if (leftover > 0) {
@@ -138,7 +153,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
     }
     notifyChanged();
     onClose();
-  }, [chestSlots, heldItem, inventory, notifyChanged, onClose]);
+  }, [authoritative, chestSlots, heldItem, inventory, notifyChanged, onClose]);
 
   // Close on E or Escape key, drop on Q
   useEffect(() => {
@@ -147,6 +162,10 @@ export const ChestUI: React.FC<ChestUIProps> = ({
         e.preventDefault();
         handleClose();
       } else if (e.key.toLowerCase() === 'q') {
+        if (authoritative) {
+          e.preventDefault();
+          return;
+        }
         if (heldItem) {
           const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? heldItem.count : 1;
           onDropItem?.(heldItem.id, dropCount);
@@ -176,7 +195,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [handleClose, heldItem, hoveredSlot, getSlot, setSlot, notifyChanged, onDropItem]);
+  }, [authoritative, handleClose, heldItem, hoveredSlot, getSlot, setSlot, notifyChanged, onDropItem]);
 
   const renderSlot = (item: ItemStack | null, target: SlotTarget, onClick: () => void) => {
     const itemDef = item ? ItemRegistry.get(item.id) : null;
@@ -189,7 +208,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
           onClick();
         }}
         onMouseEnter={(e) => {
-          if (item && itemDef && !heldItem) {
+          if (item && itemDef && !displayHeldItem) {
             setHoveredSlot({
               item,
               itemDef,
@@ -200,7 +219,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
           }
         }}
         onMouseMove={(e) => {
-          if (item && itemDef && !heldItem) {
+          if (item && itemDef && !displayHeldItem) {
             setHoveredSlot({
               item,
               itemDef,
@@ -253,6 +272,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
   return (
     <div
       onClick={() => {
+        if (authoritative) return;
         if (heldItem) {
           onDropItem?.(heldItem.id, heldItem.count);
           setHeldItem(null);
@@ -363,7 +383,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
         </div>
       </div>
 
-      {heldItem && (
+      {displayHeldItem && (
         <div
           id="chest-held-item"
           style={{
@@ -379,8 +399,8 @@ export const ChestUI: React.FC<ChestUIProps> = ({
             justifyContent: 'center',
           }}
         >
-          <div style={getItemIconStyle(heldItem.id, 32)} />
-          {heldItem.count > 1 && (
+          <div style={getItemIconStyle(displayHeldItem.id, 32)} />
+          {displayHeldItem.count > 1 && (
             <span style={{
               position: 'absolute',
               bottom: '2px',
@@ -390,14 +410,14 @@ export const ChestUI: React.FC<ChestUIProps> = ({
               fontWeight: 'bold',
               textShadow: '1px 1px 0 #000',
             }}>
-              {heldItem.count}
+              {displayHeldItem.count}
             </span>
           )}
         </div>
       )}
 
       {/* Minecraft-style Premium Hover Tooltip */}
-      {hoveredSlot && !heldItem && (
+      {hoveredSlot && !displayHeldItem && (
         <div style={{
           position: 'fixed',
           left: `${hoveredSlot.x + 12}px`,

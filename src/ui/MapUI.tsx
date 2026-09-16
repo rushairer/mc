@@ -10,6 +10,11 @@ export const MapUI: React.FC<MapUIProps> = ({ item, onClose }) => {
   const map = item.map;
   if (!map) return null;
 
+  const marker = map.playerMarker as typeof map.playerMarker & { rotation?: number };
+  const markerLeft = `${(marker.x / 127) * 100}%`;
+  const markerTop = `${(marker.z / 127) * 100}%`;
+  const markerRotation = Number.isFinite(marker.rotation) ? marker.rotation! : 0;
+
   return (
     <div
       style={{
@@ -35,27 +40,44 @@ export const MapUI: React.FC<MapUIProps> = ({ item, onClose }) => {
       >
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(32, 1fr)',
+            position: 'relative',
             aspectRatio: '1 / 1',
             border: '3px solid #624b2a',
             background: '#bfa66d',
+            overflow: 'hidden',
           }}
         >
-          {map.pixels.map((color, index) => {
-            const px = index % 32;
-            const py = Math.floor(index / 32);
-            const isPlayer = Math.abs(px - map.playerMarker.x) <= 1 && Math.abs(py - map.playerMarker.z) <= 1;
-            return (
-              <div
-                key={index}
-                style={{
-                  background: isPlayer ? '#f7f2e0' : color,
-                  boxShadow: isPlayer ? 'inset 0 0 0 1px #9b1f1f' : undefined,
-                }}
-              />
-            );
-          })}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(128, 1fr)',
+              gridTemplateRows: 'repeat(128, 1fr)',
+            }}
+          >
+            {map.pixels.map((color, index) => (
+              <div key={index} style={{ background: color }} />
+            ))}
+          </div>
+          <div
+            aria-label={`Player facing ${Math.round(markerRotation)} degrees`}
+            style={{
+              position: 'absolute',
+              left: markerLeft,
+              top: markerTop,
+              width: 0,
+              height: 0,
+              borderLeft: '6px solid transparent',
+              borderRight: '6px solid transparent',
+              borderBottom: '15px solid #f7f2e0',
+              filter: 'drop-shadow(0 0 1px #9b1f1f)',
+              transform: `translate(-50%, -50%) rotate(${markerRotation}deg)`,
+              transformOrigin: '50% 65%',
+              zIndex: 2,
+              pointerEvents: 'none',
+            }}
+          />
         </div>
         <div
           style={{
@@ -70,7 +92,7 @@ export const MapUI: React.FC<MapUIProps> = ({ item, onClose }) => {
         >
           <span>Map #{map.id}</span>
           <span>X {map.centerX} Z {map.centerZ}</span>
-          <span>Scale 1:{map.scale}</span>
+          <span>Scale 1:{1 << Math.max(0, Math.min(4, Math.floor(map.scale)))}</span>
         </div>
         <button
           onClick={onClose}

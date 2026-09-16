@@ -10,6 +10,7 @@ import {
   WILDERNESS_BOUND_BLOCKS,
   buildWildernessBoundRecipes,
 } from './WildernessBound26_3';
+import { buildWildernessBoundChangeRecipes26_3 } from './WildernessBoundChanges26_3';
 import {
   WILDERNESS_BOUND_SUPPLEMENT_BLOCKS,
   WILDERNESS_BOUND_SUPPLEMENT_ITEMS,
@@ -86,6 +87,7 @@ export function registerWildernessBound26_3(): void {
     ?? BlockRegistry.getByName(name)?.id
     ?? resolveLegacyColoredBlock(name);
   addCraftingRecipes(buildWildernessBoundRecipes(resolveId));
+  addCraftingRecipes(buildWildernessBoundChangeRecipes26_3(resolveId));
 
   for (const color of DYE_COLORS) {
     const shapes = CONCRETE_SHAPE_BLOCKS.get(color)!;

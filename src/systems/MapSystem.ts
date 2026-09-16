@@ -1,4 +1,5 @@
 import { WorldGen, BiomeType } from '../world/WorldGen';
+import { normalizeMapFacingDegrees26_3 } from '../world/WildernessBoundChanges26_3';
 
 export interface MapData {
   id: number;
@@ -8,7 +9,8 @@ export interface MapData {
   scale: number;
   dimension: number;
   pixels: string[];
-  playerMarker: { x: number; z: number };
+  /** Java 26.3 map player marker always carries facing. */
+  playerMarker: { x: number; z: number; rotation?: number };
   /** P3.5 — cartography table lock. */
   locked?: boolean;
   /** Java 26.3 dedicated Explorer Map item type, when this is not a normal Filled Map. */
@@ -59,10 +61,32 @@ function markerCoordinate(coordinate: number, center: number, scale: number): nu
   return Math.max(0, Math.min(MAP_SIZE - 1, pixel));
 }
 
+function playerMarker(
+  x: number,
+  z: number,
+  centerX: number,
+  centerZ: number,
+  scale: number,
+  yawDegrees: number,
+): MapData['playerMarker'] {
+  return {
+    x: markerCoordinate(x, centerX, scale),
+    z: markerCoordinate(z, centerZ, scale),
+    rotation: normalizeMapFacingDegrees26_3(yawDegrees),
+  };
+}
+
 export class MapSystem {
   private nextMapId = 1;
 
-  createFilledMap(worldGen: WorldGen, x: number, z: number, dimension: number, scale = 0): MapData {
+  createFilledMap(
+    worldGen: WorldGen,
+    x: number,
+    z: number,
+    dimension: number,
+    scale = 0,
+    playerYawDegrees = 0,
+  ): MapData {
     const scaleLevel = clampScale(scale);
     const sampleStride = blocksPerPixel(scaleLevel);
     const centerX = alignedCenter(x, scaleLevel);
@@ -87,10 +111,7 @@ export class MapSystem {
       scale: scaleLevel,
       dimension,
       pixels,
-      playerMarker: {
-        x: markerCoordinate(x, centerX, scaleLevel),
-        z: markerCoordinate(z, centerZ, scaleLevel),
-      },
+      playerMarker: playerMarker(x, z, centerX, centerZ, scaleLevel, playerYawDegrees),
     };
   }
 
@@ -104,20 +125,33 @@ export class MapSystem {
     targetX: number,
     targetZ: number,
     scale = 2,
+    playerYawDegrees = 0,
   ): MapData {
-    const map = this.createFilledMap(worldGen, targetX, targetZ, dimension, scale);
+    const map = this.createFilledMap(worldGen, targetX, targetZ, dimension, scale, playerYawDegrees);
     return {
       ...map,
       explorerItemName,
-      playerMarker: {
-        x: markerCoordinate(playerX, map.centerX, map.scale),
-        z: markerCoordinate(playerZ, map.centerZ, map.scale),
-      },
+      playerMarker: playerMarker(
+        playerX,
+        playerZ,
+        map.centerX,
+        map.centerZ,
+        map.scale,
+        playerYawDegrees,
+      ),
       targetMarker: {
         x: markerCoordinate(targetX, map.centerX, map.scale),
         z: markerCoordinate(targetZ, map.centerZ, map.scale),
         structure: explorerItemName,
       },
+    };
+  }
+
+  /** Refresh player position + facing without re-sampling terrain. */
+  updatePlayerMarker(map: MapData, x: number, z: number, playerYawDegrees: number): MapData {
+    return {
+      ...map,
+      playerMarker: playerMarker(x, z, map.centerX, map.centerZ, map.scale, playerYawDegrees),
     };
   }
 
@@ -158,7 +192,14 @@ export class MapSystem {
       };
     }
     const scale = Math.min(MAX_SCALE, clampScale(map.scale) + 1);
-    const reSampled = this.createFilledMap(worldGen, map.centerX, map.centerZ, map.dimension, scale);
+    const reSampled = this.createFilledMap(
+      worldGen,
+      map.centerX,
+      map.centerZ,
+      map.dimension,
+      scale,
+      map.playerMarker.rotation ?? 0,
+    );
     return { ...reSampled, locked: map.locked };
   }
 

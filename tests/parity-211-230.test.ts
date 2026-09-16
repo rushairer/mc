@@ -32,19 +32,21 @@ import {
 
 registerWildernessBound26_3();
 
+const CAMP_TEST_HEIGHT = 112;
+
 function fakeWorldGen(
   biome: (x: number, z: number) => BiomeType = () => BiomeType.Plains,
 ): WorldGen {
   return {
     seed: 263,
     getBiome: biome,
-    getTerrainHeight: () => 70,
+    getTerrainHeight: () => CAMP_TEST_HEIGHT,
   } as WorldGen;
 }
 
 function findCamp(worldGen: WorldGen): AbandonedCampPlan26_3 {
-  for (let x = -20; x <= 20; x++) {
-    for (let z = -20; z <= 20; z++) {
+  for (let x = -30; x <= 30; x++) {
+    for (let z = -30; z <= 30; z++) {
       const plan = getAbandonedCampPlanForCell26_3(worldGen, x, z);
       if (plan) return plan;
     }
@@ -196,19 +198,19 @@ test('227: abandoned-camp cell planning is deterministic and slope-gated', () =>
   const world = fakeWorldGen();
   const plan = findCamp(world);
   assert.deepEqual(getAbandonedCampPlanForCell26_3(world, plan.cellX, plan.cellZ), plan);
-  const steep = { ...world, getTerrainHeight: (x: number) => x % 10 === 0 ? 90 : 70 } as WorldGen;
+  const steep = { ...world, getTerrainHeight: (x: number) => x % 10 === 0 ? 128 : CAMP_TEST_HEIGHT } as WorldGen;
   const sameCell = getAbandonedCampPlanForCell26_3(steep, plan.cellX, plan.cellZ);
-  assert.ok(sameCell === null || sameCell.centerY >= 70);
+  assert.ok(sameCell === null || sameCell.centerY >= CAMP_TEST_HEIGHT);
 });
 
 test('228: explorer camp targeting never points to the same camp biome variant', () => {
   const mixed = fakeWorldGen((x) => x < 0 ? BiomeType.Forest : BiomeType.Plains);
   let checked = false;
-  for (let x = -12; x <= 12 && !checked; x++) {
-    for (let z = -12; z <= 12 && !checked; z++) {
+  for (let x = -30; x <= 30 && !checked; x++) {
+    for (let z = -30; z <= 30 && !checked; z++) {
       const source = getAbandonedCampPlanForCell26_3(mixed, x, z);
       if (!source) continue;
-      const target = findExplorerCampTarget26_3(mixed, source, 8);
+      const target = findExplorerCampTarget26_3(mixed, source, 20);
       if (!target) continue;
       assert.notEqual(target.variant, source.variant);
       checked = true;
@@ -235,7 +237,7 @@ test('230: abandoned-camp decorator writes real container metadata into generate
   const chestZ = plan.centerZ + 2;
   const chunk = new Chunk(Math.floor(chestX / 16), Math.floor(chestZ / 16));
   for (let x = 0; x < 16; x++) {
-    for (let z = 0; z < 16; z++) chunk.setBlock(x, 70, z, 2);
+    for (let z = 0; z < 16; z++) chunk.setBlock(x, CAMP_TEST_HEIGHT, z, 2);
   }
   const placed = decorateAbandonedCampChunk26_3(world, chunk);
   assert.ok(placed.some(candidate => candidate.id === plan.id));

@@ -22,7 +22,7 @@ jobs:
           node-version: 20
           cache: npm
 
-      - run: node scripts/.parity-151-170.mjs
+      - run: python3 scripts/.parity-151-170.py
       - run: npm ci
       - run: npm run audit:parity
       - run: npm run check

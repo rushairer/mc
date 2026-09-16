@@ -21,13 +21,13 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Harden authoritative chest and hopper UI
+      - name: Harden exact Respiration and drowning cadence
         run: |
-          node scripts/parity-131-138-container-ui.mjs
+          node scripts/parity-139-143-respiration.mjs
           npm run audit:parity
           npm run check
           git config user.name "Aben"
           git config user.email "5195693+rushairer@users.noreply.github.com"
-          git add src/engine/Game.ts src/App.tsx src/ui/ChestUI.tsx src/ui/HopperUI.tsx
-          git commit -m "fix: make network containers server-controlled"
+          git add src/systems/SurvivalSystem.ts src/engine/Game.ts tests/survival-parity.test.ts
+          git commit -m "fix: model Java Respiration on game ticks"
           git push origin HEAD:master

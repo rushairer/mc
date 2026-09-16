@@ -17,7 +17,7 @@ test('shield becomes effective only after five game ticks', () => {
   assert.equal(isShieldBlockActive(0.25, 0), true);
 });
 
-test('disabled shields cannot block until the five-second cooldown expires', () => {
+test('disabled shields cannot block until the generic cooldown expires', () => {
   assert.equal(SHIELD_DISABLE_SECONDS, 5);
   assert.equal(isShieldBlockActive(1, 0.01), false);
   assert.equal(isShieldBlockActive(1, 0), true);
@@ -42,8 +42,6 @@ test('shield blocks melee projectiles and explosions but not bypassing damage ki
 });
 
 test('shield only covers the horizontal hemisphere in front of the player', () => {
-  // Facing north (negative Z). A source north of the player produces a
-  // source->player vector toward positive Z, yielding a negative dot.
   assert.equal(shieldFacesSource(0, -1, 0, 1), true);
   assert.equal(shieldFacesSource(0, -1, 0, -1), false);
   assert.equal(shieldFacesSource(0, -1, 1, 0), false);
@@ -55,7 +53,7 @@ test('shield durability follows the blocked-damage threshold and ceil rule', () 
   assert.equal(getBlockedShieldDurabilityDamage(5.2), 6);
 });
 
-test('actual Java 1.20.1 axe behavior disables an active shield for five seconds', () => {
+test('Java 26.3 axes no longer disable shields', () => {
   assert.equal(getAxeShieldDisableSeconds(false), 0);
-  assert.equal(getAxeShieldDisableSeconds(true), 5);
+  assert.equal(getAxeShieldDisableSeconds(true), 0);
 });

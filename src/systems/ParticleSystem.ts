@@ -6,7 +6,7 @@ interface Particle {
   life: number;
   maxLife: number;
   gravity?: number;
-  type?: 'break' | 'flame' | 'smoke' | 'enchant' | 'xp' | 'falling_leaf';
+  type?: 'break' | 'flame' | 'smoke' | 'enchant' | 'xp' | 'falling_leaf' | 'teleport';
 }
 
 const MAX_PARTICLES = 400; // Increased limit to support rich particle environments
@@ -28,13 +28,15 @@ export class ParticleSystem {
 
       // Apply custom gravity/buoyancy based on particle type
       let gravityVal = 12; // standard gravity
-      if (p.type === 'flame' || p.type === 'smoke' || p.type === 'enchant') {
+      if ((p.type === 'flame' || p.type === 'smoke' || p.type === 'enchant')) {
         gravityVal = -0.5; // gentle upward drift (buoyancy)
       } else if (p.type === 'xp') {
         gravityVal = 2.0; // light gravity for experience orbs
       } else if (p.type === 'falling_leaf') {
         gravityVal = 0.12;
         p.mesh.rotation.z += dt * 1.8;
+      } else if (p.type === 'teleport') {
+        gravityVal = 0;
       } else if (p.gravity !== undefined) {
         gravityVal = p.gravity;
       }
@@ -48,7 +50,7 @@ export class ParticleSystem {
       mat.opacity = alpha;
 
       // Shrink size for flame, smoke, and glyphs
-      if (p.type === 'flame' || p.type === 'smoke' || p.type === 'enchant') {
+      if (p.type === 'flame' || p.type === 'smoke' || p.type === 'enchant' || p.type === 'teleport') {
         const scale = alpha;
         p.mesh.scale.set(scale, scale, scale);
       }
@@ -218,6 +220,38 @@ export class ParticleSystem {
         gravity: 0,
       });
     }
+  }
+
+  /** Java 26.3 directional teleport particles used by Chorus Fruit. */
+  spawnTeleportTrail26_3(from: THREE.Vector3, to: THREE.Vector3, count = 16): THREE.Vector3 {
+    const direction = to.clone().sub(from);
+    const distance = direction.length();
+    if (distance <= Number.EPSILON) return new THREE.Vector3();
+    direction.normalize();
+    const spawnCount = Math.max(0, Math.min(count, MAX_PARTICLES - this.particles.length));
+
+    for (let i = 0; i < spawnCount; i++) {
+      const t = spawnCount <= 1 ? 0 : i / (spawnCount - 1);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x8b4dff, transparent: true, opacity: 0.9, depthWrite: false });
+      const mesh = new THREE.Mesh(this.sharedGeo, mat);
+      mesh.scale.setScalar(0.55);
+      mesh.position.copy(from).lerp(to, t);
+      mesh.position.add(new THREE.Vector3(
+        (Math.random() - 0.5) * 0.22,
+        (Math.random() - 0.5) * 0.22,
+        (Math.random() - 0.5) * 0.22,
+      ));
+      this.scene.add(mesh);
+      this.particles.push({
+        mesh,
+        velocity: direction.clone().multiplyScalar(1.8 + Math.random() * 0.8),
+        life: 0.45 + Math.random() * 0.2,
+        maxLife: 0.65,
+        gravity: 0,
+        type: 'teleport',
+      });
+    }
+    return direction;
   }
 
   /** Java 26.3 Poplar falling-leaf particle. */

@@ -1,0 +1,2667 @@
+
+> minecraft-clone@0.29.0 test:unit
+> tsx --test tests/*.test.ts
+
+TAP version 13
+# Subtest: rain gain is silent when clear and scales with weather
+ok 1 - rain gain is silent when clear and scales with weather
+  ---
+  duration_ms: 1.033966
+  ...
+# Subtest: cave drip timing and pitch stay in audible ranges
+ok 2 - cave drip timing and pitch stay in audible ranges
+  ---
+  duration_ms: 0.36581
+  ...
+# Subtest: thunder rain is darker (lower filter cutoff) than plain rain
+ok 3 - thunder rain is darker (lower filter cutoff) than plain rain
+  ---
+  duration_ms: 0.193586
+  ...
+# Subtest: diamond armor contributes two toughness per equipped piece
+ok 4 - diamond armor contributes two toughness per equipped piece
+  ---
+  duration_ms: 1.089207
+  ...
+# Subtest: netherite armor contributes three toughness per equipped piece
+ok 5 - netherite armor contributes three toughness per equipped piece
+  ---
+  duration_ms: 0.213635
+  ...
+# Subtest: other vanilla armor materials contribute zero toughness
+ok 6 - other vanilla armor materials contribute zero toughness
+  ---
+  duration_ms: 0.207867
+  ...
+# Subtest: infers stable behavior ids for interactive block families
+ok 7 - infers stable behavior ids for interactive block families
+  ---
+  duration_ms: 1.057239
+  ...
+# Subtest: infers stable behavior ids for readable and active-use items
+ok 8 - infers stable behavior ids for readable and active-use items
+  ---
+  duration_ms: 0.207136
+  ...
+# Subtest: vanilla registry definitions expose inferred behavior references
+ok 9 - vanilla registry definitions expose inferred behavior references
+  ---
+  duration_ms: 0.370456
+  ...
+# Subtest: dispatches a block interaction through a registered alias
+ok 10 - dispatches a block interaction through a registered alias
+  ---
+  duration_ms: 2.01362
+  ...
+# Subtest: BlockDef behaviorId can select behavior without a name alias
+ok 11 - BlockDef behaviorId can select behavior without a name alias
+  ---
+  duration_ms: 0.322216
+  ...
+# Subtest: unregistered blocks fall through without claiming the interaction
+ok 12 - unregistered blocks fall through without claiming the interaction
+  ---
+  duration_ms: 0.29848
+  ...
+# Subtest: block behavior declares whether it prevents fallback item use
+ok 13 - block behavior declares whether it prevents fallback item use
+  ---
+  duration_ms: 0.330468
+  ...
+# Subtest: ItemDef behaviorId dispatches through the item behavior registry
+ok 14 - ItemDef behaviorId dispatches through the item behavior registry
+  ---
+  duration_ms: 0.464656
+  ...
+# Subtest: dispatches entity interaction aliases without coupling target types
+ok 15 - dispatches entity interaction aliases without coupling target types
+  ---
+  duration_ms: 0.363856
+  ...
+# Subtest: dispatches continuous item-use lifecycle with explicit progress and stop reason
+ok 16 - dispatches continuous item-use lifecycle with explicit progress and stop reason
+  ---
+  duration_ms: 0.49479
+  ...
+# Subtest: plans ordinary placement on the targeted face
+not ok 17 - plans ordinary placement on the targeted face
+  ---
+  duration_ms: 1.738315
+  location: '/home/runner/work/mc/mc/tests/block-placement.test.ts:1:1072'
+  failureType: 'testCodeFailure'
+  error: 'baseId is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    planBlockPlacement (/home/runner/work/mc/mc/src/world/BlockPlacement.ts:160:26)
+    TestContext.<anonymous> (/home/runner/work/mc/mc/tests/block-placement.test.ts:44:20)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    node:internal/test_runner/harness:255:12
+    node:internal/process/task_queues:140:7
+    AsyncResource.runInAsyncScope (node:async_hooks:206:9)
+    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)
+  ...
+# Subtest: distinguishes trapdoors from two-block doors
+not ok 18 - distinguishes trapdoors from two-block doors
+  ---
+  duration_ms: 0.387692
+  location: '/home/runner/work/mc/mc/tests/block-placement.test.ts:1:1469'
+  failureType: 'testCodeFailure'
+  error: 'baseId is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    planBlockPlacement (/home/runner/work/mc/mc/src/world/BlockPlacement.ts:160:26)
+    TestContext.<anonymous> (/home/runner/work/mc/mc/tests/block-placement.test.ts:59:20)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: selects standing and wall sign variants and rejects ceiling placement
+not ok 19 - selects standing and wall sign variants and rejects ceiling placement
+  ---
+  duration_ms: 0.293282
+  location: '/home/runner/work/mc/mc/tests/block-placement.test.ts:1:1920'
+  failureType: 'testCodeFailure'
+  error: 'baseId is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    planBlockPlacement (/home/runner/work/mc/mc/src/world/BlockPlacement.ts:160:26)
+    TestContext.<anonymous> (/home/runner/work/mc/mc/tests/block-placement.test.ts:77:20)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: requires farmland below crop placement
+not ok 20 - requires farmland below crop placement
+  ---
+  duration_ms: 0.242147
+  location: '/home/runner/work/mc/mc/tests/block-placement.test.ts:1:2601'
+  failureType: 'testCodeFailure'
+  error: 'baseId is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    planBlockPlacement (/home/runner/work/mc/mc/src/world/BlockPlacement.ts:160:26)
+    TestContext.<anonymous> (/home/runner/work/mc/mc/tests/block-placement.test.ts:109:21)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: merges compatible slab halves at the target position
+not ok 21 - merges compatible slab halves at the target position
+  ---
+  duration_ms: 0.368373
+  location: '/home/runner/work/mc/mc/tests/block-placement.test.ts:1:3019'
+  failureType: 'testCodeFailure'
+  error: 'baseId is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    planBlockPlacement (/home/runner/work/mc/mc/src/world/BlockPlacement.ts:160:26)
+    TestContext.<anonymous> (/home/runner/work/mc/mc/tests/block-placement.test.ts:117:18)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: rejects placement into either occupied player cell
+ok 22 - rejects placement into either occupied player cell
+  ---
+  duration_ms: 0.950472
+  ...
+# Subtest: derives canonical properties for stateful block families
+ok 23 - derives canonical properties for stateful block families
+  ---
+  duration_ms: 2.839048
+  ...
+# Subtest: does not confuse wall signs or wooden buttons with wall and log families
+ok 24 - does not confuse wall signs or wooden buttons with wall and log families
+  ---
+  duration_ms: 0.405999
+  ...
+# Subtest: resolves legacy metadata into a canonical block state
+ok 25 - resolves legacy metadata into a canonical block state
+  ---
+  duration_ms: 13.092694
+  ...
+# Subtest: merges canonical properties without discarding legacy block metadata
+ok 26 - merges canonical properties without discarding legacy block metadata
+  ---
+  duration_ms: 0.344158
+  ...
+# Subtest: synchronizes legacy door fields into persisted canonical properties
+ok 27 - synchronizes legacy door fields into persisted canonical properties
+  ---
+  duration_ms: 0.529582
+  ...
+# Subtest: preserves modern double slab state through legacy metadata synchronization
+ok 28 - preserves modern double slab state through legacy metadata synchronization
+  ---
+  duration_ms: 0.303428
+  ...
+# Subtest: infers mineable tags from name patterns
+ok 29 - infers mineable tags from name patterns
+  ---
+  duration_ms: 1.832463
+  ...
+# Subtest: iron hardware and stone controls mine with pickaxe, not axe
+ok 30 - iron hardware and stone controls mine with pickaxe, not axe
+  ---
+  duration_ms: 0.350346
+  ...
+# Subtest: infers harvest-level tags for ores and hard blocks
+ok 31 - infers harvest-level tags for ores and hard blocks
+  ---
+  duration_ms: 0.239623
+  ...
+# Subtest: registry blocks resolve to expected tags
+ok 32 - registry blocks resolve to expected tags
+  ---
+  duration_ms: 0.338339
+  ...
+# Subtest: explicit tag overrides win over inference
+ok 33 - explicit tag overrides win over inference
+  ---
+  duration_ms: 0.294724
+  ...
+# Subtest: maps tags to mineable category and harvest tier
+ok 34 - maps tags to mineable category and harvest tier
+  ---
+  duration_ms: 0.232893
+  ...
+# Subtest: redstone dust uses potion-specific extended durations
+ok 35 - redstone dust uses potion-specific extended durations
+  ---
+  duration_ms: 2.993786
+  ...
+# Subtest: glowstone dust uses strengthened durations
+ok 36 - glowstone dust uses strengthened durations
+  ---
+  duration_ms: 0.438897
+  ...
+# Subtest: glowstone rejects effects that have no stronger potion
+ok 37 - glowstone rejects effects that have no stronger potion
+  ---
+  duration_ms: 0.267385
+  ...
+# Subtest: gunpowder makes a splash potion
+ok 38 - gunpowder makes a splash potion
+  ---
+  duration_ms: 0.347813
+  ...
+# Subtest: dragon's breath turns splash into lingering
+ok 39 - dragon's breath turns splash into lingering
+  ---
+  duration_ms: 0.31227
+  ...
+# Subtest: Java 26.3 returns a glass bottle when the final dragon breath is brewed
+ok 40 - Java 26.3 returns a glass bottle when the final dragon breath is brewed
+  ---
+  duration_ms: 0.924905
+  ...
+# Subtest: stacked dragon breath keeps the remainder and returns one glass bottle
+ok 41 - stacked dragon breath keeps the remainder and returns one glass bottle
+  ---
+  duration_ms: 0.310017
+  ...
+# Subtest: findBrewAction resolves modifiers before base recipes
+ok 42 - findBrewAction resolves modifiers before base recipes
+  ---
+  duration_ms: 0.362655
+  ...
+# Subtest: base recipes still produce normal potions
+ok 43 - base recipes still produce normal potions
+  ---
+  duration_ms: 0.374512
+  ...
+# Subtest: brewBottle preserves a splash variant through base brewing
+ok 44 - brewBottle preserves a splash variant through base brewing
+  ---
+  duration_ms: 0.380741
+  ...
+# Subtest: modifier chain gunpowder -> dragon breath -> brew stays coherent
+ok 45 - modifier chain gunpowder -> dragon breath -> brew stays coherent
+  ---
+  duration_ms: 0.341404
+  ...
+# Subtest: base-effect recipes exclude non-brewable hunger and absorption potions
+ok 46 - base-effect recipes exclude non-brewable hunger and absorption potions
+  ---
+  duration_ms: 0.317468
+  ...
+# Subtest: generates identical chunk data for the same seed
+ok 47 - generates identical chunk data for the same seed
+  ---
+  duration_ms: 538.690565
+  ...
+# Subtest: different seeds produce different terrain
+ok 48 - different seeds produce different terrain
+  ---
+  duration_ms: 280.97157
+  ...
+# Subtest: spawn-area chunks generate without error and contain terrain
+ok 49 - spawn-area chunks generate without error and contain terrain
+  ---
+  duration_ms: 364.701307
+  ...
+# Subtest: lighting values stay within [0,15] and sky reaches the surface
+ok 50 - lighting values stay within [0,15] and sky reaches the surface
+  ---
+  duration_ms: 85.281004
+  ...
+# Subtest: deep sealed cells under opaque overburden stay dark
+ok 51 - deep sealed cells under opaque overburden stay dark
+  ---
+  duration_ms: 42.248454
+  ...
+# Subtest: torch emits decaying block light
+ok 52 - torch emits decaying block light
+  ---
+  duration_ms: 1.297183
+  ...
+# Subtest: generated chunk mesh has valid topology and no NaNs
+ok 53 - generated chunk mesh has valid topology and no NaNs
+  ---
+  duration_ms: 345.745799
+  ...
+# Subtest: mesh rebuild is deterministic for the same chunk
+ok 54 - mesh rebuild is deterministic for the same chunk
+  ---
+  duration_ms: 407.744828
+  ...
+# Subtest: single floating block renders all six faces
+ok 55 - single floating block renders all six faces
+  ---
+  duration_ms: 1.200141
+  ...
+# Subtest: interior faces are culled; only world-boundary faces remain
+ok 56 - interior faces are culled; only world-boundary faces remain
+  ---
+  duration_ms: 106.392136
+  ...
+# Subtest: fixed-seed hash snapshot stays stable (update pins deliberately)
+ok 57 - fixed-seed hash snapshot stays stable (update pins deliberately)
+  ---
+  duration_ms: 282.333104
+  ...
+# Subtest: generic items use Java attack speed 4 and a quarter-second cooldown
+ok 58 - generic items use Java attack speed 4 and a quarter-second cooldown
+  ---
+  duration_ms: 1.053344
+  ...
+# Subtest: swords use attack speed 1.6 and 0.625 second cooldown
+ok 59 - swords use attack speed 1.6 and 0.625 second cooldown
+  ---
+  duration_ms: 0.188969
+  ...
+# Subtest: pickaxes use attack speed 1.2 while shovels use 1.0
+ok 60 - pickaxes use attack speed 1.2 while shovels use 1.0
+  ---
+  duration_ms: 0.181448
+  ...
+# Subtest: axe attack speed varies by material like Java 1.20.1
+ok 61 - axe attack speed varies by material like Java 1.20.1
+  ---
+  duration_ms: 0.906437
+  ...
+# Subtest: hoe attack speed varies from 1 through 4 by material
+ok 62 - hoe attack speed varies from 1 through 4 by material
+  ---
+  duration_ms: 0.295116
+  ...
+# Subtest: sword attack damage matches Java material progression
+ok 63 - sword attack damage matches Java material progression
+  ---
+  duration_ms: 0.239944
+  ...
+# Subtest: axes use Java high single-hit damage by material
+ok 64 - axes use Java high single-hit damage by material
+  ---
+  duration_ms: 0.819449
+  ...
+# Subtest: pickaxe and shovel attack damage include the player base damage
+ok 65 - pickaxe and shovel attack damage include the player base damage
+  ---
+  duration_ms: 0.288155
+  ...
+# Subtest: hoes deal base one attack damage despite their material
+ok 66 - hoes deal base one attack damage despite their material
+  ---
+  duration_ms: 0.363606
+  ...
+# Subtest: base melee cooldown follows 0.2 + 0.8 p squared
+ok 67 - base melee cooldown follows 0.2 + 0.8 p squared
+  ---
+  duration_ms: 0.263689
+  ...
+# Subtest: enchantment melee bonus scales linearly with attack strength
+ok 68 - enchantment melee bonus scales linearly with attack strength
+  ---
+  duration_ms: 0.322055
+  ...
+# Subtest: charged melee threshold is strictly greater than ninety percent
+ok 69 - charged melee threshold is strictly greater than ninety percent
+  ---
+  duration_ms: 0.198743
+  ...
+# Subtest: critical hits multiply base damage but not enchantment bonus
+ok 70 - critical hits multiply base damage but not enchantment bonus
+  ---
+  duration_ms: 0.22361
+  ...
+# Subtest: sweep side hits deal exactly one damage without Sweeping Edge
+ok 71 - sweep side hits deal exactly one damage without Sweeping Edge
+  ---
+  duration_ms: 0.25746
+  ...
+# Subtest: Sweeping Edge transfer formula is ready for later enchantment coverage
+ok 72 - Sweeping Edge transfer formula is ready for later enchantment coverage
+  ---
+  duration_ms: 0.177872
+  ...
+# Subtest: time set presets map to Java tick values
+ok 73 - time set presets map to Java tick values
+  ---
+  duration_ms: 1.493574
+  ...
+# Subtest: time set numeric values wrap within the 24000 tick day
+ok 74 - time set numeric values wrap within the 24000 tick day
+  ---
+  duration_ms: 0.22408
+  ...
+# Subtest: new survival gamerules are queryable and writable from the command system
+ok 75 - new survival gamerules are queryable and writable from the command system
+  ---
+  duration_ms: 0.302886
+  ...
+# Subtest: createContainerSlots sizes by block
+ok 76 - createContainerSlots sizes by block
+  ---
+  duration_ms: 1.149486
+  ...
+# Subtest: validateContainerClick bounds the slot and checks the held item
+ok 77 - validateContainerClick bounds the slot and checks the held item
+  ---
+  duration_ms: 0.35953
+  ...
+# Subtest: applyContainerClick places, swaps and stacks for local callers
+ok 78 - applyContainerClick places, swaps and stacks for local callers
+  ---
+  duration_ms: 1.101044
+  ...
+# Subtest: validateContainerSlots rejects wrong sizes and registry over-stacks
+ok 79 - validateContainerSlots rejects wrong sizes and registry over-stacks
+  ---
+  duration_ms: 0.315555
+  ...
+# Subtest: container click packets contain only area and slot intent
+ok 80 - container click packets contain only area and slot intent
+  ---
+  duration_ms: 0.330678
+  ...
+# Subtest: server picks up and places stacks using its own cursor state
+ok 81 - server picks up and places stacks using its own cursor state
+  ---
+  duration_ms: 0.367051
+  ...
+# Subtest: server stacks only matching item metadata and respects registry max stack
+ok 82 - server stacks only matching item metadata and respects registry max stack
+  ---
+  duration_ms: 0.343286
+  ...
+# Subtest: server swaps unlike cursor and slot stacks without accepting client item snapshots
+ok 83 - server swaps unlike cursor and slot stacks without accepting client item snapshots
+  ---
+  duration_ms: 0.232403
+  ...
+# Subtest: closing a container returns cursor items to partial stacks before empty slots
+ok 84 - closing a container returns cursor items to partial stacks before empty slots
+  ---
+  duration_ms: 0.469993
+  ...
+# Subtest: container close preserves a cursor remainder when inventory is full
+ok 85 - container close preserves a cursor remainder when inventory is full
+  ---
+  duration_ms: 0.393661
+  ...
+# Subtest: GameServer world snapshot round-trips chunks and containers
+ok 86 - GameServer world snapshot round-trips chunks and containers
+  ---
+  duration_ms: 244.1171
+  ...
+# Subtest: armor reduction is damage dependent rather than a flat four percent per point
+ok 87 - armor reduction is damage dependent rather than a flat four percent per point
+  ---
+  duration_ms: 1.109587
+  ...
+# Subtest: diamond toughness preserves more armor against large hits
+ok 88 - diamond toughness preserves more armor against large hits
+  ---
+  duration_ms: 0.224901
+  ...
+# Subtest: netherite toughness preserves still more armor against large hits
+ok 89 - netherite toughness preserves still more armor against large hits
+  ---
+  duration_ms: 0.180807
+  ...
+# Subtest: very large hits still retain the Java minimum armor contribution
+ok 90 - very large hits still retain the Java minimum armor contribution
+  ---
+  duration_ms: 0.166285
+  ...
+# Subtest: fall drowning magic wither starvation and generic bypass base armor
+ok 91 - fall drowning magic wither starvation and generic bypass base armor
+  ---
+  duration_ms: 0.285612
+  ...
+# Subtest: melee projectile fire lava and explosion damage can use base armor
+ok 92 - melee projectile fire lava and explosion damage can use base armor
+  ---
+  duration_ms: 0.165925
+  ...
+# Subtest: Protection contributes one EPF per level for ordinary damage
+ok 93 - Protection contributes one EPF per level for ordinary damage
+  ---
+  duration_ms: 0.241576
+  ...
+# Subtest: specialized protections contribute two EPF per level
+ok 94 - specialized protections contribute two EPF per level
+  ---
+  duration_ms: 0.166155
+  ...
+# Subtest: Feather Falling contributes three EPF per level to fall damage
+ok 95 - Feather Falling contributes three EPF per level to fall damage
+  ---
+  duration_ms: 0.225723
+  ...
+# Subtest: all applicable armor enchantment EPF is capped at twenty
+ok 96 - all applicable armor enchantment EPF is capped at twenty
+  ---
+  duration_ms: 0.266964
+  ...
+# Subtest: starvation bypasses enchantment reduction
+ok 97 - starvation bypasses enchantment reduction
+  ---
+  duration_ms: 0.173205
+  ...
+# Subtest: fall damage bypasses armor but still receives Protection and Feather Falling
+ok 98 - fall damage bypasses armor but still receives Protection and Feather Falling
+  ---
+  duration_ms: 0.266834
+  ...
+# Subtest: damage mitigation has no artificial one-point floor
+ok 99 - damage mitigation has no artificial one-point floor
+  ---
+  duration_ms: 0.151554
+  ...
+# Subtest: seeded random sources replay the same sequence
+ok 100 - seeded random sources replay the same sequence
+  ---
+  duration_ms: 1.87141
+  ...
+# Subtest: forks are stable and isolated by salt
+ok 101 - forks are stable and isolated by salt
+  ---
+  duration_ms: 0.306172
+  ...
+# Subtest: coordinate samples are call-order independent
+ok 102 - coordinate samples are call-order independent
+  ---
+  duration_ms: 0.288095
+  ...
+# Subtest: nextInt validates its bounds
+ok 103 - nextInt validates its bounds
+  ---
+  duration_ms: 0.556551
+  ...
+# Subtest: Easy hostile damage uses min(damage / 2 + 1, damage)
+ok 104 - Easy hostile damage uses min(damage / 2 + 1, damage)
+  ---
+  duration_ms: 0.86096
+  ...
+# Subtest: Hard hostile damage preserves the exact 1.5 multiplier
+ok 105 - Hard hostile damage preserves the exact 1.5 multiplier
+  ---
+  duration_ms: 0.174848
+  ...
+# Subtest: Peaceful removes hostile damage while Normal and non-hostile damage stay unchanged
+ok 106 - Peaceful removes hostile damage while Normal and non-hostile damage stay unchanged
+  ---
+  duration_ms: 0.143442
+  ...
+# Subtest: dropped items use the vanilla default 10-tick pickup delay
+ok 107 - dropped items use the vanilla default 10-tick pickup delay
+  ---
+  duration_ms: 3.313628
+  ...
+# Subtest: air drag is tick based rather than render-frame based
+ok 108 - air drag is tick based rather than render-frame based
+  ---
+  duration_ms: 1.026514
+  ...
+# Subtest: pickup uses the expanded player collision box instead of a 2.5-block magnet
+ok 109 - pickup uses the expanded player collision box instead of a 2.5-block magnet
+  ---
+  duration_ms: 0.554508
+  ...
+# Subtest: a full donor stack can top up a compatible partial dropped stack
+ok 110 - a full donor stack can top up a compatible partial dropped stack
+  ---
+  duration_ms: 1.131339
+  ...
+# Subtest: item merge search expands horizontally but not vertically
+ok 111 - item merge search expands horizontally but not vertically
+  ---
+  duration_ms: 1.142536
+  ...
+# Subtest: armor durability loss uses one point per four raw damage with a one-point floor
+ok 112 - armor durability loss uses one point per four raw damage with a one-point floor
+  ---
+  duration_ms: 1.104299
+  ...
+# Subtest: shield durability is only consumed by blocked hits of at least three damage
+ok 113 - shield durability is only consumed by blocked hits of at least three damage
+  ---
+  duration_ms: 0.244821
+  ...
+# Subtest: tool Unbreaking consumes durability with probability one over level plus one
+ok 114 - tool Unbreaking consumes durability with probability one over level plus one
+  ---
+  duration_ms: 0.31868
+  ...
+# Subtest: armor Unbreaking keeps the Java sixty-percent durability-use floor
+ok 115 - armor Unbreaking keeps the Java sixty-percent durability-use floor
+  ---
+  duration_ms: 0.207556
+  ...
+# Subtest: melee durability cost is one for swords and two for ordinary tools
+ok 116 - melee durability cost is one for swords and two for ordinary tools
+  ---
+  duration_ms: 0.29121
+  ...
+# Subtest: Mending converts one XP into two durability and charges only whole repaired pairs
+ok 117 - Mending converts one XP into two durability and charges only whole repaired pairs
+  ---
+  duration_ms: 0.242698
+  ...
+# Subtest: effect registry covers the 1.20.1 core set
+ok 118 - effect registry covers the 1.20.1 core set
+  ---
+  duration_ms: 0.878616
+  ...
+# Subtest: effect modifiers follow Java 1.20.1 values
+ok 119 - effect modifiers follow Java 1.20.1 values
+  ---
+  duration_ms: 0.184743
+  ...
+# Subtest: potion system applies, ticks and expires effects
+ok 120 - potion system applies, ticks and expires effects
+  ---
+  duration_ms: 0.328174
+  ...
+# Subtest: undead set drives Smite
+ok 121 - undead set drives Smite
+  ---
+  duration_ms: 0.154938
+  ...
+# Subtest: enchantment registry exposes 20 enchantments with Java value functions
+ok 122 - enchantment registry exposes 20 enchantments with Java value functions
+  ---
+  duration_ms: 0.303648
+  ...
+# Subtest: enchantments apply to the right item categories
+ok 123 - enchantments apply to the right item categories
+  ---
+  duration_ms: 0.4338
+  ...
+# Subtest: getArmorLevel finds the highest enchantment across armor
+ok 124 - getArmorLevel finds the highest enchantment across armor
+  ---
+  duration_ms: 0.182579
+  ...
+# Subtest: brewable effects follow Java 1.20.1 data-driven recipes
+ok 125 - brewable effects follow Java 1.20.1 data-driven recipes
+  ---
+  duration_ms: 0.265432
+  ...
+# Subtest: BrewingSystem round-trips a strength potion
+ok 126 - BrewingSystem round-trips a strength potion
+  ---
+  duration_ms: 0.340072
+  ...
+# Subtest: taming rolls replay for the same world tick and entity
+ok 127 - taming rolls replay for the same world tick and entity
+  ---
+  duration_ms: 1.13188
+  ...
+# Subtest: taming chance boundaries are deterministic
+ok 128 - taming chance boundaries are deterministic
+  ---
+  duration_ms: 0.249538
+  ...
+# Subtest: damage flash normalizes to 0..1 over the flash duration
+ok 129 - damage flash normalizes to 0..1 over the flash duration
+  ---
+  duration_ms: 1.079963
+  ...
+# Subtest: camera shake grows with the flash and caps
+ok 130 - camera shake grows with the flash and caps
+  ---
+  duration_ms: 0.258251
+  ...
+# Subtest: vignette opacity follows the flash
+ok 131 - vignette opacity follows the flash
+  ---
+  duration_ms: 0.262167
+  ...
+# Subtest: a scheduled water tick deterministically fills an adjacent air cell
+ok 132 - a scheduled water tick deterministically fills an adjacent air cell
+  ---
+  duration_ms: 2.409995
+  ...
+# Subtest: source water schedules propagation but remains unchanged
+ok 133 - source water schedules propagation but remains unchanged
+  ---
+  duration_ms: 0.667435
+  ...
+# Subtest: Overworld and End lava use the Java 30-game-tick flow delay
+ok 134 - Overworld and End lava use the Java 30-game-tick flow delay
+  ---
+  duration_ms: 0.5626
+  ...
+# Subtest: Nether lava uses the Java 10-game-tick flow delay
+ok 135 - Nether lava uses the Java 10-game-tick flow delay
+  ---
+  duration_ms: 0.375945
+  ...
+# Subtest: lava horizontal decay is two levels outside Nether and one in Nether
+ok 136 - lava horizontal decay is two levels outside Nether and one in Nether
+  ---
+  duration_ms: 0.384367
+  ...
+# Subtest: falling water is full flowing water rather than a new source block
+ok 137 - falling water is full flowing water rather than a new source block
+  ---
+  duration_ms: 0.267796
+  ...
+# Subtest: falling lava is full flowing lava rather than a new source block
+ok 138 - falling lava is full flowing lava rather than a new source block
+  ---
+  duration_ms: 0.239393
+  ...
+# Subtest: two adjacent water sources create a source when supported below
+ok 139 - two adjacent water sources create a source when supported below
+  ---
+  duration_ms: 0.276688
+  ...
+# Subtest: adjacent lava sources never create a new lava source
+ok 140 - adjacent lava sources never create a new lava source
+  ---
+  duration_ms: 0.387782
+  ...
+# Subtest: water touching a lava source from the side creates obsidian
+ok 141 - water touching a lava source from the side creates obsidian
+  ---
+  duration_ms: 0.327984
+  ...
+# Subtest: water touching flowing lava from the side creates cobblestone
+ok 142 - water touching flowing lava from the side creates cobblestone
+  ---
+  duration_ms: 2.321575
+  ...
+# Subtest: lava flowing downward into water turns the water cell into stone
+ok 143 - lava flowing downward into water turns the water cell into stone
+  ---
+  duration_ms: 0.197321
+  ...
+# Subtest: Java survival gamerules have vanilla defaults
+ok 144 - Java survival gamerules have vanilla defaults
+  ---
+  duration_ms: 1.217085
+  ...
+# Subtest: older saves inherit newly tracked gamerule defaults
+ok 145 - older saves inherit newly tracked gamerule defaults
+  ---
+  duration_ms: 0.25102
+  ...
+# Subtest: gamerules round-trip without dropping survival damage switches
+ok 146 - gamerules round-trip without dropping survival damage switches
+  ---
+  duration_ms: 0.410396
+  ...
+# Subtest: hopper suction ignores player item pickupDelay
+ok 147 - hopper suction ignores player item pickupDelay
+  ---
+  duration_ms: 2.361133
+  ...
+# Subtest: hopper absorbs an entire compatible item entity stack in one collection event
+ok 148 - hopper absorbs an entire compatible item entity stack in one collection event
+  ---
+  duration_ms: 0.292641
+  ...
+# Subtest: hopper waits exactly eight game ticks before the next collection
+ok 149 - hopper waits exactly eight game ticks before the next collection
+  ---
+  duration_ms: 0.441361
+  ...
+# Subtest: furnace hopper faces expose Java input fuel and output slots
+ok 150 - furnace hopper faces expose Java input fuel and output slots
+  ---
+  duration_ms: 1.036579
+  ...
+# Subtest: brewing stand top accepts ingredients while side accepts fuel or bottles
+ok 151 - brewing stand top accepts ingredients while side accepts fuel or bottles
+  ---
+  duration_ms: 0.423284
+  ...
+# Subtest: brewing stand bottom exposes bottles plus the ingredient remainder edge case
+ok 152 - brewing stand bottom exposes bottles plus the ingredient remainder edge case
+  ---
+  duration_ms: 0.197351
+  ...
+# Subtest: brewing bottle slots are single-item slots and generic containers expose their full size
+ok 153 - brewing bottle slots are single-item slots and generic containers expose their full size
+  ---
+  duration_ms: 0.337929
+  ...
+# Subtest: a full hit starts the Java twenty-tick hurt timer
+ok 154 - a full hit starts the Java twenty-tick hurt timer
+  ---
+  duration_ms: 1.327778
+  ...
+# Subtest: equal or weaker hits are ignored during the protected ten ticks
+ok 155 - equal or weaker hits are ignored during the protected ten ticks
+  ---
+  duration_ms: 0.3723
+  ...
+# Subtest: stronger hits during protected ticks apply only the excess damage
+ok 156 - stronger hits during protected ticks apply only the excess damage
+  ---
+  duration_ms: 0.322346
+  ...
+# Subtest: once the protected half expires the next hit lands in full and resets the timer
+ok 157 - once the protected half expires the next hit lands in full and resets the timer
+  ---
+  duration_ms: 0.265351
+  ...
+# Subtest: cooldown state decays to a clean idle state
+ok 158 - cooldown state decays to a clean idle state
+  ---
+  duration_ms: 0.995979
+  ...
+# Subtest: buttons follow Java 1.20.1 press durations
+ok 159 - buttons follow Java 1.20.1 press durations
+  ---
+  duration_ms: 1.140903
+  ...
+# Subtest: button and fence gate name predicates
+ok 160 - button and fence gate name predicates
+  ---
+  duration_ms: 2.189209
+  ...
+# Subtest: behavior ids route buttons, fence gates and iron doors
+ok 161 - behavior ids route buttons, fence gates and iron doors
+  ---
+  duration_ms: 0.201858
+  ...
+# Subtest: registered button and fence gate blocks resolve behavior ids
+ok 162 - registered button and fence gate blocks resolve behavior ids
+  ---
+  duration_ms: 0.69129
+  ...
+# Subtest: isPositionPowered detects adjacent emitting components
+ok 163 - isPositionPowered detects adjacent emitting components
+  ---
+  duration_ms: 0.587667
+  ...
+# Subtest: full diamond armor totals twenty defense and eight toughness
+ok 164 - full diamond armor totals twenty defense and eight toughness
+  ---
+  duration_ms: 3.888251
+  ...
+# Subtest: full netherite armor totals twenty defense and twelve toughness
+ok 165 - full netherite armor totals twenty defense and twelve toughness
+  ---
+  duration_ms: 0.226921
+  ...
+# Subtest: unequipped armor contributes no toughness
+ok 166 - unequipped armor contributes no toughness
+  ---
+  duration_ms: 0.246081
+  ...
+# Subtest: one armor-blockable hit damages every equipped armor piece
+ok 167 - one armor-blockable hit damages every equipped armor piece
+  ---
+  duration_ms: 1.467733
+  ...
+# Subtest: armor breaks independently when a hit exhausts its durability
+ok 168 - armor breaks independently when a hit exhausts its durability
+  ---
+  duration_ms: 0.228964
+  ...
+# Subtest: armor Unbreaking uses its armor-specific probability
+ok 169 - armor Unbreaking uses its armor-specific probability
+  ---
+  duration_ms: 0.235785
+  ...
+# Subtest: Mending repairs a damaged selected item at two durability per XP
+ok 170 - Mending repairs a damaged selected item at two durability per XP
+  ---
+  duration_ms: 0.47158
+  ...
+# Subtest: XP bypasses fully repaired Mending gear and remains player XP
+ok 171 - XP bypasses fully repaired Mending gear and remains player XP
+  ---
+  duration_ms: 0.349616
+  ...
+# Subtest: parseItemAction accepts valid throw/bow_release intents and normalizes aim
+ok 172 - parseItemAction accepts valid throw/bow_release intents and normalizes aim
+  ---
+  duration_ms: 1.904287
+  ...
+# Subtest: parseItemAction rejects malformed or non-finite payloads
+ok 173 - parseItemAction rejects malformed or non-finite payloads
+  ---
+  duration_ms: 0.236466
+  ...
+# Subtest: power is clamped to 0..1
+ok 174 - power is clamped to 0..1
+  ---
+  duration_ms: 0.204365
+  ...
+# Subtest: arrow damage and speed scale with charge power
+ok 175 - arrow damage and speed scale with charge power
+  ---
+  duration_ms: 0.298154
+  ...
+# Subtest: Power damage is derived from the server-owned enchantment level
+ok 176 - Power damage is derived from the server-owned enchantment level
+  ---
+  duration_ms: 0.307739
+  ...
+# Subtest: client damageBonus fields are ignored by the parser
+ok 177 - client damageBonus fields are ignored by the parser
+  ---
+  duration_ms: 0.150539
+  ...
+# Subtest: throwable projectile type is derived from the actual item registry entry
+ok 178 - throwable projectile type is derived from the actual item registry entry
+  ---
+  duration_ms: 0.261316
+  ...
+# Subtest: server rejects spoofed item ids and action kinds that do not match held stack
+ok 179 - server rejects spoofed item ids and action kinds that do not match held stack
+  ---
+  duration_ms: 0.296592
+  ...
+# Subtest: rollLootTable is deterministic for a given rng
+ok 180 - rollLootTable is deterministic for a given rng
+  ---
+  duration_ms: 1.933203
+  ...
+# Subtest: weighted single-pick pools select exactly one entry
+ok 181 - weighted single-pick pools select exactly one entry
+  ---
+  duration_ms: 0.278703
+  ...
+# Subtest: chance entries gate independently
+ok 182 - chance entries gate independently
+  ---
+  duration_ms: 0.244749
+  ...
+# Subtest: pickWeightedLootEntry picks by weight and honors bounds
+ok 183 - pickWeightedLootEntry picks by weight and honors bounds
+  ---
+  duration_ms: 0.255246
+  ...
+# Subtest: default block loot is a self-drop with no randomness
+ok 184 - default block loot is a self-drop with no randomness
+  ---
+  duration_ms: 0.512825
+  ...
+# Subtest: named block loot tables replace self-drops
+ok 185 - named block loot tables replace self-drops
+  ---
+  duration_ms: 0.481055
+  ...
+# Subtest: gravel flint odds follow the weighted table
+ok 186 - gravel flint odds follow the weighted table
+  ---
+  duration_ms: 8.04631
+  ...
+# Subtest: lootTable id resolves through named tables (data pack hook)
+ok 187 - lootTable id resolves through named tables (data pack hook)
+  ---
+  duration_ms: 0.202021
+  ...
+# Subtest: runtime spawning cannot grow beyond the temporary safety cap
+ok 188 - runtime spawning cannot grow beyond the temporary safety cap
+  ---
+  duration_ms: 23.864326
+  ...
+# Subtest: repeated restore cycles do not duplicate saved entities
+ok 189 - repeated restore cycles do not duplicate saved entities
+  ---
+  duration_ms: 24.11851
+  ...
+# Subtest: walking and sprinting speeds match Java steady-state values
+ok 190 - walking and sprinting speeds match Java steady-state values
+  ---
+  duration_ms: 1.359732
+  ...
+# Subtest: new players start with Java food saturation level 5
+ok 191 - new players start with Java food saturation level 5
+  ---
+  duration_ms: 3.069829
+  ...
+# Subtest: sprint requires more than six food points
+ok 192 - sprint requires more than six food points
+  ---
+  duration_ms: 2.936949
+  ...
+# Subtest: sprint key does not turn pure strafe or backward motion into sprinting
+ok 193 - sprint key does not turn pure strafe or backward motion into sprinting
+  ---
+  duration_ms: 1.637403
+  ...
+# Subtest: sneaking remains thirty percent of walking speed
+ok 194 - sneaking remains thirty percent of walking speed
+  ---
+  duration_ms: 0.200468
+  ...
+# Subtest: jump impulse corresponds to 0.42 blocks per game tick
+ok 195 - jump impulse corresponds to 0.42 blocks per game tick
+  ---
+  duration_ms: 0.14519
+  ...
+# Subtest: music mode follows day/night and underground state
+ok 196 - music mode follows day/night and underground state
+  ---
+  duration_ms: 1.134443
+  ...
+# Subtest: chords contain 3-4 audible notes within the bar
+ok 197 - chords contain 3-4 audible notes within the bar
+  ---
+  duration_ms: 0.735325
+  ...
+# Subtest: chord generation is deterministic for a fixed rng
+ok 198 - chord generation is deterministic for a fixed rng
+  ---
+  duration_ms: 1.105831
+  ...
+# Subtest: the progression advances its root across bars
+ok 199 - the progression advances its root across bars
+  ---
+  duration_ms: 0.408813
+  ...
+# Subtest: cave chords sit lower than day chords
+ok 200 - cave chords sit lower than day chords
+  ---
+  duration_ms: 0.320112
+  ...
+# Connecting to mock://local as Tester...
+# GameServer started at 20 TPS. Seed: 12345
+# Subtest: authoritative player state updates live systems without a stale gameState mirror
+ok 201 - authoritative player state updates live systems without a stale gameState mirror
+  ---
+  duration_ms: 2.5484
+  ...
+# Subtest: authoritative despawn and sound packets use the actual client system APIs
+ok 202 - authoritative despawn and sound packets use the actual client system APIs
+  ---
+  duration_ms: 0.473739
+  ...
+# Subtest: P5.1 projectile spawn uses server velocity, damage and potion effect
+ok 203 - P5.1 projectile spawn uses server velocity, damage and potion effect
+  ---
+  duration_ms: 0.6028
+  ...
+# Network client connected.
+# GameServer stopped.
+# Subtest: P5.4 connection status transitions through the lifecycle
+ok 204 - P5.4 connection status transitions through the lifecycle
+  ---
+  duration_ms: 20.747056
+  ...
+# Network client disconnected.
+# Player Tester disconnected.
+# Subtest: 151-154: fall damage stays raw until the shared protection pipeline
+ok 205 - 151-154: fall damage stays raw until the shared protection pipeline
+  ---
+  duration_ms: 2.94904
+  ...
+# Subtest: 155-157: stack identity is structural and count-independent
+ok 206 - 155-157: stack identity is structural and count-independent
+  ---
+  duration_ms: 0.499757
+  ...
+# Subtest: 156 and 166: stack cloning owns every nested modeled component
+ok 207 - 156 and 166: stack cloning owns every nested modeled component
+  ---
+  duration_ms: 0.448722
+  ...
+# Subtest: 158-160: inventory keeps component-bearing stacks distinct and split preserves metadata
+ok 208 - 158-160: inventory keeps component-bearing stacks distinct and split preserves metadata
+  ---
+  duration_ms: 0.770376
+  ...
+# Subtest: 161-165: hopper stack transfer respects full item component identity
+ok 209 - 161-165: hopper stack transfer respects full item component identity
+  ---
+  duration_ms: 0.540237
+  ...
+# Subtest: 167-168: fluid slope search radius matches Java 1.20.1 dimensions
+ok 210 - 167-168: fluid slope search radius matches Java 1.20.1 dimensions
+  ---
+  duration_ms: 0.199584
+  ...
+# Subtest: 169-170: source flow chooses the horizontal direction with the nearest downward opening
+ok 211 - 169-170: source flow chooses the horizontal direction with the nearest downward opening
+  ---
+  duration_ms: 1.794507
+  ...
+# Subtest: 171-172: dropped entities own a deep-cloned full ItemStack while keeping id/count compatibility
+ok 212 - 171-172: dropped entities own a deep-cloned full ItemStack while keeping id/count compatibility
+  ---
+  duration_ms: 2.082271
+  ...
+# Subtest: 173-174: DroppedItemSystem spawnStack preserves components and legacy spawnItem still works
+ok 213 - 173-174: DroppedItemSystem spawnStack preserves components and legacy spawnItem still works
+  ---
+  duration_ms: 1.339787
+  ...
+# Subtest: 175-176: local pickup preserves metadata and supports partial capacity
+ok 214 - 175-176: local pickup preserves metadata and supports partial capacity
+  ---
+  duration_ms: 1.113793
+  ...
+# Subtest: 177: dropped-item merging requires full stack identity, not just item id
+ok 215 - 177: dropped-item merging requires full stack identity, not just item id
+  ---
+  duration_ms: 0.516002
+  ...
+# Subtest: 178: hopper suction preserves dropped stack components
+ok 216 - 178: hopper suction preserves dropped stack components
+  ---
+  duration_ms: 0.505356
+  ...
+# Subtest: 179-181: shared slot insertion is metadata-aware, max-stack-aware, and non-mutating
+ok 217 - 179-181: shared slot insertion is metadata-aware, max-stack-aware, and non-mutating
+  ---
+  duration_ms: 0.228707
+  ...
+# Subtest: 182-183: pickup bounds use the expanded player AABB rather than a spherical magnet
+ok 218 - 182-183: pickup bounds use the expanded player AABB rather than a spherical magnet
+  ---
+  duration_ms: 0.157382
+  ...
+# Subtest: 184: multiplayer clients do not locally pick up or merge server-owned item entities
+ok 219 - 184: multiplayer clients do not locally pick up or merge server-owned item entities
+  ---
+  duration_ms: 0.801502
+  ...
+# Subtest: 185: item-entity merge geometry remains horizontal-only inflation
+ok 220 - 185: item-entity merge geometry remains horizontal-only inflation
+  ---
+  duration_ms: 0.20371
+  ...
+# Subtest: 186: merge transfer preserves stack identity and leaves a donor remainder at max stack
+ok 221 - 186: merge transfer preserves stack identity and leaves a donor remainder at max stack
+  ---
+  duration_ms: 0.193025
+  ...
+# Subtest: 187: server spawn owns the stack and legacy spawn delegates to a plain stack
+ok 222 - 187: server spawn owns the stack and legacy spawn delegates to a plain stack
+  ---
+  duration_ms: 1.907664
+  ...
+# Subtest: 188: server merge is dimension- and metadata-aware and preserves age/delay rules
+ok 223 - 188: server merge is dimension- and metadata-aware and preserves age/delay rules
+  ---
+  duration_ms: 2.457044
+  ...
+# Subtest: 189: NetworkClient spawns and updates the authoritative full dropped stack
+ok 224 - 189: NetworkClient spawns and updates the authoritative full dropped stack
+  ---
+  duration_ms: 1.016589
+  ...
+# Subtest: 190: integration contracts keep death/container drops and packet movement server-authoritative
+ok 225 - 190: integration contracts keep death/container drops and packet movement server-authoritative
+  ---
+  duration_ms: 1.558369
+  ...
+# Subtest: 191: latest content bridge targets Java 26.3 and allocates unique runtime block ids
+ok 226 - 191: latest content bridge targets Java 26.3 and allocates unique runtime block ids
+  ---
+  duration_ms: 1.194111
+  ...
+# Subtest: 192: poplar core blocks are registered as real block and item definitions
+ok 227 - 192: poplar core blocks are registered as real block and item definitions
+  ---
+  duration_ms: 0.209058
+  ...
+# Subtest: 193: poplar leaves expose all three official colors and sapling growth can select each
+ok 228 - 193: poplar leaves expose all three official colors and sapling growth can select each
+  ---
+  duration_ms: 0.89526
+  ...
+# Subtest: 194: poplar wood set includes stripped wood, stairs, slabs, signs, doors and redstone-adjacent shapes
+ok 229 - 194: poplar wood set includes stripped wood, stairs, slabs, signs, doors and redstone-adjacent shapes
+  ---
+  duration_ms: 0.228888
+  ...
+# Subtest: 195: Wilderness Bound registration is idempotent and wired into browser/server entry points
+ok 230 - 195: Wilderness Bound registration is idempotent and wired into browser/server entry points
+  ---
+  duration_ms: 0.472837
+  ...
+# Subtest: 196: shelf mushroom implements official growth, drops and bounce semantics
+ok 231 - 196: shelf mushroom implements official growth, drops and bounce semantics
+  ---
+  duration_ms: 0.232392
+  ...
+# Subtest: 197: red shrub is compostable and bone meal only spreads into a valid adjacent space
+ok 232 - 197: red shrub is compostable and bone meal only spreads into a valid adjacent space
+  ---
+  duration_ms: 0.279583
+  ...
+# Subtest: 198: all sixteen wool colors get stair and slab variants
+ok 233 - 198: all sixteen wool colors get stair and slab variants
+  ---
+  duration_ms: 0.247846
+  ...
+# Subtest: 199: all sixteen concrete colors get stairs/slabs and stonecutter outputs
+ok 234 - 199: all sixteen concrete colors get stairs/slabs and stonecutter outputs
+  ---
+  duration_ms: 0.84086
+  ...
+# Subtest: 200: generated 26.3 block items preserve official ids and placement targets
+ok 235 - 200: generated 26.3 block items preserve official ids and placement targets
+  ---
+  duration_ms: 0.27785
+  ...
+# Subtest: 201: cushion content exposes exactly sixteen colored item variants
+ok 236 - 201: cushion content exposes exactly sixteen colored item variants
+  ---
+  duration_ms: 0.34567
+  ...
+# Subtest: 202: cushion placement enforces flat support, cushion exclusivity, no collision and no piston movement
+ok 237 - 202: cushion placement enforces flat support, cushion exclusivity, no collision and no piston movement
+  ---
+  duration_ms: 0.843665
+  ...
+# Subtest: 203: three hay bales craft four straw beds
+ok 238 - 203: three hay bales craft four straw beds
+  ---
+  duration_ms: 1.959681
+  ...
+# Subtest: 204: straw beds sleep only in overworld, never set spawn, and are destroyed on use
+ok 239 - 204: straw beds sleep only in overworld, never set spawn, and are destroyed on use
+  ---
+  duration_ms: 0.361343
+  ...
+# Subtest: 205: 26.3 mushroom recipe classification includes shelf mushrooms alongside both classic mushrooms
+ok 240 - 205: 26.3 mushroom recipe classification includes shelf mushrooms alongside both classic mushrooms
+  ---
+  duration_ms: 0.207767
+  ...
+# Subtest: 206: dappled forest profile is cold-adjacent and uses the official passive/neutral mob set
+ok 241 - 206: dappled forest profile is cold-adjacent and uses the official passive/neutral mob set
+  ---
+  duration_ms: 0.231461
+  ...
+# Subtest: 207: abandoned camp structure policy covers all eighteen official biome variants
+ok 242 - 207: abandoned camp structure policy covers all eighteen official biome variants
+  ---
+  duration_ms: 0.191752
+  ...
+# Subtest: 208: explorer maps are dedicated items and are not extendable
+ok 243 - 208: explorer maps are dedicated items and are not extendable
+  ---
+  duration_ms: 0.325941
+  ...
+# Subtest: 209: spectator portal policy allows portal interaction specifically for spectator mode
+ok 244 - 209: spectator portal policy allows portal interaction specifically for spectator mode
+  ---
+  duration_ms: 0.200717
+  ...
+# Subtest: 210: 26.3 crafting bridge produces wool/concrete shapes and colored cushions with modern runtime ids
+ok 245 - 210: 26.3 crafting bridge produces wool/concrete shapes and colored cushions with modern runtime ids
+  ---
+  duration_ms: 1.528985
+  ...
+# Subtest: 211: cushion placement snaps horizontally while preserving support top height
+ok 246 - 211: cushion placement snaps horizontally while preserving support top height
+  ---
+  duration_ms: 1.834897
+  ...
+# Subtest: 212: only one cushion may occupy the same snapped cushion position
+ok 247 - 212: only one cushion may occupy the same snapped cushion position
+  ---
+  duration_ms: 1.598038
+  ...
+# Subtest: 213: cushion interaction seats one player and rejects a second occupant
+ok 248 - 213: cushion interaction seats one player and rejects a second occupant
+  ---
+  duration_ms: 0.285922
+  ...
+# Subtest: 214: standing releases cushion occupancy for the next player
+ok 249 - 214: standing releases cushion occupancy for the next player
+  ---
+  duration_ms: 0.260104
+  ...
+# Subtest: 215: unsupported cushions break and retain Java 26.3 physical policy
+ok 250 - 215: unsupported cushions break and retain Java 26.3 physical policy
+  ---
+  duration_ms: 0.30521
+  ...
+# Subtest: 216: successful straw-bed sleep never sets spawn and consumes the bed once
+ok 251 - 216: successful straw-bed sleep never sets spawn and consumes the bed once
+  ---
+  duration_ms: 0.261475
+  ...
+# Subtest: 217: Nether/End straw-bed attempts destroy the bed without counting a sleep
+ok 252 - 217: Nether/End straw-bed attempts destroy the bed without counting a sleep
+  ---
+  duration_ms: 0.267374
+  ...
+# Subtest: 218: wool stairs and slabs dampen vibrations like their full wool block
+ok 253 - 218: wool stairs and slabs dampen vibrations like their full wool block
+  ---
+  duration_ms: 1.233304
+  ...
+# Subtest: 219: shelf mushrooms bounce falling entities unless they are sneaking
+ok 254 - 219: shelf mushrooms bounce falling entities unless they are sneaking
+  ---
+  duration_ms: 0.371699
+  ...
+# Subtest: 220: explorer map items are excluded from creative visibility policy
+ok 255 - 220: explorer map items are excluded from creative visibility policy
+  ---
+  duration_ms: 0.353232
+  ...
+# Subtest: 221: explorer map clone keeps dedicated item type and deep-clones map arrays
+ok 256 - 221: explorer map clone keeps dedicated item type and deep-clones map arrays
+  ---
+  duration_ms: 0.347372
+  ...
+# Subtest: 222: legacy renamed explorer maps migrate to their 26.3 dedicated names
+ok 257 - 222: legacy renamed explorer maps migrate to their 26.3 dedicated names
+  ---
+  duration_ms: 0.174467
+  ...
+# Subtest: 223: MapSystem creates explorer maps centered on located structures
+ok 258 - 223: MapSystem creates explorer maps centered on located structures
+  ---
+  duration_ms: 12.030077
+  ...
+# Subtest: 224: MapSystem refuses to zoom dedicated explorer map data
+ok 259 - 224: MapSystem refuses to zoom dedicated explorer map data
+  ---
+  duration_ms: 11.295052
+  ...
+# Subtest: 225: cartography accepts explorer maps for cloning but rejects paper zooming
+ok 260 - 225: cartography accepts explorer maps for cloning but rejects paper zooming
+  ---
+  duration_ms: 0.309647
+  ...
+# Subtest: 226: legacy biome adapter selects official abandoned-camp variants only
+ok 261 - 226: legacy biome adapter selects official abandoned-camp variants only
+  ---
+  duration_ms: 0.307714
+  ...
+# Subtest: 227: abandoned-camp cell planning is deterministic and slope-gated
+ok 262 - 227: abandoned-camp cell planning is deterministic and slope-gated
+  ---
+  duration_ms: 0.469393
+  ...
+# Subtest: 228: explorer camp targeting never points to the same camp biome variant
+ok 263 - 228: explorer camp targeting never points to the same camp biome variant
+  ---
+  duration_ms: 65.431538
+  ...
+# Subtest: 229: abandoned-camp loot includes 26.3 camping gear and an explorer map
+ok 264 - 229: abandoned-camp loot includes 26.3 camping gear and an explorer map
+  ---
+  duration_ms: 0.894439
+  ...
+# Subtest: 230: abandoned-camp decorator writes real container metadata into generated chunks
+ok 265 - 230: abandoned-camp decorator writes real container metadata into generated chunks
+  ---
+  duration_ms: 3.131049
+  ...
+# Subtest: 231: Mushroom Stew accepts two of the same new Shelf Mushroom
+ok 266 - 231: Mushroom Stew accepts two of the same new Shelf Mushroom
+  ---
+  duration_ms: 3.051522
+  ...
+# Subtest: 232: Suspicious Stew accepts any two mushrooms including Shelf Mushroom
+ok 267 - 232: Suspicious Stew accepts any two mushrooms including Shelf Mushroom
+  ---
+  duration_ms: 0.575999
+  ...
+# Subtest: 233: Suspicious Stew still requires two mushrooms plus its effect flower
+ok 268 - 233: Suspicious Stew still requires two mushrooms plus its effect flower
+  ---
+  duration_ms: 0.578644
+  ...
+# Subtest: 234: 26.3 map facing normalizes negative and wrapped yaw
+ok 269 - 234: 26.3 map facing normalizes negative and wrapped yaw
+  ---
+  duration_ms: 0.16953
+  ...
+# Subtest: 235: MapSystem emits and updates player facing on filled maps
+ok 270 - 235: MapSystem emits and updates player facing on filled maps
+  ---
+  duration_ms: 10.528221
+  ...
+# Subtest: 236: cartography clones preserve directional player markers by value
+ok 271 - 236: cartography clones preserve directional player markers by value
+  ---
+  duration_ms: 9.758185
+  ...
+# Subtest: 237: cloneable map tag semantics cover Filled and dedicated Explorer Maps
+ok 272 - 237: cloneable map tag semantics cover Filled and dedicated Explorer Maps
+  ---
+  duration_ms: 0.210601
+  ...
+# Subtest: 238: extendable map tag semantics exclude Explorer and Buried Treasure maps
+ok 273 - 238: extendable map tag semantics exclude Explorer and Buried Treasure maps
+  ---
+  duration_ms: 0.156611
+  ...
+# Subtest: 239: random movement only runs while a player is nearby
+ok 274 - 239: random movement only runs while a player is nearby
+  ---
+  duration_ms: 1.072543
+  ...
+# Subtest: 240: live MobSystem passes a bounded player-nearby activation signal into Mob AI
+ok 275 - 240: live MobSystem passes a bounded player-nearby activation signal into Mob AI
+  ---
+  duration_ms: 0.864085
+  ...
+# Subtest: 241: offhand shield takes priority over a main-hand hoe
+ok 276 - 241: offhand shield takes priority over a main-hand hoe
+  ---
+  duration_ms: 0.277319
+  ...
+# Subtest: 242: offhand shield takes priority over a main-hand shovel
+ok 277 - 242: offhand shield takes priority over a main-hand shovel
+  ---
+  duration_ms: 0.318911
+  ...
+# Subtest: 243: shield priority does not swallow unrelated item use
+ok 278 - 243: shield priority does not swallow unrelated item use
+  ---
+  duration_ms: 0.182138
+  ...
+# Subtest: 244: Spruce Leaves no longer emit falling leaf particles in 26.3
+ok 279 - 244: Spruce Leaves no longer emit falling leaf particles in 26.3
+  ---
+  duration_ms: 0.194597
+  ...
+# Subtest: 245: all three Poplar leaf colors expose distinct falling leaf particles
+ok 280 - 245: all three Poplar leaf colors expose distinct falling leaf particles
+  ---
+  duration_ms: 0.30504
+  ...
+# Subtest: 246: Poplar Leaves sound family contains ambient, fall and hit events
+ok 281 - 246: Poplar Leaves sound family contains ambient, fall and hit events
+  ---
+  duration_ms: 0.234576
+  ...
+# Subtest: 247: Shelf Mushroom bounce uses the dedicated 26.3 bounce sound
+ok 282 - 247: Shelf Mushroom bounce uses the dedicated 26.3 bounce sound
+  ---
+  duration_ms: 0.337338
+  ...
+# Subtest: 248: Straw Bed and Red Shrub expose their dedicated 26.3 sound sets
+ok 283 - 248: Straw Bed and Red Shrub expose their dedicated 26.3 sound sets
+  ---
+  duration_ms: 0.290589
+  ...
+# Subtest: 249: Cushion interaction sounds include sit and get-up lifecycle events
+ok 284 - 249: Cushion interaction sounds include sit and get-up lifecycle events
+  ---
+  duration_ms: 0.24463
+  ...
+# Subtest: 250: villager level-up offers request a live open-screen refresh exactly once per level advance
+ok 285 - 250: villager level-up offers request a live open-screen refresh exactly once per level advance
+  ---
+  duration_ms: 1.093293
+  ...
+# Subtest: 251: current Java stew data maps legacy Dandelion to Saturation
+ok 286 - 251: current Java stew data maps legacy Dandelion to Saturation
+  ---
+  duration_ms: 1.700319
+  ...
+# Subtest: 252: Poppy/Torchflower stew data produces Night Vision
+ok 287 - 252: Poppy/Torchflower stew data produces Night Vision
+  ---
+  duration_ms: 0.207216
+  ...
+# Subtest: 253: tulips share Weakness while Wither Rose keeps Wither
+ok 288 - 253: tulips share Weakness while Wither Rose keeps Wither
+  ---
+  duration_ms: 0.175809
+  ...
+# Subtest: 254: crafted Suspicious Stew carries its effect and returns a bowl
+ok 289 - 254: crafted Suspicious Stew carries its effect and returns a bowl
+  ---
+  duration_ms: 1.298586
+  ...
+# Subtest: 255: differently flavored Suspicious Stews cannot merge
+ok 290 - 255: differently flavored Suspicious Stews cannot merge
+  ---
+  duration_ms: 0.391498
+  ...
+# Subtest: 256: stew foodEffects are deep-cloned with the stack
+ok 291 - 256: stew foodEffects are deep-cloned with the stack
+  ---
+  duration_ms: 0.479127
+  ...
+# Subtest: 257: Saturation stew resolves seven Java ticks into hunger and saturation
+ok 292 - 257: Saturation stew resolves seven Java ticks into hunger and saturation
+  ---
+  duration_ms: 0.263498
+  ...
+# Subtest: 258: crafting UIs insert full result stacks instead of stripping components
+ok 293 - 258: crafting UIs insert full result stacks instead of stripping components
+  ---
+  duration_ms: 23.832107
+  ...
+# Subtest: 259: ItemStack map components retain Java 26.3 facing and explorer markers
+ok 294 - 259: ItemStack map components retain Java 26.3 facing and explorer markers
+  ---
+  duration_ms: 1.573251
+  ...
+# Subtest: 260: open map state refreshes position and facing from the live player
+ok 295 - 260: open map state refreshes position and facing from the live player
+  ---
+  duration_ms: 1.726848
+  ...
+# Subtest: 261: default F3+X chord triggers from either keydown order
+ok 296 - 261: default F3+X chord triggers from either keydown order
+  ---
+  duration_ms: 0.226835
+  ...
+# Subtest: 262: Improved Transparency chord supports a re-bound physical key
+ok 297 - 262: Improved Transparency chord supports a re-bound physical key
+  ---
+  duration_ms: 0.268196
+  ...
+# Subtest: 263: transparency state defaults to sorted alpha and toggles explicitly
+ok 298 - 263: transparency state defaults to sorted alpha and toggles explicitly
+  ---
+  duration_ms: 0.570702
+  ...
+# Subtest: 264: Game routes the debug chord into the renderer toggle
+ok 299 - 264: Game routes the debug chord into the renderer toggle
+  ---
+  duration_ms: 1.418002
+  ...
+# Subtest: 265: Poplar falling leaves spawn as real scene particles
+ok 300 - 265: Poplar falling leaves spawn as real scene particles
+  ---
+  duration_ms: 2.064395
+  ...
+# Subtest: 266: Spruce remains excluded while all three Poplar leaf colors have particle ids
+ok 301 - 266: Spruce remains excluded while all three Poplar leaf colors have particle ids
+  ---
+  duration_ms: 0.337067
+  ...
+# Subtest: 267: live ambient scanner creates Poplar leaf sources and leaf particles
+ok 302 - 267: live ambient scanner creates Poplar leaf sources and leaf particles
+  ---
+  duration_ms: 1.717383
+  ...
+# Subtest: 268: SoundSystem exposes exact-name 26.3 resource-pack sound routing
+ok 303 - 268: SoundSystem exposes exact-name 26.3 resource-pack sound routing
+  ---
+  duration_ms: 0.407862
+  ...
+# Subtest: 269: Poplar ambient runtime requests the official leaves ambient event
+ok 304 - 269: Poplar ambient runtime requests the official leaves ambient event
+  ---
+  duration_ms: 1.529076
+  ...
+# Subtest: 270: Improved Transparency remains explicitly partial until a real OIT pass exists
+ok 305 - 270: Improved Transparency remains explicitly partial until a real OIT pass exists
+  ---
+  duration_ms: 1.089547
+  ...
+# Subtest: 271: Shelf Mushroom runtime id is detected through the live BlockRegistry
+ok 306 - 271: Shelf Mushroom runtime id is detected through the live BlockRegistry
+  ---
+  duration_ms: 1.124028
+  ...
+# Subtest: 272: shelf landing resolver only supports the 26.3 Shelf Mushroom block
+ok 307 - 272: shelf landing resolver only supports the 26.3 Shelf Mushroom block
+  ---
+  duration_ms: 0.278241
+  ...
+# Subtest: 273: player physics bounces from Shelf Mushroom instead of falling through it
+ok 308 - 273: player physics bounces from Shelf Mushroom instead of falling through it
+  ---
+  duration_ms: 4.123493
+  ...
+# Subtest: 274: sneaking suppresses Shelf Mushroom bounce while preserving support
+ok 309 - 274: sneaking suppresses Shelf Mushroom bounce while preserving support
+  ---
+  duration_ms: 1.332526
+  ...
+# Subtest: 275: player bounce sound is emitted once per Shelf Mushroom landing
+ok 310 - 275: player bounce sound is emitted once per Shelf Mushroom landing
+  ---
+  duration_ms: 1.018843
+  ...
+# Subtest: 276: living Mob physics bounces from Shelf Mushroom and exposes the dedicated sound
+ok 311 - 276: living Mob physics bounces from Shelf Mushroom and exposes the dedicated sound
+  ---
+  duration_ms: 4.413891
+  ...
+# Subtest: 277: MobSystem propagates Shelf Mushroom bounce sounds from live mob updates
+ok 312 - 277: MobSystem propagates Shelf Mushroom bounce sounds from live mob updates
+  ---
+  duration_ms: 2.503684
+  ...
+# Subtest: 278: VillageSystem resolves both Java 26.3 Wandering Trader additions to live item ids
+ok 313 - 278: VillageSystem resolves both Java 26.3 Wandering Trader additions to live item ids
+  ---
+  duration_ms: 0.390235
+  ...
+# Subtest: 279: Poplar Sapling Wandering Trader offer executes through the shared trade transaction
+ok 314 - 279: Poplar Sapling Wandering Trader offer executes through the shared trade transaction
+  ---
+  duration_ms: 0.598323
+  ...
+# Subtest: 280: Shelf Mushroom Wandering Trader trade rejects missing payment without creating output
+ok 315 - 280: Shelf Mushroom Wandering Trader trade rejects missing payment without creating output
+  ---
+  duration_ms: 0.25757
+  ...
+# Subtest: 291: Bedrock is forbidden teleport support for Endermen, Shulkers, and Chorus Fruit
+ok 316 - 291: Bedrock is forbidden teleport support for Endermen, Shulkers, and Chorus Fruit
+  ---
+  duration_ms: 4.824267
+  ...
+# Subtest: 292: powder snow is rejected for Enderman and random consumable teleports
+ok 317 - 292: powder snow is rejected for Enderman and random consumable teleports
+  ---
+  duration_ms: 0.19
+  ...
+# Subtest: 293: ordinary solid ground with clear headroom remains a valid teleport destination
+ok 318 - 293: ordinary solid ground with clear headroom remains a valid teleport destination
+  ---
+  duration_ms: 0.324248
+  ...
+# Subtest: 294: Chorus Fruit planner finds a safe destination inside its bounded random-search budget
+ok 319 - 294: Chorus Fruit planner finds a safe destination inside its bounded random-search budget
+  ---
+  duration_ms: 1.024962
+  ...
+# Subtest: 295: Chorus Fruit planner refuses a Bedrock-only landing column
+ok 320 - 295: Chorus Fruit planner refuses a Bedrock-only landing column
+  ---
+  duration_ms: 0.479848
+  ...
+# Subtest: 296: teleport particle direction is normalized from source toward destination
+ok 321 - 296: teleport particle direction is normalized from source toward destination
+  ---
+  duration_ms: 0.282917
+  ...
+# Subtest: 297: ParticleSystem creates real directional teleport particles in the scene
+ok 322 - 297: ParticleSystem creates real directional teleport particles in the scene
+  ---
+  duration_ms: 2.378719
+  ...
+# Subtest: 298: Enderman runtime teleport rejects Bedrock support
+ok 323 - 298: Enderman runtime teleport rejects Bedrock support
+  ---
+  duration_ms: 3.459213
+  ...
+# Subtest: 299: Enderman runtime teleport still accepts safe ordinary ground
+ok 324 - 299: Enderman runtime teleport still accepts safe ordinary ground
+  ---
+  duration_ms: 1.110248
+  ...
+# Subtest: 300: Chorus Fruit remains food and the live Game consumption path invokes 26.3 teleport visuals
+ok 325 - 300: Chorus Fruit remains food and the live Game consumption path invokes 26.3 teleport visuals
+  ---
+  duration_ms: 2.003005
+  ...
+# Subtest: 291: modern Poplar block items resolve presentation as blocks
+ok 326 - 291: modern Poplar block items resolve presentation as blocks
+  ---
+  duration_ms: 1.407096
+  ...
+# Subtest: 292: Straw Bed uses a block translation key despite modern runtime ID
+ok 327 - 292: Straw Bed uses a block translation key despite modern runtime ID
+  ---
+  duration_ms: 0.219514
+  ...
+# Subtest: 293: Cushion remains an item presentation
+ok 328 - 293: Cushion remains an item presentation
+  ---
+  duration_ms: 0.217831
+  ...
+# Subtest: 294: Poplar block item icon uses block icon pipeline
+ok 329 - 294: Poplar block item icon uses block icon pipeline
+  ---
+  duration_ms: 0.523282
+  ...
+# Subtest: 295: Cushion has item sprite key
+ok 330 - 295: Cushion has item sprite key
+  ---
+  duration_ms: 0.187457
+  ...
+# Subtest: 296: explorer maps reuse filled-map icon
+ok 331 - 296: explorer maps reuse filled-map icon
+  ---
+  duration_ms: 0.158314
+  ...
+# Subtest: 297: Straw Bed dispatches through block_item placement
+ok 332 - 297: Straw Bed dispatches through block_item placement
+  ---
+  duration_ms: 0.148308
+  ...
+# Subtest: 298: every 26.3 direct block item uses generic placement
+ok 333 - 298: every 26.3 direct block item uses generic placement
+  ---
+  duration_ms: 0.268356
+  ...
+# Subtest: 299: Straw Bed resolves exact modern placeBlockId
+ok 334 - 299: Straw Bed resolves exact modern placeBlockId
+  ---
+  duration_ms: 0.269768
+  ...
+# Subtest: 300: Cushions are not block-placeable
+ok 335 - 300: Cushions are not block-placeable
+  ---
+  duration_ms: 0.185023
+  ...
+# Subtest: 301: Straw Bed placement plans as bed
+not ok 336 - 301: Straw Bed placement plans as bed
+  ---
+  duration_ms: 3.851792
+  location: '/home/runner/work/mc/mc/tests/parity-291-310.test.ts:1:2757'
+  failureType: 'testCodeFailure'
+  error: 'baseId is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    planBlockPlacement (/home/runner/work/mc/mc/src/world/BlockPlacement.ts:160:26)
+    TestContext.<anonymous> (/home/runner/work/mc/mc/tests/parity-291-310.test.ts:34:96)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: 302: Poplar Planks placement plans as simple block
+not ok 337 - 302: Poplar Planks placement plans as simple block
+  ---
+  duration_ms: 0.255938
+  location: '/home/runner/work/mc/mc/tests/parity-291-310.test.ts:1:3016'
+  failureType: 'testCodeFailure'
+  error: 'baseId is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    planBlockPlacement (/home/runner/work/mc/mc/src/world/BlockPlacement.ts:160:26)
+    TestContext.<anonymous> (/home/runner/work/mc/mc/tests/parity-291-310.test.ts:35:113)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: 303: wool slabs enter slab placement semantics
+not ok 338 - 303: wool slabs enter slab placement semantics
+  ---
+  duration_ms: 0.218322
+  location: '/home/runner/work/mc/mc/tests/parity-291-310.test.ts:1:3295'
+  failureType: 'testCodeFailure'
+  error: 'baseId is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    planBlockPlacement (/home/runner/work/mc/mc/src/world/BlockPlacement.ts:160:26)
+    TestContext.<anonymous> (/home/runner/work/mc/mc/tests/parity-291-310.test.ts:36:109)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: 304: high runtime IDs avoid legacy low-bit support collisions
+not ok 339 - 304: high runtime IDs avoid legacy low-bit support collisions
+  ---
+  duration_ms: 0.369455
+  location: '/home/runner/work/mc/mc/tests/parity-291-310.test.ts:1:3568'
+  failureType: 'testCodeFailure'
+  error: 'baseId is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    planBlockPlacement (/home/runner/work/mc/mc/src/world/BlockPlacement.ts:160:26)
+    TestContext.<anonymous> (/home/runner/work/mc/mc/tests/parity-291-310.test.ts:37:404)
+    Test.runInAsyncScope (node:async_hooks:206:9)
+    Test.run (node:internal/test_runner/test:796:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:526:18)
+    Test.postRun (node:internal/test_runner/test:889:19)
+    Test.run (node:internal/test_runner/test:835:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: 305: Straw Bed sleeps in Overworld without setting spawn
+ok 340 - 305: Straw Bed sleeps in Overworld without setting spawn
+  ---
+  duration_ms: 4.077645
+  ...
+# Subtest: 306: Straw Bed is destroyed but cannot sleep in Nether
+ok 341 - 306: Straw Bed is destroyed but cannot sleep in Nether
+  ---
+  duration_ms: 0.275997
+  ...
+# Subtest: 307: Cushion placement accepts supported flat top
+ok 342 - 307: Cushion placement accepts supported flat top
+  ---
+  duration_ms: 0.475801
+  ...
+# Subtest: 308: Cushion placement rejects unsupported surfaces
+ok 343 - 308: Cushion placement rejects unsupported surfaces
+  ---
+  duration_ms: 1.26758
+  ...
+# Subtest: 309: Cushion rejects duplicate placement position
+ok 344 - 309: Cushion rejects duplicate placement position
+  ---
+  duration_ms: 0.239784
+  ...
+# Subtest: 310: behavior registry dispatches Straw Bed through block_item
+ok 345 - 310: behavior registry dispatches Straw Bed through block_item
+  ---
+  duration_ms: 0.330167
+  ...
+# Subtest: clampPlayerState bounds health/hunger/oxygen
+ok 346 - clampPlayerState bounds health/hunger/oxygen
+  ---
+  duration_ms: 1.841586
+  ...
+# Subtest: validateConsume requires the exact item with positive count
+ok 347 - validateConsume requires the exact item with positive count
+  ---
+  duration_ms: 0.263839
+  ...
+# Subtest: consumeOne decrements and empties at zero
+ok 348 - consumeOne decrements and empties at zero
+  ---
+  duration_ms: 0.235567
+  ...
+# Subtest: Quick Charge is a three-level crossbow enchantment
+ok 349 - Quick Charge is a three-level crossbow enchantment
+  ---
+  duration_ms: 0.976641
+  ...
+# Subtest: Quick Charge is offered for crossbows but not bows
+ok 350 - Quick Charge is offered for crossbows but not bows
+  ---
+  duration_ms: 0.50153
+  ...
+# Subtest: Mending remains treasure-only and is not rolled by the enchanting table
+ok 351 - Mending remains treasure-only and is not rolled by the enchanting table
+  ---
+  duration_ms: 0.181628
+  ...
+# Subtest: bow reaches full power after twenty game ticks
+ok 352 - bow reaches full power after twenty game ticks
+  ---
+  duration_ms: 3.244436
+  ...
+# Subtest: bow power follows the Java quadratic draw curve
+ok 353 - bow power follows the Java quadratic draw curve
+  ---
+  duration_ms: 0.302126
+  ...
+# Subtest: bow ignores releases before three game ticks
+ok 354 - bow ignores releases before three game ticks
+  ---
+  duration_ms: 0.260054
+  ...
+# Subtest: crossbow base load time is twenty-five game ticks
+ok 355 - crossbow base load time is twenty-five game ticks
+  ---
+  duration_ms: 0.188158
+  ...
+# Subtest: Quick Charge removes five game ticks per level
+ok 356 - Quick Charge removes five game ticks per level
+  ---
+  duration_ms: 0.239383
+  ...
+# Subtest: recipe book lists all data-driven recipes with categories
+ok 357 - recipe book lists all data-driven recipes with categories
+  ---
+  duration_ms: 5.121775
+  ...
+# Subtest: derives vanilla-style categories from the result item
+ok 358 - derives vanilla-style categories from the result item
+  ---
+  duration_ms: 0.262758
+  ...
+# Subtest: filters recipes by query and category
+ok 359 - filters recipes by query and category
+  ---
+  duration_ms: 4.625203
+  ...
+# Subtest: fitsGridSize checks shaped and shapeless bounds
+ok 360 - fitsGridSize checks shaped and shapeless bounds
+  ---
+  duration_ms: 0.23052
+  ...
+# Subtest: plans a shaped 2x2 fill from the inventory
+ok 361 - plans a shaped 2x2 fill from the inventory
+  ---
+  duration_ms: 1.232899
+  ...
+# Subtest: aggregates multiple cells from one stack
+ok 362 - aggregates multiple cells from one stack
+  ---
+  duration_ms: 0.252192
+  ...
+# Subtest: plans shapeless fills in cell order
+ok 363 - plans shapeless fills in cell order
+  ---
+  duration_ms: 0.278501
+  ...
+# Subtest: returns null when the inventory cannot supply every ingredient
+ok 364 - returns null when the inventory cannot supply every ingredient
+  ---
+  duration_ms: 0.235137
+  ...
+# Subtest: a 3x3 shaped recipe fills its top-left shape in a 3x3 grid
+ok 365 - a 3x3 shaped recipe fills its top-left shape in a 3x3 grid
+  ---
+  duration_ms: 0.360271
+  ...
+# Subtest: one repeater redstone tick equals two game ticks
+ok 366 - one repeater redstone tick equals two game ticks
+  ---
+  duration_ms: 2.465507
+  ...
+# Subtest: two repeater redstone ticks equal four game ticks
+ok 367 - two repeater redstone ticks equal four game ticks
+  ---
+  duration_ms: 0.675867
+  ...
+# Subtest: repeater absolute clock survives separate update calls
+ok 368 - repeater absolute clock survives separate update calls
+  ---
+  duration_ms: 0.452608
+  ...
+# Subtest: repeater output drops off after the configured redstone delay
+ok 369 - repeater output drops off after the configured redstone delay
+  ---
+  duration_ms: 0.538905
+  ...
+# Subtest: repeaters only accept power from their rear input
+ok 370 - repeaters only accept power from their rear input
+  ---
+  duration_ms: 0.825558
+  ...
+# Subtest: powered side diode locks a repeater in its current state
+ok 371 - powered side diode locks a repeater in its current state
+  ---
+  duration_ms: 0.611241
+  ...
+# Subtest: unregister clears a pending repeater transition for that position
+ok 372 - unregister clears a pending repeater transition for that position
+  ---
+  duration_ms: 0.287014
+  ...
+# Subtest: setRepeaterDelay clamps the redstone-tick setting to 1-4
+ok 373 - setRepeaterDelay clamps the redstone-tick setting to 1-4
+  ---
+  duration_ms: 0.227015
+  ...
+# Subtest: a pressed button propagates through adjacent wire
+ok 374 - a pressed button propagates through adjacent wire
+  ---
+  duration_ms: 1.207571
+  ...
+# Subtest: redstone advances on the shared 20 TPS boundary
+ok 375 - redstone advances on the shared 20 TPS boundary
+  ---
+  duration_ms: 2.50788
+  ...
+# Subtest: redstone processes every supplied catch-up tick instead of only resetting state
+ok 376 - redstone processes every supplied catch-up tick instead of only resetting state
+  ---
+  duration_ms: 1.277064
+  ...
+# Subtest: migrates unversioned flat saves into dimension buckets
+ok 377 - migrates unversioned flat saves into dimension buckets
+  ---
+  duration_ms: 2.409575
+  ...
+# Subtest: deduplicates and caps legacy mob explosions
+ok 378 - deduplicates and caps legacy mob explosions
+  ---
+  duration_ms: 3.788639
+  ...
+# Subtest: recovers malformed optional state with safe defaults
+ok 379 - recovers malformed optional state with safe defaults
+  ---
+  duration_ms: 1.473544
+  ...
+# Subtest: rejects saves from unsupported future schemas
+ok 380 - rejects saves from unsupported future schemas
+  ---
+  duration_ms: 2.125695
+  ...
+# Subtest: migrates schema v2 saves to v3 scheduled tick storage
+ok 381 - migrates schema v2 saves to v3 scheduled tick storage
+  ---
+  duration_ms: 1.151098
+  ...
+# Subtest: schema v2 to v3 migration does not apply corrupt-legacy mob trimming
+ok 382 - schema v2 to v3 migration does not apply corrupt-legacy mob trimming
+  ---
+  duration_ms: 0.649458
+  ...
+# Subtest: validates, canonicalizes, deduplicates, and restores future block ticks
+ok 383 - validates, canonicalizes, deduplicates, and restores future block ticks
+  ---
+  duration_ms: 0.886648
+  ...
+# Subtest: preserves a loaded crossbow projectile through save validation
+ok 384 - preserves a loaded crossbow projectile through save validation
+  ---
+  duration_ms: 0.31891
+  ...
+# Subtest: direct client inventory overwrites are rejected by the server
+ok 385 - direct client inventory overwrites are rejected by the server
+  ---
+  duration_ms: 1.049268
+  ...
+# Subtest: server respawn clears the death guard and stale combat state
+ok 386 - server respawn clears the death guard and stale combat state
+  ---
+  duration_ms: 0.205804
+  ...
+# Subtest: death drops and dropped-item spawn remain scoped to the death dimension
+ok 387 - death drops and dropped-item spawn remain scoped to the death dimension
+  ---
+  duration_ms: 0.296748
+  ...
+# Subtest: server accepts only explicit attack entity intents
+ok 388 - server accepts only explicit attack entity intents
+  ---
+  duration_ms: 1.934384
+  ...
+# Subtest: survival and creative entity reach use Java distances
+ok 389 - survival and creative entity reach use Java distances
+  ---
+  duration_ms: 0.23036
+  ...
+# Subtest: server reach check rejects survival hits beyond three blocks
+ok 390 - server reach check rejects survival hits beyond three blocks
+  ---
+  duration_ms: 0.328575
+  ...
+# Subtest: server derives stone sword and axe damage from the held item registry
+ok 391 - server derives stone sword and axe damage from the held item registry
+  ---
+  duration_ms: 0.541679
+  ...
+# Subtest: server derives Sharpness and Knockback from the held stack rather than packet data
+ok 392 - server derives Sharpness and Knockback from the held stack rather than packet data
+  ---
+  duration_ms: 0.260054
+  ...
+# Subtest: Java whole-tick cooldown rounding keeps exact halves down
+ok 393 - Java whole-tick cooldown rounding keeps exact halves down
+  ---
+  duration_ms: 0.184432
+  ...
+# Subtest: weapon attack speed controls integer server cooldown ticks
+ok 394 - weapon attack speed controls integer server cooldown ticks
+  ---
+  duration_ms: 0.217161
+  ...
+# Subtest: attack strength uses the Java half-tick bias
+ok 395 - attack strength uses the Java half-tick bias
+  ---
+  duration_ms: 0.323057
+  ...
+# Subtest: first hit is fully charged and immediate spam follows the cooldown damage curve
+ok 396 - first hit is fully charged and immediate spam follows the cooldown damage curve
+  ---
+  duration_ms: 1.540713
+  ...
+# Subtest: server criticals require strictly charged descending non-sprinting airborne state
+ok 397 - server criticals require strictly charged descending non-sprinting airborne state
+  ---
+  duration_ms: 0.390476
+  ...
+# Subtest: Java critical multiplies base attack damage but not Sharpness bonus
+ok 398 - Java critical multiplies base attack damage but not Sharpness bonus
+  ---
+  duration_ms: 0.227286
+  ...
+# Subtest: sprint knockback adds one level only for strictly charged attacks
+ok 399 - sprint knockback adds one level only for strictly charged attacks
+  ---
+  duration_ms: 0.277349
+  ...
+# Subtest: knockback resistance scales strength multiplicatively
+ok 400 - knockback resistance scales strength multiplicatively
+  ---
+  duration_ms: 0.177832
+  ...
+# Subtest: each netherite armor piece contributes ten percent knockback resistance
+ok 401 - each netherite armor piece contributes ten percent knockback resistance
+  ---
+  duration_ms: 0.361093
+  ...
+# Subtest: server profile carries Java melee durability cost
+ok 402 - server profile carries Java melee durability cost
+  ---
+  duration_ms: 0.176881
+  ...
+# Subtest: server command labels are normalized without accepting ordinary chat
+ok 403 - server command labels are normalized without accepting ordinary chat
+  ---
+  duration_ms: 1.197397
+  ...
+# Subtest: privileged world-mutating commands require server operator authority
+ok 404 - privileged world-mutating commands require server operator authority
+  ---
+  duration_ms: 0.300143
+  ...
+# Subtest: weather accepts only the three Java weather modes
+ok 405 - weather accepts only the three Java weather modes
+  ---
+  duration_ms: 0.241266
+  ...
+# Subtest: Java 26.3 give count defaults to one and accepts at most one hundred stacks
+ok 406 - Java 26.3 give count defaults to one and accepts at most one hundred stacks
+  ---
+  duration_ms: 0.337558
+  ...
+# Subtest: give fills compatible stacks then empty slots without merging component-bearing items
+ok 407 - give fills compatible stacks then empty slots without merging component-bearing items
+  ---
+  duration_ms: 1.229043
+  ...
+# Subtest: give returns overflow once the player inventory is full
+ok 408 - give returns overflow once the player inventory is full
+  ---
+  duration_ms: 0.313853
+  ...
+# Subtest: death XP is seven per level and capped at one hundred
+ok 409 - death XP is seven per level and capped at one hundred
+  ---
+  duration_ms: 1.170476
+  ...
+# Subtest: death XP floors malformed fractional levels instead of overpaying
+ok 410 - death XP floors malformed fractional levels instead of overpaying
+  ---
+  duration_ms: 0.256618
+  ...
+# Subtest: keepInventory suppresses XP loss and death XP drops
+ok 411 - keepInventory suppresses XP loss and death XP drops
+  ---
+  duration_ms: 1.131809
+  ...
+# Subtest: normal death resets all server XP state
+ok 412 - normal death resets all server XP state
+  ---
+  duration_ms: 0.248767
+  ...
+# Subtest: Curse of Vanishing equipment disappears instead of dropping
+ok 413 - Curse of Vanishing equipment disappears instead of dropping
+  ---
+  duration_ms: 2.61691
+  ...
+# Subtest: death drops are cloned before entering server entities
+ok 414 - death drops are cloned before entering server entities
+  ---
+  duration_ms: 0.299852
+  ...
+# Subtest: movement parser rejects non-finite and out-of-world coordinates
+ok 415 - movement parser rejects non-finite and out-of-world coordinates
+  ---
+  duration_ms: 4.129442
+  ...
+# Subtest: movement parser normalizes boolean movement flags without trusting truthy strings
+ok 416 - movement parser normalizes boolean movement flags without trusting truthy strings
+  ---
+  duration_ms: 0.687174
+  ...
+# Subtest: distance squared is computed from authoritative previous coordinates
+ok 417 - distance squared is computed from authoritative previous coordinates
+  ---
+  duration_ms: 0.172515
+  ...
+# Subtest: Java gross movement guard uses 100 squared-distance excess
+ok 418 - Java gross movement guard uses 100 squared-distance excess
+  ---
+  duration_ms: 0.211512
+  ...
+# Subtest: fall-flying gross movement guard uses the Java 300 threshold
+ok 419 - fall-flying gross movement guard uses the Java 300 threshold
+  ---
+  duration_ms: 0.248857
+  ...
+# Subtest: survival cannot enable flight by setting a packet flag
+ok 420 - survival cannot enable flight by setting a packet flag
+  ---
+  duration_ms: 0.224532
+  ...
+# Subtest: critical movement prerequisite requires airborne downward movement
+ok 421 - critical movement prerequisite requires airborne downward movement
+  ---
+  duration_ms: 0.43377
+  ...
+# Subtest: accepted intents can be snapshotted for the next server movement packet
+ok 422 - accepted intents can be snapshotted for the next server movement packet
+  ---
+  duration_ms: 0.388673
+  ...
+# Subtest: server totals full diamond armor as twenty defense and eight toughness
+ok 423 - server totals full diamond armor as twenty defense and eight toughness
+  ---
+  duration_ms: 1.460925
+  ...
+# Subtest: server sums protection enchantments across every equipped armor piece
+ok 424 - server sums protection enchantments across every equipped armor piece
+  ---
+  duration_ms: 0.29819
+  ...
+# Subtest: server mitigation applies armor toughness and enchantment protection
+ok 425 - server mitigation applies armor toughness and enchantment protection
+  ---
+  duration_ms: 0.621346
+  ...
+# Subtest: server armor durability loss affects every armor piece for an armor-blockable hit
+ok 426 - server armor durability loss affects every armor piece for an armor-blockable hit
+  ---
+  duration_ms: 0.424216
+  ...
+# Subtest: damage sources that bypass base armor do not consume armor durability
+ok 427 - damage sources that bypass base armor do not consume armor durability
+  ---
+  duration_ms: 0.207036
+  ...
+# Subtest: Unbreaking is evaluated per durability point on server-owned stacks
+ok 428 - Unbreaking is evaluated per durability point on server-owned stacks
+  ---
+  duration_ms: 0.194928
+  ...
+# Subtest: shield durability is tracked even though shield is a material-category registry item
+ok 429 - shield durability is tracked even though shield is a material-category registry item
+  ---
+  duration_ms: 0.24398
+  ...
+# Subtest: shield is inactive during its five-tick startup delay
+ok 430 - shield is inactive during its five-tick startup delay
+  ---
+  duration_ms: 0.280003
+  ...
+# Subtest: shield blocks a front hit after startup but not a hit from behind
+ok 431 - shield blocks a front hit after startup but not a hit from behind
+  ---
+  duration_ms: 0.344508
+  ...
+# Subtest: blocked damage consumes shield durability but Java 26.3 axe hits do not disable it
+ok 432 - blocked damage consumes shield durability but Java 26.3 axe hits do not disable it
+  ---
+  duration_ms: 2.081371
+  ...
+# Subtest: disabled shield cannot block until its cooldown expires
+ok 433 - disabled shield cannot block until its cooldown expires
+  ---
+  duration_ms: 0.239213
+  ...
+# Subtest: Java 26.3 ender pearl impact teleports owner and resets momentum
+ok 434 - Java 26.3 ender pearl impact teleports owner and resets momentum
+  ---
+  duration_ms: 1.676603
+  ...
+# Subtest: ordinary projectiles remain entity-damaging without teleport semantics
+ok 435 - ordinary projectiles remain entity-damaging without teleport semantics
+  ---
+  duration_ms: 0.274104
+  ...
+# Subtest: block reach matches Java survival and creative interaction distances
+ok 436 - block reach matches Java survival and creative interaction distances
+  ---
+  duration_ms: 1.09142
+  ...
+# Subtest: block reach measures to the target block AABB rather than its center
+ok 437 - block reach measures to the target block AABB rather than its center
+  ---
+  duration_ms: 0.265121
+  ...
+# Subtest: hotbar selection is restricted to the nine Java hotbar slots
+ok 438 - hotbar selection is restricted to the nine Java hotbar slots
+  ---
+  duration_ms: 0.282206
+  ...
+# Subtest: world y validation rejects fractional and out-of-world coordinates
+ok 439 - world y validation rejects fractional and out-of-world coordinates
+  ---
+  duration_ms: 0.90845
+  ...
+# Subtest: inventory stack validation enforces registered ids and max stack sizes
+ok 440 - inventory stack validation enforces registered ids and max stack sizes
+  ---
+  duration_ms: 0.348133
+  ...
+# Subtest: durability values cannot exceed the registry maximum or reach zero
+ok 441 - durability values cannot exceed the registry maximum or reach zero
+  ---
+  duration_ms: 0.167908
+  ...
+# Subtest: server placement requires the held item to place the requested block
+ok 442 - server placement requires the held item to place the requested block
+  ---
+  duration_ms: 0.235858
+  ...
+# Subtest: consuming a placed stack decrements or clears it without mutating input
+ok 443 - consuming a placed stack decrements or clears it without mutating input
+  ---
+  duration_ms: 0.823665
+  ...
+# Subtest: shield becomes effective only after five game ticks
+ok 444 - shield becomes effective only after five game ticks
+  ---
+  duration_ms: 1.282262
+  ...
+# Subtest: disabled shields cannot block until the generic cooldown expires
+ok 445 - disabled shields cannot block until the generic cooldown expires
+  ---
+  duration_ms: 0.25769
+  ...
+# Subtest: blocking movement uses the Java sneaking pace multiplier
+ok 446 - blocking movement uses the Java sneaking pace multiplier
+  ---
+  duration_ms: 0.283187
+  ...
+# Subtest: shield blocks melee projectiles and explosions but not bypassing damage kinds
+ok 447 - shield blocks melee projectiles and explosions but not bypassing damage kinds
+  ---
+  duration_ms: 0.291019
+  ...
+# Subtest: shield only covers the horizontal hemisphere in front of the player
+ok 448 - shield only covers the horizontal hemisphere in front of the player
+  ---
+  duration_ms: 0.437786
+  ...
+# Subtest: shield durability follows the blocked-damage threshold and ceil rule
+ok 449 - shield durability follows the blocked-damage threshold and ceil rule
+  ---
+  duration_ms: 0.295526
+  ...
+# Subtest: Java 26.3 axes no longer disable shields
+ok 450 - Java 26.3 axes no longer disable shields
+  ---
+  duration_ms: 0.188408
+  ...
+# Subtest: blocks classify into the right sound material
+ok 451 - blocks classify into the right sound material
+  ---
+  duration_ms: 1.295491
+  ...
+# Subtest: mobs classify into sound families
+ok 452 - mobs classify into sound families
+  ---
+  duration_ms: 0.262858
+  ...
+# Subtest: idle sounds only play for audible families
+ok 453 - idle sounds only play for audible families
+  ---
+  duration_ms: 0.231472
+  ...
+# Subtest: idle intervals stay sparse (5-15s)
+ok 454 - idle intervals stay sparse (5-15s)
+  ---
+  duration_ms: 0.411537
+  ...
+# Subtest: standing still does not consume saturation or hunger
+ok 455 - standing still does not consume saturation or hunger
+  ---
+  duration_ms: 2.50098
+  ...
+# Subtest: naturalRegeneration gamerule disables food-based healing
+ok 456 - naturalRegeneration gamerule disables food-based healing
+  ---
+  duration_ms: 0.418557
+  ...
+# Subtest: full hunger plus saturation uses Java fast regeneration cadence
+ok 457 - full hunger plus saturation uses Java fast regeneration cadence
+  ---
+  duration_ms: 0.280273
+  ...
+# Subtest: Peaceful restores one food point every 10 game ticks in Java 1.20.1
+ok 458 - Peaceful restores one food point every 10 game ticks in Java 1.20.1
+  ---
+  duration_ms: 0.25788
+  ...
+# Subtest: Peaceful does not restore saturation in Java 1.20.1
+ok 459 - Peaceful does not restore saturation in Java 1.20.1
+  ---
+  duration_ms: 0.333101
+  ...
+# Subtest: Peaceful restores one health per second and obeys naturalRegeneration
+ok 460 - Peaceful restores one health per second and obeys naturalRegeneration
+  ---
+  duration_ms: 3.793306
+  ...
+# Subtest: starvation cadence and difficulty health floors match Java 1.20.1
+ok 461 - starvation cadence and difficulty health floors match Java 1.20.1
+  ---
+  duration_ms: 0.38647
+  ...
+# Subtest: fractional fall distance rounds damage up like Java
+ok 462 - fractional fall distance rounds damage up like Java
+  ---
+  duration_ms: 0.893407
+  ...
+# Subtest: standing inside fire deals one heart every half second
+ok 463 - standing inside fire deals one heart every half second
+  ---
+  duration_ms: 0.58976
+  ...
+# Subtest: soul fire deals twice normal fire contact damage
+ok 464 - soul fire deals twice normal fire contact damage
+  ---
+  duration_ms: 0.357867
+  ...
+# Subtest: leaving fire keeps the player burning at one-heart-per-second cadence
+ok 465 - leaving fire keeps the player burning at one-heart-per-second cadence
+  ---
+  duration_ms: 0.351368
+  ...
+# Subtest: Fire Protection IV cuts ignition duration by sixty percent in Java 1.20.1
+ok 466 - Fire Protection IV cuts ignition duration by sixty percent in Java 1.20.1
+  ---
+  duration_ms: 0.166786
+  ...
+# Subtest: lava sets the fifteen-second burn timer while keeping its contact damage cadence
+ok 467 - lava sets the fifteen-second burn timer while keeping its contact damage cadence
+  ---
+  duration_ms: 0.252312
+  ...
+# Subtest: water extinguishes persistent burning immediately
+ok 468 - water extinguishes persistent burning immediately
+  ---
+  duration_ms: 0.476413
+  ...
+# Subtest: drowning starts one second after the 15-second air supply is exhausted
+ok 469 - drowning starts one second after the 15-second air supply is exhausted
+  ---
+  duration_ms: 0.320423
+  ...
+# Subtest: drowningDamage gamerule prevents drowning damage but still drains air
+ok 470 - drowningDamage gamerule prevents drowning damage but still drains air
+  ---
+  duration_ms: 0.289658
+  ...
+# Subtest: Respiration consumes air only when the Java nextInt(level + 1) roll is zero
+ok 471 - Respiration consumes air only when the Java nextInt(level + 1) roll is zero
+  ---
+  duration_ms: 0.304269
+  ...
+# Subtest: Respiration skip rolls leave air unchanged while a zero roll consumes one air tick
+ok 472 - Respiration skip rolls leave air unchanged while a zero roll consumes one air tick
+  ---
+  duration_ms: 0.311029
+  ...
+# Subtest: Respiration also stretches the negative-air drowning countdown
+ok 473 - Respiration also stretches the negative-air drowning countdown
+  ---
+  duration_ms: 0.375454
+  ...
+# Subtest: air supply refills at four air ticks per game tick equivalent
+ok 474 - air supply refills at four air ticks per game tick equivalent
+  ---
+  duration_ms: 0.192123
+  ...
+# Subtest: advances at a deterministic 20 TPS fixed step
+ok 475 - advances at a deterministic 20 TPS fixed step
+  ---
+  duration_ms: 1.417812
+  ...
+# Subtest: deduplicates positional ticks and keeps the earliest deadline
+ok 476 - deduplicates positional ticks and keeps the earliest deadline
+  ---
+  duration_ms: 0.46757
+  ...
+# Subtest: emits due ticks in deadline, priority, then insertion order
+ok 477 - emits due ticks in deadline, priority, then insertion order
+  ---
+  duration_ms: 1.015217
+  ...
+# Subtest: restores pending ticks without replaying expired entries
+ok 478 - restores pending ticks without replaying expired entries
+  ---
+  duration_ms: 0.415413
+  ...
+# Subtest: canonicalizes fractional coordinates before deduplication and restore
+ok 479 - canonicalizes fractional coordinates before deduplication and restore
+  ---
+  duration_ms: 0.392379
+  ...
+# Subtest: maps tool materials to Java 1.20.1 harvest tiers
+ok 480 - maps tool materials to Java 1.20.1 harvest tiers
+  ---
+  duration_ms: 4.293633
+  ...
+# Subtest: canHarvestBlock gates on required tier
+ok 481 - canHarvestBlock gates on required tier
+  ---
+  duration_ms: 0.281605
+  ...
+# Subtest: ItemRegistry.canHarvest uses block harvest tags
+ok 482 - ItemRegistry.canHarvest uses block harvest tags
+  ---
+  duration_ms: 0.570752
+  ...
+# Subtest: wrong-tier tools mine at hand speed, correct tier uses tool speed
+ok 483 - wrong-tier tools mine at hand speed, correct tier uses tool speed
+  ---
+  duration_ms: 0.400852
+  ...
+# Subtest: 26.3 supplement registers poplar shelf and both poplar boat items
+ok 484 - 26.3 supplement registers poplar shelf and both poplar boat items
+  ---
+  duration_ms: 1.224946
+  ...
+# Subtest: 26.3 bridge gives legacy wool and concrete all modern color aliases
+ok 485 - 26.3 bridge gives legacy wool and concrete all modern color aliases
+  ---
+  duration_ms: 0.230467
+  ...
+# Subtest: Dappled Forest overlay decorates a real chunk with deterministic poplar content
+ok 486 - Dappled Forest overlay decorates a real chunk with deterministic poplar content
+  ---
+  duration_ms: 5.209214
+  ...
+# Subtest: stonecutter resolves products for stone families
+ok 487 - stonecutter resolves products for stone families
+  ---
+  duration_ms: 1.457766
+  ...
+# Subtest: every stonecutting recipe input and output resolves to a registered block
+ok 488 - every stonecutting recipe input and output resolves to a registered block
+  ---
+  duration_ms: 0.423623
+  ...
+# Subtest: cartography action resolution follows Java 1.20.1 lock and scale rules
+ok 489 - cartography action resolution follows Java 1.20.1 lock and scale rules
+  ---
+  duration_ms: 0.496448
+  ...
+# Subtest: new maps use Java 128x128 pixels and default scale level zero
+ok 490 - new maps use Java 128x128 pixels and default scale level zero
+  ---
+  duration_ms: 54.762164
+  ...
+# Subtest: map scale is a level whose sample stride doubles as 2^scale
+ok 491 - map scale is a level whose sample stride doubles as 2^scale
+  ---
+  duration_ms: 7.884324
+  ...
+# Subtest: maps snap their centers to the Java global map grid
+ok 492 - maps snap their centers to the Java global map grid
+  ---
+  duration_ms: 24.125191
+  ...
+# Subtest: MapSystem zooms one scale level at a time and caps at four
+ok 493 - MapSystem zooms one scale level at a time and caps at four
+  ---
+  duration_ms: 37.511773
+  ...
+# Subtest: locked map clones preserve frozen state while receiving a fresh map id
+ok 494 - locked map clones preserve frozen state while receiving a fresh map id
+  ---
+  duration_ms: 0.336103
+  ...
+# Subtest: banner pattern data resolves by id
+ok 495 - banner pattern data resolves by id
+  ---
+  duration_ms: 0.679179
+  ...
+# Subtest: MapData lock flag round-trips through the item map type
+ok 496 - MapData lock flag round-trips through the item map type
+  ---
+  duration_ms: 0.787131
+  ...
+# Subtest: experience totals split into Java orb size buckets
+ok 497 - experience totals split into Java orb size buckets
+  ---
+  duration_ms: 10.017492
+  ...
+# Subtest: large experience totals use the 2477 top bucket
+ok 498 - large experience totals use the 2477 top bucket
+  ---
+  duration_ms: 5.722539
+  ...
+# Subtest: player pickup cooldown prevents collecting multiple touching orbs in one tick
+ok 499 - player pickup cooldown prevents collecting multiple touching orbs in one tick
+  ---
+  duration_ms: 9.371446
+  ...
+# Subtest: level thresholds match Java experience progression
+ok 500 - level thresholds match Java experience progression
+  ---
+  duration_ms: 0.340161
+  ...
+# Subtest: block XP rules match Java 1.20.1 ore values
+ok 501 - block XP rules match Java 1.20.1 ore values
+  ---
+  duration_ms: 1.285822
+  ...
+# Subtest: rollBlockXp stays within the configured range
+ok 502 - rollBlockXp stays within the configured range
+  ---
+  duration_ms: 0.248796
+  ...
+# Subtest: rollXp is inclusive and boundary deterministic
+ok 503 - rollXp is inclusive and boundary deterministic
+  ---
+  duration_ms: 0.240682
+  ...
+# Subtest: fishing and breeding XP ranges are data-driven
+ok 504 - fishing and breeding XP ranges are data-driven
+  ---
+  duration_ms: 0.171863
+  ...
+1..504
+# tests 504
+# suites 0
+# pass 495
+# fail 9
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 14357.61779

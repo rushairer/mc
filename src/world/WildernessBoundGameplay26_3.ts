@@ -153,7 +153,7 @@ export function isWoolShapeVibrationDampener26_3(blockName: string): boolean {
 
 export interface ShelfMushroomBounce26_3 {
   bounced: boolean;
-  soundEvent?: 'block.shelf_mushroom.fall';
+  soundEvent?: 'block.shelf_mushroom.bounce';
   verticalVelocity: number;
 }
 
@@ -164,7 +164,7 @@ export function applyShelfMushroomBounce26_3(incomingVerticalVelocity: number, s
   // Beds/slime-style restitution: preserve a modest fraction of downward speed.
   return {
     bounced: true,
-    soundEvent: 'block.shelf_mushroom.fall',
+    soundEvent: 'block.shelf_mushroom.bounce',
     verticalVelocity: Math.abs(incomingVerticalVelocity) * 0.5,
   };
 }

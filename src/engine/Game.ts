@@ -61,6 +61,7 @@ import {
   type WorldContext,
 } from '../world/BehaviorRegistry';
 import { planBlockPlacement } from '../world/BlockPlacement';
+import { shouldPrioritizeShieldUse26_3 } from '../world/WildernessBoundChanges26_3';
 import { getButtonPressTicks } from '../world/ButtonRules';
 import { getDamageShake, normalizeDamageFlash } from '../systems/FeelRules';
 import { rollBlockLoot, rollLootTable, type LootTable } from '../world/LootSystem';
@@ -2602,6 +2603,17 @@ export class Game {
         : undefined;
       if (blockBehaviorResult?.handled) {
         this.placeCooldown = blockBehaviorResult.cooldown ?? 0.25;
+        return;
+      }
+
+      const offhandStack = this.inventory.getOffhand();
+      const offhandName = offhandStack ? ItemRegistry.get(offhandStack.id)?.name : undefined;
+      if (
+        this.isShieldBlocking
+        && shouldPrioritizeShieldUse26_3(heldItemDef?.name, offhandName)
+      ) {
+        // Java 26.3: raising a shield wins over Hoe/Shovel item-on-block actions.
+        this.placeCooldown = 0.05;
         return;
       }
 

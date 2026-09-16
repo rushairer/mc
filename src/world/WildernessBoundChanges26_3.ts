@@ -100,9 +100,10 @@ export function shouldPrioritizeShieldUse26_3(
   mainHandName: string | undefined,
   offhandName: string | undefined,
 ): boolean {
-  return offhandName === 'shield'
-    && !!mainHandName
-    && (mainHandName.endsWith('_hoe') || mainHandName.endsWith('_shovel'));
+  const isTool = (name: string | undefined) =>
+    !!name && (name.endsWith('_hoe') || name.endsWith('_shovel'));
+  return (mainHandName === 'shield' && isTool(offhandName))
+    || (offhandName === 'shield' && isTool(mainHandName));
 }
 
 export type PoplarLeafColor26_3 = 'red' | 'orange' | 'yellow';

@@ -15,6 +15,8 @@ const MAX_MOBS = 24;
 const SPAWN_INTERVAL = 2.0; // seconds between spawn attempts
 const SPAWN_RANGE = 24;     // blocks from player to attempt spawning
 const DESPAWN_RANGE = 80;
+// Internal activation radius for 26.3 random walk/swim goals. Targeted AI still runs outside it.
+export const RANDOM_MOVEMENT_PLAYER_RANGE_26_3 = 32;
 const BREEDABLE_TYPES = new Set<MobType>(['cow', 'pig', 'sheep', 'chicken', 'horse', 'wolf', 'cat']);
 const BABY_GROW_SECONDS = 240;
 
@@ -132,7 +134,7 @@ export class MobSystem {
 
       mob.update(dt, playerPos, getBlock, hurtPlayer, isSolidBlock, gameMode, (origin, dir, type) => {
         if (onMobShoot) onMobShoot(origin, dir, type);
-      }, playerHeldItem, playerLookDir);
+      }, playerHeldItem, playerLookDir, mob.position.distanceTo(playerPos) <= RANDOM_MOVEMENT_PLAYER_RANGE_26_3);
 
       // P4.3: ambient idle sounds for audible families near the player.
       mob.idleSoundTimer -= dt;

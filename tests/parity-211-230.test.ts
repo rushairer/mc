@@ -129,7 +129,7 @@ test('219: shelf mushrooms bounce falling entities unless they are sneaking', ()
   const bounce = applyShelfMushroomBounce26_3(-0.8, false);
   assert.equal(bounce.bounced, true);
   assert.equal(bounce.verticalVelocity, 0.4);
-  assert.equal(bounce.soundEvent, 'block.shelf_mushroom.fall');
+  assert.equal(bounce.soundEvent, 'block.shelf_mushroom.bounce');
   assert.equal(applyShelfMushroomBounce26_3(-0.8, true).bounced, false);
 });
 

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 import type { VillagerProfession } from '../systems/VillageSystem';
+import { shouldRunRandomMovement26_3 } from '../world/WildernessBoundChanges26_3';
 
 export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker' | 'pillager' | 'wither' | 'guardian' | 'vex';
 
@@ -1026,7 +1027,8 @@ export class Mob {
     gameMode: 'survival' | 'creative' = 'survival',
     onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, type: 'arrow' | 'fireball' | 'potion' | 'shulker_bullet' | 'wither_skull') => void,
     playerHeldItem = 0,
-    playerLookDir?: THREE.Vector3
+    playerLookDir?: THREE.Vector3,
+    randomMovementPlayerNearby = true
   ) {
     if (this.health <= 0) {
       if (this.deathTimer === undefined) {
@@ -1152,7 +1154,7 @@ export class Mob {
     if (this.def.type === 'magma_cube') {
       this.updateMagmaCubeMovement(dt, playerPos, getBlock);
     } else {
-      this.updateAI(dt, playerPos, getBlock, fluidState.inWater, gameMode, playerHeldItem);
+      this.updateAI(dt, playerPos, getBlock, fluidState.inWater, gameMode, playerHeldItem, randomMovementPlayerNearby);
     }
 
     // Drowning: like vanilla land mobs, only the head/eyes being in water consumes air.
@@ -1585,7 +1587,8 @@ export class Mob {
     getBlock: (x: number, y: number, z: number) => number,
     inWater: boolean,
     gameMode: 'survival' | 'creative' = 'survival',
-    playerHeldItem = 0
+    playerHeldItem = 0,
+    randomMovementPlayerNearby = true
   ) {
     const distToPlayer = this.position.distanceTo(playerPos);
 
@@ -1759,8 +1762,13 @@ export class Mob {
           this.velocity.y = 8;
           this.onGround = false;
         }
-      } else {
+      } else if (shouldRunRandomMovement26_3(randomMovementPlayerNearby)) {
         this.wander(dt, getBlock);
+      } else {
+        this.aiState = 'idle';
+        this.wanderTarget = null;
+        this.velocity.x *= 0.8;
+        this.velocity.z *= 0.8;
       }
     }
   }

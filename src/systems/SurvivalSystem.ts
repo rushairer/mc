@@ -173,9 +173,9 @@ export class SurvivalSystem {
     if (this.wasFalling && player.onGround) {
       const fallDist = this.fallStartY - player.position.y;
       if (fallDist > 3 && doFallDamage) {
-        const featherReduction = getEnchantLevel('feather_falling');
-        const reduced = Math.max(0, fallDist - 3) * (1 - Math.min(0.8, featherReduction * 0.12));
-        const fallDamage = Math.ceil(reduced - TIMER_EPSILON);
+        // Produce raw rounded fall damage here. Protection and Feather Falling
+        // are applied exactly once later by the shared damage pipeline.
+        const fallDamage = Math.ceil(Math.max(0, fallDist - 3) - TIMER_EPSILON);
         if (fallDamage > 0) {
           damage(fallDamage, 'fall');
         }

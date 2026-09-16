@@ -4,6 +4,7 @@ import { ChunkManager } from '../world/ChunkManager';
 import { DroppedItemSystem } from './DroppedItemSystem';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { cloneItemStack, itemStacksCanMerge } from '../items/ItemStackRules';
 import { isSmeltingFuel } from '../items/SmeltingRecipes';
 import { BrewingSystem } from './BrewingSystem';
 import type { ItemStack, BlockFacing, BlockMetadata } from '../types';
@@ -223,7 +224,7 @@ export class HopperSystem {
       if (idx >= inventory.length) continue;
       const slot = inventory[idx];
       const maxForSlot = Math.min(maxStack, slotLimit?.(idx) ?? maxStack);
-      if (slot && slot.id === stack.id && slot.count < maxForSlot) {
+      if (slot && itemStacksCanMerge(slot, stack) && slot.count < maxForSlot) {
         const addCount = Math.min(remaining, maxForSlot - slot.count);
         slot.count += addCount;
         remaining -= addCount;
@@ -237,7 +238,9 @@ export class HopperSystem {
       if (!slot) {
         const maxForSlot = Math.min(maxStack, slotLimit?.(idx) ?? maxStack);
         const addCount = Math.min(remaining, maxForSlot);
-        inventory[idx] = { ...stack, count: addCount };
+        const placed = cloneItemStack(stack)!;
+        placed.count = addCount;
+        inventory[idx] = placed;
         remaining -= addCount;
         if (remaining <= 0) return stack.count;
       }

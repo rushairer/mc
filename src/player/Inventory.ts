@@ -1,5 +1,6 @@
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { cloneItemStack, itemStacksCanMerge } from '../items/ItemStackRules';
 import { EnchantSystem } from '../systems/EnchantSystem';
 import { getArmorToughness } from '../items/ArmorAttributes';
 import {
@@ -28,7 +29,7 @@ export class Inventory {
     // First pass: try to stack on existing slots
     for (let i = 0; i < INVENTORY_SIZE && remaining > 0; i++) {
       const slot = this.slots[i];
-      if (slot && slot.id === id && slot.count < maxStack) {
+      if (slot && itemStacksCanMerge(slot, { id, count: 1 }) && slot.count < maxStack) {
         const canAdd = Math.min(remaining, maxStack - slot.count);
         slot.count += canAdd;
         remaining -= canAdd;
@@ -55,15 +56,9 @@ export class Inventory {
   addStack(stack: ItemStack): ItemStack | null {
     const maxStack = ItemRegistry.getMaxStackSize(stack.id);
     let remaining = stack.count;
-    const sameKind = (a: ItemStack, b: ItemStack) =>
-      a.id === b.id &&
-      a.customName === b.customName &&
-      JSON.stringify(a.enchantments ?? []) === JSON.stringify(b.enchantments ?? []) &&
-      JSON.stringify(a.potion ?? null) === JSON.stringify(b.potion ?? null);
-
     for (let i = 0; i < INVENTORY_SIZE && remaining > 0; i++) {
       const slot = this.slots[i];
-      if (slot && sameKind(slot, stack) && slot.count < maxStack) {
+      if (slot && itemStacksCanMerge(slot, stack) && slot.count < maxStack) {
         const canAdd = Math.min(remaining, maxStack - slot.count);
         slot.count += canAdd;
         remaining -= canAdd;
@@ -73,12 +68,17 @@ export class Inventory {
     for (let i = 0; i < INVENTORY_SIZE && remaining > 0; i++) {
       if (!this.slots[i]) {
         const toAdd = Math.min(remaining, maxStack);
-        this.slots[i] = { ...stack, count: toAdd };
+        const placed = cloneItemStack(stack)!;
+        placed.count = toAdd;
+        this.slots[i] = placed;
         remaining -= toAdd;
       }
     }
 
-    return remaining > 0 ? { ...stack, count: remaining } : null;
+    if (remaining <= 0) return null;
+    const leftover = cloneItemStack(stack)!;
+    leftover.count = remaining;
+    return leftover;
   }
 
   /** Remove one item from a specific slot. */
@@ -228,7 +228,9 @@ export class Inventory {
     if (!slot || slot.count <= 1) return null;
     const half = Math.ceil(slot.count / 2);
     slot.count -= half;
-    return { id: slot.id, count: half };
+    const split = cloneItemStack(slot)!;
+    split.count = half;
+    return split;
   }
 
   /** Get total armor defense value. */

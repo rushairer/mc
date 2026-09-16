@@ -23,7 +23,13 @@ export interface FluidTickResult {
   delayTicks: number;
 }
 
-type FluidType = 'water' | 'lava';
+export type FluidType = 'water' | 'lava';
+
+/** Java 1.20.1 horizontal drop-search radius. */
+export function getFluidSlopeFindDistance(type: FluidType, dimension?: number): number {
+  if (type === 'water') return 4;
+  return dimension === 1 ? 4 : 2;
+}
 
 type TargetFluidState = {
   level: number;
@@ -83,7 +89,7 @@ export class FluidSystem {
     }
 
     if (isSource) {
-      this.spreadFromSource(x, y, z, access.getBlock, enqueueNext);
+      this.spreadFromSource(x, y, z, fluidType!, access.getBlock, enqueueNext, access.dimension);
       return {
         changed,
         next: Array.from(next.values()),
@@ -250,18 +256,85 @@ export class FluidSystem {
     return { level: 0, type: 'water', source: false };
   }
 
+  private isFlowPassable(
+    getBlock: (x: number, y: number, z: number) => number,
+    x: number,
+    y: number,
+    z: number,
+  ): boolean {
+    const id = getBlock(x, y, z) & 0x3FF;
+    return id === 0 || BlockRegistry.isFluid(id);
+  }
+
+  private findSlopeDistance(
+    startX: number,
+    y: number,
+    startZ: number,
+    originX: number,
+    originZ: number,
+    getBlock: (x: number, y: number, z: number) => number,
+    maxDistance: number,
+  ): number {
+    const queue: Array<{ x: number; z: number; distance: number }> = [{ x: startX, z: startZ, distance: 0 }];
+    const visited = new Set<string>([`${originX},${originZ}`, `${startX},${startZ}`]);
+    const directions: Array<[number, number]> = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      for (const [dx, dz] of directions) {
+        const nx = current.x + dx;
+        const nz = current.z + dz;
+        const distance = current.distance + 1;
+        if (distance > maxDistance) continue;
+        const key = `${nx},${nz}`;
+        if (visited.has(key) || !this.isFlowPassable(getBlock, nx, y, nz)) continue;
+        visited.add(key);
+        if (this.isFlowPassable(getBlock, nx, y - 1, nz)) return distance;
+        queue.push({ x: nx, z: nz, distance });
+      }
+    }
+    return Number.POSITIVE_INFINITY;
+  }
+
+  private getBestHorizontalDirections(
+    x: number,
+    y: number,
+    z: number,
+    type: FluidType,
+    getBlock: (x: number, y: number, z: number) => number,
+    dimension?: number,
+  ): Array<[number, number]> {
+    const directions: Array<[number, number]> = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+    const candidates = directions.filter(([dx, dz]) => this.isFlowPassable(getBlock, x + dx, y, z + dz));
+    if (candidates.length <= 1) return candidates;
+
+    const maxDistance = getFluidSlopeFindDistance(type, dimension);
+    let bestDistance = Number.POSITIVE_INFINITY;
+    const scored = candidates.map(([dx, dz]) => {
+      const nx = x + dx;
+      const nz = z + dz;
+      const distance = this.isFlowPassable(getBlock, nx, y - 1, nz)
+        ? 0
+        : this.findSlopeDistance(nx, y, nz, x, z, getBlock, maxDistance);
+      bestDistance = Math.min(bestDistance, distance);
+      return { direction: [dx, dz] as [number, number], distance };
+    });
+
+    return scored.filter((entry) => entry.distance === bestDistance).map((entry) => entry.direction);
+  }
+
   private spreadFromSource(
     x: number,
     y: number,
     z: number,
+    type: FluidType,
     getBlock: (x: number, y: number, z: number) => number,
     enqueueNext: (x: number, y: number, z: number) => void,
+    dimension?: number,
   ) {
-    const belowId = getBlock(x, y - 1, z) & 0x3FF;
-    if (belowId === 0 || BlockRegistry.isFluid(belowId)) enqueueNext(x, y - 1, z);
-    for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-      const id = getBlock(x + dx, y, z + dz) & 0x3FF;
-      if (id === 0 || BlockRegistry.isFluid(id)) enqueueNext(x + dx, y, z + dz);
+    if (this.isFlowPassable(getBlock, x, y - 1, z)) enqueueNext(x, y - 1, z);
+    for (const [dx, dz] of this.getBestHorizontalDirections(x, y, z, type, getBlock, dimension)) {
+      enqueueNext(x + dx, y, z + dz);
     }
   }
 
@@ -282,9 +355,8 @@ export class FluidSystem {
     }
     const step = this.getFlowDrop(type, dimension);
     if (level <= step) return;
-    for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-      const id = getBlock(x + dx, y, z + dz) & 0x3FF;
-      if (id === 0 || BlockRegistry.isFluid(id)) enqueueNext(x + dx, y, z + dz);
+    for (const [dx, dz] of this.getBestHorizontalDirections(x, y, z, type, getBlock, dimension)) {
+      enqueueNext(x + dx, y, z + dz);
     }
   }
 }

@@ -1,5 +1,6 @@
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { cloneItemStack, itemStacksCanMerge } from '../items/ItemStackRules';
 
 /**
  * P5.3 — Server container rules (pure, testable).
@@ -36,24 +37,8 @@ export function createContainerSlots(name: string): (ItemStack | null)[] {
   return new Array(size).fill(null);
 }
 
-function cloneStack(stack: ItemStack | null): ItemStack | null {
-  if (!stack) return null;
-  const clone: ItemStack = { ...stack };
-  if (stack.enchantments) {
-    clone.enchantments = stack.enchantments.map((enchantment) => ({ ...enchantment }));
-  }
-  return clone;
-}
-
-function stackIdentity(stack: ItemStack): string {
-  const { count: _count, ...identity } = stack;
-  return JSON.stringify(identity);
-}
-
-export function canStacksMerge(a: ItemStack | null | undefined, b: ItemStack | null | undefined): boolean {
-  if (!a || !b || a.id !== b.id) return false;
-  return stackIdentity(a) === stackIdentity(b);
-}
+const cloneStack = cloneItemStack;
+export const canStacksMerge = itemStacksCanMerge;
 
 function isWellFormedStack(stack: ItemStack | null): boolean {
   if (stack === null) return true;

@@ -24,6 +24,7 @@ jobs:
       - name: Close remaining authority gaps
         run: |
           node scripts/parity-91-110-finalize.mjs
+          node scripts/fix-parity-91-110-authority-test.mjs
           npm run audit:parity
           npm run check
           git config user.name "Aben"

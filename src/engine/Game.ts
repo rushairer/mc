@@ -62,6 +62,7 @@ import {
 } from '../world/BehaviorRegistry';
 import { planBlockPlacement } from '../world/BlockPlacement';
 import { shouldPrioritizeShieldUse26_3 } from '../world/WildernessBoundChanges26_3';
+import { applySaturationStew26_3 } from '../world/SuspiciousStew26_3';
 import { getButtonPressTicks } from '../world/ButtonRules';
 import { getDamageShake, normalizeDamageFlash } from '../systems/FeelRules';
 import { rollBlockLoot, rollLootTable, type LootTable } from '../world/LootSystem';
@@ -3380,7 +3381,7 @@ export class Game {
   private canConsumeFood(stack: ItemStack): boolean {
     if (!ItemRegistry.isFood(stack.id)) return false;
     const isGoldenApple = (stack.id & 0x3FF) === 322;
-    return this.player.hunger < 20 || isGoldenApple || stack.id === HONEY_BOTTLE_ID;
+    return this.player.hunger < 20 || isGoldenApple || stack.id === HONEY_BOTTLE_ID || !!stack.alwaysEdible;
   }
 
   private continuePotionUse(stack: ItemStack, dt: number) {
@@ -3444,6 +3445,17 @@ export class Game {
       this.player.hunger,
       this.player.saturation + (foodDef.saturationRestore ?? 0),
     );
+    for (const effect of stack.foodEffects ?? []) {
+      if (effect.id === 'saturation') {
+        const saturated = applySaturationStew26_3(this.player.hunger, this.player.saturation);
+        this.player.hunger = saturated.hunger;
+        this.player.saturation = saturated.saturation;
+      } else {
+        this.potionEffects.apply(effect, (amount) => {
+          this.player.health = Math.min(20, this.player.health + amount);
+        });
+      }
+    }
 
     const baseFoodId = stack.id & 0x3FF;
     if (baseFoodId === 322) {
@@ -3473,7 +3485,15 @@ export class Game {
         itemId: stack.id,
       });
     } else if (this.gameMode !== 'creative') {
-      if (stack.id === HONEY_BOTTLE_ID) {
+      if (stack.containerItemId !== undefined) {
+        const containerItemId = stack.containerItemId;
+        if (stack.count <= 1) {
+          this.inventory.setSlot(this.player.selectedSlot, { id: containerItemId, count: 1 });
+        } else {
+          this.inventory.removeFromSlot(this.player.selectedSlot);
+          this.inventory.addItem(containerItemId, 1);
+        }
+      } else if (stack.id === HONEY_BOTTLE_ID) {
         if (stack.count <= 1) {
           this.inventory.setSlot(this.player.selectedSlot, { id: GLASS_BOTTLE_ID, count: 1 });
         } else {

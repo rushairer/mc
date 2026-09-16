@@ -21,7 +21,7 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
   const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
   const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(9).fill(0));
-  const [craftResult, setCraftResult] = useState<{ id: number; count: number } | null>(null);
+  const [craftResult, setCraftResult] = useState<ItemStack | null>(null);
   const [hoveredSlot, setHoveredSlot] = useState<{
     item: ItemStack;
     itemDef: any;
@@ -104,7 +104,7 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
   const handleCraftResultClick = useCallback(() => {
     if (!craftResult) return;
     // Add result to inventory
-    inventory.addItem(craftResult.id, craftResult.count);
+    inventory.addStack(craftResult);
     // Remove one of each ingredient from crafting grid
     const newGrid = craftingGrid.map(() => 0); // clear all on craft
     setCraftingGrid(newGrid);

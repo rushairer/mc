@@ -20,6 +20,7 @@ export function cloneItemStack(stack: ItemStack | null | undefined): ItemStack |
   }
   if (stack.book) clone.book = { ...stack.book, pages: [...stack.book.pages] };
   if (stack.patterns) clone.patterns = stack.patterns.map((pattern) => ({ ...pattern }));
+  if (stack.foodEffects) clone.foodEffects = stack.foodEffects.map((effect) => ({ ...effect }));
   return clone;
 }
 

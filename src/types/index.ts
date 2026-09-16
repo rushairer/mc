@@ -157,6 +157,12 @@ export interface ItemStack {
   };
   /** P3.5 — loom-applied banner patterns. */
   patterns?: Array<{ pattern: string; color: string }>;
+  /** Food-delivered status components, notably Suspicious Stew. */
+  foodEffects?: PotionEffectData[];
+  /** Foods such as Suspicious Stew can be consumed at full hunger. */
+  alwaysEdible?: boolean;
+  /** Container returned after consumption (e.g. bowl from stew). */
+  containerItemId?: number;
 }
 
 export type PotionKind = 'bottle' | 'water' | 'awkward' | 'healing' | 'regeneration' | 'speed' | 'fire_resistance' | 'poison' | 'strength' | 'hunger' | 'slowness' | 'water_breathing' | 'jump_boost' | 'absorption';

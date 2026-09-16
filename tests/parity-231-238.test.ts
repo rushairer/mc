@@ -44,10 +44,12 @@ test('232: Suspicious Stew accepts any two mushrooms including Shelf Mushroom', 
   const brown = itemId('brown_mushroom');
   const flower = itemId('yellow_flower');
   const suspicious = itemId('suspicious_stew');
-  assert.deepEqual(
-    findCraftingResult(craftingGrid(bowl, shelf, brown, flower)),
-    { id: suspicious, count: 1 },
-  );
+  const result = findCraftingResult(craftingGrid(bowl, shelf, brown, flower));
+  assert.equal(result?.id, suspicious);
+  assert.equal(result?.count, 1);
+  assert.equal(result?.alwaysEdible, true);
+  assert.equal(result?.containerItemId, bowl);
+  assert.equal(result?.foodEffects?.[0]?.id, 'saturation');
 });
 
 test('233: Suspicious Stew still requires two mushrooms plus its effect flower', () => {

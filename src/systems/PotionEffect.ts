@@ -2,7 +2,8 @@ export type PotionEffectId =
   | 'healing' | 'regeneration' | 'speed' | 'fire_resistance' | 'poison'
   | 'wither' | 'levitation'
   | 'strength' | 'weakness' | 'slowness' | 'hunger' | 'jump_boost'
-  | 'water_breathing' | 'absorption' | 'resistance';
+  | 'water_breathing' | 'absorption' | 'resistance'
+  | 'blindness' | 'night_vision' | 'nausea' | 'saturation';
 
 export interface PotionEffectData {
   id: PotionEffectId;
@@ -45,6 +46,10 @@ export const EFFECT_DEFS: Record<PotionEffectId, EffectDef> = {
   water_breathing: { name: 'Water Breathing' },
   absorption: { name: 'Absorption' },
   resistance: { name: 'Resistance' },
+  blindness: { name: 'Blindness' },
+  night_vision: { name: 'Night Vision' },
+  nausea: { name: 'Nausea' },
+  saturation: { name: 'Saturation' },
 };
 
 /** Undead mobs targeted by Smite. */

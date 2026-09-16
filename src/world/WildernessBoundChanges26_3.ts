@@ -1,5 +1,6 @@
 import type { RawRecipe } from '../items/CraftingRecipes';
 import { EXPLORER_MAP_NAMES } from './WildernessBound26_3';
+import { getSuspiciousStewEffect26_3 } from './SuspiciousStew26_3';
 
 export const WILDERNESS_BOUND_MUSHROOMS_26_3 = [
   'brown_mushroom',
@@ -36,9 +37,8 @@ export function isWildernessBoundMushroom26_3(name: string): boolean {
 
 /**
  * Java 26.3 changed Suspicious Stew to accept any two mushrooms. The flower
- * still controls the effect; this project's recipe result does not yet carry
- * the flower-derived stew effect component, so this bridge models ingredient
- * acceptance while preserving the dedicated Suspicious Stew output item.
+ * still controls the effect. The output ItemStack carries that effect so two
+ * stews crafted with different flowers retain distinct stack identity.
  */
 export function buildWildernessBoundChangeRecipes26_3(
   resolveId: (name: string) => number | undefined,
@@ -59,9 +59,19 @@ export function buildWildernessBoundChangeRecipes26_3(
     const flower = aliases.map(resolveId).find((id): id is number => id !== undefined);
     if (flower === undefined || registeredFlowers.has(flower)) continue;
     registeredFlowers.add(flower);
+    const sourceFlower = aliases.find(alias => resolveId(alias) === flower) ?? aliases[0];
+    const foodEffect = getSuspiciousStewEffect26_3(sourceFlower);
     entries.push({
       ingredients: [bowl, anyMushroom, anyMushroom, flower],
-      result: { id: suspiciousStew, count: 1 },
+      result: {
+        id: suspiciousStew,
+        count: 1,
+        components: {
+          alwaysEdible: true,
+          containerItemId: bowl,
+          foodEffects: foodEffect ? [foodEffect] : [],
+        },
+      },
     });
   }
   if (entries.length > 0) recipes[String(suspiciousStew)] = entries;

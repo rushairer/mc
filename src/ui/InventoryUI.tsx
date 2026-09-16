@@ -65,7 +65,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
   const { t, getLocalizedItemName, getLocalizedDisplayName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
   const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(4).fill(0));
-  const [craftResult, setCraftResult] = useState<{ id: number; count: number } | null>(null);
+  const [craftResult, setCraftResult] = useState<ItemStack | null>(null);
   const [creativeSearch, setCreativeSearch] = useState('');
   const [recipeBookOpen, setRecipeBookOpen] = useState(false);
   const recipeEntries = useRef(getAllRecipeBookEntries()).current;
@@ -265,7 +265,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
   const handleCraftResultClick = useCallback(() => {
     if (!craftResult) return;
     // Add result to inventory
-    inventory.addItem(craftResult.id, craftResult.count);
+    inventory.addStack(craftResult);
     // Remove one of each ingredient from crafting grid
     const newGrid = craftingGrid.map(id => {
       if (id === 0) return 0;

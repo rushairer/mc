@@ -1,4 +1,5 @@
 import rawRecipes from './data/recipes.json';
+import type { ItemStack } from '../types';
 
 export interface RawRecipeIngredient {
   id: number;
@@ -14,6 +15,7 @@ export interface RawRecipe {
     id: number;
     count: number;
     metadata?: number;
+    components?: Omit<ItemStack, 'id' | 'count'>;
   };
 }
 
@@ -115,7 +117,7 @@ export function listCraftingRecipes(): RecipeListItem[] {
   return out;
 }
 
-export function findCraftingResult(grid: number[]): { id: number; count: number } | null {
+export function findCraftingResult(grid: number[]): ItemStack | null {
   // 1. Get bounds of active items in grid
   let minRow = 3, maxRow = -1, minCol = 3, maxCol = -1;
   let activeCount = 0;
@@ -173,7 +175,7 @@ export function findCraftingResult(grid: number[]): { id: number; count: number 
             if (!match) break;
           }
           if (match) {
-            return { id: packedResultId, count: recipe.result.count };
+            return { id: packedResultId, count: recipe.result.count, ...(recipe.result.components ?? {}) };
           }
         }
       }
@@ -181,7 +183,7 @@ export function findCraftingResult(grid: number[]): { id: number; count: number 
       // Check Shapeless Recipe
       if (recipe.ingredients) {
         if (matchShapelessIngredients(activePlayerItems, recipe.ingredients)) {
-          return { id: packedResultId, count: recipe.result.count };
+          return { id: packedResultId, count: recipe.result.count, ...(recipe.result.components ?? {}) };
         }
       }
     }

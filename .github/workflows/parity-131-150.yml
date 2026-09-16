@@ -21,13 +21,13 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Harden persistent fire and lava burning
+      - name: Harden Java sided hopper inventory rules
         run: |
-          node scripts/parity-144-147-burning.mjs
+          node scripts/parity-148-150-hopper-sides.mjs
           npm run audit:parity
           npm run check
           git config user.name "Aben"
           git config user.email "5195693+rushairer@users.noreply.github.com"
-          git add src/systems/SurvivalSystem.ts tests/survival-parity.test.ts
-          git commit -m "fix: model persistent Java burning state"
+          git add src/systems/BrewingSystem.ts src/systems/HopperSystem.ts tests/hopper-parity.test.ts
+          git commit -m "fix: enforce Java sided hopper inventory rules"
           git push origin HEAD:master

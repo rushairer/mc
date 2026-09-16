@@ -3,6 +3,7 @@ import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { Inventory } from '../player/Inventory';
 import { useI18n } from '../i18n';
+import { isExplorerMapItemName26_3 } from '../world/WildernessBoundGameplay26_3';
 
 interface CartographyUIProps {
   inventory: Inventory;
@@ -22,18 +23,28 @@ const MAX_MAP_SCALE = 4;
 
 export type CartographyAction = 'clone' | 'zoom' | 'lock' | null;
 
-/** P3.5 — Cartography table action resolution (Java 1.20.1). */
+export function isCartographyMapItem26_3(item: ItemStack | null): boolean {
+  if (!item?.map) return false;
+  if (item.id === FILLED_MAP_ID) return true;
+  const name = ItemRegistry.get(item.id)?.name;
+  return !!name && isExplorerMapItemName26_3(name);
+}
+
+/** P3.5 + Java 26.3 Explorer Map action resolution. */
 export function getCartographyAction(mapItem: ItemStack | null, ingredient: ItemStack | null): CartographyAction {
-  if (!mapItem || !ingredient) return null;
-  if (mapItem.id !== FILLED_MAP_ID || !mapItem.map) return null;
+  if (!mapItem || !ingredient || !isCartographyMapItem26_3(mapItem)) return null;
 
-  // A locked map can still be copied, and the copy remains locked. Locking only
-  // freezes map contents; it does not make the item uncopyable.
+  const itemName = ItemRegistry.get(mapItem.id)?.name;
+  const explorerMap = !!itemName && isExplorerMapItemName26_3(itemName);
+
+  // Explorer Maps remain cloneable and copies keep their dedicated item type.
   if (ingredient.id === EMPTY_MAP_ID) return 'clone';
-  if (mapItem.map.locked) return null;
+  if (mapItem.map!.locked) return null;
 
+  // Java 26.3: Explorer Maps (including Buried Treasure Map) are not in
+  // #minecraft:extendable_maps, so paper cannot zoom them out.
   if (ingredient.id === PAPER_ID) {
-    return mapItem.map.scale < MAX_MAP_SCALE ? 'zoom' : null;
+    return !explorerMap && mapItem.map!.scale < MAX_MAP_SCALE ? 'zoom' : null;
   }
   if (ingredient.id === GLASS_PANE_ID) return 'lock';
   return null;
@@ -41,7 +52,7 @@ export function getCartographyAction(mapItem: ItemStack | null, ingredient: Item
 
 /** P3.5 — Cartography table: clone / zoom out / lock a filled map. */
 export const CartographyUI: React.FC<CartographyUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle, onCraft }) => {
-  const { getLocalizedItemName, getLocalizedDisplayName } = useI18n();
+  const { getLocalizedDisplayName } = useI18n();
   const [mapItem, setMapItem] = useState<ItemStack | null>(null);
   const [ingredient, setIngredient] = useState<ItemStack | null>(null);
 
@@ -73,7 +84,7 @@ export const CartographyUI: React.FC<CartographyUIProps> = ({ inventory, onClose
       onInventoryChange();
       return;
     }
-    const found = takeFromInventory((item) => item.id === FILLED_MAP_ID);
+    const found = takeFromInventory((item) => isCartographyMapItem26_3(item));
     if (found) setMapItem(found);
   };
 
@@ -90,18 +101,18 @@ export const CartographyUI: React.FC<CartographyUIProps> = ({ inventory, onClose
 
   const handleCraft = () => {
     if (!result || !action || !mapItem || !ingredient) return;
+    // Game's legacy cartography callback emits the old filled_map id. Dedicated
+    // 26.3 Explorer Maps must preserve their own item id when cloned/locked.
+    const output = mapItem.id === FILLED_MAP_ID ? result : { ...result, id: mapItem.id };
     if (action === 'clone') {
-      // Original map kept; empty map consumed; result added.
-      inventory.addStack({ ...result, count: 1 });
+      inventory.addStack({ ...output, count: 1 });
       setIngredient(null);
     } else if (action === 'zoom') {
-      // Paper + original map consumed; zoomed result added.
-      inventory.addStack({ ...result, count: 1 });
+      inventory.addStack({ ...output, count: 1 });
       setMapItem(null);
       setIngredient(null);
     } else {
-      // Glass pane consumed; map replaced by its locked copy.
-      inventory.addStack({ ...result, count: 1 });
+      inventory.addStack({ ...output, count: 1 });
       setMapItem(null);
       setIngredient(null);
     }
@@ -147,7 +158,7 @@ export const CartographyUI: React.FC<CartographyUIProps> = ({ inventory, onClose
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: result ? 'pointer' : 'default',
           }}>
-            {result && <div style={getItemIconStyle(result.id, 34)} />}
+            {result && <div style={getItemIconStyle(outputPreviewId(mapItem, result), 34)} />}
           </div>
           <div style={{ fontSize: '12px', color: action ? '#206020' : '#555', minWidth: '90px' }}>
             {actionLabel || '—'}
@@ -163,7 +174,7 @@ export const CartographyUI: React.FC<CartographyUIProps> = ({ inventory, onClose
                 key={i}
                 onClick={() => {
                   if (!item) return;
-                  if (item.id === FILLED_MAP_ID && !mapItem) {
+                  if (isCartographyMapItem26_3(item) && !mapItem) {
                     inventory.setSlot(i, null);
                     setMapItem({ ...item, count: 1 });
                   } else if ((item.id === EMPTY_MAP_ID || item.id === PAPER_ID || item.id === GLASS_PANE_ID) && !ingredient) {
@@ -194,3 +205,7 @@ export const CartographyUI: React.FC<CartographyUIProps> = ({ inventory, onClose
     </div>
   );
 };
+
+function outputPreviewId(mapItem: ItemStack | null, result: ItemStack): number {
+  return mapItem && mapItem.id !== FILLED_MAP_ID ? mapItem.id : result.id;
+}

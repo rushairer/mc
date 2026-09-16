@@ -195,22 +195,42 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_PLAYER_MOVE: {
-        const { playerId, x, y, z, yaw, pitch } = packet.payload;
+        const { playerId, x, y, z, yaw, pitch, teleportEffect, from } = packet.payload;
         const player = this.otherPlayers.get(playerId);
         if (player) {
           player.targetPos.set(x, y, z);
           player.targetYaw = yaw;
           player.targetPitch = pitch;
+          if (teleportEffect === 'chorus_fruit' && from && [from.x, from.y, from.z, x, y, z].every(Number.isFinite)) {
+            this.game.particles.spawnTeleportTrail26_3(
+              new THREE.Vector3(from.x, from.y + 0.9, from.z),
+              new THREE.Vector3(x, y + 0.9, z),
+              24,
+            );
+            this.game.sound.playNamedEvent26_3('item.chorus_fruit.teleport');
+          }
         }
         break;
       }
 
       case PacketType.S2C_POSITION_CORRECTION: {
-        const { x, y, z, yaw, pitch } = packet.payload;
+        const { x, y, z, yaw, pitch, teleportEffect, from } = packet.payload;
+        const previousPosition = this.game.player.position.clone();
         this.game.player.position.set(x, y, z);
         this.game.player.velocity.set(0, 0, 0);
         if (Number.isFinite(yaw)) this.game.player.yaw = yaw;
         if (Number.isFinite(pitch)) this.game.player.pitch = pitch;
+        if (teleportEffect === 'chorus_fruit' && [x, y, z].every(Number.isFinite)) {
+          const trailFrom = from && [from.x, from.y, from.z].every(Number.isFinite)
+            ? new THREE.Vector3(from.x, from.y, from.z)
+            : previousPosition;
+          this.game.particles.spawnTeleportTrail26_3(
+            trailFrom.clone().add(new THREE.Vector3(0, this.game.player.eyeHeight * 0.5, 0)),
+            new THREE.Vector3(x, y, z).add(new THREE.Vector3(0, this.game.player.eyeHeight * 0.5, 0)),
+            24,
+          );
+          this.game.sound.playNamedEvent26_3('item.chorus_fruit.teleport');
+        }
         break;
       }
 

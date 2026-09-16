@@ -3515,7 +3515,9 @@ export class Game {
 
     this.sound.playBurp();
     // P5.2: in multiplayer the server validates and deducts consumables.
-    if (foodDef.name === 'chorus_fruit') {
+    // Single-player owns its local teleport. Multiplayer waits for the
+    // authoritative server correction so clients cannot choose destinations.
+    if (foodDef.name === 'chorus_fruit' && !this.isMultiplayerNetworkConnected()) {
       this.applyChorusFruitTeleport26_3();
     }
 

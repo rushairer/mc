@@ -41,6 +41,7 @@ import {
 import { getDeathXpDrop, resetXpAfterDeath, shouldDropStackOnDeath } from './ServerDeathRules';
 import { applyGiveToInventory, canExecuteServerCommand, isValidWeatherArgument, validateGiveCount } from './ServerCommandRules';
 import { getProjectileImpactBehavior } from './ServerProjectileRules';
+import { planServerChorusTeleport26_3 } from './ServerTeleportRules26_3';
 import {
   canPlaceHeldBlock,
   consumeHeldStack,
@@ -961,14 +962,52 @@ export class GameServer {
         break;
       }
 
-      // P5.2: server-validated consumable use.
+      // P5.2 + Java 26.3: server-validated consumable use. Chorus Fruit
+      // destinations are server-owned and fan out one authoritative teleport.
       case PacketType.C2S_ITEM_CONSUME: {
         const { slot, itemId } = packet.payload;
         if (!Number.isInteger(slot) || slot < 0 || slot >= session.inventory.length) break;
         const stack = session.inventory[slot];
         if (validateConsume(stack, itemId)) {
+          const itemDef = ItemRegistry.get(stack!.id);
+          const chorusPlan = itemDef?.name === 'chorus_fruit'
+            ? planServerChorusTeleport26_3(
+                { x: session.x, y: session.y, z: session.z },
+                session.yaw,
+                session.pitch,
+                (x, y, z) => this.getBlock(x, y, z, session.dimension),
+                Math.random,
+                WORLD_HEIGHT,
+              )
+            : null;
+
           const updated = consumeOne(stack!);
           session.inventory[slot] = updated;
+
+          if (chorusPlan) {
+            session.x = chorusPlan.to.x;
+            session.y = chorusPlan.to.y;
+            session.z = chorusPlan.to.z;
+            session.onGround = false;
+            this.sendTo(session, PacketType.S2C_POSITION_CORRECTION, chorusPlan.correction);
+            for (const other of this.players.values()) {
+              if (other.id === session.id || other.dimension !== session.dimension) continue;
+              this.sendTo(other, PacketType.S2C_PLAYER_MOVE, {
+                playerId: session.id,
+                x: session.x,
+                y: session.y,
+                z: session.z,
+                yaw: session.yaw,
+                pitch: session.pitch,
+                flying: session.flying,
+                onGround: session.onGround,
+                sprinting: session.sprinting,
+                teleportEffect: 'chorus_fruit',
+                from: chorusPlan.from,
+              });
+            }
+          }
+
           this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, {
             slots: session.inventory,
             armor: session.armor,

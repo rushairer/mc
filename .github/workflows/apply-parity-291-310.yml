@@ -1,6 +1,6 @@
 name: Apply parity 291-310 item fundamentals
 
-# Validation trigger revision: placement-base-id-fix
+# Validation trigger revision: typecheck-diagnostics
 on:
   push:
     branches: [master]
@@ -23,47 +23,38 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-
       - name: Apply item fundamentals patch
         run: node scripts/patch-parity-291-310-v3.mjs
-
       - name: Install dependencies
         run: npm ci
-
       - name: Unit tests
+        run: npm run test:unit
+      - name: Latest stable target audit
+        run: npm run audit:latest
+      - name: Parity audit
+        run: npm run audit:parity
+      - name: Type check
         run: |
           set +e
-          npm run test:unit > parity-291-310-tests.log 2>&1
+          npm run typecheck > parity-291-310-typecheck.log 2>&1
           status=$?
-          cat parity-291-310-tests.log
+          cat parity-291-310-typecheck.log
           if [ "$status" -ne 0 ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add parity-291-310-tests.log
-            git commit -m "chore: capture parity 291-310 test failure"
+            git add parity-291-310-typecheck.log
+            git commit -m "chore: capture parity 291-310 typecheck failure"
             git push origin HEAD:master
             exit "$status"
           fi
-          rm parity-291-310-tests.log
-
-      - name: Latest stable target audit
-        run: npm run audit:latest
-
-      - name: Parity audit
-        run: npm run audit:parity
-
-      - name: Type check
-        run: npm run typecheck
-
+          rm parity-291-310-typecheck.log
       - name: Production build
         run: npm run build
-
       - name: Commit verified parity changes
         run: |
           git config user.name "github-actions[bot]"

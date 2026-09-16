@@ -1,6 +1,7 @@
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
-import { cloneItemStack, itemStacksCanMerge } from '../items/ItemStackRules';
+import { cloneItemStack, getItemStackMaxSize, itemStacksCanMerge } from '../items/ItemStackRules';
+import { quickMovePlayerInventory } from '../items/InventoryTransferRules';
 import { EnchantSystem } from '../systems/EnchantSystem';
 import { getArmorToughness } from '../items/ArmorAttributes';
 import {
@@ -54,7 +55,7 @@ export class Inventory {
 
   /** Add a full stack while preserving metadata such as enchantments or potion effects. */
   addStack(stack: ItemStack): ItemStack | null {
-    const maxStack = ItemRegistry.getMaxStackSize(stack.id);
+    const maxStack = getItemStackMaxSize(stack);
     let remaining = stack.count;
     for (let i = 0; i < INVENTORY_SIZE && remaining > 0; i++) {
       const slot = this.slots[i];
@@ -231,6 +232,11 @@ export class Inventory {
     const split = cloneItemStack(slot)!;
     split.count = half;
     return split;
+  }
+
+  /** Quick-move between hotbar and main inventory. Returns number of moved items. */
+  quickMove(slotIndex: number): number {
+    return quickMovePlayerInventory(this.slots, slotIndex);
   }
 
   /** Get total armor defense value. */

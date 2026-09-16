@@ -1,4 +1,5 @@
 import type { ItemStack } from '../types';
+import { ItemRegistry } from './ItemRegistry';
 
 /** Deep-clone every structured field currently carried by the project ItemStack. */
 export function cloneItemStack(stack: ItemStack | null | undefined): ItemStack | null {
@@ -46,4 +47,20 @@ export function itemStacksCanMerge(
 ): boolean {
   if (!a || !b || a.id !== b.id) return false;
   return itemStackIdentity(a) === itemStackIdentity(b);
+}
+
+/** Effective Java stack size, clamped and forced to one for damageable items. */
+export function getItemStackMaxSize(stack: Pick<ItemStack, 'id' | 'durability'>): number {
+  const def = ItemRegistry.get(stack.id);
+  if (stack.durability !== undefined || def?.durability !== undefined) return 1;
+  return Math.max(1, Math.min(64, ItemRegistry.getMaxStackSize(stack.id)));
+}
+
+export function isValidItemStack(stack: ItemStack | null | undefined): boolean {
+  if (!stack) return false;
+  return Number.isInteger(stack.id)
+    && stack.id > 0
+    && Number.isInteger(stack.count)
+    && stack.count > 0
+    && stack.count <= getItemStackMaxSize(stack);
 }

@@ -8,6 +8,7 @@ import { Player } from '../player/Player';
 import { Inventory } from '../player/Inventory';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { canConsumeFoodItem, getDefaultUseRemainderItemId, getItemUseDurationSeconds, shouldConsumePlacedItem } from '../items/ItemUseRules';
 import { SurvivalSystem } from '../systems/SurvivalSystem';
 import { MobSystem } from '../systems/MobSystem';
 import { Mob } from '../entities/Mob';
@@ -3288,7 +3289,7 @@ export class Game {
     }
 
     this.sound.playBlockPlace(plan.blockId);
-    if (this.gameMode !== 'creative') {
+    if (shouldConsumePlacedItem(this.gameMode)) {
       this.inventory.removeFromSlot(this.player.selectedSlot);
     }
     return true;
@@ -3402,9 +3403,7 @@ export class Game {
   }
 
   private canConsumeFood(stack: ItemStack): boolean {
-    if (!ItemRegistry.isFood(stack.id)) return false;
-    const isGoldenApple = (stack.id & 0x3FF) === 322;
-    return this.player.hunger < 20 || isGoldenApple || stack.id === HONEY_BOTTLE_ID || !!stack.alwaysEdible;
+    return canConsumeFoodItem(stack, this.player.hunger);
   }
 
   private continuePotionUse(stack: ItemStack, dt: number) {
@@ -3483,7 +3482,7 @@ export class Game {
       const front = this.player.eyePosition.clone().add(this.player.forward.multiplyScalar(0.4));
       this.particles.spawnBlockBreak(front.x, front.y, front.z, foodColor);
     }
-    if (this.eatingTimer < 1.6) return { handled: true };
+    if (this.eatingTimer < getItemUseDurationSeconds(stack)) return { handled: true };
 
     this.player.hunger = Math.min(20, this.player.hunger + (foodDef.hungerRestore ?? 0));
     this.player.saturation = Math.min(
@@ -3534,8 +3533,8 @@ export class Game {
         itemId: stack.id,
       });
     } else if (this.gameMode !== 'creative') {
-      if (stack.containerItemId !== undefined) {
-        const containerItemId = stack.containerItemId;
+      const containerItemId = stack.containerItemId ?? getDefaultUseRemainderItemId(stack.id);
+      if (containerItemId !== undefined) {
         if (stack.count <= 1) {
           this.inventory.setSlot(this.player.selectedSlot, { id: containerItemId, count: 1 });
         } else {

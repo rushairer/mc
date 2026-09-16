@@ -376,7 +376,9 @@ export const ItemRegistry = {
 
   getMaxStackSize(id: number): number {
     const item = this.get(id);
-    return item?.maxStackSize ?? 64;
+    if (!item) return 64;
+    if (item.durability !== undefined) return 1;
+    return Math.max(1, Math.min(64, item.maxStackSize || 64));
   },
 
   getToolMiningSpeed(id: number, blockId: number): number {

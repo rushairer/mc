@@ -1,0 +1,36 @@
+name: Parity 151-170 Hardening
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - scripts/.parity-151-170-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: node scripts/.parity-151-170.mjs
+      - run: npm ci
+      - run: npm run audit:parity
+      - run: npm run check
+
+      - name: Commit production hardening
+        run: |
+          git config user.name "Aben"
+          git config user.email "5195693+rushairer@users.noreply.github.com"
+          git add src tests
+          git commit -m "fix: harden item stacks falls and fluid slope parity"
+          git push origin HEAD:master

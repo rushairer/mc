@@ -21,8 +21,10 @@ test('block reach matches Java survival and creative interaction distances', () 
 
 test('block reach measures to the target block AABB rather than its center', () => {
   const player = { x: 0.5, y: 64, z: 0.5 };
-  assert.equal(isBlockActionInReach(player, 0, 64, -5, 'survival'), true);
-  assert.equal(isBlockActionInReach(player, 0, 64, -6, 'survival'), false);
+  // y=65 keeps the eye point inside the target AABB vertically, isolating the
+  // horizontal 4.5-block boundary instead of accidentally testing a diagonal.
+  assert.equal(isBlockActionInReach(player, 0, 65, -5, 'survival'), true);
+  assert.equal(isBlockActionInReach(player, 0, 65, -6, 'survival'), false);
 });
 
 test('hotbar selection is restricted to the nine Java hotbar slots', () => {

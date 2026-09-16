@@ -1,1 +1,98 @@
-aW1wb3J0IGZzIGZyb20gJ25vZGU6ZnMnOwpjb25zdCBwPSdzcmMvdWkvRnVybmFjZVVJLnRzeCc7CmxldCBzPWZzLnJlYWRGaWxlU3luYyhwLCd1dGY4Jyk7CmNvbnN0IGltcG9ydEZyb209YGltcG9ydCB7IGlzRnVybmFjZVJlY2lwZUFsbG93ZWQgfSBmcm9tICcuLi93b3JsZC9GdXJuYWNlUnVsZXMnO2A7CmNvbnN0IGltcG9ydFRvPWBpbXBvcnQgeyBnZXRGdXJuYWNlUXVpY2tNb3ZlVGFyZ2V0LCBpc0Z1cm5hY2VSZWNpcGVBbGxvd2VkIH0gZnJvbSAnLi4vd29ybGQvRnVybmFjZVJ1bGVzJztgOwppZighcy5pbmNsdWRlcyhpbXBvcnRGcm9tKSl0aHJvdyBuZXcgRXJyb3IoJ21pc3NpbmcgRnVybmFjZVJ1bGVzIGltcG9ydCBhbmNob3InKTsKcz1zLnJlcGxhY2UoaW1wb3J0RnJvbSxpbXBvcnRUbyk7CmNvbnN0IGZyb209YCAgICAgICAgICAgICAgICBvbkNsaWNrPXsoKSA9PiB7CiAgICAgICAgICAgICAgICAgIGlmICghaXRlbSkgcmV0dXJuOwogICAgICAgICAgICAgICAgICBjb25zdCByZWNpcGUgPSBmaW5kU21lbHRpbmdSZXN1bHQoaXRlbS5pZCk7CiAgICAgICAgICAgICAgICAgIGNvbnN0IGlzRnVlbCA9IGlzU21lbHRpbmdGdWVsKGl0ZW0uaWQpOwoKICAgICAgICAgICAgICAgICAgc2V0SG92ZXJlZFNsb3QobnVsbCk7CgogICAgICAgICAgICAgICAgICBpZiAocmVjaXBlICYmICFpbnB1dFNsb3QpIHsKICAgICAgICAgICAgICAgICAgICAvLyBDaGVjayBpZiBpbnB1dCBpcyB2YWxpZCBmb3IgdGhlIHNwZWNpZmljIGNvbnRhaW5lciB0eXBlCiAgICAgICAgICAgICAgICAgICAgY29uc3QgaXRlbURlZiA9IEl0ZW1SZWdpc3RyeS5nZXQoaXRlbS5pZCk7CiAgICAgICAgICAgICAgICAgICAgbGV0IGlzVmFsaWQgPSB0cnVlOwogICAgICAgICAgICAgICAgICAgIGlmIChpdGVtRGVmKSB7CiAgICAgICAgICAgICAgICAgICAgICBpZiAoY29udGFpbmVyVHlwZSA9PT0gJ3Ntb2tlcicpIHsKICAgICAgICAgICAgICAgICAgICAgICAgaXNWYWxpZCA9IEl0ZW1SZWdpc3RyeS5pc0Zvb2QoaXRlbS5pZCkgfHwgSXRlbVJlZ2lzdHJ5LmlzRm9vZChyZWNpcGUub3V0cHV0KTsKICAgICAgICAgICAgICAgICAgICAgIH0gZWxzZSBpZiAoY29udGFpbmVyVHlwZSA9PT0gJ2JsYXN0X2Z1cm5hY2UnKSB7CiAgICAgICAgICAgICAgICAgICAgICAgIGlzVmFsaWQgPSAoaXRlbURlZi5uYW1lLmluY2x1ZGVzKCdvcmUnKSB8fCBpdGVtRGVmLm5hbWUuc3RhcnRzV2l0aCgncmF3XycpKSAmJiAhSXRlbVJlZ2lzdHJ5LmlzRm9vZChpdGVtLmlkKTsKICAgICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgICAgICB9IGVsc2UgewogICAgICAgICAgICAgICAgICAgICAgaXNWYWxpZCA9IGZhbHNlOwogICAgICAgICAgICAgICAgICAgIH0KCiAgICAgICAgICAgICAgICAgICAgaWYgKGlzVmFsaWQpIHsKICAgICAgICAgICAgICAgICAgICAgIHNldElucHV0U2xvdCh7IGlkOiBpdGVtLmlkLCBjb3VudDogMSB9KTsKICAgICAgICAgICAgICAgICAgICAgIGludmVudG9yeS5yZW1vdmVGcm9tU2xvdChpKTsKICAgICAgICAgICAgICAgICAgICAgIG9uSW52ZW50b3J5Q2hhbmdlKCk7CiAgICAgICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgICB9IGVsc2UgaWYgKGlzRnVlbCAmJiAhZnVlbFNsb3QpIHsKICAgICAgICAgICAgICAgICAgICBzZXRGdWVsU2xvdCh7IGlkOiBpdGVtLmlkLCBjb3VudDogMSB9KTsKICAgICAgICAgICAgICAgICAgICBpbnZlbnRvcnkucmVtb3ZlRnJvbVNsb3QoaSk7CiAgICAgICAgICAgICAgICAgICAgb25JbnZlbnRvcnlDaGFuZ2UoKTsKICAgICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgfX1gOwpjb25zdCB0bz1gICAgICAgICAgICAgICAgIG9uQ2xpY2s9eygpID0+IHsKICAgICAgICAgICAgICAgICAgaWYgKCFpdGVtKSByZXR1cm47CiAgICAgICAgICAgICAgICAgIGNvbnN0IHJlY2lwZSA9IGZpbmRTbWVsdGluZ1Jlc3VsdChpdGVtLmlkKTsKICAgICAgICAgICAgICAgICAgY29uc3QgY2FuU21lbHQgPSAhIXJlY2lwZSAmJiBpc0Z1cm5hY2VSZWNpcGVBbGxvd2VkKGNvbnRhaW5lclR5cGUsIGl0ZW0uaWQsIHJlY2lwZS5vdXRwdXQpOwogICAgICAgICAgICAgICAgICBjb25zdCBpc0Z1ZWwgPSBpc1NtZWx0aW5nRnVlbChpdGVtLmlkKTsKICAgICAgICAgICAgICAgICAgY29uc3QgdGFyZ2V0ID0gaSA8IDkKICAgICAgICAgICAgICAgICAgICA/IGdldEZ1cm5hY2VRdWlja01vdmVUYXJnZXQoJ3BsYXllcl9ob3RiYXInLCB7IGNhblNtZWx0LCBpc0Z1ZWwgfSkKICAgICAgICAgICAgICAgICAgICA6IGdldEZ1cm5hY2VRdWlja01vdmVUYXJnZXQoJ3BsYXllcl9tYWluJywgeyBjYW5TbWVsdCwgaXNGdWVsIH0pOwoKICAgICAgICAgICAgICAgICAgc2V0SG92ZXJlZFNsb3QobnVsbCk7CgogICAgICAgICAgICAgICAgICBjb25zdCByZW1vdmVNb3ZlZCA9IChjb3VudDogbnVtYmVyKSA9PiB7CiAgICAgICAgICAgICAgICAgICAgaXRlbS5jb3VudCAtPSBjb3VudDsKICAgICAgICAgICAgICAgICAgICBpZiAoaXRlbS5jb3VudCA8PSAwKSBpbnZlbnRvcnkuc2V0U2xvdChpLCBudWxsKTsKICAgICAgICAgICAgICAgICAgfTsKCiAgICAgICAgICAgICAgICAgIGlmICh0YXJnZXQgPT09ICdpbnB1dCcpIHsKICAgICAgICAgICAgICAgICAgICBjb25zdCBtYXggPSBJdGVtUmVnaXN0cnkuZ2V0TWF4U3RhY2tTaXplKGl0ZW0uaWQpOwogICAgICAgICAgICAgICAgICAgIGlmICghaW5wdXRTbG90KSB7CiAgICAgICAgICAgICAgICAgICAgICBjb25zdCBtb3ZlQ291bnQgPSBNYXRoLm1pbihpdGVtLmNvdW50LCBtYXgpOwogICAgICAgICAgICAgICAgICAgICAgc2V0SW5wdXRTbG90KHsgLi4uaXRlbSwgY291bnQ6IG1vdmVDb3VudCB9KTsKICAgICAgICAgICAgICAgICAgICAgIHJlbW92ZU1vdmVkKG1vdmVDb3VudCk7CiAgICAgICAgICAgICAgICAgICAgICBvbkludmVudG9yeUNoYW5nZSgpOwogICAgICAgICAgICAgICAgICAgIH0gZWxzZSBpZiAoaW5wdXRTbG90LmlkID09PSBpdGVtLmlkICYmIGlucHV0U2xvdC5jb3VudCA8IG1heCkgewogICAgICAgICAgICAgICAgICAgICAgY29uc3QgbW92ZUNvdW50ID0gTWF0aC5taW4oaXRlbS5jb3VudCwgbWF4IC0gaW5wdXRTbG90LmNvdW50KTsKICAgICAgICAgICAgICAgICAgICAgIGlmIChtb3ZlQ291bnQgPiAwKSB7CiAgICAgICAgICAgICAgICAgICAgICAgIHNldElucHV0U2xvdCh7IC4uLmlucHV0U2xvdCwgY291bnQ6IGlucHV0U2xvdC5jb3VudCArIG1vdmVDb3VudCB9KTsKICAgICAgICAgICAgICAgICAgICAgICAgcmVtb3ZlTW92ZWQobW92ZUNvdW50KTsKICAgICAgICAgICAgICAgICAgICAgICAgb25JbnZlbnRvcnlDaGFuZ2UoKTsKICAgICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICAgICAgcmV0dXJuOwogICAgICAgICAgICAgICAgICB9CgogICAgICAgICAgICAgICAgICBpZiAodGFyZ2V0ID09PSAnZnVlbCcpIHsKICAgICAgICAgICAgICAgICAgICBjb25zdCBtYXggPSBJdGVtUmVnaXN0cnkuZ2V0TWF4U3RhY2tTaXplKGl0ZW0uaWQpOwogICAgICAgICAgICAgICAgICAgIGlmICghZnVlbFNsb3QpIHsKICAgICAgICAgICAgICAgICAgICAgIGNvbnN0IG1vdmVDb3VudCA9IE1hdGgubWluKGl0ZW0uY291bnQsIG1heCk7CiAgICAgICAgICAgICAgICAgICAgICBzZXRGdWVsU2xvdCh7IC4uLml0ZW0sIGNvdW50OiBtb3ZlQ291bnQgfSk7CiAgICAgICAgICAgICAgICAgICAgICByZW1vdmVNb3ZlZChtb3ZlQ291bnQpOwogICAgICAgICAgICAgICAgICAgICAgb25JbnZlbnRvcnlDaGFuZ2UoKTsKICAgICAgICAgICAgICAgICAgICB9IGVsc2UgaWYgKGZ1ZWxTbG90LmlkID09PSBpdGVtLmlkICYmIGZ1ZWxTbG90LmNvdW50IDwgbWF4KSB7CiAgICAgICAgICAgICAgICAgICAgICBjb25zdCBtb3ZlQ291bnQgPSBNYXRoLm1pbihpdGVtLmNvdW50LCBtYXggLSBmdWVsU2xvdC5jb3VudCk7CiAgICAgICAgICAgICAgICAgICAgICBpZiAobW92ZUNvdW50ID4gMCkgewogICAgICAgICAgICAgICAgICAgICAgICBzZXRGdWVsU2xvdCh7IC4uLmZ1ZWxTbG90LCBjb3VudDogZnVlbFNsb3QuY291bnQgKyBtb3ZlQ291bnQgfSk7CiAgICAgICAgICAgICAgICAgICAgICAgIHJlbW92ZU1vdmVkKG1vdmVDb3VudCk7CiAgICAgICAgICAgICAgICAgICAgICAgIG9uSW52ZW50b3J5Q2hhbmdlKCk7CiAgICAgICAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgICAgIHJldHVybjsKICAgICAgICAgICAgICAgICAgfQoKICAgICAgICAgICAgICAgICAgaW52ZW50b3J5LnF1aWNrTW92ZShpKTsKICAgICAgICAgICAgICAgICAgb25JbnZlbnRvcnlDaGFuZ2UoKTsKICAgICAgICAgICAgICAgIH19YDsKaWYoIXMuaW5jbHVkZXMoZnJvbSkpdGhyb3cgbmV3IEVycm9yKCdtaXNzaW5nIHF1aWNrLW1vdmUgYW5jaG9yJyk7CnM9cy5yZXBsYWNlKGZyb20sdG8pOwpmcy53cml0ZUZpbGVTeW5jKHAscyk7CmNvbnNvbGUubG9nKCdwYXRjaGVkIEZ1cm5hY2VVSSBxdWljayBtb3ZlIDM5MS00MTAnKTsK
+import fs from 'node:fs';
+const p='src/ui/FurnaceUI.tsx';
+let s=fs.readFileSync(p,'utf8');
+const importFrom=`import { isFurnaceRecipeAllowed } from '../world/FurnaceRules';`;
+const importTo=`import { getFurnaceQuickMoveTarget, isFurnaceRecipeAllowed } from '../world/FurnaceRules';`;
+if(!s.includes(importFrom))throw new Error('missing FurnaceRules import anchor');
+s=s.replace(importFrom,importTo);
+const from=`                onClick={() => {
+                  if (!item) return;
+                  const recipe = findSmeltingResult(item.id);
+                  const isFuel = isSmeltingFuel(item.id);
+
+                  setHoveredSlot(null);
+
+                  if (recipe && !inputSlot) {
+                    // Check if input is valid for the specific container type
+                    const itemDef = ItemRegistry.get(item.id);
+                    let isValid = true;
+                    if (itemDef) {
+                      if (containerType === 'smoker') {
+                        isValid = ItemRegistry.isFood(item.id) || ItemRegistry.isFood(recipe.output);
+                      } else if (containerType === 'blast_furnace') {
+                        isValid = (itemDef.name.includes('ore') || itemDef.name.startsWith('raw_')) && !ItemRegistry.isFood(item.id);
+                      }
+                    } else {
+                      isValid = false;
+                    }
+
+                    if (isValid) {
+                      setInputSlot({ id: item.id, count: 1 });
+                      inventory.removeFromSlot(i);
+                      onInventoryChange();
+                    }
+                  } else if (isFuel && !fuelSlot) {
+                    setFuelSlot({ id: item.id, count: 1 });
+                    inventory.removeFromSlot(i);
+                    onInventoryChange();
+                  }
+                }}`;
+const to=`                onClick={() => {
+                  if (!item) return;
+                  const recipe = findSmeltingResult(item.id);
+                  const canSmelt = !!recipe && isFurnaceRecipeAllowed(containerType, item.id, recipe.output);
+                  const isFuel = isSmeltingFuel(item.id);
+                  const target = i < 9
+                    ? getFurnaceQuickMoveTarget('player_hotbar', { canSmelt, isFuel })
+                    : getFurnaceQuickMoveTarget('player_main', { canSmelt, isFuel });
+
+                  setHoveredSlot(null);
+
+                  const removeMoved = (count: number) => {
+                    item.count -= count;
+                    if (item.count <= 0) inventory.setSlot(i, null);
+                  };
+
+                  if (target === 'input') {
+                    const max = ItemRegistry.getMaxStackSize(item.id);
+                    if (!inputSlot) {
+                      const moveCount = Math.min(item.count, max);
+                      setInputSlot({ ...item, count: moveCount });
+                      removeMoved(moveCount);
+                      onInventoryChange();
+                    } else if (inputSlot.id === item.id && inputSlot.count < max) {
+                      const moveCount = Math.min(item.count, max - inputSlot.count);
+                      if (moveCount > 0) {
+                        setInputSlot({ ...inputSlot, count: inputSlot.count + moveCount });
+                        removeMoved(moveCount);
+                        onInventoryChange();
+                      }
+                    }
+                    return;
+                  }
+
+                  if (target === 'fuel') {
+                    const max = ItemRegistry.getMaxStackSize(item.id);
+                    if (!fuelSlot) {
+                      const moveCount = Math.min(item.count, max);
+                      setFuelSlot({ ...item, count: moveCount });
+                      removeMoved(moveCount);
+                      onInventoryChange();
+                    } else if (fuelSlot.id === item.id && fuelSlot.count < max) {
+                      const moveCount = Math.min(item.count, max - fuelSlot.count);
+                      if (moveCount > 0) {
+                        setFuelSlot({ ...fuelSlot, count: fuelSlot.count + moveCount });
+                        removeMoved(moveCount);
+                        onInventoryChange();
+                      }
+                    }
+                    return;
+                  }
+
+                  inventory.quickMove(i);
+                  onInventoryChange();
+                }}`;
+if(!s.includes(from))throw new Error('missing quick-move anchor');
+s=s.replace(from,to);
+fs.writeFileSync(p,s);
+console.log('patched FurnaceUI quick move 391-410');

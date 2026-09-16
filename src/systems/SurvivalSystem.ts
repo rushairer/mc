@@ -16,6 +16,10 @@ const AIR_SECONDS_PER_TICK = 0.05;
 const DROWNING_DRAIN_TICKS = 20;
 const LAVA_DAMAGE_INTERVAL = 0.5;
 const FIRE_CONTACT_DAMAGE_INTERVAL = 0.5;
+const BURN_DAMAGE_INTERVAL = 1.0;
+const FIRE_IGNITION_SECONDS = 8;
+const LAVA_IGNITION_SECONDS = 15;
+const FIRE_PROTECTION_BURN_REDUCTION_PER_LEVEL = 0.15;
 const TIMER_EPSILON = 1e-9;
 
 export interface AirRandomSource {
@@ -26,6 +30,13 @@ export interface AirRandomSource {
 export function shouldConsumeAir(respirationLevel: number, random: AirRandomSource): boolean {
   const level = Math.max(0, Math.floor(respirationLevel));
   return level === 0 || random.nextInt(level + 1) === 0;
+}
+
+export function getIgnitionSeconds(baseSeconds: number, fireProtectionLevel: number): number {
+  const level = Math.max(0, Math.floor(fireProtectionLevel));
+  const multiplier = Math.max(0, 1 - level * FIRE_PROTECTION_BURN_REDUCTION_PER_LEVEL);
+  // Entity fire is stored in game ticks; floor to that 20 TPS precision.
+  return Math.floor(baseSeconds * multiplier * 20 + TIMER_EPSILON) / 20;
 }
 
 export class SurvivalSystem {
@@ -41,6 +52,8 @@ export class SurvivalSystem {
   private drowningDrainTicks = 0;
   private lavaDamageTimer = 0;
   private fireDamageTimer = 0;
+  private burnDamageTimer = 0;
+  private remainingFireSeconds = 0;
   private lastPlayerX: number | null = null;
   private lastPlayerZ: number | null = null;
   private airRandom: AirRandomSource;
@@ -78,6 +91,8 @@ export class SurvivalSystem {
       player.oxygen = MAX_AIR_SECONDS;
       this.airTickAccumulator = 0;
       this.drowningDrainTicks = 0;
+      this.remainingFireSeconds = 0;
+      this.burnDamageTimer = 0;
       return;
     }
 
@@ -223,13 +238,53 @@ export class SurvivalSystem {
     );
     const isFootLava = (footBlock & 0x3FF) === 10 || (footBlock & 0x3FF) === 11;
     const isHeadLava = (headBlock & 0x3FF) === 10 || (headBlock & 0x3FF) === 11;
+    const isFootWater = (footBlock & 0x3FF) === 8 || (footBlock & 0x3FF) === 9;
     const footName = BlockRegistry.get(footBlock)?.name;
     const headName = BlockRegistry.get(headBlock)?.name;
-    const isInFire = footName === 'fire' || footName === 'soul_fire' || headName === 'fire' || headName === 'soul_fire';
+    const isSoulFire = footName === 'soul_fire' || headName === 'soul_fire';
+    const isInFire = isSoulFire || footName === 'fire' || headName === 'fire';
+    const isInLava = isFootLava || isHeadLava;
+    const isExtinguishedByWater = isFootWater || isUnderwater;
     const doFireDamage = gamerules ? gamerules.getRule('fireDamage') : true;
     const fireImmune = hasEffect('fire_resistance');
+    const fireProtection = Math.max(0, getEnchantLevel('fire_protection'));
 
-    if ((isFootLava || isHeadLava) && doFireDamage && !fireImmune) {
+    // Ignition is stateful in Java: leaving a fire/lava source does not
+    // immediately stop burning. Fire Protection reduces the duration using the
+    // highest equipped level in 1.20.1, while Fire Resistance prevents damage
+    // rather than erasing the fire timer.
+    if (isExtinguishedByWater) {
+      this.remainingFireSeconds = 0;
+      this.burnDamageTimer = 0;
+    } else if (isInLava) {
+      this.remainingFireSeconds = Math.max(
+        this.remainingFireSeconds,
+        getIgnitionSeconds(LAVA_IGNITION_SECONDS, fireProtection),
+      );
+      this.burnDamageTimer = 0;
+    } else if (isInFire) {
+      this.remainingFireSeconds = Math.max(
+        this.remainingFireSeconds,
+        getIgnitionSeconds(FIRE_IGNITION_SECONDS, fireProtection),
+      );
+      this.burnDamageTimer = 0;
+    } else if (this.remainingFireSeconds > 0) {
+      const burningFor = Math.min(dt, this.remainingFireSeconds);
+      this.remainingFireSeconds = Math.max(0, this.remainingFireSeconds - dt);
+      if (doFireDamage && !fireImmune) {
+        this.burnDamageTimer += burningFor;
+        while (this.burnDamageTimer + TIMER_EPSILON >= BURN_DAMAGE_INTERVAL) {
+          damage(2, 'fire');
+          this.burnDamageTimer = Math.max(0, this.burnDamageTimer - BURN_DAMAGE_INTERVAL);
+        }
+      } else {
+        this.burnDamageTimer = 0;
+      }
+    } else {
+      this.burnDamageTimer = 0;
+    }
+
+    if (isInLava && doFireDamage && !fireImmune) {
       this.lavaDamageTimer += dt;
       while (this.lavaDamageTimer + TIMER_EPSILON >= LAVA_DAMAGE_INTERVAL) {
         damage(4, 'lava');
@@ -241,8 +296,9 @@ export class SurvivalSystem {
 
     if (isInFire && doFireDamage && !fireImmune) {
       this.fireDamageTimer += dt;
+      const contactDamage = isSoulFire ? 4 : 2;
       while (this.fireDamageTimer + TIMER_EPSILON >= FIRE_CONTACT_DAMAGE_INTERVAL) {
-        damage(2, 'fire');
+        damage(contactDamage, 'fire');
         this.fireDamageTimer = Math.max(0, this.fireDamageTimer - FIRE_CONTACT_DAMAGE_INTERVAL);
       }
     } else {
@@ -289,6 +345,10 @@ export class SurvivalSystem {
         this.regenTimer = 0;
       }
     }
+  }
+
+  getRemainingFireSeconds() {
+    return this.remainingFireSeconds;
   }
 
   resetFall() {

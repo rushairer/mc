@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { SurvivalSystem, shouldConsumeAir } from '../src/systems/SurvivalSystem';
+import { SurvivalSystem, getIgnitionSeconds, shouldConsumeAir } from '../src/systems/SurvivalSystem';
 import { BlockRegistry } from '../src/world/BlockRegistry';
 
 function makePlayer(overrides: Record<string, unknown> = {}) {
@@ -138,6 +138,55 @@ test('standing inside fire deals one heart every half second', () => {
   assert.deepEqual(damage, []);
   system.update(0.01, player, 'survival', getBlock, (amount, type) => damage.push([amount, type]), 'normal', defaultRules);
   assert.deepEqual(damage, [[2, 'fire']]);
+  assert.equal(system.getRemainingFireSeconds(), 8);
+});
+
+test('soul fire deals twice normal fire contact damage', () => {
+  const soulFireId = BlockRegistry.getByName('soul_fire')?.id;
+  assert.ok(soulFireId !== undefined, 'soul fire block is registered');
+  const system = new SurvivalSystem();
+  const player = makePlayer();
+  const damage: Array<[number, string]> = [];
+  system.update(0.5, player, 'survival', (_x, y) => y === 64 ? soulFireId! : 0, (amount, type) => damage.push([amount, type]), 'normal', defaultRules);
+  assert.deepEqual(damage, [[4, 'fire']]);
+});
+
+test('leaving fire keeps the player burning at one-heart-per-second cadence', () => {
+  const fireId = BlockRegistry.getByName('fire')?.id;
+  assert.ok(fireId !== undefined);
+  const system = new SurvivalSystem();
+  const player = makePlayer();
+  const damage: Array<[number, string]> = [];
+  system.update(0.05, player, 'survival', (_x, y) => y === 64 ? fireId! : 0, () => {}, 'normal', defaultRules);
+  system.update(0.99, player, 'survival', noBlocks, (amount, type) => damage.push([amount, type]), 'normal', defaultRules);
+  assert.deepEqual(damage, []);
+  system.update(0.01, player, 'survival', noBlocks, (amount, type) => damage.push([amount, type]), 'normal', defaultRules);
+  assert.deepEqual(damage, [[2, 'fire']]);
+});
+
+test('Fire Protection IV cuts ignition duration by sixty percent in Java 1.20.1', () => {
+  assert.equal(getIgnitionSeconds(8, 4), 3.2);
+  assert.equal(getIgnitionSeconds(15, 4), 6);
+});
+
+test('lava sets the fifteen-second burn timer while keeping its contact damage cadence', () => {
+  const system = new SurvivalSystem();
+  const player = makePlayer();
+  const damage: Array<[number, string]> = [];
+  system.update(0.5, player, 'survival', () => 10, (amount, type) => damage.push([amount, type]), 'normal', defaultRules);
+  assert.deepEqual(damage, [[4, 'lava']]);
+  assert.equal(system.getRemainingFireSeconds(), 15);
+});
+
+test('water extinguishes persistent burning immediately', () => {
+  const fireId = BlockRegistry.getByName('fire')?.id;
+  assert.ok(fireId !== undefined);
+  const system = new SurvivalSystem();
+  const player = makePlayer();
+  system.update(0.05, player, 'survival', (_x, y) => y === 64 ? fireId! : 0, () => {}, 'normal', defaultRules);
+  assert.equal(system.getRemainingFireSeconds(), 8);
+  system.update(0.05, player, 'survival', () => 8, () => {}, 'normal', defaultRules);
+  assert.equal(system.getRemainingFireSeconds(), 0);
 });
 
 test('drowning starts one second after the 15-second air supply is exhausted', () => {

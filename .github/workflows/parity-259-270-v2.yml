@@ -1,0 +1,32 @@
+name: Apply parity 259-270 v2
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - scripts/patch-parity-259-270-v2.mjs
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: node scripts/patch-parity-259-270-v2.mjs
+      - run: npm run check
+      - name: Commit parity batch
+        run: |
+          git config user.name "Aben"
+          git config user.email "5195693+rushairer@users.noreply.github.com"
+          git add src tests
+          git commit -m "feat: wire 26.3 map particles and transparency controls"
+          git push origin HEAD:master

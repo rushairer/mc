@@ -1,6 +1,7 @@
 import type { ItemDef } from '../items/ItemRegistry';
 import type { BlockFacing, BlockMetadata } from '../types';
 import { BlockRegistry } from './BlockRegistry';
+import { getWallSignVariantName, isHangingSignBlockName, isSignBlockName } from './SignRules';
 import type { BlockInteractionContext, BlockPosition } from './BehaviorRegistry';
 
 export type BlockPlacementFailure =
@@ -95,6 +96,20 @@ export function planBlockPlacement(
   let blockId = request.placeBlockId;
   if (blockId === undefined || blockId <= 0) return { ok: false, reason: 'not_placeable' };
 
+  const requestedBlock = BlockRegistry.get(blockId);
+  const requestedName = requestedBlock?.name ?? request.item.name;
+  if (isSignBlockName(requestedName)) {
+    const hanging = isHangingSignBlockName(requestedName);
+    if ((!hanging && face === 'down') || (hanging && face === 'up')) {
+      return { ok: false, reason: 'unsupported_face' };
+    }
+    if (face !== 'up' && face !== 'down') {
+      const wallVariant = getWallSignVariantName(requestedName);
+      const wallBlock = wallVariant ? BlockRegistry.getByName(wallVariant) : undefined;
+      if (wallBlock) blockId = wallBlock.id;
+    }
+  }
+
   if (blockId === 63 || blockId === 176) {
     if (face === 'down') return { ok: false, reason: 'unsupported_face' };
     if (face !== 'up') blockId = blockId === 63 ? 68 : 177;
@@ -155,7 +170,7 @@ export function planBlockPlacement(
       blockId,
       facing: face,
       slabHalf,
-      opensSignEditor: blockId === 63 || blockId === 68,
+      opensSignEditor: isSignBlockName(blockName),
       schedulesFluid: BlockRegistry.isFluid(blockId),
       checksWitherSpawn: legacyBaseId === 144 && ((blockId >> 10) & 0xF) === 1,
     },

@@ -2752,6 +2752,17 @@ export class TextureAtlas {
               ctx.fillRect(x + 9, y + 3, 2, 4);
               ctx.fillRect(x + 6, y + 8, 2, 4);
               ctx.fillRect(x + 9, y + 8, 2, 4);
+            } else if (name === 'filled_map' || name.endsWith('_map')) {
+              // Java 26.3 explorer maps are distinct items with distinct icons.
+              ctx.fillStyle = '#d8c58c';
+              ctx.fillRect(x + 3, y + 2, 10, 12);
+              ctx.fillStyle = '#efe2b2';
+              ctx.fillRect(x + 4, y + 3, 8, 10);
+              ctx.fillStyle = colors.hex;
+              ctx.fillRect(x + 6, y + 5, 2, 2);
+              ctx.fillRect(x + 9, y + 8, 2, 2);
+              ctx.fillStyle = '#5f7540';
+              ctx.fillRect(x + 5, y + 10, 4, 1);
             } else if (name.includes('paper')) {
               ctx.fillStyle = '#F2F0D8';
               ctx.fillRect(x + 4, y + 2, 8, 12);

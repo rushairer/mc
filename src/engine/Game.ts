@@ -67,6 +67,7 @@ import { useStrawBed as resolveStrawBedUse26_3 } from '../world/WildernessBound2
 import { applySaturationStew26_3 } from '../world/SuspiciousStew26_3';
 import { findChorusFruitDestination26_3 } from '../world/TeleportRules26_3';
 import { getButtonPressTicks } from '../world/ButtonRules';
+import { isSignBlockName, isWallSignBlockName } from '../world/SignRules';
 import { getDamageShake, normalizeDamageFlash } from '../systems/FeelRules';
 import { rollBlockLoot, rollLootTable, type LootTable } from '../world/LootSystem';
 import { getBlockXpRange, rollXp, BREEDING_XP_RANGE, FISHING_XP_RANGE } from '../world/XpRules';
@@ -690,6 +691,17 @@ export class Game {
       preventsItemUse: true,
       interact: ({ position }) => {
         this.useStrawBed26_3(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:sign',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.editingSignPos = new THREE.Vector3(position.x, position.y, position.z);
+        this.openUI = 'sign_edit';
+        document.exitPointerLock();
+        this.notifyState();
         return { handled: true, cooldown: 0.25 };
       },
     });
@@ -1489,6 +1501,13 @@ export class Game {
     this.input.requestLock();
     this.lockCooldown = 0.5;
     this.notifyState();
+  }
+
+  getEditingSignText(): string[] {
+    if (!this.editingSignPos) return ['', '', '', ''];
+    const pos = this.editingSignPos;
+    const lines = this.chunks.getBlockMeta(pos.x, pos.y, pos.z)?.signText ?? [];
+    return Array.from({ length: 4 }, (_, index) => lines[index] ?? '');
   }
 
   saveSignText(lines: string[]) {
@@ -5667,13 +5686,13 @@ export class Game {
       return;
     }
 
-    if (name === 'standing_sign' || name === 'standing_banner') {
+    if ((isSignBlockName(name) && !isWallSignBlockName(name)) || name === 'standing_banner') {
       const rotation = Math.round(((this.player.yaw + Math.PI) * 16) / (2 * Math.PI)) % 16;
       this.chunks.setBlockMeta(x, y, z, { rotation }, true);
       return;
     }
 
-    if (name === 'wall_sign' || name === 'wall_banner') {
+    if ((isSignBlockName(name) && isWallSignBlockName(name)) || name === 'wall_banner') {
       this.chunks.setBlockMeta(x, y, z, { facing }, true);
       return;
     }

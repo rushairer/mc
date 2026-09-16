@@ -377,10 +377,7 @@ export const VisualResolver = {
 
     const item = ItemRegistry.get(itemId);
     if (!item) return 'item:unknown';
-    if (item.behaviorId === 'minecraft:readable' && item.name.endsWith('_map')) {
-      return 'item:filled_map';
-    }
-    return `item:${item.name}`;
+    return 'item:' + item.name;
   },
 
   getItemVisualKind(itemId: number): ItemVisualKind {

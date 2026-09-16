@@ -1,3 +1,5 @@
+import { isSignBlockName } from './SignRules';
+
 const stripNamespace = (name: string) => name.replace(/^minecraft:/, '');
 
 const FURNACE_NAMES = new Set(['furnace', 'lit_furnace', 'smoker', 'blast_furnace']);
@@ -41,6 +43,7 @@ export function inferBlockBehaviorId(rawName: string): string | undefined {
   if (name === 'tnt') return 'minecraft:tnt';
   if (name.includes('repeater')) return 'minecraft:repeater';
   if (name === 'note_block') return 'minecraft:note_block';
+  if (isSignBlockName(name)) return 'minecraft:sign';
   if (name === 'bed' || (name.endsWith('_bed') && name !== 'bedrock')) return 'minecraft:bed';
   if (name.includes('trapdoor') && name !== 'iron_trapdoor') return 'minecraft:trapdoor';
   if (name.endsWith('_button')) return 'minecraft:button';

@@ -776,6 +776,7 @@ export const App: React.FC = () => {
       {/* Sign Edit UI */}
       {gameState.openUI === 'sign_edit' && (
         <SignEditUI
+          initialLines={gameRef.current?.getEditingSignText() ?? ['', '', '', '']}
           onSave={(lines) => {
             gameRef.current?.saveSignText(lines);
           }}

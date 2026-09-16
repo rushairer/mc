@@ -26,7 +26,7 @@ test('292: Straw Bed uses a block translation key despite modern runtime ID', ()
 test('293: Cushion remains an item presentation', () => assert.equal(resolveItemPresentationIdentity(item('red_cushion').id).kind, 'item'));
 test('294: Poplar block item icon uses block icon pipeline', () => assert.match(VisualResolver.getItemIconKey(item('poplar_log').id), /^icon:block:/));
 test('295: Cushion has item sprite key', () => assert.equal(VisualResolver.getItemIconKey(item('red_cushion').id), 'item:red_cushion'));
-test('296: explorer maps reuse filled-map icon', () => assert.equal(VisualResolver.getItemIconKey(item('ocean_monument_map').id), 'item:filled_map'));
+test('296: explorer maps use their own Java 26.3 icon identity', () => assert.equal(VisualResolver.getItemIconKey(item('ocean_monument_map').id), 'item:ocean_monument_map'));
 test('297: Straw Bed dispatches through block_item placement', () => assert.equal(item('straw_bed').behaviorId, 'minecraft:block_item'));
 test('298: every 26.3 direct block item uses generic placement', () => { for (const def of WILDERNESS_BOUND_ITEMS) assert.equal(ItemRegistry.get(def.id)?.behaviorId, 'minecraft:block_item', def.name); });
 test('299: Straw Bed resolves exact modern placeBlockId', () => { const def = item('straw_bed'); assert.equal(ItemRegistry.getPlaceBlockId(def.id), def.id); });

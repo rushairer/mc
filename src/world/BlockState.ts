@@ -59,6 +59,13 @@ export function createBlockStateSchema(name: string): BlockStateSchema | undefin
       open: booleanProperty(),
       powered: booleanProperty(),
     });
+  } else if (normalized.includes('fence_gate')) {
+    Object.assign(properties, {
+      facing: horizontalFacing,
+      in_wall: booleanProperty(),
+      open: booleanProperty(),
+      powered: booleanProperty(),
+    });
   } else if (
     normalized.includes('fence')
     || normalized.endsWith('_wall')

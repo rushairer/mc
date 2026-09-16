@@ -2,6 +2,7 @@ import type { Chunk } from '../world/Chunk';
 import { BiomeType, type WorldGen } from '../world/WorldGen';
 import { CHUNK_SIZE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
 import type { Inventory } from '../player/Inventory';
+import { resolveWildernessBoundTraderTrades26_3 } from '../world/WildernessBoundGameplay26_3';
 
 export type VillagerProfession = 'farmer' | 'librarian' | 'toolsmith' | 'cleric';
 
@@ -13,11 +14,18 @@ export interface VillageInfo {
   spawnPoints: { x: number; y: number; z: number }[];
 }
 
-export interface TradeOffer {
+export interface ExecutableTradeOffer {
   id: string;
-  profession: VillagerProfession;
   input: { id: number; count: number };
   output: { id: number; count: number };
+}
+
+export interface TradeOffer extends ExecutableTradeOffer {
+  profession: VillagerProfession;
+}
+
+export interface WanderingTraderTradeOffer26_3 extends ExecutableTradeOffer {
+  profession: 'wandering_trader';
 }
 
 interface HousePlan {
@@ -60,7 +68,14 @@ export class VillageSystem {
     return TRADE_TABLE[profession] ?? TRADE_TABLE.farmer;
   }
 
-  static performTrade(inventory: Inventory, offer: TradeOffer, creative = false): boolean {
+  static getWanderingTraderOffers26_3(): WanderingTraderTradeOffer26_3[] {
+    return resolveWildernessBoundTraderTrades26_3().map(offer => ({
+      ...offer,
+      profession: 'wandering_trader' as const,
+    }));
+  }
+
+  static performTrade(inventory: Inventory, offer: ExecutableTradeOffer, creative = false): boolean {
     if (!creative && inventory.countItem(offer.input.id) < offer.input.count) {
       return false;
     }

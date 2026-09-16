@@ -1894,6 +1894,9 @@ export class Game {
       fly: false,
     }, this.chunks);
 
+    const playerShelfBounceEvent26_3 = this.player.consumeShelfMushroomBounceSound26_3();
+    if (playerShelfBounceEvent26_3) this.sound.playNamedEvent26_3(playerShelfBounceEvent26_3);
+
     if (this.riddenMob) {
       this.player.position.copy(this.riddenMob.position);
       this.player.position.y += this.riddenMob.height * 0.75;
@@ -1999,6 +2002,9 @@ export class Game {
           if (kind === 'idle') {
             this.sound.playMobSound(mob.def.type, 'idle');
           }
+        },
+        (_mob, eventName) => {
+          this.sound.playNamedEvent26_3(eventName);
         },
       );
 

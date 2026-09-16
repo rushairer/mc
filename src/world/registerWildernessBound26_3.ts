@@ -10,6 +10,10 @@ import {
   WILDERNESS_BOUND_BLOCKS,
   buildWildernessBoundRecipes,
 } from './WildernessBound26_3';
+import {
+  WILDERNESS_BOUND_SUPPLEMENT_BLOCKS,
+  WILDERNESS_BOUND_SUPPLEMENT_ITEMS,
+} from './WildernessBound26_3Supplement';
 
 let registered = false;
 
@@ -65,9 +69,15 @@ export function registerWildernessBound26_3(): void {
   if (registered) return;
   registered = true;
 
-  BlockRegistry.registerDataPackBlocks(WILDERNESS_BOUND_BLOCKS);
+  BlockRegistry.registerDataPackBlocks([
+    ...WILDERNESS_BOUND_BLOCKS,
+    ...WILDERNESS_BOUND_SUPPLEMENT_BLOCKS,
+  ]);
   registerLegacyColoredAliases();
-  ItemRegistry.registerDataPackItems(WILDERNESS_BOUND_ALL_ITEMS);
+  ItemRegistry.registerDataPackItems([
+    ...WILDERNESS_BOUND_ALL_ITEMS,
+    ...WILDERNESS_BOUND_SUPPLEMENT_ITEMS,
+  ]);
 
   const resolveId = (name: string) =>
     ItemRegistry.getByName(name)?.id

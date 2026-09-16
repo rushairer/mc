@@ -12,6 +12,16 @@ import {
 
 let registered = false;
 
+function resolveLegacyColoredConcrete(name: string): number | undefined {
+  if (!name.endsWith('_concrete')) return undefined;
+  const color = name.slice(0, -'_concrete'.length);
+  const metadata = DYE_COLORS.indexOf(color as typeof DYE_COLORS[number]);
+  if (metadata < 0) return undefined;
+  const concrete = ItemRegistry.getByName('concrete');
+  if (!concrete) return undefined;
+  return (metadata << 10) | concrete.baseId;
+}
+
 /**
  * Installs the Minecraft Java 26.3 Wilderness Bound content bridge into the
  * built-in registries. The operation is idempotent so browser/server entry
@@ -25,7 +35,9 @@ export function registerWildernessBound26_3(): void {
   ItemRegistry.registerDataPackItems(WILDERNESS_BOUND_ALL_ITEMS);
 
   const resolveId = (name: string) =>
-    ItemRegistry.getByName(name)?.id ?? BlockRegistry.getByName(name)?.id;
+    ItemRegistry.getByName(name)?.id
+    ?? BlockRegistry.getByName(name)?.id
+    ?? resolveLegacyColoredConcrete(name);
   addCraftingRecipes(buildWildernessBoundRecipes(resolveId));
 
   for (const color of DYE_COLORS) {

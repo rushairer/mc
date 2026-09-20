@@ -56,6 +56,9 @@ import { WorldGen } from '../world/WorldGen';
 import { Dimension, DimensionGenerator } from '../world/DimensionGenerator';
 import { Chunk } from '../world/Chunk';
 import { BlockRegistry } from '../world/BlockRegistry';
+import { planBlockPlacement } from '../world/BlockPlacement';
+import { createDefaultSignMetadata, isSignBlockName, isWallSignBlockName } from '../world/SignRules';
+import { createServerPlacementCells, getDoorSidePosition, horizontalFacingFromYaw, isPlacementReplaceableBlockName, resolveDoorHinge, signRotationFromYaw } from './ServerPlacementRules';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { cloneItemStack } from '../items/ItemStackRules';
 import { getDefaultUseRemainderItemId } from '../items/ItemUseRules';
@@ -780,19 +783,145 @@ export class GameServer {
       }
 
       case PacketType.C2S_BLOCK_PLACE: {
-        const { x, y, z, blockId, facing } = packet.payload;
+        const { x, y, z, blockId, facing, targetX, targetY, targetZ, targetFace } = packet.payload;
+        const validFace = (value: unknown): value is 'north' | 'south' | 'east' | 'west' | 'up' | 'down' =>
+          value === 'north' || value === 'south' || value === 'east' || value === 'west' || value === 'up' || value === 'down';
+        const held = session.inventory[session.selectedSlot];
+
+        const hasAuthoritativeTarget =
+          isValidBlockCoordinate(targetX)
+          && isValidWorldY(targetY, WORLD_HEIGHT)
+          && isValidBlockCoordinate(targetZ)
+          && validFace(targetFace);
+
+        if (hasAuthoritativeTarget) {
+          if (!held || held.count <= 0) break;
+          if (!isBlockActionInReach(session, targetX, targetY, targetZ, session.gameMode)) break;
+          const item = ItemRegistry.get(held.id);
+          if (!item) break;
+          const targetBlockId = this.getBlock(targetX, targetY, targetZ, session.dimension);
+          const targetBlock = BlockRegistry.get(targetBlockId);
+          if (!targetBlock) break;
+
+          const decision = planBlockPlacement({
+            item,
+            target: {
+              position: { x: targetX, y: targetY, z: targetZ },
+              face: targetFace,
+              blockId: targetBlockId,
+              block: targetBlock,
+              heldItem: held,
+            },
+            placeBlockId: ItemRegistry.getPlaceBlockId(held.id),
+            playerOccupiedCells: [
+              { x: Math.floor(session.x), y: Math.floor(session.y), z: Math.floor(session.z) },
+              { x: Math.floor(session.x), y: Math.floor(session.y + 1.5), z: Math.floor(session.z) },
+            ],
+          }, {
+            getBlock: ({ x: bx, y: by, z: bz }) => this.getBlock(bx, by, bz, session.dimension),
+            getBlockMetadata: ({ x: bx, y: by, z: bz }) => this.getBlockMetadata(bx, by, bz, session.dimension),
+          });
+          if (!decision.ok) break;
+
+          const { plan } = decision;
+          if (
+            !isValidBlockCoordinate(x)
+            || !isValidWorldY(y, WORLD_HEIGHT)
+            || !isValidBlockCoordinate(z)
+            || x !== plan.position.x
+            || y !== plan.position.y
+            || z !== plan.position.z
+            || blockId !== plan.blockId
+          ) {
+            break;
+          }
+
+          const playerFacing = horizontalFacingFromYaw(session.yaw);
+          let hinge: 'left' | 'right' = 'left';
+          if (plan.kind === 'door') {
+            const left = getDoorSidePosition(plan.position.x, plan.position.z, playerFacing, 'left');
+            const right = getDoorSidePosition(plan.position.x, plan.position.z, playerFacing, 'right');
+            const leftMeta = this.getBlockMetadata(left.x, plan.position.y, left.z, session.dimension);
+            const rightMeta = this.getBlockMetadata(right.x, plan.position.y, right.z, session.dimension);
+            const leftBlock = this.getBlock(left.x, plan.position.y, left.z, session.dimension);
+            const rightBlock = this.getBlock(right.x, plan.position.y, right.z, session.dimension);
+            hinge = resolveDoorHinge(
+              plan.position.x,
+              plan.position.z,
+              playerFacing,
+              session.x,
+              session.z,
+              BlockRegistry.isDoor(leftBlock) && leftMeta?.facing === playerFacing,
+              BlockRegistry.isDoor(rightBlock) && rightMeta?.facing === playerFacing,
+            );
+          }
+
+          const cells = createServerPlacementCells(plan, session.yaw, hinge);
+          if (cells.some((cell) => !isValidWorldY(cell.position.y, WORLD_HEIGHT))) break;
+
+          if (plan.kind === 'door') {
+            if (!this.isSolidBlock(plan.position.x, plan.position.y - 1, plan.position.z, session.dimension)) break;
+            if (cells.some((cell) => this.getBlock(cell.position.x, cell.position.y, cell.position.z, session.dimension) !== 0)) break;
+          } else if (plan.kind === 'bed') {
+            if (cells.some((cell) => !this.isSolidBlock(cell.position.x, cell.position.y - 1, cell.position.z, session.dimension))) break;
+            if (cells.some((cell) => this.getBlock(cell.position.x, cell.position.y, cell.position.z, session.dimension) !== 0)) break;
+          } else if (plan.kind === 'slab') {
+            const current = this.getBlock(plan.position.x, plan.position.y, plan.position.z, session.dimension);
+            const placeBlockId = ItemRegistry.getPlaceBlockId(held.id);
+            if (current !== 0 && current !== placeBlockId) break;
+          } else {
+            const current = this.getBlock(plan.position.x, plan.position.y, plan.position.z, session.dimension);
+            const currentName = BlockRegistry.get(current)?.name;
+            if (current !== 0 && !isPlacementReplaceableBlockName(currentName)) break;
+          }
+
+          for (const cell of cells) {
+            let metadata = cell.metadata;
+            const block = BlockRegistry.get(cell.blockId);
+            if (block && isSignBlockName(block.name)) {
+              metadata = isWallSignBlockName(block.name)
+                ? createDefaultSignMetadata({ facing: plan.facing })
+                : createDefaultSignMetadata({ rotation: signRotationFromYaw(session.yaw) });
+            } else if (!metadata && validFace(plan.facing)) {
+              metadata = { facing: plan.facing };
+            }
+            this.setBlock(cell.position.x, cell.position.y, cell.position.z, cell.blockId, session.dimension, metadata);
+            this.broadcastDimension(session.dimension, PacketType.S2C_BLOCK_UPDATE, {
+              x: cell.position.x,
+              y: cell.position.y,
+              z: cell.position.z,
+              blockId: cell.blockId,
+              metadata,
+              dimension: session.dimension,
+            });
+          }
+
+          if (session.gameMode !== 'creative') {
+            session.inventory[session.selectedSlot] = consumeHeldStack(held);
+            this.syncPlayerInventory(session);
+          }
+          this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+            type: 'place',
+            x: plan.position.x,
+            y: plan.position.y,
+            z: plan.position.z,
+          });
+          break;
+        }
+
+        // Legacy clients can still place simple exact-mapped blocks.
         if (!isValidBlockCoordinate(x) || !isValidWorldY(y, WORLD_HEIGHT) || !isValidBlockCoordinate(z)) break;
         if (!Number.isInteger(blockId) || blockId <= 0) break;
-        if (!isBlockActionInReach(session, x, y, z, 'survival')) break;
+        if (!isBlockActionInReach(session, x, y, z, session.gameMode)) break;
         if (this.getBlock(x, y, z, session.dimension) !== 0) break;
-
-        const held = session.inventory[session.selectedSlot];
         if (!canPlaceHeldBlock(held, blockId)) break;
-        const validFacing = facing === 'north' || facing === 'south' || facing === 'east' || facing === 'west' || facing === 'up' || facing === 'down';
+        const validFacing = validFace(facing);
         const meta = validFacing ? { facing } : null;
         this.setBlock(x, y, z, blockId, session.dimension, meta);
-        session.inventory[session.selectedSlot] = consumeHeldStack(held!);
-        this.syncPlayerInventory(session);
+        if (session.gameMode !== 'creative') {
+          session.inventory[session.selectedSlot] = consumeHeldStack(held!);
+          this.syncPlayerInventory(session);
+        }
         this.broadcastDimension(session.dimension, PacketType.S2C_BLOCK_UPDATE, {
           x, y, z, blockId, metadata: meta, dimension: session.dimension
         });
@@ -1367,6 +1496,15 @@ export class GameServer {
     const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
     return chunk.getBlock(lx, y, lz);
+  }
+
+  getBlockMetadata(x: number, y: number, z: number, dimension: number): BlockMetadata | undefined {
+    const cx = Math.floor(x / CHUNK_SIZE);
+    const cz = Math.floor(z / CHUNK_SIZE);
+    const chunk = this.getOrGenerateChunk(cx, cz, dimension);
+    const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    return chunk.getBlockMeta(lx, y, lz);
   }
 
   setBlock(x: number, y: number, z: number, id: number, dimension: number, metadata: BlockMetadata | null = null) {

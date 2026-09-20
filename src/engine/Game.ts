@@ -3501,13 +3501,18 @@ export class Game {
     const { plan } = decision;
     const { x, y, z } = plan.position;
     if (BlockRegistry.get(plan.blockId)?.name === 'chest' && !this.canPlaceChestAt(x, y, z)) return false;
-    if (this.isMultiplayerNetworkConnected()) {
+    const multiplayerPlacement = this.isMultiplayerNetworkConnected();
+    if (multiplayerPlacement) {
       this.network.send(PacketType.C2S_BLOCK_PLACE, {
         x,
         y,
         z,
         blockId: plan.blockId,
         facing: plan.facing,
+        targetX: target.position.x,
+        targetY: target.position.y,
+        targetZ: target.position.z,
+        targetFace: target.face,
       });
     } else if (plan.kind === 'door') {
       if (!this.placeDoor(x, y, z, plan.blockId)) return false;
@@ -3535,7 +3540,7 @@ export class Game {
     }
 
     this.sound.playBlockPlace(plan.blockId);
-    if (shouldConsumePlacedItem(this.gameMode)) {
+    if (!multiplayerPlacement && shouldConsumePlacedItem(this.gameMode)) {
       this.inventory.removeFromSlot(this.player.selectedSlot);
     }
     return true;

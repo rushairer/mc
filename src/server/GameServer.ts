@@ -845,7 +845,7 @@ export class GameServer {
       case PacketType.C2S_BLOCK_BREAK: {
         const { x, y, z } = packet.payload;
         if (!isValidBlockCoordinate(x) || !isValidWorldY(y, WORLD_HEIGHT) || !isValidBlockCoordinate(z)) break;
-        if (!isBlockActionInReach(session, x, y, z, 'survival')) break;
+        if (!isBlockActionInReach(session, x, y, z, session.gameMode)) break;
         const blockId = this.getBlock(x, y, z, session.dimension);
         if (blockId === 0) break;
 

@@ -294,7 +294,7 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_VEHICLE_SPAWN: {
-        const { id, type, sourceItemId, x, y, z, dimension } = packet.payload;
+        const { id, type, sourceItemId, x, y, z, rotationY, riderId, dimension } = packet.payload;
         if (dimension !== this.game.chunks.currentDimension) return;
         if (type !== 'boat' && type !== 'chest_boat') break;
         const existing = this.game.vehicles.vehicles.get(id);
@@ -306,7 +306,38 @@ export class NetworkClient {
         );
         this.game.vehicles.vehicles.delete(vehicle.id);
         vehicle.id = id;
+        if (Number.isFinite(rotationY)) {
+          vehicle.rotationY = rotationY;
+          vehicle.mesh.rotation.y = rotationY;
+        }
         this.game.vehicles.vehicles.set(id, vehicle);
+        if (riderId !== undefined) this.game.applyServerVehicleRider(id, riderId);
+        break;
+      }
+
+      case PacketType.S2C_VEHICLE_UPDATE: {
+        const { id, x, y, z, rotationY, riderId } = packet.payload;
+        const vehicle = this.game.vehicles.vehicles.get(id);
+        if (vehicle) {
+          vehicle.position.set(x, y, z);
+          vehicle.mesh.position.copy(vehicle.position);
+          if (Number.isFinite(rotationY)) {
+            vehicle.rotationY = rotationY;
+            vehicle.mesh.rotation.y = rotationY;
+          }
+          if (riderId !== undefined) this.game.applyServerVehicleRider(id, riderId);
+        }
+        break;
+      }
+
+      case PacketType.S2C_VEHICLE_RIDER: {
+        const { vehicleId, riderId } = packet.payload;
+        this.game.applyServerVehicleRider(vehicleId, riderId ?? null);
+        break;
+      }
+
+      case PacketType.S2C_VEHICLE_DESPAWN: {
+        this.game.handleServerVehicleDespawn(packet.payload.id);
         break;
       }
 
@@ -405,8 +436,16 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_CONTAINER_DATA: {
-        const { x, y, z, slots, cursor } = packet.payload;
-        this.game.applyServerContainerData(x, y, z, slots, cursor ?? null);
+        const { source, vehicleId, x, y, z, slots, cursor } = packet.payload;
+        this.game.applyServerContainerData(
+          x,
+          y,
+          z,
+          slots,
+          cursor ?? null,
+          source === 'vehicle' ? 'vehicle' : 'block',
+          vehicleId,
+        );
         break;
       }
 

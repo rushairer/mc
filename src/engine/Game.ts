@@ -333,7 +333,9 @@ export class Game {
   private fpArmGroup!: THREE.Group;
   private fpLastHeldItemId = -1;
   private openChestPos: THREE.Vector3 | null = null;
+  private openChestVehicleId: number | null = null;
   private serverContainerCursor: ItemStack | null = null;
+  private vehicleInputSendTimer = 0;
   private openHopperPos: THREE.Vector3 | null = null;
   private openFurnacePos: THREE.Vector3 | null = null;
   private openBrewingPos: THREE.Vector3 | null = null;
@@ -974,6 +976,25 @@ export class Game {
         if (!(target instanceof Vehicle) || this.riddenVehicle || this.riddenMob) {
           return { handled: false };
         }
+        if (this.isMultiplayerNetworkConnected()) {
+          if (target.type === 'chest_boat' && this.input.isKeyDown('shift')) {
+            this.openChestVehicleId = target.id;
+            this.openChestPos = null;
+            this.openUI = 'chest';
+            document.exitPointerLock();
+            this.network.send(PacketType.C2S_VEHICLE_INTERACT, {
+              vehicleId: target.id,
+              action: 'open_container',
+            });
+            this.notifyState();
+          } else {
+            this.network.send(PacketType.C2S_VEHICLE_INTERACT, {
+              vehicleId: target.id,
+              action: 'mount',
+            });
+          }
+          return { handled: true, cooldown: 0.5 };
+        }
         this.riddenVehicle = target;
         target.isRidden = true;
         this.sound.playLever();
@@ -1485,15 +1506,54 @@ export class Game {
     }
   }
 
-  /** P5.3 — apply server container contents to the open chest. */
-  applyServerContainerData(x: number, y: number, z: number, slots: (ItemStack | null)[], cursor: ItemStack | null = null) {
-    const openPos = this.openChestPos ?? this.openHopperPos;
-    if (!openPos || openPos.x !== x || openPos.y !== y || openPos.z !== z) return;
+  /** P5.3 — apply server-owned block or Chest Boat container contents. */
+  applyServerContainerData(
+    x: number | undefined,
+    y: number | undefined,
+    z: number | undefined,
+    slots: (ItemStack | null)[],
+    cursor: ItemStack | null = null,
+    source: 'block' | 'vehicle' = 'block',
+    vehicleId?: number,
+  ) {
     this.serverContainerCursor = cursor;
+    if (source === 'vehicle') {
+      if (vehicleId === undefined || this.openChestVehicleId !== vehicleId) return;
+      const vehicle = this.vehicles.vehicles.get(vehicleId);
+      if (!vehicle || vehicle.type !== 'chest_boat') return;
+      vehicle.inventory = slots.map((slot) => (slot ? { ...slot } : null));
+      this.notifyState();
+      return;
+    }
+
+    const openPos = this.openChestPos ?? this.openHopperPos;
+    if (x === undefined || y === undefined || z === undefined || !openPos || openPos.x !== x || openPos.y !== y || openPos.z !== z) return;
     const metadata = this.chunks.getBlockMeta(x, y, z);
     if (!metadata) return;
     metadata.inventory = slots.map((slot) => (slot ? { ...slot } : null));
     this.chunks.setBlockMeta(x, y, z, metadata, true);
+    this.notifyState();
+  }
+
+  applyServerVehicleRider(vehicleId: number, riderId: string | null) {
+    const vehicle = this.vehicles.vehicles.get(vehicleId);
+    if (!vehicle) return;
+    vehicle.isRidden = riderId !== null;
+    if (riderId === this.network.playerId) {
+      this.riddenVehicle = vehicle;
+    } else if (this.riddenVehicle?.id === vehicleId) {
+      this.riddenVehicle = null;
+    }
+  }
+
+  handleServerVehicleDespawn(vehicleId: number) {
+    if (this.riddenVehicle?.id === vehicleId) this.riddenVehicle = null;
+    if (this.openChestVehicleId === vehicleId) {
+      this.openChestVehicleId = null;
+      this.serverContainerCursor = null;
+      if (this.openUI === 'chest') this.openUI = 'none';
+    }
+    this.vehicles.removeVehicle(vehicleId);
     this.notifyState();
   }
 
@@ -1641,6 +1701,7 @@ export class Game {
     if (this.openUI === 'chest') {
       this.closeServerContainerSession();
       this.openChestPos = null;
+      this.openChestVehicleId = null;
     } else if (this.openUI === 'hopper') {
       this.closeServerContainerSession();
       this.openHopperPos = null;
@@ -2047,10 +2108,17 @@ export class Game {
 
     if (this.riddenVehicle) {
       const dismount = this.chatOpen ? false : this.input.isKeyDown('shift');
-      if (dismount) {
-        this.riddenVehicle.isRidden = false;
-        this.riddenVehicle = null;
-        this.player.position.x += 1.2;
+      if (dismount && this.placeCooldown <= 0) {
+        if (this.isMultiplayerNetworkConnected()) {
+          this.network.send(PacketType.C2S_VEHICLE_INTERACT, {
+            vehicleId: this.riddenVehicle.id,
+            action: 'dismount',
+          });
+        } else {
+          this.riddenVehicle.isRidden = false;
+          this.riddenVehicle = null;
+          this.player.position.x += 1.2;
+        }
         this.placeCooldown = 0.5;
       }
     }
@@ -2268,12 +2336,26 @@ export class Game {
         a: this.chatOpen ? false : this.input.isKeyDown('a'),
         d: this.chatOpen ? false : this.input.isKeyDown('d'),
       };
-      this.vehicles.update(
-        dt,
-        (x, y, z) => this.chunks.getBlock(x, y, z),
-        (x, y, z) => this.chunks.isSolidBlock(x, y, z),
-        vehicleKeys
-      );
+      if (this.isMultiplayerNetworkConnected()) {
+        this.vehicleInputSendTimer -= dt;
+        if (this.riddenVehicle && this.vehicleInputSendTimer <= 0) {
+          this.vehicleInputSendTimer = 0.05;
+          this.network.send(PacketType.C2S_VEHICLE_INPUT, {
+            vehicleId: this.riddenVehicle.id,
+            forward: vehicleKeys.w,
+            back: vehicleKeys.s,
+            left: vehicleKeys.a,
+            right: vehicleKeys.d,
+          });
+        }
+      } else {
+        this.vehicles.update(
+          dt,
+          (x, y, z) => this.chunks.getBlock(x, y, z),
+          (x, y, z) => this.chunks.isSolidBlock(x, y, z),
+          vehicleKeys
+        );
+      }
 
       // Update projectiles
       this.projectiles.update(
@@ -2630,6 +2712,13 @@ export class Game {
         if (targetVehicle) {
           this.swordSwingTimer = 0.4;
           this.startAttackCooldown(attackCooldownDuration);
+          if (isNetworkConnected) {
+            this.network.send(PacketType.C2S_VEHICLE_INTERACT, {
+              vehicleId: targetVehicle.id,
+              action: 'attack',
+            });
+            return;
+          }
           this.sound.playBlockBreak(5); // Planks/wood sound for vehicle destruction
           
           let itemId = targetVehicle.sourceItemId ?? 328;
@@ -7236,6 +7325,9 @@ export class Game {
   }
 
   private getOpenChestInventory(): (ItemStack | null)[] | null {
+    if (this.openChestVehicleId !== null) {
+      return this.vehicles.vehicles.get(this.openChestVehicleId)?.inventory ?? null;
+    }
     if (!this.openChestPos) return null;
 
     const x = this.openChestPos.x;
@@ -7322,7 +7414,7 @@ export class Game {
   }
 
   private closeServerContainerSession() {
-    if (!this.network.isConnected || (!this.openChestPos && !this.openHopperPos)) return;
+    if (!this.network.isConnected || (!this.openChestPos && !this.openHopperPos && this.openChestVehicleId === null)) return;
     this.network.send(PacketType.C2S_CONTAINER_CLOSE, {});
     this.serverContainerCursor = null;
   }
@@ -7332,7 +7424,7 @@ export class Game {
     slotIndex: number,
     options: { button?: 'left' | 'right'; shift?: boolean } = {},
   ) {
-    if (!this.network.isConnected || (!this.openChestPos && !this.openHopperPos)) return false;
+    if (!this.network.isConnected || (!this.openChestPos && !this.openHopperPos && this.openChestVehicleId === null)) return false;
     this.network.send(PacketType.C2S_CONTAINER_CLICK, { area, slotIndex, ...options });
     return true;
   }

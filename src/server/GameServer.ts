@@ -19,6 +19,12 @@ import {
   vehicleTypeForBoatItemName,
 } from './ServerItemUseRules';
 import {
+  createIdleServerVehicleInput,
+  parseServerVehicleInput,
+  parseServerVehicleInteraction,
+  type ServerVehicleInputIntent,
+} from './ServerVehicleRules';
+import {
   applyKnockbackResistance,
   getAttackStrength,
   getNetheriteKnockbackResistance,
@@ -92,6 +98,10 @@ import { SAVE_SCHEMA_VERSION, SaveSystem, type SaveData } from '../systems/SaveS
 const WORLD_SPAWN_X = 8;
 const WORLD_SPAWN_Z = 8;
 
+type OpenServerContainer =
+  | { source: 'block'; x: number; y: number; z: number; key: string; cursor: ItemStack | null }
+  | { source: 'vehicle'; vehicleId: number; cursor: ItemStack | null };
+
 interface PlayerSession {
   id: string;
   username: string;
@@ -124,7 +134,8 @@ interface PlayerSession {
   lastAttackTick: number | null;
   hurtCooldown: HurtCooldownState;
   healthAuthorityLockSeconds: number;
-  openContainer?: { x: number; y: number; z: number; key: string; cursor: ItemStack | null };
+  openContainer?: OpenServerContainer;
+  ridingVehicleId?: number;
   /** P5.2 — guards one-time death handling. */
   dead?: boolean;
 }
@@ -176,9 +187,14 @@ interface ServerVehicle {
   id: number;
   type: 'boat' | 'chest_boat';
   position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  rotationY: number;
+  speed: number;
   sourceItemId: number;
   dimension: number;
   inventory: (ItemStack | null)[] | null;
+  riderId?: string;
+  input: ServerVehicleInputIntent;
 }
 
 interface ServerProjectile {
@@ -384,6 +400,8 @@ export class GameServer {
           x: vehicle.position.x,
           y: vehicle.position.y,
           z: vehicle.position.z,
+          rotationY: vehicle.rotationY,
+          riderId: vehicle.riderId ?? null,
           dimension: vehicle.dimension,
         });
       }
@@ -422,6 +440,17 @@ export class GameServer {
     if (session) {
       console.log(`Player ${session.username} disconnected.`);
       this.closeServerContainer(session);
+      if (session.ridingVehicleId !== undefined) {
+        const vehicle = this.vehicles.get(session.ridingVehicleId);
+        if (vehicle?.riderId === session.id) {
+          vehicle.riderId = undefined;
+          vehicle.input = createIdleServerVehicleInput(vehicle.id);
+          this.broadcastDimension(vehicle.dimension, PacketType.S2C_VEHICLE_RIDER, {
+            vehicleId: vehicle.id,
+            riderId: null,
+          });
+        }
+      }
       this.players.delete(id);
       
       // Auto-save local world if we are inside browser
@@ -1017,6 +1046,61 @@ export class GameServer {
         break;
       }
 
+      case PacketType.C2S_VEHICLE_INTERACT: {
+        const intent = parseServerVehicleInteraction(packet.payload);
+        if (!intent) break;
+        const vehicle = this.vehicles.get(intent.vehicleId);
+        if (!vehicle || vehicle.dimension !== session.dimension) break;
+        if (!isEntityAttackInReach(session, vehicle.position, session.gameMode)) break;
+
+        if (intent.action === 'mount') {
+          if (session.ridingVehicleId !== undefined || vehicle.riderId) break;
+          vehicle.riderId = session.id;
+          session.ridingVehicleId = vehicle.id;
+          vehicle.input = createIdleServerVehicleInput(vehicle.id);
+          this.broadcastDimension(vehicle.dimension, PacketType.S2C_VEHICLE_RIDER, {
+            vehicleId: vehicle.id,
+            riderId: session.id,
+          });
+          break;
+        }
+
+        if (intent.action === 'dismount') {
+          if (vehicle.riderId !== session.id || session.ridingVehicleId !== vehicle.id) break;
+          vehicle.riderId = undefined;
+          session.ridingVehicleId = undefined;
+          vehicle.input = createIdleServerVehicleInput(vehicle.id);
+          this.broadcastDimension(vehicle.dimension, PacketType.S2C_VEHICLE_RIDER, {
+            vehicleId: vehicle.id,
+            riderId: null,
+          });
+          break;
+        }
+
+        if (intent.action === 'open_container') {
+          if (vehicle.type !== 'chest_boat' || !vehicle.inventory) break;
+          this.closeServerContainer(session);
+          session.openContainer = { source: 'vehicle', vehicleId: vehicle.id, cursor: null };
+          this.sendOpenContainerState(session);
+          break;
+        }
+
+        if (intent.action === 'attack') {
+          this.destroyServerVehicle(vehicle);
+        }
+        break;
+      }
+
+      case PacketType.C2S_VEHICLE_INPUT: {
+        const intent = parseServerVehicleInput(packet.payload);
+        if (!intent) break;
+        const vehicle = this.vehicles.get(intent.vehicleId);
+        if (!vehicle || vehicle.dimension !== session.dimension) break;
+        if (vehicle.riderId !== session.id || session.ridingVehicleId !== vehicle.id) break;
+        vehicle.input = intent;
+        break;
+      }
+
       case PacketType.C2S_INTERACT_ENTITY: {
         const intent = parseEntityAttackIntent(packet.payload);
         if (!intent) break;
@@ -1196,7 +1280,7 @@ export class GameServer {
         this.closeServerContainer(session);
         const key = this.dimensionContainerKey(session.dimension, x, y, z);
         if (!this.containerData.has(key)) this.containerData.set(key, createContainerSlots(kind));
-        session.openContainer = { x, y, z, key, cursor: null };
+        session.openContainer = { source: 'block', x, y, z, key, cursor: null };
         this.sendOpenContainerState(session);
         break;
       }
@@ -1205,11 +1289,11 @@ export class GameServer {
         const intent = parseContainerClickIntent(packet.payload);
         const open = session.openContainer;
         if (!intent || !open) break;
-        if (!isBlockActionInReach(session, open.x, open.y, open.z, session.gameMode)) {
+        if (!this.isOpenContainerInReach(session, open)) {
           this.closeServerContainer(session);
           break;
         }
-        const slots = this.containerData.get(open.key);
+        const slots = this.getOpenContainerSlots(open);
         if (!slots) break;
         const next = applyServerContainerClick({
           containerSlots: slots,
@@ -1220,7 +1304,7 @@ export class GameServer {
           this.sendOpenContainerState(session);
           break;
         }
-        this.containerData.set(open.key, next.containerSlots);
+        this.setOpenContainerSlots(open, next.containerSlots);
         session.inventory = next.playerSlots;
         open.cursor = next.cursor;
         this.syncPlayerInventory(session);
@@ -1346,9 +1430,13 @@ export class GameServer {
         id: this.nextEntityId++,
         type: vehicleType,
         position: new THREE.Vector3(place.x + 0.5, place.y + 0.2, place.z + 0.5),
+        velocity: new THREE.Vector3(),
+        rotationY: session.yaw,
+        speed: 0,
         sourceItemId: held.id,
         dimension: session.dimension,
         inventory: vehicleType === 'chest_boat' ? createContainerSlots('chest') : null,
+        input: createIdleServerVehicleInput(this.nextEntityId - 1),
       };
       this.vehicles.set(vehicle.id, vehicle);
       this.broadcastDimension(session.dimension, PacketType.S2C_VEHICLE_SPAWN, {
@@ -1358,6 +1446,8 @@ export class GameServer {
         x: vehicle.position.x,
         y: vehicle.position.y,
         z: vehicle.position.z,
+        rotationY: vehicle.rotationY,
+        riderId: null,
         dimension: vehicle.dimension,
       });
       if (session.gameMode !== 'creative') {
@@ -1455,6 +1545,122 @@ export class GameServer {
       type: 'break', x: mob.position.x, y: mob.position.y, z: mob.position.z,
     });
     return true;
+  }
+
+  private destroyServerVehicle(vehicle: ServerVehicle) {
+    for (const player of this.players.values()) {
+      if (player.openContainer?.source === 'vehicle' && player.openContainer.vehicleId === vehicle.id) {
+        this.closeServerContainer(player);
+      }
+      if (player.ridingVehicleId === vehicle.id) {
+        player.ridingVehicleId = undefined;
+      }
+    }
+    if (vehicle.riderId) {
+      this.broadcastDimension(vehicle.dimension, PacketType.S2C_VEHICLE_RIDER, {
+        vehicleId: vehicle.id,
+        riderId: null,
+      });
+    }
+    if (vehicle.inventory) {
+      for (const stack of vehicle.inventory) {
+        if (!stack) continue;
+        this.spawnDroppedStack(
+          stack,
+          vehicle.position.x,
+          vehicle.position.y + 0.35,
+          vehicle.position.z,
+          vehicle.dimension,
+          0.5,
+        );
+      }
+    }
+    this.spawnDroppedStack(
+      { id: vehicle.sourceItemId, count: 1 },
+      vehicle.position.x,
+      vehicle.position.y + 0.25,
+      vehicle.position.z,
+      vehicle.dimension,
+      0.5,
+    );
+    this.vehicles.delete(vehicle.id);
+    this.broadcastDimension(vehicle.dimension, PacketType.S2C_VEHICLE_DESPAWN, {
+      id: vehicle.id,
+      dimension: vehicle.dimension,
+    });
+  }
+
+  private tickServerVehicles(dt: number) {
+    for (const vehicle of this.vehicles.values()) {
+      const bx = Math.floor(vehicle.position.x);
+      const by = Math.floor(vehicle.position.y);
+      const bz = Math.floor(vehicle.position.z);
+      const current = this.getBlock(bx, by, bz, vehicle.dimension);
+      const below = this.getBlock(bx, Math.max(0, by - 1), bz, vehicle.dimension);
+      const inWater = BlockRegistry.isWater(current) || BlockRegistry.isWater(below);
+
+      if (inWater) {
+        const surfaceY = Math.floor(vehicle.position.y) + 0.9;
+        vehicle.velocity.y += (surfaceY - vehicle.position.y) * Math.min(1, dt * 10) * 5;
+        vehicle.velocity.y *= Math.pow(0.7, dt * 10);
+      } else {
+        vehicle.velocity.y -= 18 * dt;
+      }
+
+      if (vehicle.riderId) {
+        const input = vehicle.input;
+        let speedTarget = 0;
+        let rotationSpeed = 0;
+        if (input.forward && !input.back) speedTarget = inWater ? 6.5 : 1.5;
+        else if (input.back && !input.forward) speedTarget = inWater ? -3 : -0.8;
+        if (input.left && !input.right) rotationSpeed = 2;
+        else if (input.right && !input.left) rotationSpeed = -2;
+        vehicle.rotationY += rotationSpeed * dt;
+        vehicle.speed += (speedTarget - vehicle.speed) * Math.min(1, dt * (inWater ? 3 : 5));
+        vehicle.velocity.x = Math.sin(vehicle.rotationY) * vehicle.speed;
+        vehicle.velocity.z = Math.cos(vehicle.rotationY) * vehicle.speed;
+      } else {
+        const friction = inWater ? 0.95 : 0.8;
+        vehicle.velocity.x *= Math.pow(friction, dt * 10);
+        vehicle.velocity.z *= Math.pow(friction, dt * 10);
+        vehicle.speed = Math.hypot(vehicle.velocity.x, vehicle.velocity.z);
+      }
+
+      const previous = vehicle.position.clone();
+      vehicle.position.addScaledVector(vehicle.velocity, dt);
+      const nx = Math.floor(vehicle.position.x);
+      const ny = Math.floor(vehicle.position.y + 0.1);
+      const nz = Math.floor(vehicle.position.z);
+      if (this.isSolidBlock(nx, ny, nz, vehicle.dimension)) {
+        vehicle.position.x = previous.x;
+        vehicle.position.z = previous.z;
+        vehicle.velocity.x = 0;
+        vehicle.velocity.z = 0;
+        vehicle.speed = 0;
+      }
+
+      if (vehicle.riderId) {
+        const rider = this.players.get(vehicle.riderId);
+        if (!rider || rider.dimension !== vehicle.dimension) {
+          vehicle.riderId = undefined;
+          vehicle.input = createIdleServerVehicleInput(vehicle.id);
+        } else {
+          rider.x = vehicle.position.x;
+          rider.y = vehicle.position.y + 0.55;
+          rider.z = vehicle.position.z;
+        }
+      }
+
+      this.broadcastDimension(vehicle.dimension, PacketType.S2C_VEHICLE_UPDATE, {
+        id: vehicle.id,
+        x: vehicle.position.x,
+        y: vehicle.position.y,
+        z: vehicle.position.z,
+        rotationY: vehicle.rotationY,
+        riderId: vehicle.riderId ?? null,
+        dimension: vehicle.dimension,
+      });
+    }
   }
 
   private tickPrimedTnt(dt: number) {
@@ -1579,28 +1785,61 @@ export class GameServer {
     return `${dimension}:${containerKey(x, y, z)}`;
   }
 
+  private getOpenContainerSlots(open: OpenServerContainer): (ItemStack | null)[] | null {
+    if (open.source === 'block') return this.containerData.get(open.key) ?? null;
+    return this.vehicles.get(open.vehicleId)?.inventory ?? null;
+  }
+
+  private setOpenContainerSlots(open: OpenServerContainer, slots: (ItemStack | null)[]) {
+    if (open.source === 'block') {
+      this.containerData.set(open.key, slots);
+      return;
+    }
+    const vehicle = this.vehicles.get(open.vehicleId);
+    if (vehicle?.type === 'chest_boat') vehicle.inventory = slots;
+  }
+
+  private isOpenContainerInReach(player: PlayerSession, open: OpenServerContainer): boolean {
+    if (open.source === 'block') {
+      return isBlockActionInReach(player, open.x, open.y, open.z, player.gameMode);
+    }
+    const vehicle = this.vehicles.get(open.vehicleId);
+    return !!vehicle
+      && vehicle.dimension === player.dimension
+      && isEntityAttackInReach(player, vehicle.position, player.gameMode);
+  }
+
   private sendOpenContainerState(player: PlayerSession) {
     const open = player.openContainer;
     if (!open) return;
-    this.sendTo(player, PacketType.S2C_CONTAINER_DATA, {
-      x: open.x,
-      y: open.y,
-      z: open.z,
-      slots: this.containerData.get(open.key) ?? [],
-      cursor: open.cursor,
-    });
+    const slots = this.getOpenContainerSlots(open) ?? [];
+    this.sendTo(player, PacketType.S2C_CONTAINER_DATA, open.source === 'block'
+      ? {
+          source: 'block',
+          x: open.x,
+          y: open.y,
+          z: open.z,
+          slots,
+          cursor: open.cursor,
+        }
+      : {
+          source: 'vehicle',
+          vehicleId: open.vehicleId,
+          slots,
+          cursor: open.cursor,
+        });
   }
 
   private closeServerContainer(player: PlayerSession) {
     const open = player.openContainer;
     if (!open) return;
-    const slots = this.containerData.get(open.key) ?? [];
+    const slots = this.getOpenContainerSlots(open) ?? [];
     const next = returnContainerCursorToInventory({
       containerSlots: slots,
       playerSlots: player.inventory,
       cursor: open.cursor,
     });
-    this.containerData.set(open.key, next.containerSlots);
+    this.setOpenContainerSlots(open, next.containerSlots);
     player.inventory = next.playerSlots;
     if (next.cursor) {
       this.spawnDroppedStack(next.cursor, player.x, player.y + 0.5, player.z, player.dimension);
@@ -2136,6 +2375,9 @@ export class GameServer {
 
     // Tick projectiles
     this.tickProjectiles(dt);
+
+    // Tick server-authoritative Boats / Chest Boats.
+    this.tickServerVehicles(dt);
 
     // Tick primed TNT created by server-authoritative Flint and Steel use.
     this.tickPrimedTnt(dt);

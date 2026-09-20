@@ -16,6 +16,9 @@ export enum PacketType {
   C2S_ITEM_ACTION = 'C2S_ITEM_ACTION',
   /** Server-authoritative targeted item use (buckets, ignition, shears, vehicles). */
   C2S_ITEM_USE = 'C2S_ITEM_USE',
+  /** Server-authoritative Boat / Chest Boat interaction and controls. */
+  C2S_VEHICLE_INTERACT = 'C2S_VEHICLE_INTERACT',
+  C2S_VEHICLE_INPUT = 'C2S_VEHICLE_INPUT',
   /** P5.2 — client uploads player state so server pushes never revert it. */
   C2S_PLAYER_STATE = 'C2S_PLAYER_STATE',
   /** P5.2 — server-validated consumable use (food / potions). */
@@ -54,6 +57,9 @@ export enum PacketType {
   S2C_PROJECTILE_DESPAWN = 'S2C_PROJECTILE_DESPAWN',
   /** Server-authoritative Boat / Chest Boat spawn. */
   S2C_VEHICLE_SPAWN = 'S2C_VEHICLE_SPAWN',
+  S2C_VEHICLE_UPDATE = 'S2C_VEHICLE_UPDATE',
+  S2C_VEHICLE_DESPAWN = 'S2C_VEHICLE_DESPAWN',
+  S2C_VEHICLE_RIDER = 'S2C_VEHICLE_RIDER',
   S2C_CHAT = 'S2C_CHAT',
   S2C_PARTICLE = 'S2C_PARTICLE',
   S2C_SOUND = 'S2C_SOUND',

@@ -7,6 +7,7 @@ import {
   parseServerVehicleInteraction,
 } from '../src/server/ServerVehicleRules';
 import { PacketType } from '../src/server/NetworkProtocol';
+import { isBlockActionInReach } from '../src/server/ServerWorldActionRules';
 
 test('523: vehicle interaction intents accept only explicit mount/dismount/attack/container actions', () => {
   assert.deepEqual(parseServerVehicleInteraction({ vehicleId: 12, action: 'mount' }), { vehicleId: 12, action: 'mount' });
@@ -99,12 +100,11 @@ test('531: Chest Boat opens through the existing server-owned cursor/container t
 });
 
 test('532: block interaction reach now respects creative/survival mode and late join Vehicle state includes rider/rotation', () => {
+  const player = { x: 0, y: 64, z: 0 };
+  assert.equal(isBlockActionInReach(player, 5, 65, 0, 'survival'), false);
+  assert.equal(isBlockActionInReach(player, 5, 65, 0, 'creative'), true);
+
   const server = readFileSync(new URL('../src/server/GameServer.ts', import.meta.url), 'utf8');
-  const start = server.indexOf('case PacketType.C2S_INTERACT_BLOCK');
-  const end = server.indexOf('case PacketType.C2S_VEHICLE_INTERACT', start);
-  const handler = server.slice(start, end);
-  assert.ok(handler.includes('isBlockActionInReach(session, x, y, z, session.gameMode)'));
-  assert.ok(!handler.includes("'survival'"));
   assert.ok(server.includes('riderId: vehicle.riderId ?? null'));
   assert.ok(server.includes('rotationY: vehicle.rotationY'));
 });

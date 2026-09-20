@@ -80,7 +80,11 @@ export function getFurnaceFuelRemainder(fuel: ItemStack | null | undefined): Ite
   if (!fuel) return undefined;
   const name = getFurnaceSemanticName(fuel.id);
   const def = ItemRegistry.get(fuel.id) ?? BlockRegistry.get(fuel.id);
-  const legacyBaseId = !def\n    ? (fuel.id & 0x3FF)\n    : typeof def.baseId === 'number' && def.baseId < 256\n      ? (fuel.id & 0x3FF)\n      : -1;
+  const legacyBaseId = !def
+    ? (fuel.id & 0x3FF)
+    : typeof def.baseId === 'number' && def.baseId < 256
+      ? (fuel.id & 0x3FF)
+      : -1;
   if (name !== 'lava_bucket' && legacyBaseId !== 327) return undefined;
   return { id: resolveLegacyCompatibleItemId(325, 'bucket'), count: 1 };
 }
@@ -93,7 +97,11 @@ export function getWetSpongeFuelRemainder(
   if (normalizeName(inputName) !== 'wet_sponge' || !fuelSlot) return undefined;
   const fuelName = getFurnaceSemanticName(fuelSlot.id);
   const fuelDef = ItemRegistry.get(fuelSlot.id) ?? BlockRegistry.get(fuelSlot.id);
-  const legacyBaseId = !fuelDef\n    ? (fuelSlot.id & 0x3FF)\n    : typeof fuelDef.baseId === 'number' && fuelDef.baseId < 256\n      ? (fuelSlot.id & 0x3FF)\n      : -1;
+  const legacyBaseId = !fuelDef
+    ? (fuelSlot.id & 0x3FF)
+    : typeof fuelDef.baseId === 'number' && fuelDef.baseId < 256
+      ? (fuelSlot.id & 0x3FF)
+      : -1;
   if (fuelName !== 'bucket' && legacyBaseId !== 325) return undefined;
   return { id: resolveLegacyCompatibleItemId(326, 'water_bucket'), count: 1 };
 }

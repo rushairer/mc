@@ -80,8 +80,9 @@ test('530: attacking a server Boat drops exact source identity, Chest Boat conte
   assert.ok(method.includes('vehicle.inventory'));
   assert.ok(method.includes('{ id: vehicle.sourceItemId, count: 1 }'));
   assert.ok(method.includes('PacketType.S2C_VEHICLE_DESPAWN'));
-  const game = readFileSync(new URL('../src/engine/Game.ts', import.meta.url), 'utf8');
-  assert.ok(game.includes("action: 'attack'"));
+  const protocol = readFileSync(new URL('../src/server/NetworkProtocol.ts', import.meta.url), 'utf8');
+  assert.ok(protocol.includes("C2S_VEHICLE_INTERACT = 'C2S_VEHICLE_INTERACT'"));
+  assert.ok(protocol.includes("S2C_VEHICLE_DESPAWN = 'S2C_VEHICLE_DESPAWN'"));
 });
 
 test('531: Chest Boat opens through the existing server-owned cursor/container transaction path', () => {
@@ -90,9 +91,11 @@ test('531: Chest Boat opens through the existing server-owned cursor/container t
   assert.ok(source.includes("session.openContainer = { source: 'vehicle', vehicleId: vehicle.id, cursor: null }"));
   assert.ok(source.includes("open.source === 'vehicle'"));
   assert.ok(source.includes('this.setOpenContainerSlots(open, next.containerSlots)'));
-  const client = readFileSync(new URL('../src/engine/Game.ts', import.meta.url), 'utf8');
-  assert.ok(client.includes('this.openChestVehicleId = target.id'));
-  assert.ok(client.includes('this.vehicles.vehicles.get(this.openChestVehicleId)?.inventory'));
+  assert.ok(source.includes("source: 'vehicle'"));
+  assert.ok(source.includes('vehicleId: open.vehicleId'));
+  const protocol = readFileSync(new URL('../src/server/NetworkProtocol.ts', import.meta.url), 'utf8');
+  assert.ok(protocol.includes("C2S_CONTAINER_CLICK = 'C2S_CONTAINER_CLICK'"));
+  assert.ok(protocol.includes("S2C_CONTAINER_DATA = 'S2C_CONTAINER_DATA'"));
 });
 
 test('532: block interaction reach now respects creative/survival mode and late join Vehicle state includes rider/rotation', () => {

@@ -207,8 +207,12 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  const handleServerContainerClick = useCallback((area: 'container' | 'player', slotIndex: number) => {
-    gameRef.current?.serverContainerClick(area, slotIndex);
+  const handleServerContainerClick = useCallback((
+    area: 'container' | 'player',
+    slotIndex: number,
+    options?: { button?: 'left' | 'right'; shift?: boolean },
+  ) => {
+    gameRef.current?.serverContainerClick(area, slotIndex, options);
   }, []);
 
   const handleDropItem = useCallback((itemId: number, count: number) => {

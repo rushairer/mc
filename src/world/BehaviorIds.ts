@@ -65,10 +65,14 @@ export function inferItemBehaviorId(rawName: string): string | undefined {
   if (name === 'crossbow') return 'minecraft:crossbow';
   if (name === 'shield') return 'minecraft:shield';
   if (name === 'potion') return 'minecraft:potion';
+  if (name === 'milk_bucket') return 'minecraft:milk';
   if (name === 'bucket' || name === 'water_bucket' || name === 'lava_bucket') return 'minecraft:bucket';
   if (name.includes('boat')) return 'minecraft:boat';
   if (name.includes('minecart')) return 'minecraft:minecart';
   if (name === 'flint_and_steel') return 'minecraft:flint_and_steel';
+  if (name === 'bone_meal') return 'minecraft:bone_meal';
+  if (name.endsWith('_shovel')) return 'minecraft:shovel';
+  if (name.endsWith('_axe')) return 'minecraft:axe';
   if (name.endsWith('_hoe')) return 'minecraft:hoe';
   if (name === 'fishing_rod') return 'minecraft:fishing_rod';
   if (THROWABLE_ITEM_NAMES.has(name)) return 'minecraft:throwable';

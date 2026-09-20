@@ -62,6 +62,7 @@ import {
   type WorldContext,
 } from '../world/BehaviorRegistry';
 import { planBlockPlacement } from '../world/BlockPlacement';
+import { resolveAxeStrippedBlockName, resolveShovelPathTargetName, rotateBoneMealSpreadOffsets26_3 } from '../world/ItemOnBlockRules';
 import { fallingLeafParticle26_3, shouldPrioritizeShieldUse26_3 } from '../world/WildernessBoundChanges26_3';
 import { useStrawBed as resolveStrawBedUse26_3 } from '../world/WildernessBound26_3';
 import {
@@ -882,6 +883,19 @@ export class Game {
         return { handled: true };
       },
     });
+    this.behaviors.registerItem([], {
+      id: 'minecraft:milk',
+      canStartUse: () => true,
+      startUse: () => {
+        this.resetConsumptionProgress();
+        return { handled: true };
+      },
+      continueUse: ({ stack }, progress) => this.continueMilkUse(stack, progress.deltaSeconds),
+      stopUse: () => {
+        this.resetConsumptionProgress();
+        return { handled: true };
+      },
+    });
     this.behaviors.registerItem(['bucket', 'water_bucket', 'lava_bucket'], {
       id: 'minecraft:bucket',
       use: ({ stack, target }) => ({ handled: this.tryUseBucket(stack, target), cooldown: 0.25 }),
@@ -897,6 +911,18 @@ export class Game {
     this.behaviors.registerItem('flint_and_steel', {
       id: 'minecraft:flint_and_steel',
       use: ({ target }) => ({ handled: this.tryUseFlintAndSteel(target), cooldown: 0.25 }),
+    });
+    this.behaviors.registerItem([], {
+      id: 'minecraft:bone_meal',
+      use: ({ target }) => ({ handled: this.tryUseBoneMeal26_3(target), cooldown: 0.25 }),
+    });
+    this.behaviors.registerItem([], {
+      id: 'minecraft:shovel',
+      use: ({ target }) => ({ handled: this.tryUseShovel(target), cooldown: 0.25 }),
+    });
+    this.behaviors.registerItem([], {
+      id: 'minecraft:axe',
+      use: ({ target }) => ({ handled: this.tryUseAxe(target), cooldown: 0.25 }),
     });
     this.behaviors.registerItem('wooden_hoe', {
       id: 'minecraft:hoe',
@@ -3601,6 +3627,76 @@ export class Game {
     return true;
   }
 
+  private tryUseShovel(target?: BlockInteractionContext): boolean {
+    if (!target || target.face !== 'up') return false;
+    if (!resolveShovelPathTargetName(target.block.name)) return false;
+    const { x, y, z } = target.position;
+    if (this.chunks.getBlock(x, y + 1, z) !== 0) return false;
+
+    const path = BlockRegistry.getByName('dirt_path') ?? BlockRegistry.getByName('grass_path');
+    if (!path) return false;
+    this.chunks.setBlock(x, y, z, path.id);
+    this.chunks.setBlockMeta(x, y, z, null, true);
+    this.redstone.observeBlockChange(x, y, z);
+    this.sound.playBlockPlace(path.id);
+    if (this.gameMode !== 'creative') this.inventory.damageTool(this.player.selectedSlot);
+    return true;
+  }
+
+  private tryUseAxe(target?: BlockInteractionContext): boolean {
+    if (!target) return false;
+    const strippedName = resolveAxeStrippedBlockName(target.block.name);
+    if (!strippedName) return false;
+    const stripped = BlockRegistry.getByName(strippedName);
+    if (!stripped) return false;
+
+    const { x, y, z } = target.position;
+    const metadata = this.chunks.getBlockMeta(x, y, z);
+    this.chunks.setBlock(x, y, z, stripped.id);
+    this.chunks.setBlockMeta(x, y, z, metadata ?? null, true);
+    this.redstone.observeBlockChange(x, y, z);
+    this.sound.playBlockPlace(stripped.id);
+    if (this.gameMode !== 'creative') this.inventory.damageTool(this.player.selectedSlot);
+    return true;
+  }
+
+  private tryUseBoneMeal26_3(target?: BlockInteractionContext): boolean {
+    if (!target) return false;
+    const { x, y, z } = target.position;
+
+    if (target.block.name === 'shelf_mushroom') {
+      const metadata = this.chunks.getBlockMeta(x, y, z);
+      if (metadata?.shelfMushroomSize === 'large') return false;
+      this.chunks.setBlockMeta(x, y, z, { ...metadata, shelfMushroomSize: 'large' }, true);
+      if (this.gameMode !== 'creative') this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+      this.sound.playBlockPlace(target.blockId);
+      this.notifyState();
+      return true;
+    }
+
+    if (target.block.name !== 'red_shrub') return false;
+    const start = Math.floor(coordinateRandom(
+      this.seed,
+      x,
+      this.worldTickScheduler.getCurrentTick() + 2630,
+      z,
+    ) * 8);
+    for (const offset of rotateBoneMealSpreadOffsets26_3(start)) {
+      const nx = x + offset.x;
+      const nz = z + offset.z;
+      if (this.chunks.getBlock(nx, y, nz) !== 0) continue;
+      if (!BlockRegistry.isSolid(this.chunks.getBlock(nx, y - 1, nz))) continue;
+      this.chunks.setBlock(nx, y, nz, target.blockId);
+      this.chunks.setBlockMeta(nx, y, nz, null, true);
+      this.redstone.observeBlockChange(nx, y, nz);
+      if (this.gameMode !== 'creative') this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+      this.sound.playBlockPlace(target.blockId);
+      this.notifyState();
+      return true;
+    }
+    return false;
+  }
+
   private tryTillFarmland(target?: BlockInteractionContext): boolean {
     if (!target) return false;
     const targetBaseId = target.blockId & 0x3FF;
@@ -3680,6 +3776,34 @@ export class Game {
     );
     this.sound.playNamedEvent26_3('item.chorus_fruit.teleport');
     return true;
+  }
+
+  private continueMilkUse(stack: ItemStack, dt: number) {
+    this.eatingTimer += dt;
+    this.chewSoundTimer += dt;
+    if (this.chewSoundTimer >= 0.35) {
+      this.chewSoundTimer = 0;
+      this.sound.playDrink();
+    }
+    if (this.eatingTimer < getItemUseDurationSeconds(stack)) return { handled: true };
+
+    this.potionEffects.clear();
+    this.player.absorption = 0;
+    this.sound.playDrink();
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_ITEM_CONSUME, {
+        slot: this.player.selectedSlot,
+        itemId: stack.id,
+      });
+    } else if (this.gameMode !== 'creative') {
+      const remainder = getDefaultUseRemainderItemId(stack.id);
+      this.inventory.setSlot(
+        this.player.selectedSlot,
+        remainder === undefined ? null : { id: remainder, count: 1 },
+      );
+    }
+    this.notifyState();
+    return { handled: true, completed: true, cooldown: 0.5 };
   }
 
   private continueFoodUse(stack: ItemStack, dt: number) {

@@ -95,6 +95,8 @@ export interface BlockMetadata {
   maxBurnTime?: number;
   sticky?: boolean;
   bedPart?: 'head' | 'foot';
+  /** Java 26.3 Shelf Mushroom visual/growth state. */
+  shelfMushroomSize?: 'small' | 'large';
   cakeBites?: number;
   cauldronFluid?: 'water' | 'lava';
   cauldronLevel?: number;

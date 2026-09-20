@@ -3851,6 +3851,8 @@ export class Game {
   private tryUseShovel(target?: BlockInteractionContext): boolean {
     if (!target || target.face !== 'up') return false;
     if (!resolveShovelPathTargetName(target.block.name)) return false;
+    const held = this.inventory.getSlot(this.player.selectedSlot);
+    if (held && this.sendServerBlockItemUse(held, target)) return true;
     const { x, y, z } = target.position;
     if (this.chunks.getBlock(x, y + 1, z) !== 0) return false;
 
@@ -3868,6 +3870,8 @@ export class Game {
     if (!target) return false;
     const strippedName = resolveAxeStrippedBlockName(target.block.name);
     if (!strippedName) return false;
+    const held = this.inventory.getSlot(this.player.selectedSlot);
+    if (held && this.sendServerBlockItemUse(held, target)) return true;
     const stripped = BlockRegistry.getByName(strippedName);
     if (!stripped) return false;
 
@@ -3883,6 +3887,9 @@ export class Game {
 
   private tryUseBoneMeal26_3(target?: BlockInteractionContext): boolean {
     if (!target) return false;
+    if (target.block.name !== 'shelf_mushroom' && target.block.name !== 'red_shrub') return false;
+    const held = this.inventory.getSlot(this.player.selectedSlot);
+    if (held && this.sendServerBlockItemUse(held, target)) return true;
     const { x, y, z } = target.position;
 
     if (target.block.name === 'shelf_mushroom') {

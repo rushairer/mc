@@ -55,7 +55,8 @@ export function isSupportedServerItemUseName(name: string, kind: ServerItemUseIn
     || name === 'flint_and_steel'
     || name === 'shears'
     || name === 'boat'
-    || name.endsWith('_boat');
+    || name.endsWith('_boat')
+    || serverItemOnBlockKind(name) !== null;
 }
 
 export function isValidServerItemUseForHeldStack(
@@ -101,6 +102,15 @@ export function bucketPlacedBlockName(bucketName: string): 'water' | 'lava' | 'p
 export function vehicleTypeForBoatItemName(name: string): 'boat' | 'chest_boat' | null {
   if (name === 'boat' || (name.endsWith('_boat') && !name.endsWith('_chest_boat'))) return 'boat';
   if (name.endsWith('_chest_boat')) return 'chest_boat';
+  return null;
+}
+
+export type ServerItemOnBlockKind = 'axe' | 'shovel' | 'bone_meal';
+
+export function serverItemOnBlockKind(name: string): ServerItemOnBlockKind | null {
+  if (name === 'bone_meal') return 'bone_meal';
+  if (name.endsWith('_shovel')) return 'shovel';
+  if (name.endsWith('_axe')) return 'axe';
   return null;
 }
 

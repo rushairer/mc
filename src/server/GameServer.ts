@@ -16,6 +16,7 @@ import {
   parseServerItemUseIntent,
   replaceOneHeldItem,
   type ServerBlockItemUseIntent,
+  serverItemOnBlockKind,
   vehicleTypeForBoatItemName,
 } from './ServerItemUseRules';
 import {
@@ -75,6 +76,8 @@ import { Chunk } from '../world/Chunk';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { planBlockPlacement } from '../world/BlockPlacement';
 import { createDefaultSignMetadata, isSignBlockName, isWallSignBlockName } from '../world/SignRules';
+import { resolveAxeStrippedBlockName, resolveShovelPathTargetName, rotateBoneMealSpreadOffsets26_3 } from '../world/ItemOnBlockRules';
+import { coordinateRandom } from '../engine/DeterministicRandom';
 import { createServerPlacementCells, getDoorSidePosition, horizontalFacingFromYaw, isPlacementReplaceableBlockName, resolveDoorHinge, signRotationFromYaw } from './ServerPlacementRules';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { cloneItemStack } from '../items/ItemStackRules';
@@ -1404,6 +1407,80 @@ export class GameServer {
         type: 'place', x: place.x, y: place.y, z: place.z,
       });
       return true;
+    }
+
+    const itemOnBlockKind = serverItemOnBlockKind(itemName);
+    if (itemOnBlockKind === 'shovel') {
+      if (intent.face !== 'up') return false;
+      if (!resolveShovelPathTargetName(targetBlock.name)) return false;
+      if (intent.y + 1 >= WORLD_HEIGHT || this.getBlock(intent.x, intent.y + 1, intent.z, session.dimension) !== 0) return false;
+      const path = BlockRegistry.getByName('dirt_path') ?? BlockRegistry.getByName('grass_path');
+      if (!path) return false;
+      this.setBlock(intent.x, intent.y, intent.z, path.id, session.dimension, null);
+      this.broadcastServerBlockUpdate(intent.x, intent.y, intent.z, path.id, session.dimension, null);
+      this.damageServerHeldTool(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: intent.x, y: intent.y, z: intent.z,
+      });
+      return true;
+    }
+
+    if (itemOnBlockKind === 'axe') {
+      const strippedName = resolveAxeStrippedBlockName(targetBlock.name);
+      if (!strippedName) return false;
+      const stripped = BlockRegistry.getByName(strippedName);
+      if (!stripped) return false;
+      const metadata = this.getBlockMetadata(intent.x, intent.y, intent.z, session.dimension) ?? null;
+      this.setBlock(intent.x, intent.y, intent.z, stripped.id, session.dimension, metadata);
+      this.broadcastServerBlockUpdate(intent.x, intent.y, intent.z, stripped.id, session.dimension, metadata);
+      this.damageServerHeldTool(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: intent.x, y: intent.y, z: intent.z,
+      });
+      return true;
+    }
+
+    if (itemOnBlockKind === 'bone_meal') {
+      if (targetBlock.name === 'shelf_mushroom') {
+        const metadata = this.getBlockMetadata(intent.x, intent.y, intent.z, session.dimension);
+        if (metadata?.shelfMushroomSize === 'large') return false;
+        const nextMetadata: BlockMetadata = { ...metadata, shelfMushroomSize: 'large' };
+        this.setBlock(intent.x, intent.y, intent.z, targetBlockId, session.dimension, nextMetadata);
+        this.broadcastServerBlockUpdate(intent.x, intent.y, intent.z, targetBlockId, session.dimension, nextMetadata);
+        if (session.gameMode !== 'creative') {
+          session.inventory[session.selectedSlot] = consumeHeldStack(held);
+          this.syncPlayerInventory(session);
+        }
+        this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+          type: 'place', x: intent.x, y: intent.y, z: intent.z,
+        });
+        return true;
+      }
+
+      if (targetBlock.name !== 'red_shrub') return false;
+      const start = Math.floor(coordinateRandom(
+        this.seed,
+        intent.x,
+        this.gameTick + 2630,
+        intent.z,
+      ) * 8);
+      for (const offset of rotateBoneMealSpreadOffsets26_3(start)) {
+        const nx = intent.x + offset.x;
+        const nz = intent.z + offset.z;
+        if (this.getBlock(nx, intent.y, nz, session.dimension) !== 0) continue;
+        if (!this.isSolidBlock(nx, intent.y - 1, nz, session.dimension)) continue;
+        this.setBlock(nx, intent.y, nz, targetBlockId, session.dimension, null);
+        this.broadcastServerBlockUpdate(nx, intent.y, nz, targetBlockId, session.dimension, null);
+        if (session.gameMode !== 'creative') {
+          session.inventory[session.selectedSlot] = consumeHeldStack(held);
+          this.syncPlayerInventory(session);
+        }
+        this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+          type: 'place', x: nx, y: intent.y, z: nz,
+        });
+        return true;
+      }
+      return false;
     }
 
     if (itemName === 'shears' && targetBlock.name === 'pumpkin') {

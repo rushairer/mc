@@ -64,6 +64,11 @@ import {
 import { planBlockPlacement } from '../world/BlockPlacement';
 import { fallingLeafParticle26_3, shouldPrioritizeShieldUse26_3 } from '../world/WildernessBoundChanges26_3';
 import { useStrawBed as resolveStrawBedUse26_3 } from '../world/WildernessBound26_3';
+import {
+  CushionSeatSystem26_3,
+  cushionColorFromItemName26_3,
+  type CushionPlacementPoint,
+} from '../world/WildernessBoundGameplay26_3';
 import { applySaturationStew26_3 } from '../world/SuspiciousStew26_3';
 import { findChorusFruitDestination26_3 } from '../world/TeleportRules26_3';
 import { getButtonPressTicks } from '../world/ButtonRules';
@@ -347,6 +352,9 @@ export class Game {
     GameItemInteractionContext,
     GameEntityInteractionContext
   >();
+  private cushionSeats26_3 = new CushionSeatSystem26_3();
+  private cushionMeshes26_3 = new Map<string, THREE.Mesh>();
+  private activeCushionSeat26_3: CushionPlacementPoint | null = null;
 
   activeSlot: string = 'world_1';
 
@@ -754,6 +762,13 @@ export class Game {
       id: 'minecraft:block_item',
       use: ({ stack, target }) => ({
         handled: this.tryPlaceBlockItem(stack, target),
+        cooldown: 0.25,
+      }),
+    });
+    this.behaviors.registerItem([], {
+      id: 'minecraft:cushion',
+      use: ({ item, stack, target }) => ({
+        handled: this.tryPlaceCushion26_3(item.name, stack, target),
         cooldown: 0.25,
       }),
     });
@@ -1990,19 +2005,37 @@ export class Game {
       this.player.flying = !this.player.flying;
       this.notifyState();
     }
+    if (this.activeCushionSeat26_3 && !this.chatOpen && this.input.isKeyDown('shift')) {
+      this.cushionSeats26_3.stand('local-player');
+      this.activeCushionSeat26_3 = null;
+      this.player.position.x += 1.0;
+      this.placeCooldown = Math.max(this.placeCooldown, 0.25);
+    }
+
+    const sittingOnCushion26_3 = this.activeCushionSeat26_3 !== null;
     const mouseDelta = this.input.consumeMouseDelta();
     this.player.update(dt, {
       dx: this.chatOpen ? 0 : mouseDelta.dx,
       dy: this.chatOpen ? 0 : mouseDelta.dy,
-      forward: this.chatOpen ? false : this.input.isKeyDown('w'),
-      back: this.chatOpen ? false : this.input.isKeyDown('s'),
-      left: this.chatOpen ? false : this.input.isKeyDown('a'),
-      right: this.chatOpen ? false : this.input.isKeyDown('d'),
-      jump: this.chatOpen ? false : this.input.isKeyDown(' '),
-      sprint: this.chatOpen ? false : this.input.isKeyDown('control'),
-      sneak: this.chatOpen || this.riddenMob || this.riddenVehicle ? false : this.input.isKeyDown('shift'),
+      forward: this.chatOpen || sittingOnCushion26_3 ? false : this.input.isKeyDown('w'),
+      back: this.chatOpen || sittingOnCushion26_3 ? false : this.input.isKeyDown('s'),
+      left: this.chatOpen || sittingOnCushion26_3 ? false : this.input.isKeyDown('a'),
+      right: this.chatOpen || sittingOnCushion26_3 ? false : this.input.isKeyDown('d'),
+      jump: this.chatOpen || sittingOnCushion26_3 ? false : this.input.isKeyDown(' '),
+      sprint: this.chatOpen || sittingOnCushion26_3 ? false : this.input.isKeyDown('control'),
+      sneak: this.chatOpen || this.riddenMob || this.riddenVehicle || sittingOnCushion26_3 ? false : this.input.isKeyDown('shift'),
       fly: false,
     }, this.chunks);
+
+    if (this.activeCushionSeat26_3) {
+      this.player.position.set(
+        this.activeCushionSeat26_3.x,
+        this.activeCushionSeat26_3.y + 0.18,
+        this.activeCushionSeat26_3.z,
+      );
+      this.player.velocity.set(0, 0, 0);
+      this.player.onGround = true;
+    }
 
     const playerShelfBounceEvent26_3 = this.player.consumeShelfMushroomBounceSound26_3();
     if (playerShelfBounceEvent26_3) this.sound.playNamedEvent26_3(playerShelfBounceEvent26_3);
@@ -2722,6 +2755,11 @@ export class Game {
       const heldItemDef = ItemRegistry.get(heldItemId);
       const targetInteraction = this.getTargetBlockInteractionContext(selectedSlot);
 
+      if (targetInteraction && this.trySitOnCushion26_3(targetInteraction)) {
+        this.placeCooldown = 0.25;
+        return;
+      }
+
       const blockBehaviorResult = targetInteraction
         ? this.behaviors.interactBlock(targetInteraction)
         : undefined;
@@ -3330,6 +3368,67 @@ export class Game {
       y: target.position.y + offset.y,
       z: target.position.z + offset.z,
     };
+  }
+
+  private cushionSupportKey26_3(position: BlockPosition): string {
+    return `${position.x},${position.y},${position.z}`;
+  }
+
+  private cushionSeatKey26_3(point: CushionPlacementPoint): string {
+    return `${point.x.toFixed(3)},${point.y.toFixed(3)},${point.z.toFixed(3)}`;
+  }
+
+  private createCushionMesh26_3(point: CushionPlacementPoint, colorName: string): THREE.Mesh {
+    const colors: Record<string, number> = {
+      white: 0xf0f0f0, orange: 0xf9801d, magenta: 0xc74ebd, light_blue: 0x3ab3da,
+      yellow: 0xfed83d, lime: 0x80c71f, pink: 0xf38baa, gray: 0x474f52,
+      light_gray: 0x9d9d97, cyan: 0x169c9c, purple: 0x8932b8, blue: 0x3c44aa,
+      brown: 0x835432, green: 0x5e7c16, red: 0xb02e26, black: 0x1d1d21,
+    };
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.74, 0.18, 0.74),
+      new THREE.MeshLambertMaterial({ color: colors[colorName] ?? 0xffffff }),
+    );
+    mesh.position.set(point.x, point.y + 0.09, point.z);
+    mesh.name = 'wilderness-bound-cushion';
+    return mesh;
+  }
+
+  private tryPlaceCushion26_3(itemName: string, stack: ItemStack, target?: BlockInteractionContext): boolean {
+    if (!target || stack.count <= 0 || target.face !== 'up' || !target.block.solid) return false;
+    const color = cushionColorFromItemName26_3(itemName);
+    if (!color) return false;
+    const seat = this.cushionSeats26_3.place({
+      hitX: target.position.x + 0.5,
+      hitZ: target.position.z + 0.5,
+      supportTopY: target.position.y + 1,
+      flatSurface: true,
+      supportingBlock: true,
+      color,
+    }, this.cushionSupportKey26_3(target.position));
+    if (!seat) return false;
+
+    const mesh = this.createCushionMesh26_3(seat, color);
+    this.cushionMeshes26_3.set(this.cushionSeatKey26_3(seat), mesh);
+    this.renderer.scene.add(mesh);
+    this.sound.playBlockPlace(35);
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+    this.notifyState();
+    return true;
+  }
+
+  private trySitOnCushion26_3(target: BlockInteractionContext): boolean {
+    if (target.face !== 'up' || this.activeCushionSeat26_3) return false;
+    const seat = this.cushionSeats26_3.getSeatForSupport(this.cushionSupportKey26_3(target.position));
+    if (!seat) return false;
+    const result = this.cushionSeats26_3.sit('local-player', seat);
+    if (!result.seated || !result.position) return false;
+    this.activeCushionSeat26_3 = result.position;
+    this.player.velocity.set(0, 0, 0);
+    this.notifyState();
+    return true;
   }
 
   private tryPlaceBlockItem(stack: ItemStack, target?: BlockInteractionContext): boolean {

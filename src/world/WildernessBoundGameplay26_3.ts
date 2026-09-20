@@ -39,6 +39,13 @@ export const CUSHION_PISTON_REACTION_26_3 = 'block' as const;
 export const CUSHION_DAMPENS_VIBRATIONS_26_3 = false;
 export const CUSHION_DISMOUNT_HINT_26_3 = 'Press SHIFT to get up';
 
+export function cushionColorFromItemName26_3(itemName: string): DyeColor | null {
+  const normalized = itemName.replace(/^minecraft:/, '');
+  if (!normalized.endsWith('_cushion')) return null;
+  const color = normalized.slice(0, -'_cushion'.length) as DyeColor;
+  return DYE_COLORS.includes(color) ? color : null;
+}
+
 function positionKey(x: number, y: number, z: number): string {
   return `${x.toFixed(3)},${y.toFixed(3)},${z.toFixed(3)}`;
 }
@@ -110,6 +117,13 @@ export class CushionSeatSystem26_3 {
   getSeat(point: CushionPlacementPoint): CushionSeat | undefined {
     const seat = this.seats.get(positionKey(point.x, point.y, point.z));
     return seat ? { ...seat } : undefined;
+  }
+
+  getSeatForSupport(supportKey: string): CushionSeat | undefined {
+    for (const seat of this.seats.values()) {
+      if (seat.supportKey === supportKey) return { ...seat };
+    }
+    return undefined;
   }
 
   isPlayerSitting(playerId: string): boolean {

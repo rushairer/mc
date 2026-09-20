@@ -16,6 +16,7 @@ import {
   parseServerItemUseIntent,
   replaceOneHeldItem,
   type ServerBlockItemUseIntent,
+  vehicleTypeForBoatItemName,
 } from './ServerItemUseRules';
 import {
   applyKnockbackResistance,
@@ -149,6 +150,7 @@ interface ServerMob {
   isBaby?: boolean;
   isTamed?: boolean;
   isSitting?: boolean;
+  isSheared?: boolean;
   isAngry?: boolean;
   angerTimer?: number;
 }
@@ -168,6 +170,15 @@ interface ServerPrimedTnt {
   position: THREE.Vector3;
   fuseSeconds: number;
   dimension: number;
+}
+
+interface ServerVehicle {
+  id: number;
+  type: 'boat' | 'chest_boat';
+  position: THREE.Vector3;
+  sourceItemId: number;
+  dimension: number;
+  inventory: (ItemStack | null)[] | null;
 }
 
 interface ServerProjectile {
@@ -190,6 +201,7 @@ export class GameServer {
   private droppedItemMergeTimer = 0;
   private projectiles: Map<number, ServerProjectile> = new Map();
   private primedTnt: Map<number, ServerPrimedTnt> = new Map();
+  private vehicles: Map<number, ServerVehicle> = new Map();
   private nextProjectileId = 1;
   /** P5.3 — server-owned container contents keyed by position. */
   private containerData: Map<string, (ItemStack | null)[]> = new Map();
@@ -356,7 +368,23 @@ export class GameServer {
           health: mob.health,
           isBaby: mob.isBaby,
           isTamed: mob.isTamed,
-          isSitting: mob.isSitting
+          isSitting: mob.isSitting,
+          isSheared: mob.isSheared
+        });
+      }
+    }
+
+    // Send active server-authoritative vehicles to late joiners.
+    for (const vehicle of this.vehicles.values()) {
+      if (vehicle.dimension === session.dimension) {
+        this.sendTo(session, PacketType.S2C_VEHICLE_SPAWN, {
+          id: vehicle.id,
+          type: vehicle.type,
+          sourceItemId: vehicle.sourceItemId,
+          x: vehicle.position.x,
+          y: vehicle.position.y,
+          z: vehicle.position.z,
+          dimension: vehicle.dimension,
         });
       }
     }
@@ -453,7 +481,8 @@ export class GameServer {
         dimension,
         isBaby: mob.isBaby,
         isTamed: mob.isTamed,
-        isSitting: mob.isSitting
+        isSitting: mob.isSitting,
+        isSheared: mob.isSheared
       });
     }
 
@@ -574,7 +603,8 @@ export class GameServer {
             dimension,
             mData.isBaby,
             mData.isTamed,
-            mData.isSitting
+            mData.isSitting,
+            mData.isSheared
           );
         }
       }
@@ -1292,6 +1322,54 @@ export class GameServer {
       return true;
     }
 
+    if (itemName === 'shears' && targetBlock.name === 'pumpkin') {
+      const carved = BlockRegistry.getByName('carved_pumpkin');
+      const seeds = ItemRegistry.getByName('pumpkin_seeds');
+      if (!carved || !seeds) return false;
+      const metadata: BlockMetadata = { facing: horizontalFacingFromYaw(session.yaw) };
+      this.setBlock(intent.x, intent.y, intent.z, carved.id, session.dimension, metadata);
+      this.broadcastServerBlockUpdate(intent.x, intent.y, intent.z, carved.id, session.dimension, metadata);
+      this.spawnDroppedItem(seeds.id, 4, intent.x + 0.5, intent.y + 0.8, intent.z + 0.5, session.dimension, 0.5);
+      this.damageServerHeldTool(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: intent.x, y: intent.y, z: intent.z,
+      });
+      return true;
+    }
+
+    const vehicleType = vehicleTypeForBoatItemName(itemName);
+    if (vehicleType) {
+      const place = adjacentBlockPosition(intent.x, intent.y, intent.z, intent.face);
+      if (!isValidWorldY(place.y, WORLD_HEIGHT)) return false;
+      if (this.isSolidBlock(place.x, place.y, place.z, session.dimension)) return false;
+      const vehicle: ServerVehicle = {
+        id: this.nextEntityId++,
+        type: vehicleType,
+        position: new THREE.Vector3(place.x + 0.5, place.y + 0.2, place.z + 0.5),
+        sourceItemId: held.id,
+        dimension: session.dimension,
+        inventory: vehicleType === 'chest_boat' ? createContainerSlots('chest') : null,
+      };
+      this.vehicles.set(vehicle.id, vehicle);
+      this.broadcastDimension(session.dimension, PacketType.S2C_VEHICLE_SPAWN, {
+        id: vehicle.id,
+        type: vehicle.type,
+        sourceItemId: vehicle.sourceItemId,
+        x: vehicle.position.x,
+        y: vehicle.position.y,
+        z: vehicle.position.z,
+        dimension: vehicle.dimension,
+      });
+      if (session.gameMode !== 'creative') {
+        session.inventory[session.selectedSlot] = consumeHeldStack(held);
+        this.syncPlayerInventory(session);
+      }
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: place.x, y: place.y, z: place.z,
+      });
+      return true;
+    }
+
     if (itemName === 'flint_and_steel') {
       if (targetBlock.name === 'tnt') {
         this.setBlock(intent.x, intent.y, intent.z, 0, session.dimension);
@@ -1346,8 +1424,37 @@ export class GameServer {
     return false;
   }
 
-  private handleServerEntityItemUse(_session: PlayerSession, _entityId: number, _held: ItemStack): boolean {
-    return false;
+  private handleServerEntityItemUse(session: PlayerSession, entityId: number, held: ItemStack): boolean {
+    const itemName = ItemRegistry.get(held.id)?.name;
+    if (itemName !== 'shears') return false;
+
+    const mob = this.mobs.get(entityId);
+    if (!mob || mob.dimension !== session.dimension || mob.type !== 'sheep') return false;
+    if (!isEntityAttackInReach(session, mob.position, session.gameMode)) return false;
+    if (mob.isBaby || mob.isSheared) return false;
+
+    mob.isSheared = true;
+    const woolCount = 1 + Math.floor(Math.random() * 3);
+    this.spawnDroppedItem(
+      35,
+      woolCount,
+      mob.position.x,
+      mob.position.y + 0.7,
+      mob.position.z,
+      mob.dimension,
+      0.5,
+    );
+    this.damageServerHeldTool(session, held);
+    this.broadcastDimension(session.dimension, PacketType.S2C_MOB_STATE, {
+      id: mob.id,
+      health: mob.health,
+      hurtTimer: mob.hurtTimer,
+      isSheared: true,
+    });
+    this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+      type: 'break', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+    });
+    return true;
   }
 
   private tickPrimedTnt(dt: number) {
@@ -1708,7 +1815,7 @@ export class GameServer {
 
   // --- Entity Spawning & Ticking ---
 
-  spawnMob(type: MobType, x: number, y: number, z: number, dimension: number, isBaby = false, isTamed = false, isSitting = false): ServerMob {
+  spawnMob(type: MobType, x: number, y: number, z: number, dimension: number, isBaby = false, isTamed = false, isSitting = false, isSheared = false): ServerMob {
     const id = this.nextEntityId++;
     const mob: ServerMob = {
       id,
@@ -1730,7 +1837,8 @@ export class GameServer {
       dimension,
       isBaby,
       isTamed,
-      isSitting
+      isSitting,
+      isSheared
     };
 
     this.mobs.set(id, mob);
@@ -1745,7 +1853,8 @@ export class GameServer {
       health: mob.health,
       isBaby,
       isTamed,
-      isSitting
+      isSitting,
+      isSheared
     });
 
     return mob;

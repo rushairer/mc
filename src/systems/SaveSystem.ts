@@ -107,6 +107,7 @@ export interface SerializedMob {
   breedCooldown?: number;
   isTamed?: boolean;
   isSitting?: boolean;
+  isSheared?: boolean;
   isAngry?: boolean;
   angerTimer?: number;
 }

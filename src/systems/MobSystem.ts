@@ -369,6 +369,7 @@ export class MobSystem {
         breedCooldown: mob.breedCooldown,
         isTamed: mob.isTamed,
         isSitting: mob.isSitting,
+        isSheared: mob.isSheared,
         isAngry: mob.isAngry,
         angerTimer: mob.angerTimer,
       }));
@@ -393,6 +394,7 @@ export class MobSystem {
       mob.breedCooldown = Math.max(0, saved.breedCooldown ?? 0);
       mob.isTamed = !!saved.isTamed;
       mob.isSitting = !!saved.isSitting;
+      mob.isSheared = !!saved.isSheared;
       mob.isAngry = !!saved.isAngry;
       mob.angerTimer = Math.max(0, saved.angerTimer ?? 0);
       mob.isRidden = false;

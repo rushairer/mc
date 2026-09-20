@@ -233,7 +233,7 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_MOB_SPAWN: {
-        const { id, type, x, y, z, yaw, pitch, health, isBaby, isTamed, isSitting } = packet.payload;
+        const { id, type, x, y, z, yaw, pitch, health, isBaby, isTamed, isSitting, isSheared } = packet.payload;
         // Spawns mob client-side
         const mob = this.game.mobs.spawnMob(type, x, y, z);
         if (mob) {
@@ -248,6 +248,7 @@ export class NetworkClient {
           if (isBaby) mob.isBaby = true;
           if (isTamed) mob.isTamed = true;
           if (isSitting) mob.isSitting = true;
+          if (isSheared) mob.isSheared = true;
         }
         break;
       }
@@ -281,13 +282,31 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_MOB_STATE: {
-        const { id, health, hurtTimer, fuseTimer } = packet.payload;
+        const { id, health, hurtTimer, fuseTimer, isSheared } = packet.payload;
         const mob = this.game.mobs.mobs.get(id);
         if (mob) {
           mob.health = health;
           mob.hurtTimer = hurtTimer;
           if (fuseTimer !== undefined) mob.fuseTimer = fuseTimer;
+          if (isSheared !== undefined) mob.isSheared = !!isSheared;
         }
+        break;
+      }
+
+      case PacketType.S2C_VEHICLE_SPAWN: {
+        const { id, type, sourceItemId, x, y, z, dimension } = packet.payload;
+        if (dimension !== this.game.chunks.currentDimension) return;
+        if (type !== 'boat' && type !== 'chest_boat') break;
+        const existing = this.game.vehicles.vehicles.get(id);
+        if (existing) this.game.vehicles.removeVehicle(id);
+        const vehicle = this.game.vehicles.spawnVehicle(
+          type,
+          new THREE.Vector3(x, y, z),
+          sourceItemId,
+        );
+        this.game.vehicles.vehicles.delete(vehicle.id);
+        vehicle.id = id;
+        this.game.vehicles.vehicles.set(id, vehicle);
         break;
       }
 

@@ -98,6 +98,12 @@ export function bucketPlacedBlockName(bucketName: string): 'water' | 'lava' | 'p
   return null;
 }
 
+export function vehicleTypeForBoatItemName(name: string): 'boat' | 'chest_boat' | null {
+  if (name === 'boat' || (name.endsWith('_boat') && !name.endsWith('_chest_boat'))) return 'boat';
+  if (name.endsWith('_chest_boat')) return 'chest_boat';
+  return null;
+}
+
 export interface HeldReplacementResult {
   held: ItemStack | null;
   remainder: ItemStack | null;

@@ -16,7 +16,7 @@ export interface ItemDef {
   displayName: string;
   maxStackSize: number;
   category: 'block' | 'tool' | 'food' | 'material' | 'armor';
-  toolType?: 'pickaxe' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'spear' | 'bow' | 'crossbow' | 'fishing_rod' | 'trident' | 'mace' | 'brush';
+  toolType?: 'pickaxe' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'spear' | 'bow' | 'crossbow' | 'fishing_rod' | 'trident' | 'mace' | 'brush' | 'shears';
   toolMaterial?: 'wood' | 'stone' | 'iron' | 'gold' | 'diamond' | 'copper' | 'netherite';
   durability?: number;
   damage?: number;
@@ -190,10 +190,10 @@ for (const item of rawItems) {
           ? stats.damage + 3
           : getMeleeAttackDamage(toolType, toolMaterial);
       }
-    } else if (name === 'bow' || name === 'crossbow' || name === 'trident' || name === 'mace' || name === 'brush' || name === 'fishing_rod') {
+    } else if (name === 'bow' || name === 'crossbow' || name === 'trident' || name === 'mace' || name === 'brush' || name === 'fishing_rod' || name === 'shears') {
       category = 'tool';
       toolType = name === 'trident' ? 'trident' : name;
-      durability = item.maxDurability ?? (name === 'fishing_rod' ? 64 : 384);
+      durability = item.maxDurability ?? (name === 'fishing_rod' ? 64 : name === 'shears' ? 238 : 384);
       damage = name === 'trident' ? 9 : name === 'mace' ? 6 : 1;
     } else if (name.endsWith('_helmet') || name.endsWith('_chestplate') || name.endsWith('_leggings') || name.endsWith('_boots')) {
       category = 'armor';

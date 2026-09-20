@@ -851,8 +851,8 @@ export class GameServer {
               playerFacing,
               session.x,
               session.z,
-              BlockRegistry.isDoor(leftBlock) && leftMeta?.facing === playerFacing,
-              BlockRegistry.isDoor(rightBlock) && rightMeta?.facing === playerFacing,
+              !!BlockRegistry.get(leftBlock)?.name.endsWith('door') && !BlockRegistry.get(leftBlock)?.name.includes('trapdoor') && leftMeta?.facing === playerFacing,
+              !!BlockRegistry.get(rightBlock)?.name.endsWith('door') && !BlockRegistry.get(rightBlock)?.name.includes('trapdoor') && rightMeta?.facing === playerFacing,
             );
           }
 

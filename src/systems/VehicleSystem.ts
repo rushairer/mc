@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
+import type { ItemStack } from '../types';
 
-export type VehicleType = 'boat' | 'minecart';
+export type VehicleType = 'boat' | 'chest_boat' | 'minecart';
 
 export class Vehicle {
   id: number;
@@ -14,13 +15,17 @@ export class Vehicle {
   height = 0.6;
   isRidden = false;
   speed = 0;
+  sourceItemId?: number;
+  inventory: (ItemStack | null)[] | null;
 
-  constructor(id: number, type: VehicleType, position: THREE.Vector3, mesh: THREE.Mesh | THREE.Group) {
+  constructor(id: number, type: VehicleType, position: THREE.Vector3, mesh: THREE.Mesh | THREE.Group, sourceItemId?: number) {
     this.id = id;
     this.type = type;
     this.position = position.clone();
     this.velocity = new THREE.Vector3();
     this.mesh = mesh;
+    this.sourceItemId = sourceItemId;
+    this.inventory = type === 'chest_boat' ? new Array(27).fill(null) : null;
   }
 
   dispose(scene: THREE.Scene) {
@@ -47,8 +52,8 @@ export class VehicleSystem {
     this.scene = scene;
   }
 
-  spawnVehicle(type: VehicleType, position: THREE.Vector3): Vehicle {
-    const mesh = type === 'boat' ? this.createBoatMesh() : this.createMinecartMesh();
+  spawnVehicle(type: VehicleType, position: THREE.Vector3, sourceItemId?: number): Vehicle {
+    const mesh = type === 'minecart' ? this.createMinecartMesh() : this.createBoatMesh(type === 'chest_boat');
     mesh.position.copy(position);
     mesh.traverse(child => {
       if (child instanceof THREE.Mesh) {
@@ -58,7 +63,7 @@ export class VehicleSystem {
     });
     this.scene.add(mesh);
 
-    const vehicle = new Vehicle(this.nextId++, type, position, mesh);
+    const vehicle = new Vehicle(this.nextId++, type, position, mesh, sourceItemId);
     this.vehicles.set(vehicle.id, vehicle);
     return vehicle;
   }
@@ -100,7 +105,7 @@ export class VehicleSystem {
     inputKeys: { w: boolean; s: boolean; a: boolean; d: boolean }
   ) {
     for (const vehicle of this.vehicles.values()) {
-      if (vehicle.type === 'boat') {
+      if (vehicle.type !== 'minecart') {
         this.updateBoatPhysics(vehicle, dt, getBlock, isSolidBlock, inputKeys);
       } else {
         this.updateMinecartPhysics(vehicle, dt, getBlock, isSolidBlock, inputKeys);
@@ -110,7 +115,7 @@ export class VehicleSystem {
     }
   }
 
-  private createBoatMesh(): THREE.Group {
+  private createBoatMesh(withChest = false): THREE.Group {
     const group = new THREE.Group();
     const base = new THREE.Mesh(
       new THREE.BoxGeometry(1.2, 0.2, 0.7),
@@ -130,6 +135,14 @@ export class VehicleSystem {
     back.position.set(-0.6, 0.3, 0);
 
     group.add(left, right, front, back);
+    if (withChest) {
+      const chestMaterial = new THREE.MeshLambertMaterial({ color: 0x8a5a2b });
+      const chest = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.38, 0.5), chestMaterial);
+      chest.position.set(-0.18, 0.48, 0);
+      const lid = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.12, 0.53), chestMaterial);
+      lid.position.set(-0.18, 0.73, 0);
+      group.add(chest, lid);
+    }
     return group;
   }
 

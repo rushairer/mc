@@ -647,11 +647,8 @@ export class Game {
     });
     this.behaviors.registerBlock(['tnt'], {
       id: 'minecraft:tnt',
-      preventsItemUse: true,
-      interact: ({ position }) => {
-        this.igniteTNT(position.x, position.y, position.z);
-        return { handled: true, cooldown: 0.25 };
-      },
+      // TNT is inert to an ordinary right-click; ignition belongs to the held item.
+      interact: () => ({ handled: false }),
     });
     // P3.6: repeater delay cycling + note block pitch cycling.
     this.behaviors.registerBlock([], {
@@ -913,6 +910,10 @@ export class Game {
       use: ({ target }) => ({ handled: this.tryUseFlintAndSteel(target), cooldown: 0.25 }),
     });
     this.behaviors.registerItem([], {
+      id: 'minecraft:shears',
+      use: ({ target }) => ({ handled: this.tryUseShears(target), cooldown: 0.25 }),
+    });
+    this.behaviors.registerItem([], {
       id: 'minecraft:bone_meal',
       use: ({ target }) => ({ handled: this.tryUseBoneMeal26_3(target), cooldown: 0.25 }),
     });
@@ -967,7 +968,7 @@ export class Game {
       },
     });
 
-    this.behaviors.registerEntity(['vehicle:boat', 'vehicle:minecart'], {
+    this.behaviors.registerEntity(['vehicle:boat', 'vehicle:chest_boat', 'vehicle:minecart'], {
       id: 'minecraft:vehicle_mount',
       interact: ({ target }) => {
         if (!(target instanceof Vehicle) || this.riddenVehicle || this.riddenMob) {
@@ -1035,6 +1036,22 @@ export class Game {
 
   private tryInteractMob(target: Mob, heldItem: ItemStack | null) {
     const heldItemId = heldItem?.id ?? 0;
+    const heldItemName = heldItem ? ItemRegistry.get(heldItem.id)?.name : undefined;
+
+    if (target.def.type === 'sheep' && heldItemName === 'shears' && !target.isBaby && !target.isSheared) {
+      target.isSheared = true;
+      const woolCount = 1 + Math.floor(Math.random() * 3);
+      this.droppedItems.spawnItem(
+        35,
+        woolCount,
+        target.position.clone().add(new THREE.Vector3(0, 0.7, 0)),
+        new THREE.Vector3((Math.random() - 0.5) * 0.5, 1.2, (Math.random() - 0.5) * 0.5),
+        0.5,
+      );
+      if (this.gameMode !== 'creative') this.inventory.damageTool(this.player.selectedSlot);
+      this.sound.playBlockBreak(35);
+      return { handled: true, cooldown: 0.25 };
+    }
 
     if (target.def.type === 'villager') {
       this.openTradingUI(target.villagerProfession);
@@ -2584,13 +2601,18 @@ export class Game {
           this.startAttackCooldown(attackCooldownDuration);
           this.sound.playBlockBreak(5); // Planks/wood sound for vehicle destruction
           
-          let itemId = 328;
-          if (targetVehicle.type === 'boat') {
-            const boatDef = ItemRegistry.getByName('oak_boat') || ItemRegistry.getByName('boat');
-            itemId = boatDef?.id ?? 333;
-          } else {
-            const cartDef = ItemRegistry.getByName('minecart');
-            itemId = cartDef?.id ?? 328;
+          let itemId = targetVehicle.sourceItemId ?? 328;
+          if (!targetVehicle.sourceItemId) {
+            if (targetVehicle.type === 'boat') {
+              const boatDef = ItemRegistry.getByName('oak_boat') || ItemRegistry.getByName('boat');
+              itemId = boatDef?.id ?? 333;
+            } else if (targetVehicle.type === 'chest_boat') {
+              const chestBoatDef = ItemRegistry.getByName('oak_chest_boat');
+              itemId = chestBoatDef?.id ?? 20190;
+            } else {
+              const cartDef = ItemRegistry.getByName('minecart');
+              itemId = cartDef?.id ?? 328;
+            }
           }
           
           const dropPos = targetVehicle.position.clone().add(new THREE.Vector3(0, 0.2, 0));
@@ -3548,23 +3570,40 @@ export class Game {
 
   private tryUseBucket(stack: ItemStack, target?: BlockInteractionContext): boolean {
     if (!target) return false;
+    const bucketName = ItemRegistry.get(stack.id)?.name;
+    if (!bucketName) return false;
 
-    if (stack.id === 325) {
-      const targetBaseId = target.blockId & 0x3FF;
-      if (targetBaseId !== 9 && targetBaseId !== 11) return false;
+    if (bucketName === 'bucket') {
+      const targetName = target.block.name;
+      const filledName = BlockRegistry.isWater(target.blockId)
+        ? 'water_bucket'
+        : BlockRegistry.isLava(target.blockId)
+          ? 'lava_bucket'
+          : targetName === 'powder_snow'
+            ? 'powder_snow_bucket'
+            : null;
+      if (!filledName) return false;
+      const filledBucket = ItemRegistry.getByName(filledName);
+      if (!filledBucket) return false;
 
-      const filledBucketId = targetBaseId === 9 ? 326 : 327;
       const { x, y, z } = target.position;
       this.chunks.setBlock(x, y, z, 0);
       this.chunks.setBlockMeta(x, y, z, null);
-      this.scheduleFluidNeighborhood(x, y, z);
+      if (filledName !== 'powder_snow_bucket') this.scheduleFluidNeighborhood(x, y, z);
       this.sound.playBucketFill();
-      this.replaceHeldBucketAfterUse(stack, filledBucketId);
+      this.replaceHeldBucketAfterUse(stack, filledBucket.id);
       this.notifyState();
       return true;
     }
 
-    if (stack.id !== 326 && stack.id !== 327) return false;
+    const placedBlockName = bucketName === 'water_bucket'
+      ? 'water'
+      : bucketName === 'lava_bucket'
+        ? 'lava'
+        : bucketName === 'powder_snow_bucket'
+          ? 'powder_snow'
+          : null;
+    if (!placedBlockName) return false;
     const placePosition = this.getAdjacentBlockPosition(target);
     if (!placePosition) return false;
 
@@ -3576,22 +3615,33 @@ export class Game {
       currentBlock === 38;
     if (!isReplaceable) return false;
 
-    const fluidBlockId = stack.id === 326 ? 9 : 11;
-    this.chunks.setBlock(placePosition.x, placePosition.y, placePosition.z, fluidBlockId);
-    this.chunks.setBlockMeta(placePosition.x, placePosition.y, placePosition.z, { fluidLevel: 8 });
-    this.scheduleFluidNeighborhood(placePosition.x, placePosition.y, placePosition.z);
+    const placedBlock = BlockRegistry.getByName(placedBlockName);
+    const emptyBucket = ItemRegistry.getByName('bucket');
+    if (!placedBlock || !emptyBucket) return false;
+    this.chunks.setBlock(placePosition.x, placePosition.y, placePosition.z, placedBlock.id);
+    this.chunks.setBlockMeta(
+      placePosition.x,
+      placePosition.y,
+      placePosition.z,
+      bucketName === 'powder_snow_bucket' ? null : { fluidLevel: 8 },
+    );
+    if (bucketName !== 'powder_snow_bucket') {
+      this.scheduleFluidNeighborhood(placePosition.x, placePosition.y, placePosition.z);
+    }
     this.sound.playBucketEmpty();
-    this.replaceHeldBucketAfterUse(stack, 325);
+    this.replaceHeldBucketAfterUse(stack, emptyBucket.id);
     this.notifyState();
     return true;
   }
 
-  private tryPlaceBoat(_stack: ItemStack, target?: BlockInteractionContext): boolean {
+  private tryPlaceBoat(stack: ItemStack, target?: BlockInteractionContext): boolean {
     if (!target) return false;
     const position = this.getAdjacentBlockPosition(target);
     if (!position) return false;
 
-    this.vehicles.spawnVehicle('boat', new THREE.Vector3(position.x + 0.5, position.y + 0.2, position.z + 0.5));
+    const itemName = ItemRegistry.get(stack.id)?.name ?? '';
+    const vehicleType = itemName.endsWith('_chest_boat') ? 'chest_boat' : 'boat';
+    this.vehicles.spawnVehicle(vehicleType, new THREE.Vector3(position.x + 0.5, position.y + 0.2, position.z + 0.5), stack.id);
     this.sound.playBlockPlace(5);
     if (this.gameMode !== 'creative') {
       this.inventory.removeFromSlot(this.player.selectedSlot, 1);
@@ -3613,6 +3663,13 @@ export class Game {
 
   private tryUseFlintAndSteel(target?: BlockInteractionContext): boolean {
     if (!target) return false;
+
+    if (target.block.name === 'tnt') {
+      this.igniteTNT(target.position.x, target.position.y, target.position.z);
+      if (this.gameMode !== 'creative') this.inventory.damageTool(this.player.selectedSlot);
+      return true;
+    }
+
     const position = this.getAdjacentBlockPosition(target);
     if (!position) return false;
 
@@ -3623,12 +3680,44 @@ export class Game {
       position.y,
       position.z,
     );
-    if (!activated) return false;
-
-    this.sound.playBlockPlace(0);
-    if (this.gameMode !== 'creative') {
-      this.inventory.damageTool(this.player.selectedSlot);
+    if (activated) {
+      this.sound.playBlockPlace(0);
+      if (this.gameMode !== 'creative') this.inventory.damageTool(this.player.selectedSlot);
+      return true;
     }
+
+    if (this.chunks.getBlock(position.x, position.y, position.z) !== 0) return false;
+    const fire = BlockRegistry.getByName('fire');
+    if (!fire) return false;
+    this.chunks.setBlock(position.x, position.y, position.z, fire.id);
+    this.chunks.setBlockMeta(position.x, position.y, position.z, null);
+    this.redstone.observeBlockChange(position.x, position.y, position.z);
+    this.sound.playBlockPlace(fire.id);
+    if (this.gameMode !== 'creative') this.inventory.damageTool(this.player.selectedSlot);
+    return true;
+  }
+
+  private tryUseShears(target?: BlockInteractionContext): boolean {
+    if (!target || target.block.name !== 'pumpkin') return false;
+    const carved = BlockRegistry.getByName('carved_pumpkin');
+    if (!carved) return false;
+    const { x, y, z } = target.position;
+    this.chunks.setBlock(x, y, z, carved.id);
+    this.chunks.setBlockMeta(x, y, z, { facing: this.getPlayerHorizontalFacing() }, true);
+    this.redstone.observeBlockChange(x, y, z);
+
+    const seeds = ItemRegistry.getByName('pumpkin_seeds');
+    if (seeds) {
+      this.droppedItems.spawnItem(
+        seeds.id,
+        4,
+        new THREE.Vector3(x + 0.5, y + 0.8, z + 0.5),
+        new THREE.Vector3(0, 1.1, 0),
+        0.5,
+      );
+    }
+    if (this.gameMode !== 'creative') this.inventory.damageTool(this.player.selectedSlot);
+    this.sound.playBlockPlace(carved.id);
     return true;
   }
 

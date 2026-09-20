@@ -107,6 +107,8 @@ export class Mob {
   isTamed = false;
   isSitting = false;
   isRidden = false;
+  /** Sheep shearing state; regrowth can reset this when grass-eating is modeled. */
+  isSheared = false;
   targetMob: Mob | null = null;
   runAwayFrom: THREE.Vector3 | null = null;
   shouldTeleport = false;

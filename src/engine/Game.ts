@@ -3419,6 +3419,26 @@ export class Game {
     return true;
   }
 
+  private breakCushionsSupportedBy26_3(position: BlockPosition, spawnDrop: boolean): void {
+    const broken = this.cushionSeats26_3.breakUnsupported(this.cushionSupportKey26_3(position));
+    for (const seat of broken) {
+      const key = this.cushionSeatKey26_3(seat);
+      const mesh = this.cushionMeshes26_3.get(key);
+      if (mesh) {
+        this.renderer.scene.remove(mesh);
+        mesh.geometry.dispose();
+        if (Array.isArray(mesh.material)) mesh.material.forEach(material => material.dispose());
+        else mesh.material.dispose();
+        this.cushionMeshes26_3.delete(key);
+      }
+      if (seat.occupantId === 'local-player') this.activeCushionSeat26_3 = null;
+      if (spawnDrop && this.gameMode !== 'creative') {
+        const item = ItemRegistry.getByName(`${seat.color}_cushion`);
+        if (item) this.droppedItems.spawnItem(item.id, 1, new THREE.Vector3(seat.x, seat.y + 0.2, seat.z), new THREE.Vector3(0, 1.1, 0), 0.5);
+      }
+    }
+  }
+
   private trySitOnCushion26_3(target: BlockInteractionContext): boolean {
     if (target.face !== 'up' || this.activeCushionSeat26_3) return false;
     const seat = this.cushionSeats26_3.getSeatForSupport(this.cushionSupportKey26_3(target.position));
@@ -7334,6 +7354,7 @@ export class Game {
     // 3. Set block to air and clear metadata
     this.chunks.setBlock(x, y, z, 0);
     this.chunks.setBlockMeta(x, y, z, null);
+    this.breakCushionsSupportedBy26_3({ x, y, z }, spawnDrop);
     this.redstone.unregister(x, y, z);
     this.redstone.observeBlockChange(x, y, z);
 

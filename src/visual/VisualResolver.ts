@@ -19,8 +19,23 @@ export type ItemVisualKind = 'block' | 'tool' | 'sprite';
 
 const FACE_NAMES: VisualFace[] = ['top', 'bottom', 'right', 'left', 'front', 'back'];
 
-const WOOD_MATERIALS = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak'] as const;
+const WOOD_MATERIALS = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak', 'mangrove', 'cherry', 'bamboo', 'crimson', 'warped', 'poplar'] as const;
 type WoodMaterial = typeof WOOD_MATERIALS[number];
+
+const DEDICATED_PLACEABLE_ITEM_SPRITES_26_3 = new Set([
+  'poplar_door',
+  'poplar_sign',
+  'poplar_hanging_sign',
+  'poplar_sapling',
+  'shelf_mushroom',
+  'red_shrub',
+  'straw_bed',
+]);
+
+function usesDedicatedPlaceableItemSprite26_3(itemId: number): boolean {
+  const item = ItemRegistry.get(itemId);
+  return !!item && DEDICATED_PLACEABLE_ITEM_SPRITES_26_3.has(item.name);
+}
 
 function baseId(id: number): number {
   return id & 0x3FF;
@@ -372,17 +387,19 @@ export const VisualResolver = {
   },
 
   getItemIconKey(itemId: number): string {
-    const placeBlockId = ItemRegistry.getPlaceBlockId(itemId);
-    if (placeBlockId !== undefined) return this.getBlockIconKey(placeBlockId);
-
     const item = ItemRegistry.get(itemId);
     if (!item) return 'item:unknown';
+    if (usesDedicatedPlaceableItemSprite26_3(itemId)) return 'item:' + item.name;
+
+    const placeBlockId = ItemRegistry.getPlaceBlockId(itemId);
+    if (placeBlockId !== undefined) return this.getBlockIconKey(placeBlockId);
     return 'item:' + item.name;
   },
 
   getItemVisualKind(itemId: number): ItemVisualKind {
     const item = ItemRegistry.get(itemId);
     if (!item) return 'sprite';
+    if (usesDedicatedPlaceableItemSprite26_3(itemId)) return 'sprite';
     if (ItemRegistry.getPlaceBlockId(itemId) !== undefined) return 'block';
     if (item.category === 'tool') return 'tool';
     return 'sprite';

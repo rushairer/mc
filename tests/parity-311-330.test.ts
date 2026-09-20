@@ -34,9 +34,12 @@ test('312: every registered item resolves a non-unknown inventory icon key', () 
   }
 });
 
-test('313: direct block-category items resolve through the block icon pipeline', () => {
+test('313: block-category items use either a block model or an explicit item sprite', () => {
   for (const def of ItemRegistry.all().filter((entry) => entry.category === 'block')) {
-    assert.match(VisualResolver.getItemIconKey(def.id), /^icon:block:/, def.name);
+    const kind = VisualResolver.getItemVisualKind(def.id);
+    const icon = VisualResolver.getItemIconKey(def.id);
+    if (kind === 'block') assert.match(icon, /^icon:block:/, def.name);
+    else assert.match(icon, /^item:/, def.name);
   }
 });
 

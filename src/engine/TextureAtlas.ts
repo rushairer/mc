@@ -2764,6 +2764,30 @@ export class TextureAtlas {
               ctx.fillRect(x + 7, y + 7, 2, 2);
               ctx.fillRect(x + 10, y + 10, 2, 2);
               ctx.fillRect(x + 6, y + 11, 2, 1);
+            } else if (name.includes('bed')) {
+              ctx.fillRect(x + 2, y + 7, 12, 5);
+              ctx.fillStyle = 'rgba(255,255,255,0.45)';
+              ctx.fillRect(x + 3, y + 6, 4, 2);
+              ctx.fillStyle = 'rgba(0,0,0,0.22)';
+              ctx.fillRect(x + 3, y + 12, 2, 2);
+              ctx.fillRect(x + 11, y + 12, 2, 2);
+            } else if (name.includes('hanging_sign') || name.endsWith('_sign')) {
+              ctx.fillRect(x + 3, y + 5, 10, 6);
+              ctx.fillStyle = 'rgba(0,0,0,0.30)';
+              ctx.fillRect(x + 5, y + 2, 1, 3);
+              ctx.fillRect(x + 10, y + 2, 1, 3);
+              if (!name.includes('hanging_sign')) ctx.fillRect(x + 7, y + 11, 2, 4);
+            } else if (name.includes('sapling') || name.includes('shrub')) {
+              ctx.fillStyle = '#4a7023';
+              ctx.fillRect(x + 7, y + 7, 2, 7);
+              ctx.fillRect(x + 4, y + 5, 8, 4);
+              ctx.fillRect(x + 5, y + 3, 6, 3);
+            } else if (name.includes('mushroom')) {
+              ctx.fillStyle = '#d9c7a3';
+              ctx.fillRect(x + 7, y + 8, 2, 6);
+              ctx.fillStyle = colors.hex;
+              ctx.fillRect(x + 4, y + 5, 8, 4);
+              ctx.fillRect(x + 6, y + 3, 4, 2);
             } else if (name.includes('door')) {
               ctx.fillRect(x + 5, y + 2, 7, 12);
               ctx.fillStyle = 'rgba(0,0,0,0.25)';

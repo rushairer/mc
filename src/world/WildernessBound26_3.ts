@@ -105,7 +105,7 @@ export const WILDERNESS_BOUND_ITEMS: DataPackItem[] = WILDERNESS_BOUND_BLOCKS
     baseId: block.id,
     name: block.name,
     displayName: block.displayName,
-    maxStackSize: 64,
+    maxStackSize: block.name === 'straw_bed' ? 16 : 64,
     category: 'block' as const,
     placeBlockId: block.id,
     behaviorId: 'minecraft:block_item',
@@ -117,7 +117,7 @@ export const CUSHION_ITEMS: DataPackItem[] = DYE_COLORS.map((color, index) => ({
   baseId: CUSHION_ID_START + index,
   name: `${color}_cushion`,
   displayName: `${color.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} Cushion`,
-  maxStackSize: 64,
+  maxStackSize: 16,
   category: 'material',
   behaviorId: 'minecraft:cushion',
 }));

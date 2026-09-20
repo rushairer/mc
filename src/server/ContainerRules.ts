@@ -1,6 +1,10 @@
 import type { ItemStack } from '../types';
-import { ItemRegistry } from '../items/ItemRegistry';
-import { cloneItemStack, itemStacksCanMerge } from '../items/ItemStackRules';
+import {
+  cloneItemStack,
+  getItemStackMaxSize,
+  isValidItemStack,
+  itemStacksCanMerge,
+} from '../items/ItemStackRules';
 
 /**
  * P5.3 — Server container rules (pure, testable).
@@ -15,10 +19,13 @@ export const CONTAINER_SIZES: Record<string, number> = {
 };
 
 export type ContainerArea = 'container' | 'player';
+export type ContainerClickButton = 'left' | 'right';
 
 export interface ContainerClickIntent {
   area: ContainerArea;
   slotIndex: number;
+  button?: ContainerClickButton;
+  shift?: boolean;
 }
 
 export interface ContainerTransactionState {
@@ -41,11 +48,7 @@ const cloneStack = cloneItemStack;
 export const canStacksMerge = itemStacksCanMerge;
 
 function isWellFormedStack(stack: ItemStack | null): boolean {
-  if (stack === null) return true;
-  if (!Number.isInteger(stack.id) || stack.id <= 0 || !Number.isInteger(stack.count) || stack.count <= 0) return false;
-  const def = ItemRegistry.get(stack.id);
-  if (!def) return false;
-  return stack.count <= def.maxStackSize;
+  return stack === null || isValidItemStack(stack);
 }
 
 /** Validate a container click: slot in range and held item well-formed. */
@@ -73,7 +76,7 @@ export function applyContainerClick(
   const next = slots.map((slot) => cloneStack(slot));
   const previous = next[slotIndex];
   if (heldItem && previous && canStacksMerge(previous, heldItem)) {
-    const maxStack = ItemRegistry.getMaxStackSize(heldItem.id);
+    const maxStack = getItemStackMaxSize(heldItem);
     const moved = Math.min(heldItem.count, Math.max(0, maxStack - previous.count));
     next[slotIndex] = { ...previous, count: previous.count + moved };
     return next;
@@ -88,26 +91,36 @@ export function parseContainerClickIntent(payload: unknown): ContainerClickInten
   if (raw.area !== 'container' && raw.area !== 'player') return null;
   const slotIndex = Number(raw.slotIndex);
   if (!Number.isInteger(slotIndex) || slotIndex < 0) return null;
-  return { area: raw.area, slotIndex };
+  if (raw.button !== undefined && raw.button !== 'left' && raw.button !== 'right') return null;
+  if (raw.shift !== undefined && typeof raw.shift !== 'boolean') return null;
+
+  const intent: ContainerClickIntent = { area: raw.area, slotIndex };
+  if (raw.button === 'left' || raw.button === 'right') intent.button = raw.button;
+  if (typeof raw.shift === 'boolean') intent.shift = raw.shift;
+  return intent;
 }
 
-/**
- * Apply one Java-style left click using only server-owned slots and cursor.
- * The client does not provide item data, so it cannot create or rewrite stacks.
- */
-export function applyServerContainerClick(
-  state: ContainerTransactionState,
-  intent: ContainerClickIntent,
-): ContainerTransactionState | null {
-  const sourceSlots = intent.area === 'container' ? state.containerSlots : state.playerSlots;
-  if (intent.slotIndex >= sourceSlots.length) return null;
-
-  const next: ContainerTransactionState = {
+function cloneTransactionState(state: ContainerTransactionState): ContainerTransactionState {
+  return {
     containerSlots: state.containerSlots.map((slot) => cloneStack(slot)),
     playerSlots: state.playerSlots.map((slot) => cloneStack(slot)),
     cursor: cloneStack(state.cursor),
   };
-  const slots = intent.area === 'container' ? next.containerSlots : next.playerSlots;
+}
+
+function getIntentSlots(
+  state: ContainerTransactionState,
+  area: ContainerArea,
+): (ItemStack | null)[] {
+  return area === 'container' ? state.containerSlots : state.playerSlots;
+}
+
+function applyServerLeftClick(
+  state: ContainerTransactionState,
+  intent: ContainerClickIntent,
+): ContainerTransactionState {
+  const next = cloneTransactionState(state);
+  const slots = getIntentSlots(next, intent.area);
   const slot = slots[intent.slotIndex];
   const cursor = next.cursor;
 
@@ -125,7 +138,7 @@ export function applyServerContainerClick(
   if (!cursor || !slot) return next;
 
   if (canStacksMerge(cursor, slot)) {
-    const maxStack = ItemRegistry.getMaxStackSize(slot.id);
+    const maxStack = getItemStackMaxSize(slot);
     const moved = Math.min(cursor.count, Math.max(0, maxStack - slot.count));
     if (moved <= 0) return next;
     slots[intent.slotIndex] = { ...slot, count: slot.count + moved };
@@ -139,18 +152,128 @@ export function applyServerContainerClick(
   return next;
 }
 
+function applyServerRightClick(
+  state: ContainerTransactionState,
+  intent: ContainerClickIntent,
+): ContainerTransactionState {
+  const next = cloneTransactionState(state);
+  const slots = getIntentSlots(next, intent.area);
+  const slot = slots[intent.slotIndex];
+  const cursor = next.cursor;
+
+  if (!cursor && slot) {
+    const pickedCount = Math.ceil(slot.count / 2);
+    const remaining = slot.count - pickedCount;
+    next.cursor = { ...slot, count: pickedCount };
+    slots[intent.slotIndex] = remaining > 0 ? { ...slot, count: remaining } : null;
+    return next;
+  }
+
+  if (!cursor) return next;
+
+  if (!slot) {
+    slots[intent.slotIndex] = { ...cursor, count: 1 };
+    const remaining = cursor.count - 1;
+    next.cursor = remaining > 0 ? { ...cursor, count: remaining } : null;
+    return next;
+  }
+
+  if (!canStacksMerge(slot, cursor)) return next;
+  const maxStack = getItemStackMaxSize(slot);
+  if (slot.count >= maxStack) return next;
+
+  slots[intent.slotIndex] = { ...slot, count: slot.count + 1 };
+  const remaining = cursor.count - 1;
+  next.cursor = remaining > 0 ? { ...cursor, count: remaining } : null;
+  return next;
+}
+
+function destinationOrderForPlayerInventory(length: number): number[] {
+  const mainEnd = Math.min(length, 36);
+  const main = Array.from({ length: Math.max(0, mainEnd - 9) }, (_, i) => i + 9);
+  const hotbar = Array.from({ length: Math.min(9, length) }, (_, i) => i);
+  return [...main, ...hotbar];
+}
+
+function insertStackIntoIndices(
+  slots: (ItemStack | null)[],
+  stack: ItemStack,
+  indices: number[],
+): ItemStack | null {
+  let remaining = stack.count;
+
+  for (const index of indices) {
+    if (remaining <= 0) break;
+    if (!Number.isInteger(index) || index < 0 || index >= slots.length) continue;
+    const target = slots[index];
+    if (!target || !canStacksMerge(target, stack)) continue;
+    const maxStack = getItemStackMaxSize(target);
+    if (target.count >= maxStack) continue;
+    const moved = Math.min(remaining, maxStack - target.count);
+    slots[index] = { ...target, count: target.count + moved };
+    remaining -= moved;
+  }
+
+  const sourceMax = getItemStackMaxSize(stack);
+  for (const index of indices) {
+    if (remaining <= 0) break;
+    if (!Number.isInteger(index) || index < 0 || index >= slots.length || slots[index]) continue;
+    const moved = Math.min(remaining, sourceMax);
+    const placed = cloneStack(stack)!;
+    placed.count = moved;
+    slots[index] = placed;
+    remaining -= moved;
+  }
+
+  if (remaining <= 0) return null;
+  const remainder = cloneStack(stack)!;
+  remainder.count = remaining;
+  return remainder;
+}
+
+function applyServerQuickMove(
+  state: ContainerTransactionState,
+  intent: ContainerClickIntent,
+): ContainerTransactionState {
+  const next = cloneTransactionState(state);
+  const sourceSlots = getIntentSlots(next, intent.area);
+  const source = sourceSlots[intent.slotIndex];
+  if (!source) return next;
+
+  const destinationSlots = intent.area === 'container' ? next.playerSlots : next.containerSlots;
+  const destinationIndices = intent.area === 'container'
+    ? destinationOrderForPlayerInventory(destinationSlots.length)
+    : Array.from({ length: destinationSlots.length }, (_, i) => i);
+
+  const remainder = insertStackIntoIndices(destinationSlots, source, destinationIndices);
+  sourceSlots[intent.slotIndex] = remainder;
+  return next;
+}
+
+/**
+ * Apply one server-authoritative container interaction using only server-owned
+ * slots and cursor. The client supplies intent only; it never supplies stacks.
+ */
+export function applyServerContainerClick(
+  state: ContainerTransactionState,
+  intent: ContainerClickIntent,
+): ContainerTransactionState | null {
+  const sourceSlots = getIntentSlots(state, intent.area);
+  if (!Number.isInteger(intent.slotIndex) || intent.slotIndex < 0 || intent.slotIndex >= sourceSlots.length) return null;
+
+  if (intent.shift) return applyServerQuickMove(state, intent);
+  if ((intent.button ?? 'left') === 'right') return applyServerRightClick(state, intent);
+  return applyServerLeftClick(state, intent);
+}
+
 /** Return the server cursor to inventory on close; any remainder stays on cursor. */
 export function returnContainerCursorToInventory(state: ContainerTransactionState): ContainerTransactionState {
-  const next: ContainerTransactionState = {
-    containerSlots: state.containerSlots.map((slot) => cloneStack(slot)),
-    playerSlots: state.playerSlots.map((slot) => cloneStack(slot)),
-    cursor: cloneStack(state.cursor),
-  };
+  const next = cloneTransactionState(state);
   if (!next.cursor) return next;
 
   let remaining = next.cursor.count;
   const cursor = next.cursor;
-  const maxStack = ItemRegistry.getMaxStackSize(cursor.id);
+  const maxStack = getItemStackMaxSize(cursor);
 
   for (let i = 0; i < next.playerSlots.length && remaining > 0; i++) {
     const slot = next.playerSlots[i];

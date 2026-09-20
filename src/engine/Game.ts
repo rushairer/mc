@@ -1018,6 +1018,29 @@ export class Game {
     };
   }
 
+  private sendServerBlockItemUse(stack: ItemStack, target?: BlockInteractionContext): boolean {
+    if (!target || !this.isMultiplayerNetworkConnected()) return false;
+    this.network.send(PacketType.C2S_ITEM_USE, {
+      kind: 'block',
+      itemId: stack.id,
+      x: target.position.x,
+      y: target.position.y,
+      z: target.position.z,
+      face: target.face,
+    });
+    return true;
+  }
+
+  private sendServerEntityItemUse(stack: ItemStack, entityId: number): boolean {
+    if (!this.isMultiplayerNetworkConnected()) return false;
+    this.network.send(PacketType.C2S_ITEM_USE, {
+      kind: 'entity',
+      itemId: stack.id,
+      entityId,
+    });
+    return true;
+  }
+
   private consumeInteractionItem() {
     if (this.gameMode !== 'creative') {
       this.inventory.removeFromSlot(this.player.selectedSlot, 1);
@@ -1039,6 +1062,9 @@ export class Game {
     const heldItemName = heldItem ? ItemRegistry.get(heldItem.id)?.name : undefined;
 
     if (target.def.type === 'sheep' && heldItemName === 'shears' && !target.isBaby && !target.isSheared) {
+      if (heldItem && this.sendServerEntityItemUse(heldItem, target.id)) {
+        return { handled: true, cooldown: 0.25 };
+      }
       target.isSheared = true;
       const woolCount = 1 + Math.floor(Math.random() * 3);
       this.droppedItems.spawnItem(
@@ -2533,8 +2559,13 @@ export class Game {
     // Raycast
     const heldSlot = this.inventory.getSlot(this.player.selectedSlot);
     const localHeldItemId = heldSlot?.id ?? 0;
-    const isHoldingBucket = localHeldItemId === 325 || localHeldItemId === 326 || localHeldItemId === 327;
-    this.targetBlock = this.player.raycast(this.chunks, isHoldingBucket);
+    const localHeldItemName = ItemRegistry.get(localHeldItemId)?.name ?? '';
+    const includeFluidsInRaycast =
+      localHeldItemName === 'bucket'
+      || localHeldItemName.endsWith('_bucket')
+      || localHeldItemName === 'boat'
+      || localHeldItemName.endsWith('_boat');
+    this.targetBlock = this.player.raycast(this.chunks, includeFluidsInRaycast);
     this.updateHighlight();
 
     const prevSignText = this.lookedAtSignText;
@@ -3570,6 +3601,7 @@ export class Game {
 
   private tryUseBucket(stack: ItemStack, target?: BlockInteractionContext): boolean {
     if (!target) return false;
+    if (this.sendServerBlockItemUse(stack, target)) return true;
     const bucketName = ItemRegistry.get(stack.id)?.name;
     if (!bucketName) return false;
 
@@ -3636,6 +3668,7 @@ export class Game {
 
   private tryPlaceBoat(stack: ItemStack, target?: BlockInteractionContext): boolean {
     if (!target) return false;
+    if (this.sendServerBlockItemUse(stack, target)) return true;
     const position = this.getAdjacentBlockPosition(target);
     if (!position) return false;
 
@@ -3663,6 +3696,8 @@ export class Game {
 
   private tryUseFlintAndSteel(target?: BlockInteractionContext): boolean {
     if (!target) return false;
+    const held = this.inventory.getSlot(this.player.selectedSlot);
+    if (held && this.sendServerBlockItemUse(held, target)) return true;
 
     if (target.block.name === 'tnt') {
       this.igniteTNT(target.position.x, target.position.y, target.position.z);
@@ -3698,7 +3733,10 @@ export class Game {
   }
 
   private tryUseShears(target?: BlockInteractionContext): boolean {
-    if (!target || target.block.name !== 'pumpkin') return false;
+    if (!target) return false;
+    const held = this.inventory.getSlot(this.player.selectedSlot);
+    if (held && this.sendServerBlockItemUse(held, target)) return true;
+    if (target.block.name !== 'pumpkin') return false;
     const carved = BlockRegistry.getByName('carved_pumpkin');
     if (!carved) return false;
     const { x, y, z } = target.position;

@@ -8,6 +8,16 @@ import {
   parseItemAction,
 } from './ItemActionRules';
 import {
+  SERVER_TNT_FUSE_SECONDS,
+  adjacentBlockPosition,
+  bucketFillItemName,
+  bucketPlacedBlockName,
+  isValidServerItemUseForHeldStack,
+  parseServerItemUseIntent,
+  replaceOneHeldItem,
+  type ServerBlockItemUseIntent,
+} from './ServerItemUseRules';
+import {
   applyKnockbackResistance,
   getAttackStrength,
   getNetheriteKnockbackResistance,
@@ -153,6 +163,13 @@ interface ServerDroppedItem {
   dimension: number;
 }
 
+interface ServerPrimedTnt {
+  id: number;
+  position: THREE.Vector3;
+  fuseSeconds: number;
+  dimension: number;
+}
+
 interface ServerProjectile {
   id: number;
   type: 'arrow' | 'fireball' | 'shulker_bullet' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident';
@@ -172,6 +189,7 @@ export class GameServer {
   private droppedItems: Map<number, ServerDroppedItem> = new Map();
   private droppedItemMergeTimer = 0;
   private projectiles: Map<number, ServerProjectile> = new Map();
+  private primedTnt: Map<number, ServerPrimedTnt> = new Map();
   private nextProjectileId = 1;
   /** P5.3 — server-owned container contents keyed by position. */
   private containerData: Map<string, (ItemStack | null)[]> = new Map();
@@ -1032,6 +1050,20 @@ export class GameServer {
         break;
       }
 
+      case PacketType.C2S_ITEM_USE: {
+        const intent = parseServerItemUseIntent(packet.payload);
+        if (!intent) break;
+        const held = session.inventory[session.selectedSlot];
+        if (!isValidServerItemUseForHeldStack(intent, held)) break;
+
+        if (intent.kind === 'block') {
+          this.handleServerBlockItemUse(session, intent, held!);
+        } else {
+          this.handleServerEntityItemUse(session, intent.entityId, held!);
+        }
+        break;
+      }
+
       // P5.1: server-authoritative item actions (bow release / throwables).
       case PacketType.C2S_ITEM_ACTION: {
         const request = parseItemAction(packet.payload);
@@ -1177,6 +1209,153 @@ export class GameServer {
         this.sendOpenContainerState(session);
         break;
       }
+    }
+  }
+
+  private applyServerHeldReplacement(session: PlayerSession, held: ItemStack, replacementItemId: number) {
+    const result = replaceOneHeldItem(held, replacementItemId, session.gameMode === 'creative');
+    session.inventory[session.selectedSlot] = result.held;
+    if (result.remainder) {
+      const insertion = insertItemStackIntoSlots(session.inventory, result.remainder);
+      if (insertion.remaining) {
+        this.spawnDroppedStack(
+          insertion.remaining,
+          session.x,
+          session.y + 0.5,
+          session.z,
+          session.dimension,
+          0,
+        );
+      }
+    }
+    this.syncPlayerInventory(session);
+  }
+
+  private damageServerHeldTool(session: PlayerSession, held: ItemStack) {
+    if (session.gameMode === 'creative') return;
+    session.inventory[session.selectedSlot] = damageDurableStack(held, 1, 'tool');
+    this.syncPlayerInventory(session);
+  }
+
+  private broadcastServerBlockUpdate(x: number, y: number, z: number, blockId: number, dimension: number, metadata?: BlockMetadata | null) {
+    this.broadcastDimension(dimension, PacketType.S2C_BLOCK_UPDATE, {
+      x, y, z, blockId, metadata: metadata ?? null, dimension,
+    });
+  }
+
+  private handleServerBlockItemUse(session: PlayerSession, intent: ServerBlockItemUseIntent, held: ItemStack): boolean {
+    if (!isValidWorldY(intent.y, WORLD_HEIGHT)) return false;
+    if (!isBlockActionInReach(session, intent.x, intent.y, intent.z, session.gameMode)) return false;
+
+    const item = ItemRegistry.get(held.id);
+    const itemName = item?.name ?? '';
+    const targetBlockId = this.getBlock(intent.x, intent.y, intent.z, session.dimension);
+    const targetBlock = BlockRegistry.get(targetBlockId);
+    if (!targetBlock) return false;
+
+    if (itemName === 'bucket') {
+      const filledName = bucketFillItemName(targetBlock.name);
+      if (!filledName) return false;
+      const filledBucket = ItemRegistry.getByName(filledName);
+      if (!filledBucket) return false;
+
+      this.setBlock(intent.x, intent.y, intent.z, 0, session.dimension);
+      this.broadcastServerBlockUpdate(intent.x, intent.y, intent.z, 0, session.dimension);
+      this.applyServerHeldReplacement(session, held, filledBucket.id);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'pickup', x: intent.x, y: intent.y, z: intent.z,
+      });
+      return true;
+    }
+
+    const bucketBlockName = bucketPlacedBlockName(itemName);
+    if (bucketBlockName) {
+      const place = adjacentBlockPosition(intent.x, intent.y, intent.z, intent.face);
+      if (!isValidWorldY(place.y, WORLD_HEIGHT)) return false;
+      const currentId = this.getBlock(place.x, place.y, place.z, session.dimension);
+      const currentName = BlockRegistry.get(currentId)?.name;
+      const replaceable = currentId === 0
+        || BlockRegistry.isFluid(currentId)
+        || isPlacementReplaceableBlockName(currentName);
+      if (!replaceable) return false;
+
+      const placedBlock = BlockRegistry.getByName(bucketBlockName);
+      const emptyBucket = ItemRegistry.getByName('bucket');
+      if (!placedBlock || !emptyBucket) return false;
+      const metadata = bucketBlockName === 'powder_snow' ? null : { fluidLevel: 8 };
+      this.setBlock(place.x, place.y, place.z, placedBlock.id, session.dimension, metadata);
+      this.broadcastServerBlockUpdate(place.x, place.y, place.z, placedBlock.id, session.dimension, metadata);
+      this.applyServerHeldReplacement(session, held, emptyBucket.id);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: place.x, y: place.y, z: place.z,
+      });
+      return true;
+    }
+
+    if (itemName === 'flint_and_steel') {
+      if (targetBlock.name === 'tnt') {
+        this.setBlock(intent.x, intent.y, intent.z, 0, session.dimension);
+        this.broadcastServerBlockUpdate(intent.x, intent.y, intent.z, 0, session.dimension);
+        const id = this.nextEntityId++;
+        this.primedTnt.set(id, {
+          id,
+          position: new THREE.Vector3(intent.x + 0.5, intent.y + 0.5, intent.z + 0.5),
+          fuseSeconds: SERVER_TNT_FUSE_SECONDS,
+          dimension: session.dimension,
+        });
+        this.damageServerHeldTool(session, held);
+        this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+          type: 'place', x: intent.x, y: intent.y, z: intent.z,
+        });
+        return true;
+      }
+
+      const place = adjacentBlockPosition(intent.x, intent.y, intent.z, intent.face);
+      if (!isValidWorldY(place.y, WORLD_HEIGHT) || this.getBlock(place.x, place.y, place.z, session.dimension) !== 0) return false;
+
+      const portalUpdates: Array<{ x: number; y: number; z: number; id: number }> = [];
+      const activated = this.dimensionGen.findAndActivatePortalFrame(
+        (x, y, z) => this.getBlock(x, y, z, session.dimension),
+        (x, y, z, id) => {
+          this.setBlock(x, y, z, id, session.dimension);
+          portalUpdates.push({ x, y, z, id });
+        },
+        place.x,
+        place.y,
+        place.z,
+      );
+      if (activated) {
+        for (const update of portalUpdates) {
+          this.broadcastServerBlockUpdate(update.x, update.y, update.z, update.id, session.dimension);
+        }
+        this.damageServerHeldTool(session, held);
+        return true;
+      }
+
+      const fire = BlockRegistry.getByName('fire');
+      if (!fire) return false;
+      this.setBlock(place.x, place.y, place.z, fire.id, session.dimension);
+      this.broadcastServerBlockUpdate(place.x, place.y, place.z, fire.id, session.dimension);
+      this.damageServerHeldTool(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: place.x, y: place.y, z: place.z,
+      });
+      return true;
+    }
+
+    return false;
+  }
+
+  private handleServerEntityItemUse(_session: PlayerSession, _entityId: number, _held: ItemStack): boolean {
+    return false;
+  }
+
+  private tickPrimedTnt(dt: number) {
+    for (const tnt of Array.from(this.primedTnt.values())) {
+      tnt.fuseSeconds -= dt;
+      if (tnt.fuseSeconds > 0) continue;
+      this.primedTnt.delete(tnt.id);
+      this.triggerExplosion(tnt.position, 4, tnt.dimension);
     }
   }
 
@@ -1848,6 +2027,9 @@ export class GameServer {
 
     // Tick projectiles
     this.tickProjectiles(dt);
+
+    // Tick primed TNT created by server-authoritative Flint and Steel use.
+    this.tickPrimedTnt(dt);
 
     // Dynamic Mob Spawner
     if (this.mobs.size < 30 && Math.random() < 0.15) {

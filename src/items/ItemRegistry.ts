@@ -354,7 +354,9 @@ export const ItemRegistry = {
 
   getPlaceBlockId(id: number): number | undefined {
     const item = this.get(id);
-    if (item?.placeBlockId !== undefined) return item.placeBlockId;
+    // A registered item is authoritative even when it is not placeable. Without
+    // this early return, high modern item IDs can alias legacy packed block IDs.
+    if (item) return item.placeBlockId;
 
     const directBlock = BlockRegistry.get(id);
     if (directBlock && directBlock.id === id && id !== 0) return id;

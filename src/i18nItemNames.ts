@@ -211,7 +211,7 @@ const ZH_TW_EXACT: Dict = {
 const ZH_CN_WORDS: Dict = {
   acacia: '金合欢', activator: '激活', armor: '盔甲', axe: '斧', baked: '烤', banner: '旗帜',
   beetroot: '甜菜', birch: '白桦', black: '黑色', blaze: '烈焰', block: '块', blue: '蓝色',
-  bone: '骨', book: '书', boots: '靴子', bottle: '瓶', brick: '砖', brown: '棕色', bucket: '桶',
+  bone: '骨', book: '书', boat: '船', boots: '靴子', bottle: '瓶', brick: '砖', brown: '棕色', bucket: '桶',
   button: '按钮', carrot: '胡萝卜', chain: '锁链', chainmail: '链甲', chest: '箱子',
   chestplate: '胸甲', chorus: '紫颂', clay: '黏土', coal: '煤炭', cobblestone: '圆石',
   command: '命令', comparator: '比较器', concrete: '混凝土', cooked: '熟', cyan: '青色',
@@ -247,7 +247,7 @@ const ZH_CN_WORDS: Dict = {
 const ZH_TW_WORDS: Dict = {
   ...ZH_CN_WORDS,
   acacia: '相思木', birch: '樺木', black: '黑色', blaze: '烈焰使者', blue: '藍色',
-  bone: '骨', boots: '靴子', brick: '磚', brown: '棕色', button: '按鈕', carrot: '胡蘿蔔',
+  bone: '骨', boat: '船', boots: '靴子', brick: '磚', brown: '棕色', button: '按鈕', carrot: '胡蘿蔔',
   chestplate: '胸甲', clay: '黏土', cobblestone: '鵝卵石', comparator: '比較器',
   cooked: '熟', cyan: '青色', daylight: '日光', dead: '枯死', diamond: '鑽石',
   dragon: '龍', dropper: '投擲器', dye: '染料', emerald: '綠寶石', enchanted: '附魔',

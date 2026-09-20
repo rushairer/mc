@@ -1,3 +1,5 @@
+import type { ItemStack } from '../types';
+
 /**
  * P5.2 — Server-authoritative player state / consumable rules (pure, testable).
  */
@@ -33,4 +35,31 @@ export function validateConsume(stack: { id: number; count: number } | null | un
 export function consumeOne(stack: { id: number; count: number }): { id: number; count: number } | null {
   const count = stack.count - 1;
   return count > 0 ? { ...stack, count } : null;
+}
+
+export interface ConsumeWithRemainderResult {
+  stack: ItemStack | null;
+  remainder: ItemStack | null;
+}
+
+/**
+ * Consume one item while preserving Java container remainders.
+ * When the consumed stack empties, the remainder replaces it in-place.
+ * Otherwise the remainder must be inserted into inventory or dropped.
+ */
+export function consumeOneWithRemainder(
+  stack: ItemStack,
+  remainderItemId?: number,
+): ConsumeWithRemainderResult {
+  const remainingCount = stack.count - 1;
+  if (remainingCount <= 0) {
+    return {
+      stack: remainderItemId === undefined ? null : { id: remainderItemId, count: 1 },
+      remainder: null,
+    };
+  }
+  return {
+    stack: { ...stack, count: remainingCount },
+    remainder: remainderItemId === undefined ? null : { id: remainderItemId, count: 1 },
+  };
 }

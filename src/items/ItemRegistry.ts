@@ -352,6 +352,17 @@ export const ItemRegistry = {
     return this.getPlaceBlockId(id) !== undefined;
   },
 
+  getItemIdForPlacedBlock(blockId: number): number | undefined {
+    const block = BlockRegistry.get(blockId);
+    for (const item of items.values()) {
+      if (item.placeBlockId === blockId) return item.id;
+      if (item.placeBlockId === undefined || !block) continue;
+      const placedBlock = BlockRegistry.get(item.placeBlockId);
+      if (placedBlock?.name === block.name) return item.id;
+    }
+    return undefined;
+  },
+
   getPlaceBlockId(id: number): number | undefined {
     const item = this.get(id);
     // A registered item is authoritative even when it is not placeable. Without

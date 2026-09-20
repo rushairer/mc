@@ -46,6 +46,20 @@ export function getBedHeadPosition(position: BedPosition, metadata: Pick<BlockMe
   return { x: position.x + offset.x, y: position.y, z: position.z + offset.z };
 }
 
+/** Return the other half of a placed bed from either its head or foot. */
+export function getBedOtherPosition(
+  position: BedPosition,
+  metadata: Pick<BlockMetadata, 'facing' | 'bedPart'> | undefined,
+): BedPosition {
+  const offset = horizontalOffset(metadata?.facing);
+  const direction = metadata?.bedPart === 'head' ? -1 : 1;
+  return {
+    x: position.x + offset.x * direction,
+    y: position.y,
+    z: position.z + offset.z * direction,
+  };
+}
+
 /** Java sleep safety box: 8 blocks horizontally and 5 vertically from the bed. */
 export function isMonsterWithinBedSleepRange(bed: BedPosition, monster: BedPosition): boolean {
   return Math.abs(monster.x - bed.x) <= 8

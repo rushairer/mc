@@ -86,7 +86,7 @@ import {
 import { resolveFenceGateManualToggle, resolveOpenableRedstoneState } from '../world/OpenableRules';
 import { canPlaceChestFromNeighborDegrees, isChestObstructingBlock } from '../world/ContainerRules';
 import { canAcceptFurnaceOutput, getFurnaceCookSpeed, getFurnaceFuelBurnTime, getFurnaceFuelRemainder, getWetSpongeFuelRemainder, isFurnaceRecipeAllowed } from '../world/FurnaceRules';
-import { getBedHeadPosition, isMonsterWithinBedSleepRange, resolveBedUse } from '../world/BedRules';
+import { getBedHeadPosition, getBedOtherPosition, isMonsterWithinBedSleepRange, resolveBedUse } from '../world/BedRules';
 import { getDamageShake, normalizeDamageFlash } from '../systems/FeelRules';
 import { rollBlockLoot, rollLootTable, type LootTable } from '../world/LootSystem';
 import { getBlockXpRange, rollXp, BREEDING_XP_RANGE, FISHING_XP_RANGE } from '../world/XpRules';
@@ -6571,7 +6571,8 @@ export class Game {
   }
 
   private placeDoor(x: number, y: number, z: number, doorBlockId: number): boolean {
-    if (y < 0 || y >= 254) return false;
+    if (y <= 0 || y >= 254) return false;
+    if (!BlockRegistry.isSolid(this.chunks.getBlock(x, y - 1, z))) return false;
     if (this.chunks.getBlock(x, y, z) !== 0 || this.chunks.getBlock(x, y + 1, z) !== 0) {
       return false;
     }
@@ -6621,6 +6622,14 @@ export class Game {
 
     const headX = x + dx;
     const headZ = z + dz;
+
+    if (y <= 0) return false;
+    if (
+      !BlockRegistry.isSolid(this.chunks.getBlock(x, y - 1, z))
+      || !BlockRegistry.isSolid(this.chunks.getBlock(headX, y - 1, headZ))
+    ) {
+      return false;
+    }
 
     // Check if both blocks are empty (0)
     if (this.chunks.getBlock(x, y, z) !== 0 || this.chunks.getBlock(headX, y, headZ) !== 0) {
@@ -7408,6 +7417,21 @@ export class Game {
 
     const meta = this.chunks.getBlockMeta(x, y, z);
     const def = BlockRegistry.get(blockId);
+    const doorPartnerY = this.isDoorBlock(blockId)
+      ? meta?.doorHalf === 'upper'
+        ? y - 1
+        : meta?.doorHalf === 'lower'
+          ? y + 1
+          : this.isDoorBlock(this.chunks.getBlock(x, y - 1, z))
+            ? y - 1
+            : this.isDoorBlock(this.chunks.getBlock(x, y + 1, z))
+              ? y + 1
+              : null
+      : null;
+    const isBedBlock = !!def && (def.name === 'bed' || def.name.endsWith('_bed'));
+    const bedPartner = isBedBlock && meta?.bedPart
+      ? getBedOtherPosition({ x, y, z }, meta)
+      : null;
 
     // 1. Drop contents if it's a container
     if (spawnDrop && meta?.inventory) {
@@ -7448,7 +7472,10 @@ export class Game {
       );
 
       if (this.isDoorBlock(blockId)) {
-        this.droppedItems.spawnItem(37, 1, dropPos, velocity, 0.5);
+        const doorItemId = ItemRegistry.getItemIdForPlacedBlock(blockId);
+        if (doorItemId !== undefined) {
+          this.droppedItems.spawnItem(doorItemId, 1, dropPos, velocity, 0.5);
+        }
       } else if (baseId === 59 || baseId === 141 || baseId === 142) {
         this.spawnCropDrops(x, y, z, blockId);
       } else if (baseId === 92) {
@@ -7521,37 +7548,19 @@ export class Game {
       }
     }
 
-    // If it was a door, break the other part of the door
-    if (this.isDoorBlock(blockId)) {
-      this.breakDoor(x, y, z);
+    // Paired blocks are resolved from metadata captured before this half was cleared.
+    if (doorPartnerY !== null) {
+      const partnerId = this.chunks.getBlock(x, doorPartnerY, z);
+      if (this.isDoorBlock(partnerId)) {
+        this.destroyBlockAt(x, doorPartnerY, z, false);
+      }
     }
 
-    // Bed cascade destruction
-    if (baseId === 26) {
-      if (meta?.facing && meta?.bedPart) {
-        const facing = meta.facing;
-        const part = meta.bedPart;
-        let dx = 0;
-        let dz = 0;
-        if (part === 'head') {
-          // opposite of facing
-          if (facing === 'north') dz = 1;
-          else if (facing === 'south') dz = -1;
-          else if (facing === 'east') dx = -1;
-          else if (facing === 'west') dx = 1;
-        } else {
-          // same as facing
-          if (facing === 'north') dz = -1;
-          else if (facing === 'south') dz = 1;
-          else if (facing === 'east') dx = 1;
-          else if (facing === 'west') dx = -1;
-        }
-        const partnerX = x + dx;
-        const partnerZ = z + dz;
-        const partnerId = this.chunks.getBlock(partnerX, y, partnerZ);
-        if ((partnerId & 0x3FF) === 26) {
-          this.destroyBlockAt(partnerX, y, partnerZ, false);
-        }
+    if (bedPartner) {
+      const partnerId = this.chunks.getBlock(bedPartner.x, bedPartner.y, bedPartner.z);
+      const partnerDef = BlockRegistry.get(partnerId);
+      if (partnerDef?.name === def?.name) {
+        this.destroyBlockAt(bedPartner.x, bedPartner.y, bedPartner.z, false);
       }
     }
 

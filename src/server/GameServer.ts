@@ -24,7 +24,7 @@ import {
   mitigateServerPlayerDamage,
   resolveServerShieldBlock,
 } from './ServerPlayerDamage';
-import { clampPlayerState, consumeOne, validateConsume } from './PlayerStateRules';
+import { clampPlayerState, consumeOne, consumeOneWithRemainder, validateConsume } from './PlayerStateRules';
 import {
   applyServerContainerClick,
   containerKey,
@@ -58,6 +58,7 @@ import { Chunk } from '../world/Chunk';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { cloneItemStack } from '../items/ItemStackRules';
+import { getDefaultUseRemainderItemId } from '../items/ItemUseRules';
 import {
   ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
   ITEM_ENTITY_DESPAWN_SECONDS,
@@ -967,8 +968,22 @@ export class GameServer {
         if (!Number.isInteger(slot) || slot < 0 || slot >= session.inventory.length) break;
         const stack = session.inventory[slot];
         if (validateConsume(stack, itemId)) {
-          const updated = consumeOne(stack!);
-          session.inventory[slot] = updated;
+          const remainderItemId = getDefaultUseRemainderItemId(itemId);
+          const outcome = consumeOneWithRemainder(stack!, remainderItemId);
+          session.inventory[slot] = outcome.stack;
+          if (outcome.remainder) {
+            const insertion = insertItemStackIntoSlots(session.inventory, outcome.remainder);
+            if (insertion.remaining) {
+              this.spawnDroppedStack(
+                insertion.remaining,
+                session.x,
+                session.y + 0.5,
+                session.z,
+                session.dimension,
+                0,
+              );
+            }
+          }
           this.sendTo(session, PacketType.S2C_INVENTORY_SYNC, {
             slots: session.inventory,
             armor: session.armor,

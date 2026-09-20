@@ -13,7 +13,7 @@ interface ChestUIProps {
   onDropItem?: (itemId: number, count: number) => void;
   titleKey?: 'chest' | 'doubleChest' | 'barrel';
   serverCursor?: ItemStack | null;
-  onServerSlotClick?: (area: 'container' | 'player', slotIndex: number) => void;
+  onServerSlotClick?: (area: 'container' | 'player', slotIndex: number, options?: { button?: 'left' | 'right'; shift?: boolean }) => void;
 }
 
 const SLOT_SIZE = 48;
@@ -203,9 +203,25 @@ export const ChestUI: React.FC<ChestUIProps> = ({
     return (
       <div
         key={slotKey}
-        onClick={() => {
+        onClick={(e) => {
           setHoveredSlot(null);
+          if (authoritative) {
+            onServerSlotClick?.(target.type === 'chest' ? 'container' : 'player', target.index, {
+              button: 'left',
+              shift: e.shiftKey,
+            });
+            return;
+          }
           onClick();
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setHoveredSlot(null);
+          if (!authoritative) return;
+          onServerSlotClick?.(target.type === 'chest' ? 'container' : 'player', target.index, {
+            button: 'right',
+            shift: e.shiftKey,
+          });
         }}
         onMouseEnter={(e) => {
           if (item && itemDef && !displayHeldItem) {

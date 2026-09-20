@@ -1,6 +1,6 @@
 export type CombatToolType =
   | 'pickaxe' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'spear'
-  | 'bow' | 'crossbow' | 'fishing_rod' | 'trident' | 'mace' | 'brush';
+  | 'bow' | 'crossbow' | 'fishing_rod' | 'trident' | 'mace' | 'brush' | 'shears';
 
 export type CombatToolMaterial =
   | 'wood' | 'stone' | 'iron' | 'gold' | 'diamond' | 'copper' | 'netherite';

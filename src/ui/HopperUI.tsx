@@ -14,7 +14,7 @@ interface HopperUIProps {
   getItemIconStyle: (id: number, size?: number) => any;
   onDropItem?: (itemId: number, count: number) => void;
   serverCursor?: ItemStack | null;
-  onServerSlotClick?: (area: 'container' | 'player', slotIndex: number) => void;
+  onServerSlotClick?: (area: 'container' | 'player', slotIndex: number, options?: { button?: 'left' | 'right'; shift?: boolean }) => void;
 }
 
 const SLOT_SIZE = 48;
@@ -204,9 +204,25 @@ export const HopperUI: React.FC<HopperUIProps> = ({
     return (
       <div
         key={slotKey}
-        onClick={() => {
+        onClick={(e) => {
           setHoveredSlot(null);
+          if (authoritative) {
+            onServerSlotClick?.(target.type === 'hopper' ? 'container' : 'player', target.index, {
+              button: 'left',
+              shift: e.shiftKey,
+            });
+            return;
+          }
           onClick();
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setHoveredSlot(null);
+          if (!authoritative) return;
+          onServerSlotClick?.(target.type === 'hopper' ? 'container' : 'player', target.index, {
+            button: 'right',
+            shift: e.shiftKey,
+          });
         }}
         onMouseEnter={(e) => {
           if (item && itemDef && !displayHeldItem) {

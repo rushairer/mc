@@ -79,7 +79,7 @@ import {
 } from '../world/SignRules';
 import { resolveFenceGateManualToggle, resolveOpenableRedstoneState } from '../world/OpenableRules';
 import { canPlaceChestFromNeighborDegrees, isChestObstructingBlock } from '../world/ContainerRules';
-import { canAcceptFurnaceOutput, getFurnaceCookSpeed, getWetSpongeFuelRemainder } from '../world/FurnaceRules';
+import { canAcceptFurnaceOutput, getFurnaceCookSpeed, getFurnaceFuelBurnTime, getFurnaceFuelRemainder, getWetSpongeFuelRemainder, isFurnaceRecipeAllowed } from '../world/FurnaceRules';
 import { getBedHeadPosition, isMonsterWithinBedSleepRange, resolveBedUse } from '../world/BedRules';
 import { getDamageShake, normalizeDamageFlash } from '../systems/FeelRules';
 import { rollBlockLoot, rollLootTable, type LootTable } from '../world/LootSystem';
@@ -7645,17 +7645,7 @@ export class Game {
     let recipeCookTime = 10;
 
     if (hasRecipe && input) {
-      let typeValid = true;
-      const itemDef = ItemRegistry.get(input.id);
-      if (itemDef) {
-        if (meta.containerType === 'smoker') {
-          typeValid = ItemRegistry.isFood(input.id) || ItemRegistry.isFood(hasRecipe.output);
-        } else if (meta.containerType === 'blast_furnace') {
-          typeValid = (itemDef.name.includes('ore') || itemDef.name.startsWith('raw_')) && !ItemRegistry.isFood(input.id);
-        }
-      } else {
-        typeValid = false;
-      }
+      const typeValid = isFurnaceRecipeAllowed(meta.containerType, input.id, hasRecipe.output);
 
       if (typeValid) {
         recipeOutputId = hasRecipe.output;
@@ -7675,19 +7665,15 @@ export class Game {
 
     // Consume fuel if furnace is unlit but we need to cook
     if (meta.burnTime === 0 && canCook && fuel && isSmeltingFuel(fuel.id)) {
-      const fuelBurnTime = getFuelBurnTime(fuel.id);
+      const fuelBurnTime = getFurnaceFuelBurnTime(meta.containerType, getFuelBurnTime(fuel.id));
       if (fuelBurnTime > 0) {
         meta.burnTime = fuelBurnTime;
         meta.maxBurnTime = fuelBurnTime;
-
-        const baseFuelId = fuel.id & 0x3FF;
-        if (baseFuelId === 327) { // Lava bucket -> empty bucket
-          meta.inventory[1] = { id: 325, count: 1 };
-        } else {
+        const fuelRemainder = getFurnaceFuelRemainder(fuel);
+        if (fuelRemainder) meta.inventory[1] = fuelRemainder;
+        else {
           fuel.count--;
-          if (fuel.count <= 0) {
-            meta.inventory[1] = null;
-          }
+          if (fuel.count <= 0) meta.inventory[1] = null;
         }
         metadataChanged = true;
       }
@@ -7715,7 +7701,7 @@ export class Game {
           meta.inventory[2] = { ...output, count: output.count + recipeOutputCount };
         }
 
-        const wetSpongeRemainder = getWetSpongeFuelRemainder(ItemRegistry.get(input.id)?.name, meta.inventory[1]);
+        const wetSpongeRemainder = getWetSpongeFuelRemainder(ItemRegistry.get(input.id)?.name ?? BlockRegistry.get(input.id)?.name, meta.inventory[1]);
         if (wetSpongeRemainder) meta.inventory[1] = wetSpongeRemainder;
 
         metadataChanged = true;

@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { Inventory } from '../player/Inventory';
 import { findSmeltingResult, isSmeltingFuel, SMELTING_RECIPES } from '../items/SmeltingRecipes';
 import { useI18n } from '../i18n';
+import { getFurnaceQuickMoveTarget, isFurnaceRecipeAllowed } from '../world/FurnaceRules';
 
 interface FurnaceUIProps {
   inventory: Inventory;
@@ -37,9 +38,15 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({
   const [fuelSlot, setFuelSlot] = useState<ItemStack | null>(furnaceSlots[1]);
   const [outputSlot, setOutputSlot] = useState<ItemStack | null>(furnaceSlots[2]);
   const [recipeListOpen, setRecipeListOpen] = useState(false);
+  const availableRecipes = useMemo(
+    () => SMELTING_RECIPES.filter((entry) => isFurnaceRecipeAllowed(containerType, entry.input, entry.output)),
+    [containerType],
+  );
 
   // P3.2: smelting recipe browser — place the recipe input from the inventory.
   const handleRecipeSelect = useCallback((inputId: number) => {
+    const selectedRecipe = findSmeltingResult(inputId);
+    if (!selectedRecipe || !isFurnaceRecipeAllowed(containerType, inputId, selectedRecipe.output)) return;
     if (inputSlot) {
       inventory.addItem(inputSlot.id, inputSlot.count);
       setInputSlot(null);
@@ -47,9 +54,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({
     for (let slot = 0; slot < 36; slot++) {
       const item = inventory.getSlot(slot);
       if (!item) continue;
-      const exact = item.id === inputId;
-      const baseMatch = (item.id & 0x3FF) === (inputId & 0x3FF);
-      if (!exact && !baseMatch) continue;
+      if (item.id !== inputId) continue;
       item.count -= 1;
       if (item.count <= 0) inventory.setSlot(slot, null);
       setInputSlot({ id: item.id, count: 1 });
@@ -57,7 +62,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({
       onInventoryChange();
       return;
     }
-  }, [inputSlot, inventory, onInventoryChange]);
+  }, [containerType, inputSlot, inventory, onInventoryChange]);
 
   // Sync state changes back to furnaceSlots and notify parent
   useEffect(() => {
@@ -99,7 +104,10 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({
 
   // Calculate cook and fuel progress
   const inputItem = furnaceSlots[0];
-  const recipe = inputItem ? findSmeltingResult(inputItem.id) : null;
+  const candidateRecipe = inputItem ? findSmeltingResult(inputItem.id) : null;
+  const recipe = candidateRecipe && inputItem && isFurnaceRecipeAllowed(containerType, inputItem.id, candidateRecipe.output)
+    ? candidateRecipe
+    : null;
   const totalCookTime = recipe ? recipe.cookTime : 10;
   
   const smeltProgress = totalCookTime > 0 ? Math.min(1, Math.max(0, cookTime / totalCookTime)) : 0;
@@ -272,7 +280,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({
               border: '2px solid #7ab87a', color: '#fff', fontFamily: '"Courier New", monospace',
             }}
           >
-            {t('recipeBook')} ({SMELTING_RECIPES.length})
+            {t('recipeBook')} ({availableRecipes.length})
           </button>
         </div>
 
@@ -286,7 +294,7 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({
               Click a recipe to place its input from your inventory.
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {SMELTING_RECIPES.map((recipe, i) => {
+              {availableRecipes.map((recipe, i) => {
                 const inputDef = ItemRegistry.get(recipe.input);
                 const outputDef = ItemRegistry.get(recipe.output);
                 if (!inputDef || !outputDef) return null;
@@ -382,34 +390,57 @@ export const FurnaceUI: React.FC<FurnaceUIProps> = ({
                 onClick={() => {
                   if (!item) return;
                   const recipe = findSmeltingResult(item.id);
+                  const canSmelt = !!recipe && isFurnaceRecipeAllowed(containerType, item.id, recipe.output);
                   const isFuel = isSmeltingFuel(item.id);
+                  const target = i < 9
+                    ? getFurnaceQuickMoveTarget('player_hotbar', { canSmelt, isFuel })
+                    : getFurnaceQuickMoveTarget('player_main', { canSmelt, isFuel });
 
                   setHoveredSlot(null);
 
-                  if (recipe && !inputSlot) {
-                    // Check if input is valid for the specific container type
-                    const itemDef = ItemRegistry.get(item.id);
-                    let isValid = true;
-                    if (itemDef) {
-                      if (containerType === 'smoker') {
-                        isValid = ItemRegistry.isFood(item.id) || ItemRegistry.isFood(recipe.output);
-                      } else if (containerType === 'blast_furnace') {
-                        isValid = (itemDef.name.includes('ore') || itemDef.name.startsWith('raw_')) && !ItemRegistry.isFood(item.id);
-                      }
-                    } else {
-                      isValid = false;
-                    }
+                  const removeMoved = (count: number) => {
+                    item.count -= count;
+                    if (item.count <= 0) inventory.setSlot(i, null);
+                  };
 
-                    if (isValid) {
-                      setInputSlot({ id: item.id, count: 1 });
-                      inventory.removeFromSlot(i);
+                  if (target === 'input') {
+                    const max = ItemRegistry.getMaxStackSize(item.id);
+                    if (!inputSlot) {
+                      const moveCount = Math.min(item.count, max);
+                      setInputSlot({ ...item, count: moveCount });
+                      removeMoved(moveCount);
                       onInventoryChange();
+                    } else if (inputSlot.id === item.id && inputSlot.count < max) {
+                      const moveCount = Math.min(item.count, max - inputSlot.count);
+                      if (moveCount > 0) {
+                        setInputSlot({ ...inputSlot, count: inputSlot.count + moveCount });
+                        removeMoved(moveCount);
+                        onInventoryChange();
+                      }
                     }
-                  } else if (isFuel && !fuelSlot) {
-                    setFuelSlot({ id: item.id, count: 1 });
-                    inventory.removeFromSlot(i);
-                    onInventoryChange();
+                    return;
                   }
+
+                  if (target === 'fuel') {
+                    const max = ItemRegistry.getMaxStackSize(item.id);
+                    if (!fuelSlot) {
+                      const moveCount = Math.min(item.count, max);
+                      setFuelSlot({ ...item, count: moveCount });
+                      removeMoved(moveCount);
+                      onInventoryChange();
+                    } else if (fuelSlot.id === item.id && fuelSlot.count < max) {
+                      const moveCount = Math.min(item.count, max - fuelSlot.count);
+                      if (moveCount > 0) {
+                        setFuelSlot({ ...fuelSlot, count: fuelSlot.count + moveCount });
+                        removeMoved(moveCount);
+                        onInventoryChange();
+                      }
+                    }
+                    return;
+                  }
+
+                  inventory.quickMove(i);
+                  onInventoryChange();
                 }}
                 onMouseEnter={(e) => {
                   if (item && itemDef) {

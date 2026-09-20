@@ -6943,9 +6943,13 @@ export class Game {
     this.serverContainerCursor = null;
   }
 
-  serverContainerClick(area: 'container' | 'player', slotIndex: number) {
+  serverContainerClick(
+    area: 'container' | 'player',
+    slotIndex: number,
+    options: { button?: 'left' | 'right'; shift?: boolean } = {},
+  ) {
     if (!this.network.isConnected || (!this.openChestPos && !this.openHopperPos)) return false;
-    this.network.send(PacketType.C2S_CONTAINER_CLICK, { area, slotIndex });
+    this.network.send(PacketType.C2S_CONTAINER_CLICK, { area, slotIndex, ...options });
     return true;
   }
 

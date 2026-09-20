@@ -1,5 +1,6 @@
 import type { BlockFacing, BlockMetadata } from '../types';
-import type { BlockPlacementPlan, BlockPosition } from '../world/BlockPlacement';
+import type { BlockPlacementPlan } from '../world/BlockPlacement';
+import type { BlockPosition } from '../world/BehaviorRegistry';
 
 export interface ServerPlacementCell {
   position: BlockPosition;

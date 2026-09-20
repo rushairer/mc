@@ -2652,7 +2652,26 @@ export class TextureAtlas {
             const name = item.name;
             ctx.fillStyle = colors.hex;
 
-            if (name === 'bow' || name === 'crossbow') {
+            if (name.endsWith('_cushion')) {
+              const dye = name.slice(0, -'_cushion'.length);
+              const dyeColors: Record<string, string> = {
+                white: '#f0f0f0', orange: '#f9801d', magenta: '#c74ebd', light_blue: '#3ab3da',
+                yellow: '#fed83d', lime: '#80c71f', pink: '#f38baa', gray: '#474f52',
+                light_gray: '#9d9d97', cyan: '#169c9c', purple: '#8932b8', blue: '#3c44aa',
+                brown: '#835432', green: '#5e7c16', red: '#b02e26', black: '#1d1d21',
+              };
+              const cushion = dyeColors[dye] ?? colors.hex;
+              ctx.fillStyle = 'rgba(0,0,0,0.28)';
+              ctx.fillRect(x + 4, y + 11, 8, 2);
+              ctx.fillStyle = cushion;
+              ctx.fillRect(x + 3, y + 6, 10, 5);
+              ctx.fillRect(x + 4, y + 4, 8, 2);
+              ctx.fillStyle = 'rgba(255,255,255,0.28)';
+              ctx.fillRect(x + 5, y + 5, 5, 1);
+              ctx.fillStyle = 'rgba(0,0,0,0.18)';
+              ctx.fillRect(x + 4, y + 10, 8, 1);
+              ctx.fillRect(x + 7, y + 7, 2, 2);
+            } else if (name === 'bow' || name === 'crossbow') {
               ctx.strokeStyle = '#6b3f1d';
               ctx.lineWidth = 2;
               ctx.beginPath();
@@ -2908,6 +2927,8 @@ export class TextureAtlas {
     this.aliasTile('dark_oak_chest_boat', 'boat');
     this.aliasTile('cherry_chest_boat', 'boat');
     this.aliasTile('mangrove_chest_boat', 'boat');
+    this.aliasTile('poplar_boat', 'boat');
+    this.aliasTile('poplar_chest_boat', 'boat');
     this.aliasTile('chest_minecart', 'minecart');
     this.aliasTile('furnace_minecart', 'minecart');
     this.aliasTile('tnt_minecart', 'minecart');

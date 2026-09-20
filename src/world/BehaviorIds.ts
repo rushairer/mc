@@ -60,6 +60,7 @@ export function inferItemBehaviorId(rawName: string): string | undefined {
   const name = stripNamespace(rawName);
 
   if (READABLE_ITEM_NAMES.has(name)) return 'minecraft:readable';
+  if (name.endsWith('_cushion')) return 'minecraft:cushion';
   if (name === 'bow') return 'minecraft:bow';
   if (name === 'crossbow') return 'minecraft:crossbow';
   if (name === 'shield') return 'minecraft:shield';

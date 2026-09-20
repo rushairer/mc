@@ -131,6 +131,12 @@ const ZH_CN_EXACT: Dict = {
   'Honey Bottle': '蜂蜜瓶',
   Shield: '盾牌',
   Elytra: '鞘翅',
+  'Poplar Log': '杨木原木',
+  'Poplar Planks': '杨木木板',
+  'Poplar Sapling': '杨树树苗',
+  'Shelf Mushroom': '层孔菇',
+  'Red Shrub': '红灌木',
+  'Straw Bed': '稻草床',
 };
 
 const ZH_TW_EXACT: Dict = {
@@ -194,6 +200,12 @@ const ZH_TW_EXACT: Dict = {
   'Baked Potato': '烤馬鈴薯',
   'Golden Carrot': '金胡蘿蔔',
   Elytra: '鞘翅',
+  'Poplar Log': '楊木原木',
+  'Poplar Planks': '楊木木材',
+  'Poplar Sapling': '楊樹樹苗',
+  'Shelf Mushroom': '層孔菇',
+  'Red Shrub': '紅灌木',
+  'Straw Bed': '稻草床',
 };
 
 const ZH_CN_WORDS: Dict = {
@@ -228,6 +240,7 @@ const ZH_CN_WORDS: Dict = {
   torch: '火把', trapdoor: '活板门', trapped: '陷阱', tripwire: '绊线', tunic: '外套',
   void: '空位', wart: '疣', water: '水', weighted: '测重', wheat: '小麦', white: '白色',
   wither: '凋灵', wood: '木', wooden: '木', wool: '羊毛', written: '成书', yellow: '黄色',
+  poplar: '杨木', cushion: '坐垫', straw: '稻草', shelf: '层孔', shrub: '灌木',
   zombie: '僵尸',
 };
 
@@ -253,6 +266,7 @@ const ZH_TW_WORDS: Dict = {
   spectral: '光靈', splash: '飛濺型', spruce: '杉木', star: '星', stone: '石頭',
   tipped: '藥水', torch: '火把', trapdoor: '地板門', trapped: '陷阱', tripwire: '絆線',
   wart: '疙瘩', weighted: '測重', white: '白色', wither: '凋零', wooden: '木製',
+  poplar: '楊木', cushion: '坐墊', straw: '稻草', shelf: '層孔', shrub: '灌木',
   yellow: '黃色', zombie: '殭屍',
 };
 

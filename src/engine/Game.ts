@@ -93,6 +93,7 @@ import {
 } from '../world/WildernessBoundGameplay26_3';
 import { applySaturationStew26_3 } from '../world/SuspiciousStew26_3';
 import { findChorusFruitDestination26_3 } from '../world/TeleportRules26_3';
+import { GOAT_HORN_COOLDOWN_SECONDS, goatHornSoundIndex, spyglassFov } from '../items/SpecialItemUseRules';
 import { getButtonPressTicks } from '../world/ButtonRules';
 import {
   applySignInteraction,
@@ -349,6 +350,7 @@ export class Game {
   private eatingTimer = 0;
   private chewSoundTimer = 0;
   private activeItemUse: ActiveItemUse | null = null;
+  private goatHornCooldown = 0;
   private stepTimer = 0;
   private perspectiveMode: 'first' | 'third' = 'first';
   private container: HTMLElement;
@@ -885,6 +887,28 @@ export class Game {
       startUse: () => ({ handled: true }),
       continueUse: () => ({ handled: true }),
       stopUse: () => ({ handled: true }),
+    });
+    this.behaviors.registerItem('spyglass', {
+      id: 'minecraft:spyglass',
+      startUse: () => {
+        this.setSpyglassActive(true);
+        return { handled: true };
+      },
+      continueUse: () => ({ handled: true }),
+      stopUse: () => {
+        this.setSpyglassActive(false);
+        return { handled: true };
+      },
+    });
+    this.behaviors.registerItem('goat_horn', {
+      id: 'minecraft:goat_horn',
+      use: ({ stack }) => {
+        if (this.goatHornCooldown > 0) return { handled: true, cooldown: 0.1 };
+        this.goatHornCooldown = GOAT_HORN_COOLDOWN_SECONDS;
+        this.sound.playGoatHorn(goatHornSoundIndex(stack.goatHornInstrument));
+        this.swordSwingTimer = Math.max(this.swordSwingTimer, 0.35);
+        return { handled: true, cooldown: 0.25 };
+      },
     });
     this.behaviors.registerItem('food', {
       id: 'minecraft:food',
@@ -2110,6 +2134,7 @@ export class Game {
     const wasAttackCoolingDown = this.attackCooldownTimer > 0;
     this.breakCooldown = Math.max(0, this.breakCooldown - dt);
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
+    this.goatHornCooldown = Math.max(0, this.goatHornCooldown - dt);
     this.damageFlashTimer = Math.max(0, this.damageFlashTimer - dt);
     this.swordSwingTimer = Math.max(0, this.swordSwingTimer - dt);
     this.attackCooldownTimer = Math.max(0, this.attackCooldownTimer - dt);
@@ -5768,6 +5793,14 @@ export class Game {
       stack,
       target: this.getTargetBlockInteractionContext(stack),
     };
+  }
+
+  private setSpyglassActive(active: boolean) {
+    const nextFov = spyglassFov(70, active);
+    if (Math.abs(this.renderer.camera.fov - nextFov) > 1e-6) {
+      this.renderer.camera.fov = nextFov;
+      this.renderer.camera.updateProjectionMatrix();
+    }
   }
 
   private stopActiveItemUse(reason: ItemUseStopReason): boolean {

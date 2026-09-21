@@ -27,7 +27,7 @@ test('movement parser normalizes boolean movement flags without trusting truthy 
   });
   assert.deepEqual(parsed, {
     x: 0, y: 64, z: 0, yaw: 0, pitch: 0,
-    flying: false, onGround: true, sprinting: false,
+    flying: false, onGround: true, sprinting: false, sneaking: false,
   });
 });
 

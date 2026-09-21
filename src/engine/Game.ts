@@ -14,6 +14,7 @@ import { MobSystem } from '../systems/MobSystem';
 import { Mob } from '../entities/Mob';
 import { shouldTameEntity } from '../entities/EntityInteractionRules';
 import { canApplySaddle, canControlMountedMob, canMountMob, getNameTagLabel } from '../entities/MobItemInteractionRules';
+import { armorStandSlotIndex, canPlaceArmorStandAt, firstEquippedArmorStandSlot, snapArmorStandYaw } from '../entities/ArmorStandRules';
 import { ParticleSystem } from '../systems/ParticleSystem';
 import { FluidSystem } from '../systems/FluidSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
@@ -948,6 +949,10 @@ export class Game {
       id: 'minecraft:hoe',
       use: ({ target }) => ({ handled: this.tryTillFarmland(target), cooldown: 0.25 }),
     });
+    this.behaviors.registerItem('armor_stand', {
+      id: 'minecraft:armor_stand',
+      use: ({ stack, target }) => ({ handled: this.tryPlaceArmorStand(stack, target), cooldown: 0.35 }),
+    });
     this.behaviors.registerItem([], {
       id: 'minecraft:spawn_egg',
       use: ({ stack, target }) => ({ handled: this.tryUseSpawnEgg(stack, target), cooldown: 0.25 }),
@@ -1031,7 +1036,7 @@ export class Game {
         'mob:zombie', 'mob:skeleton', 'mob:creeper', 'mob:spider', 'mob:cow', 'mob:pig', 'mob:sheep', 'mob:chicken',
         'mob:blaze', 'mob:zombie_pigman', 'mob:magma_cube', 'mob:wither_skeleton', 'mob:villager', 'mob:enderman',
         'mob:witch', 'mob:iron_golem', 'mob:wolf', 'mob:cat', 'mob:horse', 'mob:shulker', 'mob:pillager',
-        'mob:wither', 'mob:guardian', 'mob:vex',
+        'mob:wither', 'mob:guardian', 'mob:vex', 'mob:armor_stand',
       ],
       {
         id: 'minecraft:mob_interaction',
@@ -1111,6 +1116,11 @@ export class Game {
   private tryInteractMob(target: Mob, heldItem: ItemStack | null) {
     const heldItemId = heldItem?.id ?? 0;
     const heldItemName = heldItem ? ItemRegistry.get(heldItem.id)?.name : undefined;
+
+    if (target.def.type === 'armor_stand') {
+      const result = this.tryInteractArmorStand(target, heldItem);
+      if (result.handled) return result;
+    }
 
     const nameTagLabel = heldItemName === 'name_tag' ? getNameTagLabel(heldItem) : null;
     if (nameTagLabel) {
@@ -3901,6 +3911,80 @@ export class Game {
     return true;
   }
 
+  private tryPlaceArmorStand(stack: ItemStack, target?: BlockInteractionContext): boolean {
+    if (!target || target.face === 'down') return false;
+    if (this.sendServerBlockItemUse(stack, target)) return true;
+
+    const position = this.getAdjacentBlockPosition(target);
+    if (!position) return false;
+    const canPlace = canPlaceArmorStandAt(
+      position,
+      target.face,
+      (x, y, z) => this.chunks.isSolidBlock(x, y, z),
+      (x, y, z) => {
+        if (
+          Math.abs(this.player.position.x - x) < 0.55 &&
+          Math.abs(this.player.position.y - y) < 1.98 &&
+          Math.abs(this.player.position.z - z) < 0.55
+        ) return true;
+        return Array.from(this.mobs.mobs.values()).some((mob) =>
+          mob.health > 0 &&
+          Math.abs(mob.position.x - x) < (mob.width + 0.5) * 0.5 &&
+          Math.abs(mob.position.y - y) < Math.max(mob.height, 1.975) &&
+          Math.abs(mob.position.z - z) < (mob.width + 0.5) * 0.5
+        );
+      },
+    );
+    if (!canPlace) return false;
+
+    const stand = this.mobs.spawnMob('armor_stand', position.x + 0.5, position.y, position.z + 0.5);
+    if (!stand) return false;
+    stand.yaw = snapArmorStandYaw(this.player.yaw);
+    stand.mesh.rotation.y = stand.yaw;
+    if (this.gameMode !== 'creative') this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    this.sound.playBlockPlace(target.blockId);
+    this.notifyState();
+    return true;
+  }
+
+  private tryInteractArmorStand(target: Mob, heldItem: ItemStack | null) {
+    if (target.def.type !== 'armor_stand') return { handled: false };
+
+    const heldDef = heldItem ? ItemRegistry.get(heldItem.id) : undefined;
+    const isArmorItem = !!heldDef && heldDef.category === 'armor' && !!heldDef.armorSlot;
+
+    if (this.isMultiplayerNetworkConnected()) {
+      if (heldItem && !isArmorItem) return { handled: false };
+      this.network.send(PacketType.C2S_MOB_INTERACT, { mobId: target.id, action: 'interact' });
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    if (heldItem) {
+      const def = heldDef;
+      if (def?.category !== 'armor' || !def.armorSlot) return { handled: false };
+      const slotIndex = armorStandSlotIndex(def.armorSlot);
+      const existing = target.getArmorStandEquipment(slotIndex);
+      const equipped = { ...heldItem, count: 1 };
+      target.setArmorStandEquipment(slotIndex, equipped);
+      if (this.gameMode !== 'creative') {
+        this.inventory.setSlot(this.player.selectedSlot, existing);
+      }
+      this.sound.playLever();
+      this.notifyState();
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    const slotIndex = firstEquippedArmorStandSlot(target.armorStandEquipment);
+    if (slotIndex < 0) return { handled: false };
+    const existing = target.getArmorStandEquipment(slotIndex);
+    if (!existing) return { handled: false };
+    target.setArmorStandEquipment(slotIndex, null);
+    this.inventory.setSlot(this.player.selectedSlot, existing);
+    this.sound.playPickup();
+    this.notifyState();
+    return { handled: true, cooldown: 0.25 };
+  }
+
   private tryPlaceBoat(stack: ItemStack, target?: BlockInteractionContext): boolean {
     if (!target) return false;
     if (this.sendServerBlockItemUse(stack, target)) return true;
@@ -4380,14 +4464,27 @@ export class Game {
       }
     }
 
+    if (mob.def.type === 'armor_stand' && this.gameMode !== 'creative') {
+      for (const stack of mob.armorStandEquipment) {
+        if (!stack) continue;
+        this.droppedItems.spawnStack(
+          stack,
+          mob.position.clone().add(new THREE.Vector3(0, 0.75, 0)),
+          new THREE.Vector3((Math.random() - 0.5) * 0.4, 1.1, (Math.random() - 0.5) * 0.4),
+          0.5,
+        );
+      }
+    }
+
     // Drop items in 3D world (magma cubes only drop if size === 1)
     const isMagmaCube = mob.def.type === 'magma_cube';
-    const shouldDrop = !isMagmaCube || mob.size === 1;
+    const shouldDrop = (!isMagmaCube || mob.size === 1)
+      && !(mob.def.type === 'armor_stand' && this.gameMode === 'creative');
 
     if (shouldDrop) {
       for (const drop of mob.def.drops) {
-        // P3.3: Looting adds up to `level` extra drop rolls per entry.
-        const rolls = 1 + lootingLevel;
+        // P3.3: Looting applies to living-mob loot, not the Armor Stand item itself.
+        const rolls = mob.def.type === 'armor_stand' ? 1 : 1 + lootingLevel;
         for (let roll = 0; roll < rolls; roll++) {
           if (Math.random() < drop.chance) {
             const dropPos = mob.position.clone().add(new THREE.Vector3(0, 0.5, 0));

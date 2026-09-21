@@ -126,6 +126,7 @@ import {
 import { MOB_DEFS, Mob, type MobType } from '../entities/Mob';
 import { shouldTameEntity } from '../entities/EntityInteractionRules';
 import { canApplySaddle, canControlMountedMob, canMountMob, getNameTagLabel } from '../entities/MobItemInteractionRules';
+import { armorStandSlotIndex, canPlaceArmorStandAt, firstEquippedArmorStandSlot, snapArmorStandYaw } from '../entities/ArmorStandRules';
 import { CHUNK_SIZE, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
 import type { ItemStack, BlockMetadata } from '../types';
 import { createHurtCooldownState, resolveHurtDamage, tickHurtCooldown, type HurtCooldownState } from '../systems/HurtCooldown';
@@ -201,6 +202,7 @@ interface ServerMob {
   isSitting?: boolean;
   isSaddled?: boolean;
   customName?: string;
+  armorStandEquipment?: (ItemStack | null)[];
   isSheared?: boolean;
   riderId?: string;
   riderInput?: ServerMobRideInput;
@@ -439,6 +441,9 @@ export class GameServer {
           isSitting: mob.isSitting,
           isSaddled: mob.isSaddled,
           customName: mob.customName,
+          armorStandEquipment: mob.type === 'armor_stand'
+            ? (mob.armorStandEquipment ?? []).map((stack) => cloneItemStack(stack))
+            : undefined,
           isSheared: mob.isSheared,
           riderId: mob.riderId ?? null
         });
@@ -581,6 +586,11 @@ export class GameServer {
         isSitting: mob.isSitting,
         isSaddled: mob.isSaddled,
         customName: mob.customName,
+        yaw: mob.yaw,
+        pitch: mob.pitch,
+        armorStandEquipment: mob.type === 'armor_stand'
+          ? (mob.armorStandEquipment ?? []).map((stack) => cloneItemStack(stack))
+          : undefined,
         isSheared: mob.isSheared
       });
     }
@@ -705,7 +715,9 @@ export class GameServer {
             mData.isSitting,
             mData.isSheared,
             mData.isSaddled,
-            mData.customName
+            mData.customName,
+            mData.yaw,
+            mData.armorStandEquipment
           );
         }
       }
@@ -1229,6 +1241,48 @@ export class GameServer {
         const mob = this.mobs.get(intent.mobId);
         if (!mob || mob.dimension !== session.dimension || mob.health <= 0) break;
         if (!isEntityAttackInReach(session, mob.position, session.gameMode)) break;
+
+        if (intent.action === 'interact') {
+          if (mob.type !== 'armor_stand') break;
+          const held = session.inventory[session.selectedSlot];
+          const heldDef = held ? ItemRegistry.get(held.id) : undefined;
+          const equipment = mob.armorStandEquipment ?? [null, null, null, null];
+
+          if (held) {
+            if (heldDef?.category !== 'armor' || !heldDef.armorSlot) break;
+            const slotIndex = armorStandSlotIndex(heldDef.armorSlot);
+            const existing = cloneItemStack(equipment[slotIndex]);
+            const equipped = cloneItemStack(held)!;
+            equipped.count = 1;
+            equipment[slotIndex] = equipped;
+            if (session.gameMode !== 'creative') {
+              session.inventory[session.selectedSlot] = existing;
+              this.syncPlayerInventory(session);
+            }
+          } else {
+            const slotIndex = firstEquippedArmorStandSlot(equipment);
+            if (slotIndex < 0) break;
+            const existing = cloneItemStack(equipment[slotIndex]);
+            if (!existing) break;
+            equipment[slotIndex] = null;
+            session.inventory[session.selectedSlot] = existing;
+            this.syncPlayerInventory(session);
+          }
+
+          mob.armorStandEquipment = equipment;
+          this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_STATE, {
+            id: mob.id,
+            health: mob.health,
+            hurtTimer: mob.hurtTimer,
+            armorStandEquipment: equipment.map((stack) => cloneItemStack(stack)),
+          });
+          this.broadcastDimension(mob.dimension, PacketType.S2C_SOUND, {
+            type: 'place', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+          });
+          break;
+        }
+
+        if (intent.action === 'interact') break;
         if (!canMountMob(mob.type, !!mob.isBaby, !!mob.isTamed)) break;
 
         if (intent.action === 'mount') {
@@ -1638,6 +1692,58 @@ export class GameServer {
     const targetBlockId = this.getBlock(intent.x, intent.y, intent.z, session.dimension);
     const targetBlock = BlockRegistry.get(targetBlockId);
     if (!targetBlock) return false;
+
+    if (itemName === 'armor_stand') {
+      const place = adjacentBlockPosition(intent.x, intent.y, intent.z, intent.face);
+      if (!isValidWorldY(place.y, WORLD_HEIGHT) || !isValidWorldY(place.y + 1, WORLD_HEIGHT)) return false;
+      const canPlace = canPlaceArmorStandAt(
+        place,
+        intent.face,
+        (x, y, z) => this.isSolidBlock(x, y, z, session.dimension),
+        (x, y, z) => {
+          for (const player of this.players.values()) {
+            if (player.dimension !== session.dimension) continue;
+            if (
+              Math.abs(player.x - x) < 0.55 &&
+              Math.abs(player.y - y) < 1.98 &&
+              Math.abs(player.z - z) < 0.55
+            ) return true;
+          }
+          for (const mob of this.mobs.values()) {
+            if (mob.dimension !== session.dimension || mob.health <= 0) continue;
+            const width = MOB_DEFS[mob.type]?.width ?? 0.6;
+            const height = MOB_DEFS[mob.type]?.height ?? 1.8;
+            if (
+              Math.abs(mob.position.x - x) < (width + 0.5) * 0.5 &&
+              Math.abs(mob.position.y - y) < Math.max(height, 1.975) &&
+              Math.abs(mob.position.z - z) < (width + 0.5) * 0.5
+            ) return true;
+          }
+          return false;
+        },
+      );
+      if (!canPlace) return false;
+      this.spawnMob(
+        'armor_stand',
+        place.x + 0.5,
+        place.y,
+        place.z + 0.5,
+        session.dimension,
+        false,
+        false,
+        false,
+        false,
+        false,
+        undefined,
+        snapArmorStandYaw(session.yaw),
+        [],
+      );
+      this.consumeServerHeldItem(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: place.x, y: place.y, z: place.z,
+      });
+      return true;
+    }
 
     const spawnEggMobType = spawnEggMobTypeForItemName(itemName);
     if (spawnEggMobType) {
@@ -2753,6 +2859,8 @@ export class GameServer {
     isSheared = false,
     isSaddled = false,
     customName?: string,
+    yaw?: number,
+    armorStandEquipment: readonly (ItemStack | null)[] = [],
   ): ServerMob {
     const id = this.nextEntityId++;
     const mob: ServerMob = {
@@ -2760,7 +2868,7 @@ export class GameServer {
       type,
       position: new THREE.Vector3(x, y, z),
       velocity: new THREE.Vector3(0, 0, 0),
-      yaw: Math.random() * Math.PI * 2,
+      yaw: Number.isFinite(yaw) ? yaw! : Math.random() * Math.PI * 2,
       pitch: 0,
       health: MOB_DEFS[type]?.health || 20,
       maxHealth: MOB_DEFS[type]?.health || 20,
@@ -2778,6 +2886,9 @@ export class GameServer {
       isSitting,
       isSaddled,
       customName: typeof customName === 'string' && customName.trim() ? customName.trim().slice(0, 50) : undefined,
+      armorStandEquipment: type === 'armor_stand'
+        ? [0, 1, 2, 3].map((index) => cloneItemStack(armorStandEquipment[index]))
+        : undefined,
       isSheared,
       riderInput: createIdleServerMobRideInput(id)
     };
@@ -2797,6 +2908,9 @@ export class GameServer {
       isSitting,
       isSaddled,
       customName: mob.customName,
+      armorStandEquipment: mob.type === 'armor_stand'
+        ? (mob.armorStandEquipment ?? []).map((stack) => cloneItemStack(stack))
+        : undefined,
       isSheared,
       riderId: null
     });
@@ -2813,6 +2927,20 @@ export class GameServer {
     this.mobs.delete(mob.id);
     this.broadcast(PacketType.S2C_MOB_DESPAWN, { id: mob.id });
     
+    if (mob.type === 'armor_stand') {
+      for (const stack of mob.armorStandEquipment ?? []) {
+        if (!stack) continue;
+        this.spawnDroppedStack(
+          stack,
+          mob.position.x,
+          mob.position.y + 0.75,
+          mob.position.z,
+          mob.dimension,
+          0.1,
+        );
+      }
+    }
+
     // Spawn drops
     const drops = MOB_DEFS[mob.type]?.drops || [];
     for (const d of drops) {
@@ -3104,8 +3232,9 @@ export class GameServer {
     // Tick primed TNT created by server-authoritative Flint and Steel use.
     this.tickPrimedTnt(dt);
 
-    // Dynamic Mob Spawner
-    if (this.mobs.size < 30 && Math.random() < 0.15) {
+    // Dynamic Mob Spawner. Placed Armor Stands do not consume the natural mob budget.
+    const naturalMobCount = Array.from(this.mobs.values()).filter(mob => mob.type !== 'armor_stand').length;
+    if (naturalMobCount < 30 && Math.random() < 0.15) {
       this.attemptMobSpawning();
     }
   }
@@ -3128,6 +3257,23 @@ export class GameServer {
         mob.onGround = true;
       } else {
         mob.onGround = false;
+      }
+
+      if (mob.type === 'armor_stand') {
+        mob.aiState = 'idle';
+        mob.velocity.x = 0;
+        mob.velocity.z = 0;
+        mob.wanderTarget = null;
+        mob.hurtTimer = Math.max(0, mob.hurtTimer - dt);
+        this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_MOVE, {
+          id: mob.id,
+          x: mob.position.x,
+          y: mob.position.y,
+          z: mob.position.z,
+          yaw: mob.yaw,
+          pitch: mob.pitch,
+        });
+        continue;
       }
 
       // Pathfinding & AI logic

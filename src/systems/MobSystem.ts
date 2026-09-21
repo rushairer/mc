@@ -3,6 +3,7 @@ import { Mob, type MobType, MOB_DEFS } from '../entities/Mob';
 import { CHUNK_SIZE, RENDER_DISTANCE } from '../constants';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { VillageSystem, type VillagerProfession } from './VillageSystem';
+import { cloneItemStack } from '../items/ItemStackRules';
 import type { WorldGen } from '../world/WorldGen';
 import { BiomeType } from '../world/WorldGen';
 import { MAX_RESTORED_MOBS_PER_DIMENSION, type SerializedMob } from './SaveSystem';
@@ -211,7 +212,8 @@ export class MobSystem {
     // Spawn new mobs
     if (this.doMobSpawning && this.difficulty !== 'peaceful') {
       this.spawnTimer += dt;
-      if (this.spawnTimer >= SPAWN_INTERVAL && this.mobs.size < MAX_MOBS && getBlock) {
+      const naturalMobCount = Array.from(this.mobs.values()).filter(mob => mob.def.type !== 'armor_stand').length;
+      if (this.spawnTimer >= SPAWN_INTERVAL && naturalMobCount < MAX_MOBS && getBlock) {
         this.spawnTimer = 0;
         this.trySpawn(playerPos, isNight ?? false, getBlock, dimension, worldGen);
       }
@@ -343,7 +345,7 @@ export class MobSystem {
   }
 
   spawnMob(type: MobType, x: number, y: number, z: number, size?: number, profession?: VillagerProfession): Mob | null {
-    const atRuntimeCap = this.mobs.size >= MAX_RESTORED_MOBS_PER_DIMENSION && type !== 'wither';
+    const atRuntimeCap = this.mobs.size >= MAX_RESTORED_MOBS_PER_DIMENSION && type !== 'wither' && type !== 'armor_stand';
     if ((this.difficulty === 'peaceful' && MOB_DEFS[type].hostile) || atRuntimeCap) return null;
     const mob = new Mob(type, x, y, z, size, profession);
     this.mobs.set(mob.id, mob);
@@ -371,6 +373,11 @@ export class MobSystem {
         isSitting: mob.isSitting,
         isSaddled: mob.isSaddled,
         customName: mob.customName ?? undefined,
+        yaw: mob.yaw,
+        pitch: mob.pitch,
+        armorStandEquipment: mob.def.type === 'armor_stand'
+          ? mob.armorStandEquipment.map((stack) => cloneItemStack(stack))
+          : undefined,
         isSheared: mob.isSheared,
         isAngry: mob.isAngry,
         angerTimer: mob.angerTimer,
@@ -400,6 +407,12 @@ export class MobSystem {
       mob.customName = typeof saved.customName === 'string' && saved.customName.trim()
         ? saved.customName.trim().slice(0, 50)
         : null;
+      mob.yaw = Number.isFinite(saved.yaw) ? saved.yaw! : 0;
+      mob.pitch = Number.isFinite(saved.pitch) ? saved.pitch! : 0;
+      mob.mesh.rotation.y = mob.yaw;
+      if (mob.def.type === 'armor_stand') {
+        mob.setArmorStandEquipmentSnapshot(saved.armorStandEquipment ?? []);
+      }
       mob.isSheared = !!saved.isSheared;
       mob.isAngry = !!saved.isAngry;
       mob.angerTimer = Math.max(0, saved.angerTimer ?? 0);

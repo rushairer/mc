@@ -109,6 +109,9 @@ export interface SerializedMob {
   isSitting?: boolean;
   isSaddled?: boolean;
   customName?: string;
+  yaw?: number;
+  pitch?: number;
+  armorStandEquipment?: (ItemStack | null)[];
   isSheared?: boolean;
   isAngry?: boolean;
   angerTimer?: number;
@@ -140,7 +143,7 @@ const VALID_MOB_TYPES = new Set<MobType>([
   'zombie', 'skeleton', 'creeper', 'spider', 'cow', 'pig', 'sheep', 'chicken',
   'blaze', 'zombie_pigman', 'magma_cube', 'wither_skeleton', 'villager', 'enderman',
   'witch', 'iron_golem', 'wolf', 'cat', 'horse', 'shulker', 'pillager', 'wither',
-  'guardian', 'vex',
+  'guardian', 'vex', 'armor_stand',
 ]);
 const HOSTILE_MOB_TYPES = new Set<MobType>([
   'zombie', 'skeleton', 'creeper', 'spider', 'blaze', 'zombie_pigman', 'magma_cube',
@@ -327,6 +330,16 @@ function sanitizeMobs(
       isSaddled: !!mob.isSaddled,
       customName: typeof mob.customName === 'string' && mob.customName.trim()
         ? mob.customName.trim().slice(0, 50)
+        : undefined,
+      yaw: finiteOr(mob.yaw, 0),
+      pitch: finiteOr(mob.pitch, 0),
+      armorStandEquipment: mob.type === 'armor_stand' && Array.isArray(mob.armorStandEquipment)
+        ? mob.armorStandEquipment.slice(0, 4).map((stack) => {
+            if (!stack || typeof stack !== 'object') return null;
+            const candidate = stack as ItemStack;
+            if (!Number.isInteger(candidate.id) || candidate.id <= 0 || !Number.isInteger(candidate.count) || candidate.count <= 0) return null;
+            return { ...candidate, count: 1 };
+          })
         : undefined,
     });
   }

@@ -233,7 +233,7 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_MOB_SPAWN: {
-        const { id, type, x, y, z, yaw, pitch, health, isBaby, isTamed, isSitting, isSaddled, customName, isSheared, riderId } = packet.payload;
+        const { id, type, x, y, z, yaw, pitch, health, isBaby, isTamed, isSitting, isSaddled, customName, armorStandEquipment, isSheared, riderId } = packet.payload;
         // Spawns mob client-side
         const mob = this.game.mobs.spawnMob(type, x, y, z);
         if (mob) {
@@ -243,13 +243,17 @@ export class NetworkClient {
           this.game.mobs.mobs.set(id, mob);
           
           mob.health = health;
-          mob.yaw = yaw;
-          mob.pitch = pitch;
+          mob.yaw = Number.isFinite(yaw) ? yaw : 0;
+          mob.pitch = Number.isFinite(pitch) ? pitch : 0;
+          mob.mesh.rotation.y = mob.yaw;
           if (isBaby) mob.isBaby = true;
           if (isTamed) mob.isTamed = true;
           if (isSitting) mob.isSitting = true;
           if (isSaddled) mob.isSaddled = true;
           if (typeof customName === 'string' && customName.trim()) mob.customName = customName.trim().slice(0, 50);
+          if (type === 'armor_stand' && Array.isArray(armorStandEquipment)) {
+            mob.setArmorStandEquipmentSnapshot(armorStandEquipment);
+          }
           if (isSheared) mob.isSheared = true;
           if (riderId !== undefined) this.game.applyServerMobRider(id, riderId ?? null);
         }
@@ -286,7 +290,7 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_MOB_STATE: {
-        const { id, health, hurtTimer, fuseTimer, isTamed, isSitting, isSaddled, customName, isSheared } = packet.payload;
+        const { id, health, hurtTimer, fuseTimer, isTamed, isSitting, isSaddled, customName, armorStandEquipment, isSheared } = packet.payload;
         const mob = this.game.mobs.mobs.get(id);
         if (mob) {
           if (health !== undefined) mob.health = health;
@@ -296,6 +300,9 @@ export class NetworkClient {
           if (isSitting !== undefined) mob.isSitting = !!isSitting;
           if (isSaddled !== undefined) mob.isSaddled = !!isSaddled;
           if (customName !== undefined) mob.customName = typeof customName === 'string' && customName.trim() ? customName.trim().slice(0, 50) : null;
+          if (mob.def.type === 'armor_stand' && Array.isArray(armorStandEquipment)) {
+            mob.setArmorStandEquipmentSnapshot(armorStandEquipment);
+          }
           if (isSheared !== undefined) mob.isSheared = !!isSheared;
         }
         break;

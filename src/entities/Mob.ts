@@ -4,8 +4,11 @@ import type { VillagerProfession } from '../systems/VillageSystem';
 import { shouldRunRandomMovement26_3 } from '../world/WildernessBoundChanges26_3';
 import { resolveShelfMushroomLanding26_3 } from '../world/WildernessBoundGameplay26_3';
 import { isSafeTeleportDestination26_3 } from '../world/TeleportRules26_3';
+import type { ItemStack } from '../types';
+import { ItemRegistry } from '../items/ItemRegistry';
+import { cloneItemStack } from '../items/ItemStackRules';
 
-export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker' | 'pillager' | 'wither' | 'guardian' | 'vex';
+export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker' | 'pillager' | 'wither' | 'guardian' | 'vex' | 'armor_stand';
 
 export interface MobDef {
   type: MobType;
@@ -48,6 +51,7 @@ const MOB_DEFS: Record<MobType, MobDef> = {
   wither:   { type: 'wither',   health: 300, speed: 3.5, damage: 8, hostile: true, width: 0.9, height: 1.9, bodyColor: 0x141414, headColor: 0x141414, eyeColor: 0xFFFFFF, xpDrop: 50, drops: [{ id: 399, count: 1, chance: 1.0 }] },
   guardian: { type: 'guardian', health: 30,  speed: 2.0, damage: 6, hostile: true, width: 0.8, height: 0.8, bodyColor: 0x5c8c8c, headColor: 0x5c8c8c, eyeColor: 0xFF5500, xpDrop: 10, drops: [{ id: 409, count: 1, chance: 0.4 }] },
   vex:      { type: 'vex',      health: 14,  speed: 4.0, damage: 3, hostile: true, width: 0.4, height: 0.8, bodyColor: 0xbfd3ff, headColor: 0xbfd3ff, eyeColor: 0xFF0000, xpDrop: 3,  drops: [] },
+  armor_stand: { type: 'armor_stand', health: 2, speed: 0, damage: 0, hostile: false, width: 0.5, height: 1.975, bodyColor: 0x9a6a38, headColor: 0x9a6a38, xpDrop: 0, drops: [{ id: 416, count: 1, chance: 1.0 }] },
 };
 
 const MOB_MAX_AIR = 15.0;
@@ -72,6 +76,8 @@ export class Mob {
   def: MobDef;
   position: THREE.Vector3;
   velocity: THREE.Vector3;
+  yaw = 0;
+  pitch = 0;
   health: number;
   mesh: THREE.Group;
   onGround = false;
@@ -111,6 +117,8 @@ export class Mob {
   private _customName: string | null = null;
   private saddleMesh: THREE.Group | null = null;
   private customNameLabel: THREE.Sprite | null = null;
+  armorStandEquipment: (ItemStack | null)[] = [null, null, null, null];
+  private armorStandEquipmentMesh: THREE.Group | null = null;
   /** Sheep shearing state; regrowth can reset this when grass-eating is modeled. */
   isSheared = false;
   targetMob: Mob | null = null;
@@ -143,6 +151,22 @@ export class Mob {
     const normalized = typeof value === 'string' && value.trim() ? value.trim().slice(0, 50) : null;
     this._customName = normalized;
     this.refreshCustomNameLabel();
+  }
+
+  getArmorStandEquipment(slotIndex: number): ItemStack | null {
+    return cloneItemStack(this.armorStandEquipment[slotIndex]);
+  }
+
+  setArmorStandEquipment(slotIndex: number, stack: ItemStack | null) {
+    if (this.def.type !== 'armor_stand' || slotIndex < 0 || slotIndex >= 4) return;
+    this.armorStandEquipment[slotIndex] = cloneItemStack(stack);
+    this.refreshArmorStandEquipmentVisual();
+  }
+
+  setArmorStandEquipmentSnapshot(equipment: readonly (ItemStack | null)[]) {
+    if (this.def.type !== 'armor_stand') return;
+    this.armorStandEquipment = [0, 1, 2, 3].map(index => cloneItemStack(equipment[index]));
+    this.refreshArmorStandEquipmentVisual();
   }
 
   get width(): number {
@@ -195,6 +219,76 @@ export class Mob {
     this.mesh.position.set(x, y, z);
     this.refreshSaddleVisual();
     this.refreshCustomNameLabel();
+    this.refreshArmorStandEquipmentVisual();
+  }
+
+  private refreshArmorStandEquipmentVisual() {
+    if (!this.mesh || this.def.type !== 'armor_stand') return;
+    if (this.armorStandEquipmentMesh) {
+      this.mesh.remove(this.armorStandEquipmentMesh);
+      this.armorStandEquipmentMesh.traverse(child => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          if (Array.isArray(child.material)) child.material.forEach(material => material.dispose());
+          else child.material.dispose();
+        }
+      });
+      this.armorStandEquipmentMesh = null;
+    }
+
+    const group = new THREE.Group();
+    group.name = 'armor_stand_equipment';
+    const materialColor = (itemId: number) => {
+      const name = ItemRegistry.get(itemId)?.name ?? '';
+      if (name.startsWith('leather_')) return 0x8b5a2b;
+      if (name.startsWith('gold') || name.startsWith('golden_')) return 0xf2c94c;
+      if (name.startsWith('diamond_')) return 0x4fd6d0;
+      if (name.startsWith('netherite_')) return 0x4a4148;
+      if (name.startsWith('chainmail_')) return 0x9ca3a8;
+      return 0xc6c6c6;
+    };
+
+    const [helmet, chestplate, leggings, boots] = this.armorStandEquipment;
+    if (helmet) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.48, 0.36, 0.48),
+        new THREE.MeshLambertMaterial({ color: materialColor(helmet.id) }),
+      );
+      mesh.name = 'armor_helmet';
+      mesh.position.y = 1.72;
+      group.add(mesh);
+    }
+    if (chestplate) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.58, 0.62, 0.3),
+        new THREE.MeshLambertMaterial({ color: materialColor(chestplate.id) }),
+      );
+      mesh.name = 'armor_chestplate';
+      mesh.position.y = 1.18;
+      group.add(mesh);
+    }
+    if (leggings) {
+      const mat = new THREE.MeshLambertMaterial({ color: materialColor(leggings.id) });
+      const left = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.68, 0.22), mat);
+      const right = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.68, 0.22), mat.clone());
+      left.name = 'armor_leggings_left';
+      right.name = 'armor_leggings_right';
+      left.position.set(-0.14, 0.61, 0);
+      right.position.set(0.14, 0.61, 0);
+      group.add(left, right);
+    }
+    if (boots) {
+      const mat = new THREE.MeshLambertMaterial({ color: materialColor(boots.id) });
+      const left = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.25, 0.32), mat);
+      const right = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.25, 0.32), mat.clone());
+      left.name = 'armor_boot_left';
+      right.name = 'armor_boot_right';
+      left.position.set(-0.14, 0.19, 0.04);
+      right.position.set(0.14, 0.19, 0.04);
+      group.add(left, right);
+    }
+    this.mesh.add(group);
+    this.armorStandEquipmentMesh = group;
   }
 
   private refreshSaddleVisual() {
@@ -271,7 +365,26 @@ export class Mob {
     const bodyColor = this.def.bodyColor;
     const headColor = this.def.headColor ?? bodyColor;
 
-    if (type === 'zombie' || type === 'skeleton' || type === 'zombie_pigman' || type === 'wither_skeleton' || type === 'pillager') {
+    if (type === 'armor_stand') {
+      const wood = new THREE.MeshLambertMaterial({ color: 0x9a6a38 });
+      const darkWood = new THREE.MeshLambertMaterial({ color: 0x6d4727 });
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.08, 0.72), darkWood);
+      base.name = 'armor_stand_base';
+      base.position.y = 0.04;
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.10, 1.3, 0.10), wood);
+      post.name = 'armor_stand_post';
+      post.position.y = 0.75;
+      const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.10, 0.10), wood);
+      shoulders.name = 'armor_stand_shoulders';
+      shoulders.position.y = 1.35;
+      const waist = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.08, 0.10), wood);
+      waist.position.y = 0.85;
+      const legL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.72, 0.09), wood);
+      const legR = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.72, 0.09), wood.clone());
+      legL.position.set(-0.13, 0.4, 0);
+      legR.position.set(0.13, 0.4, 0);
+      group.add(base, post, shoulders, waist, legL, legR);
+    } else if (type === 'zombie' || type === 'skeleton' || type === 'zombie_pigman' || type === 'wither_skeleton' || type === 'pillager') {
       // Humanoid
       const isZombie = type === 'zombie';
       const isPigman = type === 'zombie_pigman';
@@ -1695,6 +1808,14 @@ export class Mob {
     randomMovementPlayerNearby = true
   ) {
     const distToPlayer = this.position.distanceTo(playerPos);
+
+    if (this.def.type === 'armor_stand') {
+      this.aiState = 'idle';
+      this.velocity.x = 0;
+      this.velocity.z = 0;
+      this.wanderTarget = null;
+      return;
+    }
 
     if (this.def.type === 'guardian' && !inWater) {
       this.aiState = 'wander';

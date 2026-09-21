@@ -3950,13 +3950,17 @@ export class Game {
   private tryInteractArmorStand(target: Mob, heldItem: ItemStack | null) {
     if (target.def.type !== 'armor_stand') return { handled: false };
 
+    const heldDef = heldItem ? ItemRegistry.get(heldItem.id) : undefined;
+    const isArmorItem = !!heldDef && heldDef.category === 'armor' && !!heldDef.armorSlot;
+
     if (this.isMultiplayerNetworkConnected()) {
+      if (heldItem && !isArmorItem) return { handled: false };
       this.network.send(PacketType.C2S_MOB_INTERACT, { mobId: target.id, action: 'interact' });
       return { handled: true, cooldown: 0.25 };
     }
 
     if (heldItem) {
-      const def = ItemRegistry.get(heldItem.id);
+      const def = heldDef;
       if (def?.category !== 'armor' || !def.armorSlot) return { handled: false };
       const slotIndex = armorStandSlotIndex(def.armorSlot);
       const existing = target.getArmorStandEquipment(slotIndex);

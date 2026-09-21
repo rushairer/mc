@@ -1209,6 +1209,8 @@ export class GameServer {
         if (isFenceBlockName(blockName)) {
           const holderId = fenceLeashHolderId(session.dimension, { x, y, z });
           const fenceCenter = { x: x + 0.5, y: y + 0.65, z: z + 0.5 };
+          const held = session.inventory[session.selectedSlot];
+          const heldName = held ? ItemRegistry.get(held.id)?.name : undefined;
           const playerLeashed = Array.from(this.mobs.values()).filter((mob) =>
             mob.dimension === session.dimension &&
             mob.leashHolderId === session.id &&
@@ -1224,20 +1226,44 @@ export class GameServer {
           const fenceLeashed = Array.from(this.mobs.values()).filter((mob) =>
             mob.dimension === session.dimension &&
             mob.leashHolderId === holderId &&
-            isLeashableMobType(mob.type) &&
-            leashDistance(fenceCenter, {
-              x: mob.position.x,
-              y: mob.position.y + (MOB_DEFS[mob.type]?.height ?? 1) * 0.55,
-              z: mob.position.z,
-            }) <= LEAD_SNAP_DISTANCE
+            isLeashableMobType(mob.type)
           );
 
-          const nextHolderId = attachable.length > 0
-            ? holderId
-            : playerLeashed.length === 0 && fenceLeashed.length > 0
-              ? session.id
-              : null;
-          const affected = attachable.length > 0 ? attachable : nextHolderId === session.id ? fenceLeashed : [];
+          if (heldName === 'shears' && fenceLeashed.length > 0 && held) {
+            for (const mob of fenceLeashed) {
+              mob.leashHolderId = undefined;
+              if (session.gameMode !== 'creative') {
+                this.spawnDroppedItem(
+                  420,
+                  1,
+                  mob.position.x,
+                  mob.position.y + 0.4,
+                  mob.position.z,
+                  mob.dimension,
+                  0.25,
+                );
+              }
+              this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_STATE, {
+                id: mob.id,
+                health: mob.health,
+                hurtTimer: mob.hurtTimer,
+                leashHolderId: null,
+              });
+            }
+            this.damageServerHeldTool(session, held);
+            this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+              type: 'break', x: x + 0.5, y: y + 0.5, z: z + 0.5,
+            });
+            break;
+          }
+
+          const transferBack =
+            !session.sneaking &&
+            attachable.length === 0 &&
+            playerLeashed.length === 0 &&
+            fenceLeashed.length > 0;
+          const nextHolderId = attachable.length > 0 ? holderId : transferBack ? session.id : null;
+          const affected = attachable.length > 0 ? attachable : transferBack ? fenceLeashed : [];
 
           for (const mob of affected) {
             mob.leashHolderId = nextHolderId ?? undefined;

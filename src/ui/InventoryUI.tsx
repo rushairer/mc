@@ -148,8 +148,9 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({
   // P3.2: fill the 2x2 grid from inventory when a recipe book entry is chosen.
   const handleRecipeSelect = useCallback((entry: RecipeBookEntry) => {
     if (heldItem) {
-      inventory.addItem(heldItem.id, heldItem.count);
+      inventory.addStack(heldItem);
       setHeldItem(null);
+      setHeldOriginSlot(null);
     }
     const plan = planGridFill(
       entry.recipe,
@@ -208,6 +209,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({
       // Crafting grid click
       const newGrid = [...craftingGrid];
       if (heldItem && newGrid[slotIndex] === 0) {
+        if (isBundleStack(heldItem) && bundleUsedCapacity(heldItem) > 0) return;
         newGrid[slotIndex] = heldItem.id;
         setHeldItem(prev => {
           if (!prev) return null;

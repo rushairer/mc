@@ -57,6 +57,21 @@ export function hangingEntityPosition(
   }
 }
 
+export function hangingEntityWorldPosition(
+  support: BlockPosition,
+  face: BlockFacing,
+): { x: number; y: number; z: number } {
+  const inset = 0.03125;
+  switch (face) {
+    case 'north': return { x: support.x + 0.5, y: support.y + 0.5, z: support.z - inset };
+    case 'south': return { x: support.x + 0.5, y: support.y + 0.5, z: support.z + 1 + inset };
+    case 'east': return { x: support.x + 1 + inset, y: support.y + 0.5, z: support.z + 0.5 };
+    case 'west': return { x: support.x - inset, y: support.y + 0.5, z: support.z + 0.5 };
+    case 'up': return { x: support.x + 0.5, y: support.y + 1 + inset, z: support.z + 0.5 };
+    case 'down': return { x: support.x + 0.5, y: support.y - inset, z: support.z + 0.5 };
+  }
+}
+
 export function hangingEntityYaw(face: BlockFacing): number {
   switch (face) {
     case 'north': return 0;

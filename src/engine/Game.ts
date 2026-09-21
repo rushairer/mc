@@ -451,6 +451,7 @@ export class Game {
     // Spawn
     const spawn = this.findSafeWorldSpawnPosition();
     this.player = new Player(spawn.x, spawn.y, spawn.z);
+    this.mobs.setItemVisualFactory((itemId) => this.player.createItemVisualMesh(itemId));
     this.droppedItems = new DroppedItemSystem(this.renderer.scene, (itemId) => this.player.createItemVisualMesh(itemId));
     this.hoppers = new HopperSystem(this.chunks, this.droppedItems, () => this.notifyState());
     this.chunks.update(spawn.x, spawn.z);

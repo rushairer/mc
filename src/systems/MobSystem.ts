@@ -11,7 +11,7 @@ import {
   MAX_RESTORED_MOBS_PER_DIMENSION,
   type SerializedMob,
 } from './SaveSystem';
-import { isPaintingVariant } from '../entities/HangingEntityRules';
+import { isPaintingVariant, mobLeashHolderId, parseMobLeashHolderId } from '../entities/HangingEntityRules';
 import type { EndGenerator } from '../world/EndGenerator';
 import { EnchantSystem } from './EnchantSystem';
 import { UNDEAD_MOB_TYPES } from './PotionEffect';
@@ -371,6 +371,7 @@ export class MobSystem {
     return Array.from(this.mobs.values())
       .filter(mob => mob.health > 0)
       .map(mob => ({
+        entityId: mob.id,
         type: mob.def.type,
         x: mob.position.x,
         y: mob.position.y,
@@ -409,6 +410,8 @@ export class MobSystem {
 
     let ordinaryRestored = 0;
     let decorativeRestored = 0;
+    const restoredRelationships: Array<{ mob: Mob; saved: SerializedMob }> = [];
+    const idMap = new Map<number, number>();
     for (const saved of savedMobs) {
       const decorative = saved.type === 'armor_stand' || saved.type === 'item_frame' || saved.type === 'painting';
       if (decorative) {
@@ -424,6 +427,10 @@ export class MobSystem {
         : undefined;
       const mob = this.spawnMob(saved.type, saved.x, saved.y, saved.z, saved.size, profession);
       if (!mob) continue;
+      if (Number.isInteger(saved.entityId) && Number(saved.entityId) >= 0) {
+        idMap.set(Number(saved.entityId), mob.id);
+      }
+      restoredRelationships.push({ mob, saved });
       if (decorative) decorativeRestored++;
       else ordinaryRestored++;
       mob.isBaby = !!saved.isBaby;
@@ -449,7 +456,10 @@ export class MobSystem {
         mob.setHangingFace(saved.hangingFace ?? null);
         if (isPaintingVariant(saved.paintingVariant)) mob.setPaintingVariant(saved.paintingVariant);
       }
-      mob.leashHolderId = typeof saved.leashHolderId === 'string' ? saved.leashHolderId : null;
+      const savedMobHolderId = parseMobLeashHolderId(saved.leashHolderId);
+      mob.leashHolderId = savedMobHolderId === null && typeof saved.leashHolderId === 'string'
+        ? saved.leashHolderId
+        : null;
       mob.isSheared = !!saved.isSheared;
       mob.isAngry = !!saved.isAngry;
       mob.angerTimer = Math.max(0, saved.angerTimer ?? 0);
@@ -458,6 +468,16 @@ export class MobSystem {
       const maxHealth = mob.def.type === 'wolf' && mob.isTamed ? 20 : mob.health;
       mob.health = Math.max(0, Math.min(saved.health, maxHealth));
       mob.mesh.position.copy(mob.position);
+    }
+
+    for (const { mob, saved } of restoredRelationships) {
+      const oldHolderId = parseMobLeashHolderId(saved.leashHolderId);
+      if (oldHolderId === null) continue;
+      const newHolderId = idMap.get(oldHolderId);
+      mob.leashHolderId =
+        newHolderId !== undefined && newHolderId !== mob.id
+          ? mobLeashHolderId(newHolderId)
+          : null;
     }
   }
 

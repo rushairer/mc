@@ -8750,6 +8750,19 @@ export class Game {
       }
     }
 
+    if (spawnDrop && meta?.jukeboxDisc) {
+      const jukeboxDisc = getStoredJukeboxDisc(meta.jukeboxDisc);
+      if (jukeboxDisc) {
+        this.droppedItems.spawnStack(
+          jukeboxDisc,
+          new THREE.Vector3(x + 0.5, y + 0.8, z + 0.5),
+          new THREE.Vector3(0, 1.0, 0),
+          0.5,
+        );
+      }
+      this.sound.stopJukeboxSong();
+    }
+
     // 2. Spawn item drop for the block itself
     if (spawnDrop && this.gameMode !== 'creative' && harvestable) {
       const dropPos = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);

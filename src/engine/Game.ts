@@ -107,6 +107,14 @@ import { findChorusFruitDestination26_3 } from '../world/TeleportRules26_3';
 import { GOAT_HORN_COOLDOWN_SECONDS, goatHornSoundIndex, spyglassFov } from '../items/SpecialItemUseRules';
 import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, windBurstImpulse } from '../items/WindChargeRules';
 import { getMaceSmashBonus, getMaceSmashImpulse, isMaceSmash, MACE_HEAVY_SMASH_THRESHOLD } from '../items/MaceRules';
+import {
+  archaeologyBrushStage,
+  archaeologyTargetKey,
+  brushedReplacementName,
+  isBrushExcavationComplete,
+  isSuspiciousBlockName,
+  normalizeArchaeologyLootCount,
+} from '../items/ArchaeologyRules';
 import { getButtonPressTicks } from '../world/ButtonRules';
 import {
   applySignInteraction,
@@ -363,6 +371,8 @@ export class Game {
   private eatingTimer = 0;
   private chewSoundTimer = 0;
   private activeItemUse: ActiveItemUse | null = null;
+  private activeBrushTarget: { x: number; y: number; z: number; key: string } | null = null;
+  private brushLastStage = 0;
   private goatHornCooldown = 0;
   private windChargeCooldown = 0;
   private maceFallStartY: number | null = null;
@@ -1002,6 +1012,42 @@ export class Game {
     this.behaviors.registerItem('fire_charge', {
       id: 'minecraft:fire_charge',
       use: ({ target }) => ({ handled: this.tryUseFireCharge(target), cooldown: 0.25 }),
+    });
+    this.behaviors.registerItem('brush', {
+      id: 'minecraft:brush',
+      canStartUse: ({ target }) => !!target && isSuspiciousBlockName(target.block.name),
+      startUse: ({ stack, target }) => {
+        if (!target || !isSuspiciousBlockName(target.block.name)) return { handled: false };
+        const { x, y, z } = target.position;
+        this.activeBrushTarget = { x, y, z, key: archaeologyTargetKey(x, y, z) };
+        this.brushLastStage = 0;
+        if (this.isMultiplayerNetworkConnected()) {
+          this.network.send(PacketType.C2S_BRUSH_ACTION, {
+            action: 'start', itemId: stack.id, x, y, z,
+          });
+        }
+        return { handled: true };
+      },
+      continueUse: ({ stack, target }, progress) =>
+        this.continueBrushUse(stack, target, progress.elapsedSeconds),
+      stopUse: ({ stack }, progress) => {
+        const active = this.activeBrushTarget;
+        if (
+          active
+          && progress.reason !== 'completed'
+          && this.isMultiplayerNetworkConnected()
+        ) {
+          this.network.send(PacketType.C2S_BRUSH_ACTION, {
+            action: 'cancel',
+            itemId: stack.id,
+            x: active.x,
+            y: active.y,
+            z: active.z,
+          });
+        }
+        this.resetBrushUseProgress();
+        return { handled: true };
+      },
     });
     this.behaviors.registerItem([], {
       id: 'minecraft:shears',
@@ -5949,6 +5995,98 @@ export class Game {
       stack,
       target: this.getTargetBlockInteractionContext(stack),
     };
+  }
+
+  private resetBrushUseProgress() {
+    const active = this.activeBrushTarget;
+    if (active && !this.isMultiplayerNetworkConnected()) {
+      const meta = this.chunks.getBlockMeta(active.x, active.y, active.z);
+      if (meta?.archaeologyProgress) {
+        this.chunks.setBlockMeta(
+          active.x,
+          active.y,
+          active.z,
+          { ...meta, archaeologyProgress: 0 },
+          true,
+        );
+      }
+    }
+    this.activeBrushTarget = null;
+    this.brushLastStage = 0;
+  }
+
+  private continueBrushUse(
+    stack: ItemStack,
+    target: BlockInteractionContext | undefined,
+    elapsedSeconds: number,
+  ) {
+    const active = this.activeBrushTarget;
+    if (!active || !target || !isSuspiciousBlockName(target.block.name)) {
+      return { handled: true, completed: true };
+    }
+    const { x, y, z } = target.position;
+    if (archaeologyTargetKey(x, y, z) !== active.key) {
+      return { handled: true, completed: true };
+    }
+
+    const stage = archaeologyBrushStage(elapsedSeconds);
+    if (stage > this.brushLastStage) {
+      this.brushLastStage = stage;
+      this.sound.playBrush(target.block.name as 'suspicious_sand' | 'suspicious_gravel');
+      this.particles.spawnBlockBreak(x + 0.5, y + 0.5, z + 0.5, target.block.name === 'suspicious_gravel' ? 0x8b8181 : 0xd9bd8c, 4);
+      if (!this.isMultiplayerNetworkConnected()) {
+        const meta = this.chunks.getBlockMeta(x, y, z) ?? {};
+        this.chunks.setBlockMeta(x, y, z, { ...meta, archaeologyProgress: stage }, true);
+      }
+    }
+
+    if (!isBrushExcavationComplete(elapsedSeconds)) return { handled: true };
+    return {
+      handled: this.completeBrushExcavation(stack, target),
+      completed: true,
+      cooldown: 0.1,
+    };
+  }
+
+  private completeBrushExcavation(stack: ItemStack, target: BlockInteractionContext): boolean {
+    const { x, y, z } = target.position;
+    const currentId = this.chunks.getBlock(x, y, z);
+    const current = BlockRegistry.get(currentId);
+    const replacementName = brushedReplacementName(current?.name);
+    if (!replacementName) return false;
+
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_BRUSH_ACTION, {
+        action: 'complete',
+        itemId: stack.id,
+        x,
+        y,
+        z,
+      });
+      return true;
+    }
+
+    const replacement = BlockRegistry.getByName(replacementName);
+    if (!replacement) return false;
+    const meta = this.chunks.getBlockMeta(x, y, z);
+    this.chunks.setBlock(x, y, z, replacement.id);
+    this.chunks.setBlockMeta(x, y, z, null, true);
+
+    const lootCount = normalizeArchaeologyLootCount(meta?.archaeologyLootCount);
+    if (meta?.archaeologyNatural && meta.archaeologyLootItemId && lootCount > 0) {
+      this.droppedItems.spawnItem(
+        meta.archaeologyLootItemId,
+        lootCount,
+        new THREE.Vector3(x + 0.5, y + 0.65, z + 0.5),
+        new THREE.Vector3(0, 0.8, 0),
+        0.25,
+      );
+    }
+    if (this.gameMode !== 'creative') this.inventory.damageTool(this.player.selectedSlot, 1);
+    this.sound.playBrush(current!.name as 'suspicious_sand' | 'suspicious_gravel');
+    this.particles.spawnBlockBreak(x + 0.5, y + 0.5, z + 0.5, current!.name === 'suspicious_gravel' ? 0x8b8181 : 0xd9bd8c, 18);
+    this.notifyState();
+    return true;
   }
 
   private setSpyglassActive(active: boolean) {

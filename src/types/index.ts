@@ -110,6 +110,12 @@ export interface BlockMetadata {
   jukeboxSong?: string;
   /** Comparator output encoded by the inserted jukebox song (0-15). */
   jukeboxComparatorOutput?: number;
+  /** Archaeology: transient brushing stage 0-4. */
+  archaeologyProgress?: number;
+  /** Archaeology loot exists only on naturally generated suspicious blocks. */
+  archaeologyLootItemId?: number;
+  archaeologyLootCount?: number;
+  archaeologyNatural?: boolean;
 }
 
 export interface SerializedBlockMetadata {

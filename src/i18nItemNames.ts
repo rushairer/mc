@@ -148,6 +148,9 @@ const ZH_CN_EXACT: Dict = {
   'Wind Charge': '风弹',
   Mace: '重锤',
   'Totem of Undying': '不死图腾',
+  Brush: '刷子',
+  'Suspicious Sand': '可疑的沙子',
+  'Suspicious Gravel': '可疑的沙砾',
 };
 
 const ZH_TW_EXACT: Dict = {
@@ -229,6 +232,9 @@ const ZH_TW_EXACT: Dict = {
   'Wind Charge': '風彈',
   Mace: '重錘',
   'Totem of Undying': '不死圖騰',
+  Brush: '刷子',
+  'Suspicious Sand': '可疑的沙子',
+  'Suspicious Gravel': '可疑的礫石',
 };
 
 const ZH_CN_WORDS: Dict = {

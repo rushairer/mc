@@ -529,6 +529,8 @@ export class NetworkClient {
         else if (type === 'pickup') this.game.sound.playPickup();
         else if (type === 'xp') this.game.sound.playXP();
         else if (type === 'explode') this.game.sound.playExplosion();
+        else if (type === 'brush_sand') this.game.sound.playBrush('suspicious_sand');
+        else if (type === 'brush_gravel') this.game.sound.playBrush('suspicious_gravel');
         else if (type === 'mace_smash') this.game.sound.playMaceSmash(false);
         else if (type === 'mace_smash_heavy') this.game.sound.playMaceSmash(true);
         else if (type === 'wind_charge_throw') this.game.sound.playWindChargeThrow();

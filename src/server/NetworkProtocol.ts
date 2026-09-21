@@ -18,6 +18,8 @@ export enum PacketType {
   C2S_ITEM_ACTION = 'C2S_ITEM_ACTION',
   /** Server-authoritative targeted item use (buckets, ignition, shears, vehicles). */
   C2S_ITEM_USE = 'C2S_ITEM_USE',
+  /** Server-timed archaeology brushing session. */
+  C2S_BRUSH_ACTION = 'C2S_BRUSH_ACTION',
   /** Server-authoritative Boat / Chest Boat interaction and controls. */
   C2S_VEHICLE_INTERACT = 'C2S_VEHICLE_INTERACT',
   C2S_VEHICLE_INPUT = 'C2S_VEHICLE_INPUT',

@@ -28538,40 +28538,32 @@
     "runtimeId": 30834,
     "displayName": "Suspicious Gravel",
     "name": "suspicious_gravel",
-    "hardness": 0.6,
+    "hardness": 0.25,
     "stackSize": 64,
     "diggable": true,
     "boundingBox": "block",
     "material": "dirt",
-    "drops": [
-      {
-        "drop": "minecraft:suspicious_gravel"
-      }
-    ],
+    "drops": [],
     "transparent": false,
     "emitLight": 0,
     "filterLight": 15,
-    "resistance": 3
+    "resistance": 0.25
   },
   {
     "id": "minecraft:suspicious_sand",
     "runtimeId": 30835,
     "displayName": "Suspicious Sand",
     "name": "suspicious_sand",
-    "hardness": 0.6,
+    "hardness": 0.25,
     "stackSize": 64,
     "diggable": true,
     "boundingBox": "block",
     "material": "dirt",
-    "drops": [
-      {
-        "drop": "minecraft:suspicious_sand"
-      }
-    ],
+    "drops": [],
     "transparent": false,
     "emitLight": 0,
     "filterLight": 15,
-    "resistance": 3
+    "resistance": 0.25
   },
   {
     "id": "minecraft:sweet_berry_bush",

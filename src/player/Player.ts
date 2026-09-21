@@ -816,6 +816,23 @@ export class Player {
       featherB.position.y = -0.18;
       group.add(shaft, head, featherA, featherB);
       group.rotation.set(Math.PI / 3, -Math.PI / 4, 0);
+    } else if (name === 'brush') {
+      const handleMat = new THREE.MeshLambertMaterial({ color: 0x7a4c2e });
+      const copperMat = new THREE.MeshLambertMaterial({ color: 0xc87348 });
+      const bristleMat = new THREE.MeshLambertMaterial({ color: 0xd9c69b });
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.028, 0.3, 7), handleMat);
+      handle.name = 'brush_handle';
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.07, 8), copperMat);
+      collar.name = 'brush_collar';
+      const bristles = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.042, 0.12, 8), bristleMat);
+      bristles.name = 'brush_bristles';
+      handle.rotation.z = Math.PI / 2;
+      collar.rotation.z = Math.PI / 2;
+      bristles.rotation.z = Math.PI / 2;
+      collar.position.x = 0.16;
+      bristles.position.x = 0.245;
+      group.add(handle, collar, bristles);
+      group.rotation.set(Math.PI / 4, -Math.PI / 5, Math.PI / 12);
     } else if (name === 'spyglass') {
       const brass = new THREE.MeshLambertMaterial({ color: 0xb9823e });
       const dark = new THREE.MeshLambertMaterial({ color: 0x5b3d22 });

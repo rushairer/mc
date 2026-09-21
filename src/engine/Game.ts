@@ -20,7 +20,10 @@ import {
   choosePaintingVariant,
   hangingEntityWorldPosition,
   hangingSupportPositionFromWorld,
+  fenceLeashHolderId,
+  isFenceBlockName,
   isLeashableMobType,
+  parseFenceLeashHolderId,
   leashDistance,
   leashPullVector,
   shouldBreakLeash,
@@ -713,6 +716,13 @@ export class Game {
         this.sound.playLever();
         return { handled: true, cooldown: 0.25 };
       },
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:fence',
+      interact: ({ position, block }) => ({
+        handled: this.tryTieLeashedMobsToFence(position, block.name),
+        cooldown: 0.25,
+      }),
     });
     this.behaviors.registerBlock([], {
       id: 'minecraft:iron_door',
@@ -4133,6 +4143,31 @@ export class Game {
     return { handled: true, cooldown: 0.25 };
   }
 
+  private tryTieLeashedMobsToFence(position: BlockPosition, blockName: string): boolean {
+    if (!isFenceBlockName(blockName)) return false;
+    const localHolderId = this.network.playerId ?? 'local-player';
+    const candidates = Array.from(this.mobs.mobs.values()).filter((mob) =>
+      isLeashableMobType(mob.def.type) &&
+      (mob.leashHolderId === 'local-player' || mob.leashHolderId === localHolderId)
+    );
+    if (candidates.length === 0) return false;
+
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_INTERACT_BLOCK, {
+        x: position.x,
+        y: position.y,
+        z: position.z,
+      });
+      return true;
+    }
+
+    const holderId = fenceLeashHolderId(this.chunks.currentDimension, position);
+    for (const mob of candidates) mob.leashHolderId = holderId;
+    this.sound.playLever();
+    this.notifyState();
+    return true;
+  }
+
   private tryDetachLeadFromMob(target: Mob) {
     if (!target.leashHolderId || !isLeashableMobType(target.def.type)) return { handled: false };
     if (this.isMultiplayerNetworkConnected()) {
@@ -4181,15 +4216,46 @@ export class Game {
       if (localHolder) {
         holder = this.player.position.clone().add(new THREE.Vector3(0, 1.0, 0));
       } else {
-        const remote = this.network.otherPlayers.get(mob.leashHolderId);
-        if (remote) holder = remote.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0));
+        const fenceHolder = parseFenceLeashHolderId(mob.leashHolderId);
+        if (fenceHolder && fenceHolder.dimension === this.chunks.currentDimension) {
+          holder = new THREE.Vector3(
+            fenceHolder.position.x + 0.5,
+            fenceHolder.position.y + 0.65,
+            fenceHolder.position.z + 0.5,
+          );
+        } else {
+          const remote = this.network.otherPlayers.get(mob.leashHolderId);
+          if (remote) holder = remote.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0));
+        }
       }
       if (!holder) continue;
 
       active.add(mob.id);
       const center = mob.position.clone().add(new THREE.Vector3(0, mob.height * 0.55, 0));
 
-      if (!networkAuthoritative && localHolder) {
+      const fenceHolder = parseFenceLeashHolderId(mob.leashHolderId);
+      if (!networkAuthoritative && (localHolder || fenceHolder)) {
+        if (fenceHolder) {
+          const block = BlockRegistry.get(this.chunks.getBlock(
+            fenceHolder.position.x,
+            fenceHolder.position.y,
+            fenceHolder.position.z,
+          ));
+          if (!block || !isFenceBlockName(block.name)) {
+            mob.leashHolderId = null;
+            if (this.gameMode !== 'creative') {
+              this.droppedItems.spawnItem(
+                420,
+                1,
+                mob.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+                new THREE.Vector3(0, 0.8, 0),
+                0.25,
+              );
+            }
+            continue;
+          }
+        }
+
         const distance = leashDistance(holder, center);
         if (shouldBreakLeash(distance)) {
           mob.leashHolderId = null;

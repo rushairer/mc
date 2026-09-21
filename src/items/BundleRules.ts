@@ -73,11 +73,21 @@ export function insertIntoBundle(bundle: ItemStack, incoming: ItemStack): Bundle
 
   const stored = cloneItemStack(remaining)!;
   stored.count = insertCount;
-  const mergeIndex = nextBundle.bundleContents.findIndex((entry) => itemStacksCanMerge(entry, stored));
+  const mergeIndex = nextBundle.bundleContents.findIndex((entry) =>
+    itemStacksCanMerge(entry, stored) && entry.count < getItemStackMaxSize(entry)
+  );
   if (mergeIndex >= 0) {
-    nextBundle.bundleContents[mergeIndex].count += insertCount;
+    const current = nextBundle.bundleContents[mergeIndex];
+    const maxStack = getItemStackMaxSize(current);
+    const mergeCount = Math.min(insertCount, maxStack - current.count);
+    current.count += mergeCount;
     const [merged] = nextBundle.bundleContents.splice(mergeIndex, 1);
     nextBundle.bundleContents.unshift(merged);
+    if (mergeCount < insertCount) {
+      const overflow = cloneItemStack(stored)!;
+      overflow.count = insertCount - mergeCount;
+      nextBundle.bundleContents.unshift(overflow);
+    }
   } else {
     nextBundle.bundleContents.unshift(stored);
   }

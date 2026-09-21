@@ -974,6 +974,11 @@ export class Game {
       id: 'minecraft:painting',
       use: ({ stack, target }) => ({ handled: this.tryPlaceHangingEntity('painting', stack, target), cooldown: 0.25 }),
     });
+    this.behaviors.registerItem('lead', {
+      id: 'minecraft:lead',
+      // Entity-target use is dispatched by minecraft:mob_interaction.
+      use: () => ({ handled: false }),
+    });
     this.behaviors.registerItem([], {
       id: 'minecraft:spawn_egg',
       use: ({ stack, target }) => ({ handled: this.tryUseSpawnEgg(stack, target), cooldown: 0.25 }),

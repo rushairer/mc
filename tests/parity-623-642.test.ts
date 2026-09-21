@@ -74,7 +74,9 @@ test('629: Armor Stand is static and does not enter ordinary mob wandering AI', 
   assert.ok(mobSource.includes("if (this.def.type === 'armor_stand')"));
   assert.ok(mobSource.includes("this.aiState = 'idle'"));
   const server = readFileSync(new URL('../src/server/GameServer.ts', import.meta.url), 'utf8');
-  const start = server.indexOf("if (mob.type === 'armor_stand')");
+  const tickStart = server.indexOf('private tickMobs');
+  const start = server.indexOf("if (mob.type === 'armor_stand')", tickStart);
+  assert.ok(start > tickStart);
   assert.ok(server.slice(start, start + 700).includes("mob.aiState = 'idle'"));
 });
 

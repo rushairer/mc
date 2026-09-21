@@ -2951,6 +2951,13 @@
     "officialId": "minecraft:item_frame"
   },
   {
+    "id": "minecraft:glow_item_frame",
+    "displayName": "Glow Item Frame",
+    "name": "glow_item_frame",
+    "stackSize": 64,
+    "runtimeId": 20311
+  },
+  {
     "id": 390,
     "displayName": "Flower Pot",
     "name": "flower_pot",

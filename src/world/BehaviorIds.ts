@@ -81,6 +81,7 @@ export function inferItemBehaviorId(rawName: string): string | undefined {
   if (name === 'fishing_rod') return 'minecraft:fishing_rod';
   if (name === 'armor_stand') return 'minecraft:armor_stand';
   if (name === 'item_frame') return 'minecraft:item_frame';
+  if (name === 'glow_item_frame') return 'minecraft:glow_item_frame';
   if (name === 'painting') return 'minecraft:painting';
   if (name === 'lead') return 'minecraft:lead';
   if (name.endsWith('_spawn_egg')) return 'minecraft:spawn_egg';

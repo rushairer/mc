@@ -170,6 +170,7 @@ interface PlayerSession {
   flying: boolean;
   onGround: boolean;
   sprinting: boolean;
+  sneaking: boolean;
   descending: boolean;
   gameMode: 'survival' | 'creative';
   isOperator: boolean;
@@ -361,6 +362,7 @@ export class GameServer {
       flying: false,
       onGround: false,
       sprinting: false,
+      sneaking: false,
       descending: false,
       gameMode: 'survival',
       isOperator: isLocalHost,
@@ -929,6 +931,7 @@ export class GameServer {
             session.pitch = intent.pitch;
             session.onGround = riddenMob.onGround;
             session.sprinting = false;
+            session.sneaking = intent.sneaking;
             session.flying = false;
             this.broadcastExcept(playerId, PacketType.S2C_PLAYER_MOVE, {
               playerId,
@@ -957,6 +960,7 @@ export class GameServer {
         session.pitch = intent.pitch;
         session.onGround = intent.onGround;
         session.sprinting = intent.sprinting && session.hunger > 6 && !session.flying;
+        session.sneaking = intent.sneaking;
         session.flying = session.gameMode === 'creative' && intent.flying;
 
         this.broadcastExcept(playerId, PacketType.S2C_PLAYER_MOVE, {
@@ -2380,6 +2384,65 @@ export class GameServer {
     const mob = this.mobs.get(entityId);
     if (!itemName || !mob || mob.dimension !== session.dimension || mob.health <= 0) return false;
     if (!isEntityAttackInReach(session, mob.position, session.gameMode)) return false;
+
+    if (itemName === 'shears' && mob.leashHolderId && isLeashableMobType(mob.type)) {
+      mob.leashHolderId = undefined;
+      if (session.gameMode !== 'creative') {
+        this.spawnDroppedItem(
+          420,
+          1,
+          mob.position.x,
+          mob.position.y + 0.4,
+          mob.position.z,
+          mob.dimension,
+          0.25,
+        );
+      }
+      this.damageServerHeldTool(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_MOB_STATE, {
+        id: mob.id,
+        health: mob.health,
+        hurtTimer: mob.hurtTimer,
+        leashHolderId: null,
+      });
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'break', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+      });
+      return true;
+    }
+
+    if (
+      itemName === 'shears' &&
+      (mob.type === 'horse' || mob.type === 'pig') &&
+      mob.isSaddled &&
+      !mob.riderId &&
+      !session.sneaking
+    ) {
+      mob.isSaddled = false;
+      const saddle = ItemRegistry.getByName('saddle');
+      if (session.gameMode !== 'creative' && saddle) {
+        this.spawnDroppedItem(
+          saddle.id,
+          1,
+          mob.position.x,
+          mob.position.y + 0.55,
+          mob.position.z,
+          mob.dimension,
+          0.25,
+        );
+      }
+      this.damageServerHeldTool(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_MOB_STATE, {
+        id: mob.id,
+        health: mob.health,
+        hurtTimer: mob.hurtTimer,
+        isSaddled: false,
+      });
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'break', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+      });
+      return true;
+    }
 
     if (itemName === 'lead') {
       if (!isLeashableMobType(mob.type) || mob.leashHolderId) return false;

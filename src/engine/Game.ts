@@ -4014,6 +4014,84 @@ export class Game {
     return { handled: true, cooldown: 0.25 };
   }
 
+  private tryPlaceHangingEntity(
+    type: HangingEntityType,
+    stack: ItemStack,
+    target?: BlockInteractionContext,
+  ): boolean {
+    if (!target?.face) return false;
+    if (this.sendServerBlockItemUse(stack, target)) return true;
+
+    const canPlace = canPlaceHangingEntity(
+      type,
+      target.position,
+      target.face,
+      (x, y, z) => this.chunks.isSolidBlock(x, y, z),
+      (x, y, z) => Array.from(this.mobs.mobs.values()).some((mob) =>
+        mob.health > 0 &&
+        Math.abs(mob.position.x - x) < 0.6 &&
+        Math.abs(mob.position.y - y) < 0.6 &&
+        Math.abs(mob.position.z - z) < 0.6
+      ),
+    );
+    if (!canPlace) return false;
+
+    const pos = hangingEntityWorldPosition(target.position, target.face);
+    const entity = this.mobs.spawnMob(type, pos.x, pos.y, pos.z);
+    if (!entity) return false;
+    entity.setHangingFace(target.face);
+    if (type === 'painting') {
+      entity.setPaintingVariant(choosePaintingVariant(this.seed, target.position));
+    }
+
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+    this.sound.playBlockPlace(target.blockId);
+    this.notifyState();
+    return true;
+  }
+
+  private tryInteractItemFrame(target: Mob, heldItem: ItemStack | null) {
+    if (target.def.type !== 'item_frame') return { handled: false };
+
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_MOB_INTERACT, { mobId: target.id, action: 'interact' });
+      return { handled: true, cooldown: 0.2 };
+    }
+
+    if (!target.itemFrameItem) {
+      if (!heldItem) return { handled: false };
+      target.setItemFrameItem(heldItem);
+      if (this.gameMode !== 'creative') {
+        this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+      }
+      this.sound.playLever();
+      this.notifyState();
+      return { handled: true, cooldown: 0.2 };
+    }
+
+    target.rotateItemFrame();
+    this.sound.playLever();
+    this.notifyState();
+    return { handled: true, cooldown: 0.2 };
+  }
+
+  private tryUseLeadOnMob(target: Mob, heldItem: ItemStack) {
+    if (!isLeashableMobType(target.def.type) || target.leashHolderId) return { handled: false };
+    if (this.sendServerEntityItemUse(heldItem, target.id)) {
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    target.leashHolderId = 'local-player';
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+    this.sound.playLever();
+    this.notifyState();
+    return { handled: true, cooldown: 0.25 };
+  }
+
   private tryPlaceBoat(stack: ItemStack, target?: BlockInteractionContext): boolean {
     if (!target) return false;
     if (this.sendServerBlockItemUse(stack, target)) return true;

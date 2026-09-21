@@ -70,6 +70,15 @@ test('569: Minecart destruction and late join reuse the same exact-source author
   assert.ok(source.includes('riderId: vehicle.riderId ?? null'));
 });
 
+test('569b: NetworkClient accepts authoritative Minecart spawns instead of filtering them out', () => {
+  const source = readFileSync(new URL('../src/server/NetworkClient.ts', import.meta.url), 'utf8');
+  const start = source.indexOf('case PacketType.S2C_VEHICLE_SPAWN');
+  const end = source.indexOf('case PacketType.S2C_VEHICLE_UPDATE', start);
+  const handler = source.slice(start, end);
+  assert.ok(handler.includes("type !== 'minecart'"));
+  assert.ok(handler.includes('this.game.vehicles.spawnVehicle('));
+});
+
 test('570: Firework Rocket is a validated server throwable action', () => {
   const firework = getThrowableProjectileType(401);
   const modern = getThrowableProjectileType(20006);

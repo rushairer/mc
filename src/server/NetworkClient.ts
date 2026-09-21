@@ -296,7 +296,7 @@ export class NetworkClient {
       case PacketType.S2C_VEHICLE_SPAWN: {
         const { id, type, sourceItemId, x, y, z, rotationY, riderId, dimension } = packet.payload;
         if (dimension !== this.game.chunks.currentDimension) return;
-        if (type !== 'boat' && type !== 'chest_boat') break;
+        if (type !== 'boat' && type !== 'chest_boat' && type !== 'minecart') break;
         const existing = this.game.vehicles.vehicles.get(id);
         if (existing) this.game.vehicles.removeVehicle(id);
         const vehicle = this.game.vehicles.spawnVehicle(

@@ -26,6 +26,13 @@ interface InventoryUIProps {
   getItemIconStyle: (id: number, size?: number) => any;
   gameMode?: 'survival' | 'creative';
   onDropItem?: (itemId: number, count: number) => void;
+  onDropStack?: (stack: ItemStack) => void;
+  onBundleInventoryAction?: (
+    action: 'insert_from_slot' | 'extract_to_inventory',
+    bundleSlot: number,
+    sourceSlot?: number,
+    selectedIndex?: number,
+  ) => boolean;
 }
 
 const SLOT_SIZE = 48;
@@ -70,9 +77,19 @@ function getCreativeItems(): number[] {
   return cachedCreativeItems;
 }
 
-export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle, gameMode = 'survival', onDropItem }) => {
+export const InventoryUI: React.FC<InventoryUIProps> = ({
+  inventory,
+  onClose,
+  onInventoryChange,
+  getItemIconStyle,
+  gameMode = 'survival',
+  onDropItem,
+  onDropStack,
+  onBundleInventoryAction,
+}) => {
   const { t, getLocalizedItemName, getLocalizedDisplayName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
+  const [heldOriginSlot, setHeldOriginSlot] = useState<number | null>(null);
   const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(4).fill(0));
   const [craftResult, setCraftResult] = useState<ItemStack | null>(null);
   const [creativeSearch, setCreativeSearch] = useState('');
@@ -125,6 +142,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
   const handleCatalogClick = (itemId: number) => {
     const maxStack = ItemRegistry.getMaxStackSize(itemId);
     setHeldItem({ id: itemId, count: maxStack });
+    setHeldOriginSlot(null);
   };
 
   // P3.2: fill the 2x2 grid from inventory when a recipe book entry is chosen.
@@ -209,10 +227,21 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     const slotItem = inventory.getSlot(slotIndex);
 
     if (heldItem && slotItem && isBundleStack(slotItem)) {
+      if (
+        heldOriginSlot !== null
+        && onBundleInventoryAction?.('insert_from_slot', slotIndex, heldOriginSlot, 0)
+      ) {
+        setHeldItem(null);
+        setHeldOriginSlot(null);
+        setHoveredSlot(null);
+        return;
+      }
+
       const result = insertIntoBundle(slotItem, heldItem);
       if (result.insertedCount > 0) {
         inventory.setSlot(slotIndex, result.bundle);
         setHeldItem(result.remaining);
+        setHeldOriginSlot(null);
         setHoveredSlot(null);
         onInventoryChange();
         return;
@@ -226,22 +255,26 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
       slotItem.count += canAdd;
       const leftover = heldItem.count - canAdd;
       setHeldItem(leftover > 0 ? { ...heldItem, count: leftover } : null);
+      if (leftover <= 0) setHeldOriginSlot(null);
     } else if (heldItem && !slotItem) {
       // Place held item
       inventory.setSlot(slotIndex, heldItem);
       setHeldItem(null);
+      setHeldOriginSlot(null);
     } else if (!heldItem && slotItem) {
       // Pick up slot
       setHeldItem(slotItem);
+      setHeldOriginSlot(slotIndex);
       inventory.setSlot(slotIndex, null);
     } else if (heldItem && slotItem) {
       // Swap
       inventory.setSlot(slotIndex, heldItem);
       setHeldItem(slotItem);
+      setHeldOriginSlot(slotIndex);
     }
 
     onInventoryChange();
-  }, [heldItem, inventory, craftingGrid, onInventoryChange]);
+  }, [heldItem, heldOriginSlot, inventory, craftingGrid, onBundleInventoryAction, onInventoryChange]);
 
   const handleBundleContextMenu = useCallback((
     e: React.MouseEvent,
@@ -252,13 +285,19 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     if (slotType !== 'inventory' || !item || heldItem || !isBundleStack(item)) return;
     e.preventDefault();
     const key = `${slotType}:${index}`;
-    const result = removeOneFromBundle(item, bundleSelectedIndex[key] ?? 0);
+    const selectedIndex = bundleSelectedIndex[key] ?? 0;
+    if (onBundleInventoryAction?.('extract_to_inventory', index, undefined, selectedIndex)) {
+      setHoveredSlot(null);
+      return;
+    }
+    const result = removeOneFromBundle(item, selectedIndex);
     if (!result.removed) return;
     inventory.setSlot(index, result.bundle);
     setHeldItem(result.removed);
+    setHeldOriginSlot(null);
     setHoveredSlot(null);
     onInventoryChange();
-  }, [bundleSelectedIndex, heldItem, inventory, onInventoryChange]);
+  }, [bundleSelectedIndex, heldItem, inventory, onBundleInventoryAction, onInventoryChange]);
 
   const handleBundleWheel = useCallback((
     e: React.WheelEvent,
@@ -334,8 +373,9 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
   const handleClose = useCallback(() => {
     // Return held item to inventory
     if (heldItem) {
-      inventory.addItem(heldItem.id, heldItem.count);
+      inventory.addStack(heldItem);
       setHeldItem(null);
+      setHeldOriginSlot(null);
     }
     // Return crafting grid items to inventory
     for (const id of craftingGrid) {

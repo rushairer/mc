@@ -18,12 +18,17 @@ import { armorStandSlotIndex, canPlaceArmorStandAt, firstEquippedArmorStandSlot,
 import {
   LEAD_SNAP_DISTANCE,
   canPlaceHangingEntity,
-  choosePaintingVariant,
+  chooseFittingPaintingVariant,
   hangingEntityWorldPosition,
   hangingSupportPositionFromWorld,
+  paintingBackingStillValid,
+  paintingWorldPosition,
   fenceLeashHolderId,
+  isDecorativeMobType,
   isFenceBlockName,
+  isItemFrameType,
   isLeashableMobType,
+  itemFrameComparatorSignal,
   mobLeashHolderId,
   parseFenceLeashHolderId,
   parseMobLeashHolderId,
@@ -984,6 +989,10 @@ export class Game {
       id: 'minecraft:item_frame',
       use: ({ stack, target }) => ({ handled: this.tryPlaceHangingEntity('item_frame', stack, target), cooldown: 0.25 }),
     });
+    this.behaviors.registerItem('glow_item_frame', {
+      id: 'minecraft:glow_item_frame',
+      use: ({ stack, target }) => ({ handled: this.tryPlaceHangingEntity('glow_item_frame', stack, target), cooldown: 0.25 }),
+    });
     this.behaviors.registerItem('painting', {
       id: 'minecraft:painting',
       use: ({ stack, target }) => ({ handled: this.tryPlaceHangingEntity('painting', stack, target), cooldown: 0.25 }),
@@ -1076,7 +1085,7 @@ export class Game {
         'mob:zombie', 'mob:skeleton', 'mob:creeper', 'mob:spider', 'mob:cow', 'mob:pig', 'mob:sheep', 'mob:chicken',
         'mob:blaze', 'mob:zombie_pigman', 'mob:magma_cube', 'mob:wither_skeleton', 'mob:villager', 'mob:enderman',
         'mob:witch', 'mob:iron_golem', 'mob:wolf', 'mob:cat', 'mob:horse', 'mob:shulker', 'mob:pillager',
-        'mob:wither', 'mob:guardian', 'mob:vex', 'mob:armor_stand', 'mob:item_frame', 'mob:painting',
+        'mob:wither', 'mob:guardian', 'mob:vex', 'mob:armor_stand', 'mob:item_frame', 'mob:glow_item_frame', 'mob:painting',
       ],
       {
         id: 'minecraft:mob_interaction',
@@ -1162,7 +1171,7 @@ export class Game {
       if (result.handled) return result;
     }
 
-    if (target.def.type === 'item_frame') {
+    if (isItemFrameType(target.def.type)) {
       return this.tryInteractItemFrame(target, heldItem);
     }
     if (target.def.type === 'painting') {
@@ -2988,7 +2997,7 @@ export class Game {
         if (!isNetworkConnected) {
           const decorativeTarget = this.mobs.getMobInRay(this.player.eyePosition, dir, entityReach);
           if (
-            decorativeTarget?.def.type === 'item_frame' &&
+            decorativeTarget && isItemFrameType(decorativeTarget.def.type) &&
             decorativeTarget.itemFrameItem &&
             this.gameMode !== 'creative'
           ) {
@@ -3415,6 +3424,7 @@ export class Game {
       (x, y, z) => this.chunks.getBlockMeta(x, y, z),
       entitiesList,
       worldTicks,
+      (x, y, z, facing) => this.getItemFrameComparatorSignal(x, y, z, facing),
     );
 
     // Hopper simulation
@@ -4117,26 +4127,42 @@ export class Game {
     if (!target?.face) return false;
     if (this.sendServerBlockItemUse(stack, target)) return true;
 
-    const canPlace = canPlaceHangingEntity(
-      type,
-      target.position,
-      target.face,
-      (x, y, z) => this.chunks.isSolidBlock(x, y, z),
-      (x, y, z) => Array.from(this.mobs.mobs.values()).some((mob) =>
+    const isOccupied = (x: number, y: number, z: number) =>
+      Array.from(this.mobs.mobs.values()).some((mob) =>
         mob.health > 0 &&
         Math.abs(mob.position.x - x) < 0.6 &&
         Math.abs(mob.position.y - y) < 0.6 &&
         Math.abs(mob.position.z - z) < 0.6
-      ),
-    );
-    if (!canPlace) return false;
+      );
+    const isSolidBlock = (x: number, y: number, z: number) => this.chunks.isSolidBlock(x, y, z);
 
-    const pos = hangingEntityWorldPosition(target.position, target.face);
-    const entity = this.mobs.spawnMob(type, pos.x, pos.y, pos.z);
-    if (!entity) return false;
-    entity.setHangingFace(target.face);
     if (type === 'painting') {
-      entity.setPaintingVariant(choosePaintingVariant(this.seed, target.position));
+      const variant = chooseFittingPaintingVariant(
+        this.seed,
+        target.position,
+        target.face,
+        isSolidBlock,
+        isOccupied,
+      );
+      if (!variant || !target.face || target.face === 'up' || target.face === 'down') return false;
+      const pos = paintingWorldPosition(target.position, target.face, variant);
+      const entity = this.mobs.spawnMob(type, pos.x, pos.y, pos.z);
+      if (!entity) return false;
+      entity.setHangingFace(target.face);
+      entity.setPaintingVariant(variant);
+    } else {
+      const canPlace = canPlaceHangingEntity(
+        type,
+        target.position,
+        target.face,
+        isSolidBlock,
+        isOccupied,
+      );
+      if (!canPlace) return false;
+      const pos = hangingEntityWorldPosition(target.position, target.face);
+      const entity = this.mobs.spawnMob(type, pos.x, pos.y, pos.z);
+      if (!entity) return false;
+      entity.setHangingFace(target.face);
     }
 
     if (this.gameMode !== 'creative') {
@@ -4148,7 +4174,7 @@ export class Game {
   }
 
   private tryInteractItemFrame(target: Mob, heldItem: ItemStack | null) {
-    if (target.def.type !== 'item_frame') return { handled: false };
+    if (!isItemFrameType(target.def.type)) return { handled: false };
 
     if (this.isMultiplayerNetworkConnected()) {
       this.network.send(PacketType.C2S_MOB_INTERACT, { mobId: target.id, action: 'interact' });
@@ -4378,7 +4404,18 @@ export class Game {
   private breakUnsupportedHangingEntities() {
     const broken: Mob[] = [];
     for (const mob of this.mobs.mobs.values()) {
-      if ((mob.def.type !== 'item_frame' && mob.def.type !== 'painting') || !mob.hangingFace) continue;
+      if ((!isItemFrameType(mob.def.type) && mob.def.type !== 'painting') || !mob.hangingFace) continue;
+      if (mob.def.type === 'painting') {
+        if (!paintingBackingStillValid(
+          mob.position,
+          mob.hangingFace,
+          mob.paintingVariant,
+          (x, y, z) => this.chunks.isSolidBlock(x, y, z),
+        )) {
+          broken.push(mob);
+        }
+        continue;
+      }
       const support = hangingSupportPositionFromWorld(mob.position, mob.hangingFace);
       if (!this.chunks.isSolidBlock(support.x, support.y, support.z)) broken.push(mob);
     }
@@ -4386,6 +4423,29 @@ export class Game {
       this.handleMobDeath(mob, 0);
       this.mobs.removeMob(mob.id);
     }
+  }
+
+  private getItemFrameComparatorSignal(
+    supportX: number,
+    supportY: number,
+    supportZ: number,
+    comparatorFacing: BlockFacing,
+  ): number | null {
+    const expectedFace: BlockFacing =
+      comparatorFacing === 'north' ? 'south'
+        : comparatorFacing === 'south' ? 'north'
+          : comparatorFacing === 'east' ? 'west'
+            : comparatorFacing === 'west' ? 'east'
+              : comparatorFacing === 'up' ? 'down'
+                : 'up';
+
+    for (const mob of this.mobs.mobs.values()) {
+      if (!isItemFrameType(mob.def.type) || mob.hangingFace !== expectedFace || mob.health <= 0) continue;
+      const support = hangingSupportPositionFromWorld(mob.position, mob.hangingFace);
+      if (support.x !== supportX || support.y !== supportY || support.z !== supportZ) continue;
+      return itemFrameComparatorSignal(mob.itemFrameItem, mob.itemFrameRotation);
+    }
+    return null;
   }
 
   private updateLeashedMobs(dt: number, networkAuthoritative: boolean) {
@@ -4992,7 +5052,7 @@ export class Game {
       }
     }
 
-    if (mob.def.type === 'item_frame' && mob.itemFrameItem && this.gameMode !== 'creative') {
+    if (isItemFrameType(mob.def.type) && mob.itemFrameItem && this.gameMode !== 'creative') {
       const framed = cloneItemStack(mob.itemFrameItem);
       if (framed) {
         this.droppedItems.spawnStack(
@@ -5018,7 +5078,7 @@ export class Game {
 
     // Drop items in 3D world (magma cubes only drop if size === 1)
     const isMagmaCube = mob.def.type === 'magma_cube';
-    const decorative = mob.def.type === 'armor_stand' || mob.def.type === 'item_frame' || mob.def.type === 'painting';
+    const decorative = isDecorativeMobType(mob.def.type);
     const shouldDrop = (!isMagmaCube || mob.size === 1)
       && !(decorative && this.gameMode === 'creative');
 

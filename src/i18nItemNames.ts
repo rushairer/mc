@@ -137,6 +137,7 @@ const ZH_CN_EXACT: Dict = {
   'Shelf Mushroom': '层孔菇',
   'Red Shrub': '红灌木',
   'Straw Bed': '稻草床',
+  "Bottle o' Enchanting": '附魔之瓶',
 };
 
 const ZH_TW_EXACT: Dict = {
@@ -206,6 +207,7 @@ const ZH_TW_EXACT: Dict = {
   'Shelf Mushroom': '層孔菇',
   'Red Shrub': '紅灌木',
   'Straw Bed': '稻草床',
+  "Bottle o' Enchanting": '附魔之瓶',
 };
 
 const ZH_CN_WORDS: Dict = {
@@ -241,7 +243,6 @@ const ZH_CN_WORDS: Dict = {
   void: '空位', wart: '疣', water: '水', weighted: '测重', wheat: '小麦', white: '白色',
   wither: '凋灵', wood: '木', wooden: '木', wool: '羊毛', written: '成书', yellow: '黄色',
   poplar: '杨木', cushion: '坐垫', straw: '稻草', shelf: '层孔', shrub: '灌木',
-  zombie: '僵尸',
 };
 
 const ZH_TW_WORDS: Dict = {
@@ -270,6 +271,21 @@ const ZH_TW_WORDS: Dict = {
   yellow: '黃色', zombie: '殭屍',
 };
 
+const SPAWN_EGG_ENTITY_ZH_CN: Dict = {
+  Zombie: '僵尸', Skeleton: '骷髅', Creeper: '苦力怕', Spider: '蜘蛛', Cow: '牛', Pig: '猪',
+  Sheep: '绵羊', Chicken: '鸡', Blaze: '烈焰人', 'Zombified Piglin': '僵尸猪灵',
+  'Magma Cube': '岩浆怪', 'Wither Skeleton': '凋灵骷髅', Villager: '村民', Enderman: '末影人',
+  Witch: '女巫', 'Iron Golem': '铁傀儡', Wolf: '狼', Cat: '猫', Horse: '马',
+  Shulker: '潜影贝', Pillager: '掠夺者', Guardian: '守卫者', Vex: '恼鬼',
+};
+
+const SPAWN_EGG_ENTITY_ZH_TW: Dict = {
+  Zombie: '殭屍', Skeleton: '骷髏', Creeper: '苦力怕', Spider: '蜘蛛', Cow: '牛', Pig: '豬',
+  Sheep: '綿羊', Chicken: '雞', Blaze: '烈焰使者', Villager: '村民', Enderman: '終界使者',
+  Witch: '女巫', 'Iron Golem': '鐵魔像', Wolf: '狼', Cat: '貓', Horse: '馬',
+  Shulker: '界伏蚌', Pillager: '掠奪者', Guardian: '深海守衛', Vex: '惱鬼',
+};
+
 const MATERIAL_SUFFIXES = new Set(['sword', 'shovel', 'pickaxe', 'axe', 'hoe', 'helmet', 'chestplate', 'leggings', 'boots']);
 
 const normalize = (value: string) => value.replace(/^minecraft:/, '').replace(/_/g, ' ').trim();
@@ -290,6 +306,12 @@ const translateWords = (name: string, words: Dict) => {
 };
 
 const translateSpecialPatterns = (displayName: string, words: Dict): string | null => {
+  const spawnEgg = displayName.match(/^(.+) Spawn Egg$/);
+  if (spawnEgg) {
+    const entityNames = words === ZH_TW_WORDS ? SPAWN_EGG_ENTITY_ZH_TW : SPAWN_EGG_ENTITY_ZH_CN;
+    return `${entityNames[spawnEgg[1]] ?? translateWords(spawnEgg[1], words)}刷怪蛋`;
+  }
+
   const blockOf = displayName.match(/^Block of (.+)$/);
   if (blockOf) return `${translateWords(blockOf[1], words)}块`;
 

@@ -44,6 +44,7 @@ export function inferBlockBehaviorId(rawName: string): string | undefined {
   if (name === 'tnt') return 'minecraft:tnt';
   if (name.includes('repeater')) return 'minecraft:repeater';
   if (name === 'note_block') return 'minecraft:note_block';
+  if (name === 'jukebox') return 'minecraft:jukebox';
   if (isSignBlockName(name)) return 'minecraft:sign';
   if (name === 'bed' || (name.endsWith('_bed') && name !== 'bedrock')) return 'minecraft:bed';
   if (name === 'iron_trapdoor') return 'minecraft:iron_trapdoor';
@@ -86,6 +87,8 @@ export function inferItemBehaviorId(rawName: string): string | undefined {
   if (name === 'item_frame') return 'minecraft:item_frame';
   if (name === 'painting') return 'minecraft:painting';
   if (name === 'lead') return 'minecraft:lead';
+  if (name.startsWith('record_') || name.startsWith('music_disc_')) return 'minecraft:music_disc';
+  if (name === 'totem_of_undying') return 'minecraft:totem_of_undying';
   if (name.endsWith('_spawn_egg')) return 'minecraft:spawn_egg';
   if (THROWABLE_ITEM_NAMES.has(name)) return 'minecraft:throwable';
   if (name === 'ender_eye') return 'minecraft:ender_eye';

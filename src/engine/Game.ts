@@ -24,7 +24,9 @@ import {
   fenceLeashHolderId,
   isFenceBlockName,
   isLeashableMobType,
+  mobLeashHolderId,
   parseFenceLeashHolderId,
+  parseMobLeashHolderId,
   leashDistance,
   leashPullVector,
   shouldBreakLeash,
@@ -720,8 +722,8 @@ export class Game {
     });
     this.behaviors.registerBlock([], {
       id: 'minecraft:fence',
-      interact: ({ position, block }) => ({
-        handled: this.tryTieLeashedMobsToFence(position, block.name),
+      interact: ({ position, block, heldItem }) => ({
+        handled: this.tryTieLeashedMobsToFence(position, block.name, heldItem),
         cooldown: 0.25,
       }),
     });
@@ -1165,6 +1167,16 @@ export class Game {
     if (target.def.type === 'painting') {
       return { handled: false };
     }
+    if (heldItemName === 'shears') {
+      const snipped = this.tryShearLeashConnections(target, heldItem!);
+      if (snipped.handled) return snipped;
+    }
+
+    if (this.input.isKeyDown('shift')) {
+      const transferred = this.tryTransferPlayerLeashesToMob(target);
+      if (transferred.handled) return transferred;
+    }
+
     if (heldItemName === 'lead' && isLeashableMobType(target.def.type)) {
       return this.tryUseLeadOnMob(target, heldItem!);
     }
@@ -1197,26 +1209,6 @@ export class Game {
       target.isSaddled = true;
       this.consumeInteractionItem();
       this.sound.playLever();
-      return { handled: true, cooldown: 0.25 };
-    }
-
-    if (heldItemName === 'shears' && target.leashHolderId && isLeashableMobType(target.def.type)) {
-      if (heldItem && this.sendServerEntityItemUse(heldItem, target.id)) {
-        return { handled: true, cooldown: 0.25 };
-      }
-      target.leashHolderId = null;
-      if (this.gameMode !== 'creative') {
-        this.droppedItems.spawnItem(
-          420,
-          1,
-          target.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
-          new THREE.Vector3(0, 0.8, 0),
-          0.25,
-        );
-        this.inventory.damageTool(this.player.selectedSlot);
-      }
-      this.sound.playLever();
-      this.notifyState();
       return { handled: true, cooldown: 0.25 };
     }
 

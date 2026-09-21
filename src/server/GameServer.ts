@@ -115,6 +115,7 @@ import { ItemRegistry } from '../items/ItemRegistry';
 import { cloneItemStack } from '../items/ItemStackRules';
 import { getDefaultUseRemainderItemId } from '../items/ItemUseRules';
 import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, WIND_CHARGE_SPEED, windBurstImpulse } from '../items/WindChargeRules';
+import { getMaceSmashBonus, getMaceSmashImpulse, isMaceSmash, MACE_HEAVY_SMASH_THRESHOLD } from '../items/MaceRules';
 import {
   ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
   ITEM_ENTITY_DESPAWN_SECONDS,
@@ -192,6 +193,8 @@ interface PlayerSession {
   shieldUseSeconds: number;
   shieldDisabledSeconds: number;
   windChargeCooldownSeconds: number;
+  maceFallStartY: number | null;
+  maceFallDistance: number;
   lastAttackTick: number | null;
   hurtCooldown: HurtCooldownState;
   healthAuthorityLockSeconds: number;
@@ -385,6 +388,8 @@ export class GameServer {
       shieldUseSeconds: 0,
       shieldDisabledSeconds: 0,
       windChargeCooldownSeconds: 0,
+      maceFallStartY: null,
+      maceFallDistance: 0,
       lastAttackTick: null,
       hurtCooldown: createHurtCooldownState(),
       healthAuthorityLockSeconds: 0
@@ -985,10 +990,21 @@ export class GameServer {
           session.ridingMobId = undefined;
         }
 
+        const previousY = session.y;
         session.descending = isDescendingAirborne(
           { x: session.x, y: session.y, z: session.z, onGround: session.onGround, sprinting: session.sprinting },
           intent,
         );
+        if (session.gameMode === 'creative' && intent.flying) {
+          session.maceFallStartY = null;
+          session.maceFallDistance = 0;
+        } else if (!intent.onGround && intent.y < previousY) {
+          if (session.maceFallStartY === null) session.maceFallStartY = previousY;
+          session.maceFallDistance = Math.max(session.maceFallDistance, session.maceFallStartY - intent.y);
+        } else if (intent.onGround || intent.y > previousY) {
+          session.maceFallStartY = null;
+          session.maceFallDistance = 0;
+        }
         session.x = intent.x;
         session.y = intent.y;
         session.z = intent.z;
@@ -1602,14 +1618,19 @@ export class GameServer {
         const profile = getServerMeleeProfile(held);
         const attackStrength = getAttackStrength(session.lastAttackTick, this.gameTick, profile.cooldownTicks);
         const feetBlock = this.getBlock(Math.floor(session.x), Math.floor(session.y), Math.floor(session.z), session.dimension);
-        const critical = isServerCriticalHit(attackStrength, {
+        const maceSmashDistance = ItemRegistry.get(held?.id ?? 0)?.toolType === 'mace'
+          ? session.maceFallDistance
+          : 0;
+        const maceSmash = isMaceSmash(maceSmashDistance);
+        const critical = !maceSmash && isServerCriticalHit(attackStrength, {
           descending: session.descending,
           onGround: session.onGround,
           sprinting: session.sprinting,
           flying: session.flying,
           inWater: BlockRegistry.isFluid(feetBlock),
         });
-        const damage = getServerMeleeDamage(held, session.lastAttackTick, this.gameTick, critical);
+        const damage = getServerMeleeDamage(held, session.lastAttackTick, this.gameTick, critical)
+          + (maceSmash ? getMaceSmashBonus(maceSmashDistance) : 0);
         const knockback = getServerKnockbackPlan(held, attackStrength, session.sprinting);
 
         if (typeof intent.entityId === 'number') {
@@ -1658,6 +1679,7 @@ export class GameServer {
           }
 
           mob.health -= damage;
+          if (maceSmash) this.resolveServerMaceSmash(session, mob.position, maceSmashDistance, mob.id);
           mob.hurtTimer = 0.5;
           this.applyMeleeKnockbackToMob(session, mob, knockback.strength);
           if (knockback.sprintKnockback) session.sprinting = false;
@@ -1688,6 +1710,7 @@ export class GameServer {
           profile.isAxe,
         );
         if (applied > 0) {
+          if (maceSmash) this.resolveServerMaceSmash(session, new THREE.Vector3(target.x, target.y, target.z), maceSmashDistance, undefined, target.id);
           const resistance = getNetheriteKnockbackResistance(target.armor);
           this.applyMeleeKnockbackToPlayer(session, target, applyKnockbackResistance(knockback.strength, resistance));
         }
@@ -3620,6 +3643,8 @@ export class GameServer {
     player.shieldUseSeconds = 0;
     player.shieldDisabledSeconds = 0;
     player.windChargeCooldownSeconds = 0;
+    player.maceFallStartY = null;
+    player.maceFallDistance = 0;
     player.hurtCooldown = createHurtCooldownState();
     player.healthAuthorityLockSeconds = 0;
     player.lastAttackTick = null;
@@ -4320,6 +4345,38 @@ export class GameServer {
     this.projectiles.delete(proj.id);
     this.broadcastDimension(proj.dimension, PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
     return true;
+  }
+
+  private resolveServerMaceSmash(
+    attacker: PlayerSession,
+    impact: THREE.Vector3,
+    fallDistance: number,
+    struckMobId?: number,
+    struckPlayerId?: string,
+  ) {
+    attacker.maceFallStartY = null;
+    attacker.maceFallDistance = 0;
+    attacker.descending = false;
+    this.sendTo(attacker, PacketType.S2C_PLAYER_VELOCITY, { x: 0, y: 0, z: 0 });
+
+    for (const player of this.players.values()) {
+      if (player.id === attacker.id || player.id === struckPlayerId || player.dimension !== attacker.dimension) continue;
+      const impulse = getMaceSmashImpulse(impact, { x: player.x, y: player.y, z: player.z }, fallDistance);
+      if (Math.abs(impulse.x) + Math.abs(impulse.y) + Math.abs(impulse.z) <= 1e-6) continue;
+      this.sendTo(player, PacketType.S2C_PLAYER_VELOCITY, impulse);
+    }
+    for (const mob of this.mobs.values()) {
+      if (mob.id === struckMobId || mob.dimension !== attacker.dimension || mob.health <= 0) continue;
+      const impulse = getMaceSmashImpulse(impact, mob.position, fallDistance);
+      if (Math.abs(impulse.x) + Math.abs(impulse.y) + Math.abs(impulse.z) <= 1e-6) continue;
+      mob.velocity.add(new THREE.Vector3(impulse.x, impulse.y, impulse.z));
+    }
+    this.broadcastDimension(attacker.dimension, PacketType.S2C_SOUND, {
+      type: fallDistance > MACE_HEAVY_SMASH_THRESHOLD ? 'mace_smash_heavy' : 'mace_smash',
+      x: attacker.x,
+      y: attacker.y,
+      z: attacker.z,
+    });
   }
 
   private resolveWindChargeBurst(proj: ServerProjectile) {

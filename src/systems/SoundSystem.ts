@@ -344,6 +344,15 @@ export class SoundSystem {
   }
 
   /** Wind Charge resource events first, with procedural fallbacks when no pack is active. */
+  playMaceSmash(heavy = false) {
+    const event = heavy ? 'item.mace.smash_ground_heavy' : 'item.mace.smash_ground';
+    if (this.playFirstResourceSound([event], heavy ? 1.2 : 1.0)) return;
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    this.synthNoiseCall(ctx, 'lowpass', heavy ? 420 : 620, heavy ? 0.34 : 0.24, heavy ? 0.32 : 0.24, heavy ? 0.55 : 0.4);
+    this.synthToneCall(ctx, 'square', heavy ? 105 : 145, heavy ? 58 : 82, heavy ? 0.34 : 0.24, heavy ? 0.18 : 0.13);
+  }
+
   playWindChargeThrow() {
     if (this.playFirstResourceSound(['entity.wind_charge.throw'], 0.55)) return;
     const ctx = this.ensureCtx();

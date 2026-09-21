@@ -41,6 +41,7 @@ export function getAttackSpeed(
   switch (toolType) {
     case 'sword': return 1.6;
     case 'trident': return 1.1;
+    case 'mace': return 0.6;
     case 'shovel': return 1.0;
     case 'pickaxe': return 1.2;
     case 'axe': return AXE_ATTACK_SPEED[material ?? 'wood'] ?? 1.0;

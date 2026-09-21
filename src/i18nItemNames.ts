@@ -146,6 +146,7 @@ const ZH_CN_EXACT: Dict = {
   Spyglass: '望远镜',
   'Goat Horn': '山羊角',
   'Wind Charge': '风弹',
+  Mace: '重锤',
 };
 
 const ZH_TW_EXACT: Dict = {
@@ -225,6 +226,7 @@ const ZH_TW_EXACT: Dict = {
   Spyglass: '望遠鏡',
   'Goat Horn': '山羊角',
   'Wind Charge': '風彈',
+  Mace: '重錘',
 };
 
 const ZH_CN_WORDS: Dict = {

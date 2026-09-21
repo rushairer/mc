@@ -32,7 +32,9 @@ test('525: server mount validates vehicle existence, dimension, reach, and exclu
   const handler = source.slice(start, end);
   assert.ok(handler.includes('vehicle.dimension !== session.dimension'));
   assert.ok(handler.includes('isEntityAttackInReach(session, vehicle.position, session.gameMode)'));
-  assert.ok(handler.includes('session.ridingVehicleId !== undefined || vehicle.riderId'));
+  assert.ok(handler.includes('session.ridingVehicleId !== undefined'));
+  assert.ok(handler.includes('vehicle.riderId'));
+  assert.ok(handler.includes('session.ridingMobId !== undefined'));
   assert.ok(handler.includes('vehicle.riderId = session.id'));
 });
 

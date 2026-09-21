@@ -147,8 +147,8 @@ test('616: server rider input is owner-validated and steering rechecks Saddle/co
 test('617: server Saddle and Name Tag actions own consumption and broadcast canonical mob state', () => {
   const source = readFileSync(new URL('../src/server/GameServer.ts', import.meta.url), 'utf8');
   const start = source.indexOf('private handleServerEntityItemUse');
-  const end = source.indexOf('\n  }', start);
-  const handler = source.slice(start, end + 4);
+  const end = source.indexOf('\n  private ', start + 'private handleServerEntityItemUse'.length);
+  const handler = source.slice(start, end);
   assert.ok(handler.includes("itemName === 'name_tag'"));
   assert.ok(handler.includes("itemName === 'saddle'"));
   assert.ok(handler.includes('this.consumeServerHeldItem(session, held)'));

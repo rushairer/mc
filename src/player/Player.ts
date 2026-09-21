@@ -801,6 +801,19 @@ export class Player {
       lens.position.x = 0.17;
       group.add(body, grip, lens);
       group.rotation.set(Math.PI / 5, -Math.PI / 5, Math.PI / 12);
+    } else if (name === 'wind_charge') {
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(0.085, 8, 8),
+        new THREE.MeshLambertMaterial({ color: 0xc8eef1, emissive: 0x31565b, transparent: true, opacity: 0.9 })
+      );
+      core.name = 'wind_charge_item_core';
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.12, 0.016, 6, 12),
+        new THREE.MeshLambertMaterial({ color: 0xe8ffff, emissive: 0x53777b, transparent: true, opacity: 0.85 })
+      );
+      ring.name = 'wind_charge_item_ring';
+      group.add(core, ring);
+      group.rotation.set(Math.PI / 5, -Math.PI / 4, 0);
     } else if (name === 'goat_horn') {
       const hornMat = new THREE.MeshLambertMaterial({ color: 0xd8c79f });
       const darkHornMat = new THREE.MeshLambertMaterial({ color: 0x6e604c });

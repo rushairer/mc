@@ -12,7 +12,7 @@ export const BOW_BASE_DAMAGE = 6;
 export const BOW_MIN_SPEED = 18;
 export const BOW_MAX_SPEED = 32;
 
-export type ItemActionKind = 'throw' | 'bow_release';
+export type ItemActionKind = 'throw' | 'bow_release' | 'ender_eye_throw';
 export type ThrowableProjectileType = 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'firework_rocket';
 
 export interface ItemActionRequest {
@@ -43,7 +43,7 @@ export function parseItemAction(payload: unknown): ItemActionRequest | null {
   if (!payload || typeof payload !== 'object') return null;
   const raw = payload as Record<string, unknown>;
   const action = raw.action;
-  if (action !== 'throw' && action !== 'bow_release') return null;
+  if (action !== 'throw' && action !== 'bow_release' && action !== 'ender_eye_throw') return null;
   const itemId = Number(raw.itemId);
   if (!Number.isInteger(itemId) || itemId <= 0) return null;
 
@@ -98,6 +98,7 @@ export function isValidItemActionForHeldStack(
   if (!held || held.count <= 0 || held.id !== request.itemId) return false;
   const def = ItemRegistry.get(held.id);
   if (request.action === 'bow_release') return def?.toolType === 'bow' || def?.name === 'bow';
+  if (request.action === 'ender_eye_throw') return def?.name === 'ender_eye' || (held.id & 0x3ff) === 381;
   return getThrowableProjectileType(held.id) !== null;
 }
 

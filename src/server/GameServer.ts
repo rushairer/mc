@@ -7,6 +7,14 @@ import {
   isValidItemActionForHeldStack,
   parseItemAction,
 } from './ItemActionRules';
+import { findEnderEyeTarget, shouldEnderEyeShatter } from './EnderEyeRules';
+import {
+  getServerFishingWaitSeconds,
+  parseServerFishingAction,
+  rollServerFishingLoot,
+  rollServerFishingXp,
+  SERVER_FISHING_HOOKED_SECONDS,
+} from './ServerFishingRules';
 import {
   SERVER_TNT_FUSE_SECONDS,
   adjacentBlockPosition,
@@ -216,9 +224,18 @@ interface ServerVehicle {
   input: ServerVehicleInputIntent;
 }
 
+interface ServerFishingState {
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  phase: 'flying' | 'waiting' | 'hooked';
+  waitSeconds: number;
+  hookedSeconds: number;
+  dimension: number;
+}
+
 interface ServerProjectile {
   id: number;
-  type: 'arrow' | 'fireball' | 'shulker_bullet' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'firework_rocket';
+  type: 'arrow' | 'fireball' | 'shulker_bullet' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'firework_rocket' | 'eye_of_ender';
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   ownerId?: string;
@@ -237,6 +254,7 @@ export class GameServer {
   private projectiles: Map<number, ServerProjectile> = new Map();
   private primedTnt: Map<number, ServerPrimedTnt> = new Map();
   private vehicles: Map<number, ServerVehicle> = new Map();
+  private fishingStates: Map<string, ServerFishingState> = new Map();
   private nextProjectileId = 1;
   /** P5.3 — server-owned container contents keyed by position. */
   private containerData: Map<string, (ItemStack | null)[]> = new Map();
@@ -459,6 +477,7 @@ export class GameServer {
     if (session) {
       console.log(`Player ${session.username} disconnected.`);
       this.closeServerContainer(session);
+      this.fishingStates.delete(session.id);
       if (session.ridingVehicleId !== undefined) {
         const vehicle = this.vehicles.get(session.ridingVehicleId);
         if (vehicle?.riderId === session.id) {
@@ -1257,6 +1276,24 @@ export class GameServer {
           break;
         }
 
+        if (request.action === 'ender_eye_throw') {
+          if (session.dimension !== 0) break;
+          const target = findEnderEyeTarget(this.seed, session.x, session.z);
+          const targetPosition = new THREE.Vector3(target.x, target.y, target.z);
+          const eyeDirection = targetPosition.sub(origin);
+          eyeDirection.y = 0;
+          if (eyeDirection.lengthSq() <= 1e-9) break;
+          eyeDirection.normalize();
+          const velocity = eyeDirection.multiplyScalar(12);
+          velocity.y = 4;
+          this.spawnProjectile(session, 'eye_of_ender', origin, velocity, { damage: 0 });
+          if (session.gameMode !== 'creative') {
+            session.inventory[session.selectedSlot] = consumeOne(held!);
+          }
+          this.syncPlayerInventory(session);
+          break;
+        }
+
         const type = getThrowableProjectileType(held!.id);
         if (!type) break;
         const potionEffect = type === 'potion' ? held?.potion?.effect : undefined;
@@ -1275,6 +1312,58 @@ export class GameServer {
           }
         }
         this.syncPlayerInventory(session);
+        break;
+      }
+
+      case PacketType.C2S_FISHING_ACTION: {
+        const request = parseServerFishingAction(packet.payload);
+        if (!request) break;
+        const held = session.inventory[session.selectedSlot];
+        const heldName = held ? ItemRegistry.get(held.id)?.name : undefined;
+        if (!held || held.id !== request.itemId || heldName !== 'fishing_rod') break;
+
+        const existing = this.fishingStates.get(session.id);
+        if (request.action === 'cast') {
+          if (existing) break;
+          const origin = new THREE.Vector3(session.x, session.y + 1.6, session.z);
+          const velocity = new THREE.Vector3(
+            request.direction.x,
+            request.direction.y,
+            request.direction.z,
+          ).multiplyScalar(14);
+          velocity.y += 2.2;
+          const state: ServerFishingState = {
+            position: origin,
+            velocity,
+            phase: 'flying',
+            waitSeconds: 0,
+            hookedSeconds: 0,
+            dimension: session.dimension,
+          };
+          this.fishingStates.set(session.id, state);
+          this.damageServerHeldTool(session, held);
+          this.sendFishingState(session, state);
+          break;
+        }
+
+        if (!existing) break;
+        if (existing.phase === 'hooked') {
+          const lootId = rollServerFishingLoot(Math.random);
+          this.spawnDroppedStack(
+            { id: lootId, count: 1 },
+            existing.position.x,
+            existing.position.y + 0.2,
+            existing.position.z,
+            existing.dimension,
+            0.1,
+          );
+          this.addServerXp(session, rollServerFishingXp(Math.random));
+          this.broadcastDimension(existing.dimension, PacketType.S2C_SOUND, {
+            type: 'pickup', x: existing.position.x, y: existing.position.y, z: existing.position.z,
+          });
+        }
+        this.fishingStates.delete(session.id);
+        this.sendFishingState(session, null);
         break;
       }
 
@@ -2028,7 +2117,55 @@ export class GameServer {
     }
   }
 
-  private tickPrimedTnt(dt: number) {  private tickPrimedTnt(dt: number) {
+  private tickServerFishing(dt: number) {
+    for (const [playerId, state] of this.fishingStates) {
+      const player = this.players.get(playerId);
+      if (!player || player.dimension !== state.dimension) {
+        this.fishingStates.delete(playerId);
+        if (player) this.sendFishingState(player, null);
+        continue;
+      }
+
+      if (state.phase === 'flying') {
+        state.velocity.y -= 12 * dt;
+        const next = state.position.clone().addScaledVector(state.velocity, dt);
+        const bx = Math.floor(next.x);
+        const by = Math.floor(next.y);
+        const bz = Math.floor(next.z);
+        const block = this.getBlock(bx, by, bz, state.dimension);
+
+        if (BlockRegistry.isWater(block)) {
+          state.position.set(next.x, by + 0.85, next.z);
+          state.velocity.set(0, 0, 0);
+          state.phase = 'waiting';
+          state.waitSeconds = getServerFishingWaitSeconds(Math.random);
+        } else if (this.isSolidBlock(bx, by, bz, state.dimension)) {
+          state.position.copy(next);
+          state.velocity.set(0, 0, 0);
+          state.phase = 'waiting';
+          state.waitSeconds = Number.POSITIVE_INFINITY;
+        } else {
+          state.position.copy(next);
+        }
+      } else if (state.phase === 'waiting' && Number.isFinite(state.waitSeconds)) {
+        state.waitSeconds -= dt;
+        if (state.waitSeconds <= 0) {
+          state.phase = 'hooked';
+          state.hookedSeconds = SERVER_FISHING_HOOKED_SECONDS;
+        }
+      } else if (state.phase === 'hooked') {
+        state.hookedSeconds -= dt;
+        if (state.hookedSeconds <= 0) {
+          state.phase = 'waiting';
+          state.waitSeconds = getServerFishingWaitSeconds(Math.random);
+        }
+      }
+
+      this.sendFishingState(player, state);
+    }
+  }
+
+  private tickPrimedTnt(dt: number) {
     for (const tnt of Array.from(this.primedTnt.values())) {
       tnt.fuseSeconds -= dt;
       if (tnt.fuseSeconds > 0) continue;
@@ -2255,6 +2392,33 @@ export class GameServer {
       level: player.xpLevel,
       xpProgress: nextRequirement > 0 ? player.xpCurrent / nextRequirement : 0,
     });
+  }
+
+  private addServerXp(player: PlayerSession, amount: number) {
+    let remaining = Math.max(0, Math.floor(amount));
+    while (remaining > 0) {
+      const required = this.getXpRequirement(player.xpLevel);
+      const needed = required - player.xpCurrent;
+      const added = Math.min(remaining, needed);
+      player.xpCurrent += added;
+      remaining -= added;
+      if (player.xpCurrent >= required) {
+        player.xpCurrent = 0;
+        player.xpLevel += 1;
+      }
+    }
+    player.xpProgress = player.xpCurrent / this.getXpRequirement(player.xpLevel);
+    this.syncPlayerState(player);
+  }
+
+  private sendFishingState(player: PlayerSession, state: ServerFishingState | null) {
+    this.sendTo(player, PacketType.S2C_FISHING_STATE, state ? {
+      active: true,
+      x: state.position.x,
+      y: state.position.y,
+      z: state.position.z,
+      phase: state.phase,
+    } : { active: false });
   }
 
   private getXpRequirement(level: number): number {
@@ -2741,8 +2905,11 @@ export class GameServer {
     // Tick projectiles
     this.tickProjectiles(dt);
 
-    // Tick server-authoritative Boats / Chest Boats.
+    // Tick server-authoritative Boats / Chest Boats / Minecarts.
     this.tickServerVehicles(dt);
+
+    // Tick server-authoritative fishing bobbers.
+    this.tickServerFishing(dt);
 
     // Tick primed TNT created by server-authoritative Flint and Steel use.
     this.tickPrimedTnt(dt);
@@ -3113,7 +3280,7 @@ export class GameServer {
   private tickProjectiles(dt: number) {
     for (const proj of this.projectiles.values()) {
       proj.age += dt;
-      const maxAge = proj.type === 'firework_rocket' ? 1.6 : 30;
+      const maxAge = proj.type === 'firework_rocket' ? 1.6 : proj.type === 'eye_of_ender' ? 3.5 : 30;
       if (proj.age > maxAge) {
         this.projectiles.delete(proj.id);
         this.broadcastDimension(proj.dimension, PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
@@ -3121,11 +3288,45 @@ export class GameServer {
           this.broadcastDimension(proj.dimension, PacketType.S2C_SOUND, {
             type: 'explode', x: proj.position.x, y: proj.position.y, z: proj.position.z,
           });
+        } else if (proj.type === 'eye_of_ender') {
+          const shattered = shouldEnderEyeShatter(this.seed, proj.id, proj.position.x, proj.position.z);
+          if (!shattered) {
+            this.spawnDroppedStack(
+              { id: 381, count: 1 },
+              proj.position.x,
+              proj.position.y,
+              proj.position.z,
+              proj.dimension,
+              0.5,
+            );
+          } else {
+            this.broadcastDimension(proj.dimension, PacketType.S2C_SOUND, {
+              type: 'break', x: proj.position.x, y: proj.position.y, z: proj.position.z,
+            });
+          }
         }
         continue;
       }
 
-      proj.velocity.y -= 9.8 * dt; // gravity
+      if (proj.type === 'eye_of_ender') {
+        if (proj.age > 2.5) {
+          proj.velocity.multiplyScalar(Math.max(0, 1 - dt * 8));
+        } else {
+          proj.velocity.y = Math.max(0, proj.velocity.y - dt * 3);
+        }
+        proj.position.addScaledVector(proj.velocity, dt);
+        this.broadcastDimension(proj.dimension, PacketType.S2C_PROJECTILE_MOVE, {
+          id: proj.id,
+          x: proj.position.x,
+          y: proj.position.y,
+          z: proj.position.z,
+        });
+        continue;
+      }
+
+      if (proj.type !== 'firework_rocket') {
+        proj.velocity.y -= 9.8 * dt;
+      }
       proj.position.addScaledVector(proj.velocity, dt);
 
       // Hit detection

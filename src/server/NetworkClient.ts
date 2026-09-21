@@ -435,6 +435,11 @@ export class NetworkClient {
         break;
       }
 
+      case PacketType.S2C_FISHING_STATE: {
+        this.game.applyServerFishingState(packet.payload);
+        break;
+      }
+
       case PacketType.S2C_CONTAINER_DATA: {
         const { source, vehicleId, x, y, z, slots, cursor } = packet.payload;
         this.game.applyServerContainerData(

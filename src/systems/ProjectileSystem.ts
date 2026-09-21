@@ -148,7 +148,7 @@ export class ProjectileSystem {
    * (the id is re-keyed by the network client afterwards).
    */
   spawnServerProjectile(
-    type: 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'fireball' | 'shulker_bullet' | 'firework_rocket',
+    type: 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'fireball' | 'shulker_bullet' | 'firework_rocket' | 'eye_of_ender',
     position: THREE.Vector3,
     velocity: THREE.Vector3,
     damage: number = 4,
@@ -162,7 +162,9 @@ export class ProjectileSystem {
           ? this.createPotionMesh()
           : type === 'firework_rocket'
             ? this.createFireworkRocketMesh()
-            : this.createThrowableMesh(type as 'snowball' | 'egg' | 'ender_pearl');
+            : type === 'eye_of_ender'
+              ? this.createEnderEyeMesh()
+              : this.createThrowableMesh(type as 'snowball' | 'egg' | 'ender_pearl');
     const projectile: Projectile = {
       id: this.nextId++,
       type: type as ProjectileType,

@@ -21,6 +21,8 @@ export enum PacketType {
   /** Server-authoritative Boat / Chest Boat interaction and controls. */
   C2S_VEHICLE_INTERACT = 'C2S_VEHICLE_INTERACT',
   C2S_VEHICLE_INPUT = 'C2S_VEHICLE_INPUT',
+  /** Server-authoritative fishing cast/reel intent. */
+  C2S_FISHING_ACTION = 'C2S_FISHING_ACTION',
   /** P5.2 — client uploads player state so server pushes never revert it. */
   C2S_PLAYER_STATE = 'C2S_PLAYER_STATE',
   /** P5.2 — server-validated consumable use (food / potions). */
@@ -62,6 +64,8 @@ export enum PacketType {
   S2C_VEHICLE_UPDATE = 'S2C_VEHICLE_UPDATE',
   S2C_VEHICLE_DESPAWN = 'S2C_VEHICLE_DESPAWN',
   S2C_VEHICLE_RIDER = 'S2C_VEHICLE_RIDER',
+  /** Owner-facing authoritative fishing bobber state. */
+  S2C_FISHING_STATE = 'S2C_FISHING_STATE',
   S2C_CHAT = 'S2C_CHAT',
   S2C_PARTICLE = 'S2C_PARTICLE',
   S2C_SOUND = 'S2C_SOUND',

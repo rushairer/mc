@@ -4401,6 +4401,19 @@ export class Game {
   private tryUseFishingRod(heldItemId: number): boolean {
     if (heldItemId !== FISHING_ROD_ID) return false;
 
+    if (this.isMultiplayerNetworkConnected()) {
+      const direction = this.player.forward;
+      this.network.send(PacketType.C2S_FISHING_ACTION, {
+        action: this.fishingBobber ? 'reel' : 'cast',
+        itemId: heldItemId,
+        dirX: direction.x,
+        dirY: direction.y,
+        dirZ: direction.z,
+      });
+      this.placeCooldown = 0.35;
+      return true;
+    }
+
     if (this.fishingBobber) {
       this.reelFishingRod();
     } else {
@@ -4464,6 +4477,10 @@ export class Game {
   private updateFishingBobber(dt: number) {
     const bobber = this.fishingBobber;
     if (!bobber) return;
+    if (this.isMultiplayerNetworkConnected()) {
+      bobber.mesh.position.copy(bobber.position);
+      return;
+    }
 
     if (bobber.phase === 'flying') {
       bobber.velocity.y += -12 * dt;
@@ -4509,6 +4526,53 @@ export class Game {
     }
 
     bobber.mesh.position.copy(bobber.position);
+  }
+
+  applyServerFishingState(payload: {
+    active: boolean;
+    x?: number;
+    y?: number;
+    z?: number;
+    phase?: 'flying' | 'waiting' | 'hooked';
+  }) {
+    if (!payload.active) {
+      this.clearFishingBobber();
+      this.notifyState();
+      return;
+    }
+    if (![payload.x, payload.y, payload.z].every(Number.isFinite)) return;
+
+    if (!this.fishingBobber) {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.12, 8, 8),
+        new THREE.MeshLambertMaterial({ color: 0xfff2e5, emissive: 0x220000 }),
+      );
+      const position = new THREE.Vector3(payload.x!, payload.y!, payload.z!);
+      this.fishingBobber = {
+        mesh,
+        position,
+        velocity: new THREE.Vector3(),
+        phase: payload.phase ?? 'flying',
+        waitTimer: 0,
+        hookedTimer: 0,
+      };
+      mesh.position.copy(position);
+      this.renderer.scene.add(mesh);
+    }
+
+    const bobber = this.fishingBobber;
+    const previousPhase = bobber.phase;
+    bobber.position.set(payload.x!, payload.y!, payload.z!);
+    bobber.phase = payload.phase ?? bobber.phase;
+    bobber.mesh.position.copy(bobber.position);
+    if (previousPhase !== bobber.phase) {
+      this.disposeFishingBobberMaterial(bobber.mesh);
+      bobber.mesh.material = new THREE.MeshLambertMaterial({
+        color: bobber.phase === 'hooked' ? 0xff3333 : 0xfff2e5,
+        emissive: bobber.phase === 'hooked' ? 0x440000 : 0x220000,
+      });
+    }
+    this.notifyState();
   }
 
   private rollFishingLoot(): number {
@@ -5826,6 +5890,12 @@ export class Game {
   }
 
   private throwEnderEye() {
+    const held = this.inventory.getSlot(this.player.selectedSlot);
+    if (held?.id === ENDER_EYE_ID && this.sendItemAction({ action: 'ender_eye_throw', itemId: held.id })) {
+      this.placeCooldown = 0.5;
+      return;
+    }
+
     const spacing = 24;
     const offsetX = Math.floor(this.pseudoRandom(this.seed, 19, 7) * spacing);
     const offsetZ = Math.floor(this.pseudoRandom(this.seed, 31, 11) * spacing);

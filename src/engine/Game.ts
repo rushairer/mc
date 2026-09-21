@@ -4086,7 +4086,7 @@ export class Game {
   }
 
   private tryPlaceArmorStand(stack: ItemStack, target?: BlockInteractionContext): boolean {
-    if (!target || target.face === 'down') return false;
+    if (!target || !target.face || target.face === 'down') return false;
     if (this.sendServerBlockItemUse(stack, target)) return true;
 
     const position = this.getAdjacentBlockPosition(target);

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { ItemRegistry } from '../src/items/ItemRegistry';
 import { inferBlockBehaviorId, inferItemBehaviorId } from '../src/world/BehaviorIds';
+import { VisualResolver } from '../src/visual/VisualResolver';
 import { localizeItemDisplayName } from '../src/i18nItemNames';
 import {
   getJukeboxComparatorOutput,
@@ -50,6 +51,17 @@ test('664: every current repository Music Disc is non-stackable and legacy recor
     assert.match(item.officialId ?? '', /^minecraft:music_disc_/);
     assert.match(item.displayName, /^Music Disc /);
   }
+  assert.equal(
+    VisualResolver.getItemIconKey(ItemRegistry.getByName('record_cat')!.id),
+    'item:music_disc_cat',
+  );
+  assert.equal(
+    VisualResolver.getItemIconKey(ItemRegistry.getByName('music_disc_bounce')!.id),
+    'item:music_disc_bounce',
+  );
+  const atlas = readFileSync(new URL('../src/engine/TextureAtlas.ts', import.meta.url), 'utf8');
+  assert.ok(atlas.includes("name.startsWith('record_') || name.startsWith('music_disc_')"));
+  assert.ok(atlas.includes("name === 'totem_of_undying'"));
 });
 
 test('665: every registered Music Disc is jukebox-playable', () => {
@@ -175,6 +187,10 @@ test('673: Totem of Undying remains non-stackable and has canonical item identit
   assert.equal(totem.officialId, 'minecraft:totem_of_undying');
   assert.equal(isTotemOfUndyingName(totem.name), true);
   assert.equal(isTotemOfUndyingName('minecraft:totem_of_undying'), true);
+  assert.equal(VisualResolver.getItemIconKey(ItemRegistry.getByName('totem_of_undying')!.id), 'item:totem_of_undying');
+  const player = readFileSync(new URL('../src/player/Player.ts', import.meta.url), 'utf8');
+  assert.ok(player.includes("name.startsWith('record_') || name.startsWith('music_disc_')"));
+  assert.ok(player.includes("name === 'totem_of_undying'"));
 });
 
 test('674: held Totem resolution prefers selected main hand over offhand', () => {

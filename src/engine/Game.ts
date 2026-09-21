@@ -4478,7 +4478,8 @@ export class Game {
 
     // Drop items in 3D world (magma cubes only drop if size === 1)
     const isMagmaCube = mob.def.type === 'magma_cube';
-    const shouldDrop = !isMagmaCube || mob.size === 1;
+    const shouldDrop = (!isMagmaCube || mob.size === 1)
+      && !(mob.def.type === 'armor_stand' && this.gameMode === 'creative');
 
     if (shouldDrop) {
       for (const drop of mob.def.drops) {

@@ -1,5 +1,5 @@
 import type { SerializedBlockMetadata } from '../types';
-import type { ActivePotionEffect, ItemStack } from '../types';
+import type { ActivePotionEffect, BlockFacing, ItemStack } from '../types';
 import type { MobType } from '../entities/Mob';
 import { TickScheduler, type ScheduledTick, type TickPriority } from './TickScheduler';
 import { isWorldTickType, type WorldTickPayload, type WorldTickType } from '../world/WorldTick';
@@ -13,6 +13,7 @@ export const SAVE_SCHEMA_VERSION = 3;
 // Temporary global safety caps until entity culling/object pooling are in place.
 export const MAX_RESTORED_MOBS_PER_DIMENSION = 24;
 export const MAX_RECOVERED_MOBS_PER_DIMENSION = 16;
+export const MAX_RESTORED_DECORATIVE_ENTITIES_PER_DIMENSION = 512;
 const MAX_REASONABLE_CHUNKS_PER_DIMENSION = 4096;
 const MAX_SCHEDULED_BLOCK_TICKS = 65536;
 const MAX_COORDINATE = 30_000_000;
@@ -112,6 +113,11 @@ export interface SerializedMob {
   yaw?: number;
   pitch?: number;
   armorStandEquipment?: (ItemStack | null)[];
+  hangingFace?: BlockFacing;
+  itemFrameItem?: ItemStack;
+  itemFrameRotation?: number;
+  paintingVariant?: string;
+  leashHolderId?: string;
   isSheared?: boolean;
   isAngry?: boolean;
   angerTimer?: number;
@@ -143,7 +149,7 @@ const VALID_MOB_TYPES = new Set<MobType>([
   'zombie', 'skeleton', 'creeper', 'spider', 'cow', 'pig', 'sheep', 'chicken',
   'blaze', 'zombie_pigman', 'magma_cube', 'wither_skeleton', 'villager', 'enderman',
   'witch', 'iron_golem', 'wolf', 'cat', 'horse', 'shulker', 'pillager', 'wither',
-  'guardian', 'vex', 'armor_stand',
+  'guardian', 'vex', 'armor_stand', 'item_frame', 'painting',
 ]);
 const HOSTILE_MOB_TYPES = new Set<MobType>([
   'zombie', 'skeleton', 'creeper', 'spider', 'blaze', 'zombie_pigman', 'magma_cube',
@@ -341,6 +347,22 @@ function sanitizeMobs(
             return { ...candidate, count: 1 };
           })
         : undefined,
+      hangingFace: ['north', 'south', 'east', 'west', 'up', 'down'].includes(String(mob.hangingFace))
+        ? mob.hangingFace as BlockFacing
+        : undefined,
+      itemFrameItem: mob.type === 'item_frame' && mob.itemFrameItem && typeof mob.itemFrameItem === 'object'
+        && Number.isInteger(mob.itemFrameItem.id) && mob.itemFrameItem.id > 0
+        ? { ...mob.itemFrameItem, count: 1 }
+        : undefined,
+      itemFrameRotation: mob.type === 'item_frame'
+        ? ((Math.trunc(finiteOr(mob.itemFrameRotation, 0)) % 8) + 8) % 8
+        : undefined,
+      paintingVariant: mob.type === 'painting' && typeof mob.paintingVariant === 'string'
+        ? mob.paintingVariant.slice(0, 64)
+        : undefined,
+      leashHolderId: typeof mob.leashHolderId === 'string' && mob.leashHolderId.trim()
+        ? mob.leashHolderId.trim().slice(0, 128)
+        : undefined,
     });
   }
 
@@ -354,11 +376,21 @@ function sanitizeMobs(
   });
 
   const maxMobs = protectRecoveredPlayer ? MAX_RECOVERED_MOBS_PER_DIMENSION : MAX_RESTORED_MOBS_PER_DIMENSION;
-  if (valid.length > maxMobs) {
-    warnings.push(`Trimmed dimension ${dimension} mobs from ${valid.length} to ${maxMobs}.`);
-    valid.length = maxMobs;
+  const isDecorative = (mob: SerializedMob) =>
+    mob.type === 'armor_stand' || mob.type === 'item_frame' || mob.type === 'painting';
+  const ordinary = valid.filter((mob) => !isDecorative(mob));
+  const decorative = valid.filter(isDecorative);
+  if (ordinary.length > maxMobs) {
+    warnings.push(`Trimmed dimension ${dimension} mobs from ${ordinary.length} to ${maxMobs}.`);
+    ordinary.length = maxMobs;
   }
-  return valid;
+  if (decorative.length > MAX_RESTORED_DECORATIVE_ENTITIES_PER_DIMENSION) {
+    warnings.push(
+      `Trimmed dimension ${dimension} decorative entities from ${decorative.length} to ${MAX_RESTORED_DECORATIVE_ENTITIES_PER_DIMENSION}.`,
+    );
+    decorative.length = MAX_RESTORED_DECORATIVE_ENTITIES_PER_DIMENSION;
+  }
+  return [...ordinary, ...decorative];
 }
 
 /** Pure migration and validation entry point used by IndexedDB and regression tests. */

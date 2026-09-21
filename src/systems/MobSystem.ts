@@ -11,7 +11,13 @@ import {
   MAX_RESTORED_MOBS_PER_DIMENSION,
   type SerializedMob,
 } from './SaveSystem';
-import { isPaintingVariant, mobLeashHolderId, parseMobLeashHolderId } from '../entities/HangingEntityRules';
+import {
+  isDecorativeMobType,
+  isItemFrameType,
+  isPaintingVariant,
+  mobLeashHolderId,
+  parseMobLeashHolderId,
+} from '../entities/HangingEntityRules';
 import type { EndGenerator } from '../world/EndGenerator';
 import { EnchantSystem } from './EnchantSystem';
 import { UNDEAD_MOB_TYPES } from './PotionEffect';
@@ -224,7 +230,7 @@ export class MobSystem {
     if (this.doMobSpawning && this.difficulty !== 'peaceful') {
       this.spawnTimer += dt;
       const naturalMobCount = Array.from(this.mobs.values()).filter(
-        mob => mob.def.type !== 'armor_stand' && mob.def.type !== 'item_frame' && mob.def.type !== 'painting',
+        mob => !isDecorativeMobType(mob.def.type),
       ).length;
       if (this.spawnTimer >= SPAWN_INTERVAL && naturalMobCount < MAX_MOBS && getBlock) {
         this.spawnTimer = 0;
@@ -358,9 +364,9 @@ export class MobSystem {
   }
 
   spawnMob(type: MobType, x: number, y: number, z: number, size?: number, profession?: VillagerProfession): Mob | null {
-    const decorative = type === 'armor_stand' || type === 'item_frame' || type === 'painting';
+    const decorative = isDecorativeMobType(type);
     const ordinaryMobCount = Array.from(this.mobs.values()).filter(
-      mob => mob.def.type !== 'armor_stand' && mob.def.type !== 'item_frame' && mob.def.type !== 'painting',
+      mob => !isDecorativeMobType(mob.def.type),
     ).length;
     const decorativeCount = this.mobs.size - ordinaryMobCount;
     const atRuntimeCap = decorative
@@ -401,8 +407,8 @@ export class MobSystem {
           ? mob.armorStandEquipment.map((stack) => cloneItemStack(stack))
           : undefined,
         hangingFace: mob.hangingFace ?? undefined,
-        itemFrameItem: mob.def.type === 'item_frame' ? cloneItemStack(mob.itemFrameItem) ?? undefined : undefined,
-        itemFrameRotation: mob.def.type === 'item_frame' ? mob.itemFrameRotation : undefined,
+        itemFrameItem: isItemFrameType(mob.def.type) ? cloneItemStack(mob.itemFrameItem) ?? undefined : undefined,
+        itemFrameRotation: isItemFrameType(mob.def.type) ? mob.itemFrameRotation : undefined,
         paintingVariant: mob.def.type === 'painting' ? mob.paintingVariant : undefined,
         leashHolderId: mob.leashHolderId ?? undefined,
         isSheared: mob.isSheared,
@@ -420,7 +426,7 @@ export class MobSystem {
     const restoredRelationships: Array<{ mob: Mob; saved: SerializedMob }> = [];
     const idMap = new Map<number, number>();
     for (const saved of savedMobs) {
-      const decorative = saved.type === 'armor_stand' || saved.type === 'item_frame' || saved.type === 'painting';
+      const decorative = isDecorativeMobType(saved.type);
       if (decorative) {
         if (decorativeRestored >= MAX_RESTORED_DECORATIVE_ENTITIES_PER_DIMENSION) continue;
       } else if (ordinaryRestored >= MAX_RESTORED_MOBS_PER_DIMENSION) {
@@ -456,7 +462,7 @@ export class MobSystem {
       if (mob.def.type === 'armor_stand') {
         mob.setArmorStandEquipmentSnapshot(saved.armorStandEquipment ?? []);
       }
-      if (mob.def.type === 'item_frame') {
+      if (isItemFrameType(mob.def.type)) {
         mob.setHangingFace(saved.hangingFace ?? null);
         mob.setItemFrameState(saved.itemFrameItem ?? null, saved.itemFrameRotation ?? 0);
       } else if (mob.def.type === 'painting') {
@@ -503,7 +509,7 @@ export class MobSystem {
       let blockedByCap = false;
       for (const point of village.spawnPoints) {
         const ordinaryMobCount = Array.from(this.mobs.values()).filter(
-          mob => mob.def.type !== 'armor_stand' && mob.def.type !== 'item_frame' && mob.def.type !== 'painting',
+          mob => !isDecorativeMobType(mob.def.type),
         ).length;
         if (ordinaryMobCount >= MAX_RESTORED_MOBS_PER_DIMENSION) {
           blockedByCap = true;
@@ -548,7 +554,7 @@ export class MobSystem {
     for (const mob of this.mobs.values()) {
       // Simple AABB ray intersection
       const hw = mob.width / 2;
-      const hanging = mob.def.type === 'item_frame' || mob.def.type === 'painting';
+      const hanging = isItemFrameType(mob.def.type) || mob.def.type === 'painting';
       const minY = hanging ? mob.position.y - mob.height / 2 : mob.position.y;
       const maxY = hanging ? mob.position.y + mob.height / 2 : mob.position.y + mob.height;
       const box = new THREE.Box3(
@@ -628,7 +634,7 @@ export class MobSystem {
       if (allowed && !allowed.has(mob.def.type)) continue;
 
       const hw = mob.width / 2;
-      const hanging = mob.def.type === 'item_frame' || mob.def.type === 'painting';
+      const hanging = isItemFrameType(mob.def.type) || mob.def.type === 'painting';
       const minY = hanging ? mob.position.y - mob.height / 2 : mob.position.y;
       const maxY = hanging ? mob.position.y + mob.height / 2 : mob.position.y + mob.height;
       const box = new THREE.Box3(
@@ -676,7 +682,7 @@ export class MobSystem {
       let blockedByCap = false;
       for (const [dx, dy, dz] of offsets) {
         const ordinaryMobCount = Array.from(this.mobs.values()).filter(
-          mob => mob.def.type !== 'armor_stand' && mob.def.type !== 'item_frame' && mob.def.type !== 'painting',
+          mob => !isDecorativeMobType(mob.def.type),
         ).length;
         if (ordinaryMobCount >= MAX_RESTORED_MOBS_PER_DIMENSION) {
           blockedByCap = true;

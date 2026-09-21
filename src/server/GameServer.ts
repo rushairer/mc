@@ -3257,6 +3257,23 @@ export class GameServer {
         mob.onGround = false;
       }
 
+      if (mob.type === 'armor_stand') {
+        mob.aiState = 'idle';
+        mob.velocity.x = 0;
+        mob.velocity.z = 0;
+        mob.wanderTarget = null;
+        mob.hurtTimer = Math.max(0, mob.hurtTimer - dt);
+        this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_MOVE, {
+          id: mob.id,
+          x: mob.position.x,
+          y: mob.position.y,
+          z: mob.position.z,
+          yaw: mob.yaw,
+          pitch: mob.pitch,
+        });
+        continue;
+      }
+
       // Pathfinding & AI logic
       mob.wanderTimer -= dt;
       

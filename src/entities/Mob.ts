@@ -119,6 +119,8 @@ export class Mob {
   private customNameLabel: THREE.Sprite | null = null;
   armorStandEquipment: (ItemStack | null)[] = [null, null, null, null];
   private armorStandEquipmentMesh: THREE.Group | null = null;
+  leashHolderId: string | null = null;
+  private leashLine: THREE.Line | null = null;
   /** Sheep shearing state; regrowth can reset this when grass-eating is modeled. */
   isSheared = false;
   targetMob: Mob | null = null;
@@ -167,6 +169,35 @@ export class Mob {
     if (this.def.type !== 'armor_stand') return;
     this.armorStandEquipment = [0, 1, 2, 3].map(index => cloneItemStack(equipment[index]));
     this.refreshArmorStandEquipmentVisual();
+  }
+
+  setLeashHolder(holderId: string | null) {
+    this.leashHolderId = holderId;
+    if (!holderId) this.updateLeashVisual();
+  }
+
+  updateLeashVisual(holderWorldPosition?: THREE.Vector3) {
+    if (this.leashLine) {
+      this.mesh.remove(this.leashLine);
+      this.leashLine.geometry.dispose();
+      if (Array.isArray(this.leashLine.material)) this.leashLine.material.forEach(material => material.dispose());
+      else this.leashLine.material.dispose();
+      this.leashLine = null;
+    }
+    if (!this.leashHolderId || !holderWorldPosition) return;
+
+    const startY = Math.max(0.45, this.height * 0.62);
+    const localEnd = holderWorldPosition.clone().sub(this.position);
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, startY, 0),
+      localEnd,
+    ]);
+    const material = new THREE.LineBasicMaterial({ color: 0x6f5235 });
+    const line = new THREE.Line(geometry, material);
+    line.name = 'lead_rope';
+    line.frustumCulled = false;
+    this.mesh.add(line);
+    this.leashLine = line;
   }
 
   get width(): number {

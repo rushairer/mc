@@ -33,6 +33,17 @@ import {
   type HangingEntityType,
 } from '../entities/HangingEntityRules';
 import { cloneItemStack } from '../items/ItemStackRules';
+import {
+  getJukeboxSong,
+  getStoredJukeboxDisc,
+  isJukeboxPlayableItemName,
+} from '../world/JukeboxRules';
+import {
+  TOTEM_OF_UNDYING_EFFECTS,
+  consumeTotemStack,
+  findHeldTotemHand,
+  shouldActivateTotem,
+} from '../items/TotemRules';
 import { ParticleSystem } from '../systems/ParticleSystem';
 import { FluidSystem } from '../systems/FluidSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
@@ -694,6 +705,13 @@ export class Game {
         this.cycleNotePitch(position.x, position.y, position.z);
         return { handled: true, cooldown: 0.25 };
       },
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:jukebox',
+      interact: ({ position, blockId, heldItem }) => ({
+        handled: this.tryInteractJukebox(position, blockId, heldItem),
+        cooldown: 0.25,
+      }),
     });
     // P3.1: buttons (wooden 0.5s / stone 1.5s press), fence gates and iron
     // doors. Buttons emit a redstone pulse while pressed and reset on a

@@ -816,6 +816,28 @@ export class Player {
       featherB.position.y = -0.18;
       group.add(shaft, head, featherA, featherB);
       group.rotation.set(Math.PI / 3, -Math.PI / 4, 0);
+    } else if (name === 'bundle' || name.endsWith('_bundle')) {
+      const colorByName: Record<string, number> = {
+        white: 0xe8e8e8, orange: 0xe58c32, magenta: 0xb24cd8, light_blue: 0x6ca9d8,
+        yellow: 0xe8cf48, lime: 0x7abf43, pink: 0xd98fa9, gray: 0x666a6d,
+        light_gray: 0xa4a8a8, cyan: 0x3a8f9c, purple: 0x7551a8, blue: 0x405aa8,
+        brown: 0x7a5132, green: 0x4f7a42, red: 0xa64a44, black: 0x34383b,
+      };
+      const prefix = name === 'bundle' ? '' : name.slice(0, -'_bundle'.length);
+      const cloth = new THREE.MeshLambertMaterial({ color: colorByName[prefix] ?? 0x9a7448 });
+      const tieMat = new THREE.MeshLambertMaterial({ color: 0x6a4427 });
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), cloth);
+      body.name = 'bundle_body';
+      body.scale.set(1.0, 1.15, 0.72);
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.085, 0.075, 8), cloth);
+      neck.name = 'bundle_neck';
+      neck.position.y = 0.135;
+      const tie = new THREE.Mesh(new THREE.TorusGeometry(0.072, 0.012, 5, 10), tieMat);
+      tie.name = 'bundle_tie';
+      tie.rotation.x = Math.PI / 2;
+      tie.position.y = 0.105;
+      group.add(body, neck, tie);
+      group.rotation.set(0.2, -0.55, -0.12);
     } else if (name === 'brush') {
       const handleMat = new THREE.MeshLambertMaterial({ color: 0x7a4c2e });
       const copperMat = new THREE.MeshLambertMaterial({ color: 0xc87348 });

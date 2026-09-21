@@ -127,8 +127,20 @@ import { MOB_DEFS, Mob, type MobType } from '../entities/Mob';
 import { shouldTameEntity } from '../entities/EntityInteractionRules';
 import { canApplySaddle, canControlMountedMob, canMountMob, getNameTagLabel } from '../entities/MobItemInteractionRules';
 import { armorStandSlotIndex, canPlaceArmorStandAt, firstEquippedArmorStandSlot, snapArmorStandYaw } from '../entities/ArmorStandRules';
+import {
+  canPlaceHangingEntity,
+  choosePaintingVariant,
+  hangingEntityWorldPosition,
+  isLeashableMobType,
+  isPaintingVariant,
+  leashDistance,
+  leashPullVector,
+  nextItemFrameRotation,
+  shouldBreakLeash,
+  type HangingEntityType,
+} from '../entities/HangingEntityRules';
 import { CHUNK_SIZE, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
-import type { ItemStack, BlockMetadata } from '../types';
+import type { ItemStack, BlockFacing, BlockMetadata } from '../types';
 import { createHurtCooldownState, resolveHurtDamage, tickHurtCooldown, type HurtCooldownState } from '../systems/HurtCooldown';
 import type { PlayerDamageKind } from '../systems/DamageRules';
 import { SAVE_SCHEMA_VERSION, SaveSystem, type SaveData } from '../systems/SaveSystem';
@@ -203,6 +215,11 @@ interface ServerMob {
   isSaddled?: boolean;
   customName?: string;
   armorStandEquipment?: (ItemStack | null)[];
+  hangingFace?: BlockFacing;
+  itemFrameItem?: ItemStack;
+  itemFrameRotation?: number;
+  paintingVariant?: string;
+  leashHolderId?: string;
   isSheared?: boolean;
   riderId?: string;
   riderInput?: ServerMobRideInput;
@@ -444,6 +461,11 @@ export class GameServer {
           armorStandEquipment: mob.type === 'armor_stand'
             ? (mob.armorStandEquipment ?? []).map((stack) => cloneItemStack(stack))
             : undefined,
+          hangingFace: mob.hangingFace,
+          itemFrameItem: mob.type === 'item_frame' ? cloneItemStack(mob.itemFrameItem) : undefined,
+          itemFrameRotation: mob.type === 'item_frame' ? mob.itemFrameRotation ?? 0 : undefined,
+          paintingVariant: mob.type === 'painting' ? mob.paintingVariant : undefined,
+          leashHolderId: mob.leashHolderId ?? null,
           isSheared: mob.isSheared,
           riderId: mob.riderId ?? null
         });
@@ -591,6 +613,11 @@ export class GameServer {
         armorStandEquipment: mob.type === 'armor_stand'
           ? (mob.armorStandEquipment ?? []).map((stack) => cloneItemStack(stack))
           : undefined,
+        hangingFace: mob.hangingFace,
+        itemFrameItem: mob.type === 'item_frame' ? cloneItemStack(mob.itemFrameItem) : undefined,
+        itemFrameRotation: mob.type === 'item_frame' ? mob.itemFrameRotation ?? 0 : undefined,
+        paintingVariant: mob.type === 'painting' ? mob.paintingVariant : undefined,
+        leashHolderId: mob.leashHolderId === localSession.id ? 'local-player' : undefined,
         isSheared: mob.isSheared
       });
     }

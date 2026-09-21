@@ -801,6 +801,22 @@ export class Player {
       lens.position.x = 0.17;
       group.add(body, grip, lens);
       group.rotation.set(Math.PI / 5, -Math.PI / 5, Math.PI / 12);
+    } else if (name === 'mace') {
+      const shaftMat = new THREE.MeshLambertMaterial({ color: 0x6f4d32 });
+      const coreMat = new THREE.MeshLambertMaterial({ color: 0x59656d, emissive: 0x10161a });
+      const accentMat = new THREE.MeshLambertMaterial({ color: 0x9aa6ad });
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.032, 0.34, 7), shaftMat);
+      shaft.name = 'mace_shaft';
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.16), coreMat);
+      head.name = 'mace_head';
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.05, 0.11), accentMat);
+      cap.name = 'mace_cap';
+      shaft.rotation.z = Math.PI / 2;
+      head.position.x = 0.19;
+      cap.position.x = 0.19;
+      cap.position.y = 0.085;
+      group.add(shaft, head, cap);
+      group.rotation.set(Math.PI / 4, -Math.PI / 6, -Math.PI / 10);
     } else if (name === 'wind_charge') {
       const core = new THREE.Mesh(
         new THREE.SphereGeometry(0.085, 8, 8),

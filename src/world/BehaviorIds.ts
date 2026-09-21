@@ -70,6 +70,7 @@ export function inferItemBehaviorId(rawName: string): string | undefined {
   if (name.includes('boat')) return 'minecraft:boat';
   if (name.includes('minecart')) return 'minecraft:minecart';
   if (name === 'flint_and_steel') return 'minecraft:flint_and_steel';
+  if (name === 'fire_charge') return 'minecraft:fire_charge';
   if (name === 'shears') return 'minecraft:shears';
   if (name === 'bone_meal') return 'minecraft:bone_meal';
   if (name.endsWith('_shovel')) return 'minecraft:shovel';

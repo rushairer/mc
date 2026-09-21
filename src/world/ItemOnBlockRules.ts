@@ -25,6 +25,11 @@ export function resolveShovelPathTargetName(blockName: string): 'dirt_path' | nu
   return SHOVEL_PATH_TARGETS.has(normalize(blockName)) ? 'dirt_path' : null;
 }
 
+export function resolveHoeFarmlandTargetName(blockName: string): 'farmland' | null {
+  const name = normalize(blockName);
+  return name === 'grass' || name === 'grass_block' || name === 'dirt' ? 'farmland' : null;
+}
+
 export function resolveAxeStrippedBlockName(blockName: string): string | null {
   const name = normalize(blockName);
   if (name.startsWith('stripped_')) return null;

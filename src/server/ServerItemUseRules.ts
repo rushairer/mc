@@ -105,12 +105,15 @@ export function vehicleTypeForBoatItemName(name: string): 'boat' | 'chest_boat' 
   return null;
 }
 
-export type ServerItemOnBlockKind = 'axe' | 'shovel' | 'bone_meal';
+export type ServerItemOnBlockKind = 'axe' | 'shovel' | 'hoe' | 'bone_meal' | 'fire_charge' | 'ender_eye';
 
 export function serverItemOnBlockKind(name: string): ServerItemOnBlockKind | null {
   if (name === 'bone_meal') return 'bone_meal';
+  if (name === 'fire_charge') return 'fire_charge';
+  if (name === 'ender_eye') return 'ender_eye';
   if (name.endsWith('_shovel')) return 'shovel';
   if (name.endsWith('_axe')) return 'axe';
+  if (name.endsWith('_hoe')) return 'hoe';
   return null;
 }
 

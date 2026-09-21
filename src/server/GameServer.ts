@@ -76,7 +76,14 @@ import { Chunk } from '../world/Chunk';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { planBlockPlacement } from '../world/BlockPlacement';
 import { createDefaultSignMetadata, isSignBlockName, isWallSignBlockName } from '../world/SignRules';
-import { resolveAxeStrippedBlockName, resolveShovelPathTargetName, rotateBoneMealSpreadOffsets26_3 } from '../world/ItemOnBlockRules';
+import { resolveAxeStrippedBlockName, resolveHoeFarmlandTargetName, resolveShovelPathTargetName, rotateBoneMealSpreadOffsets26_3 } from '../world/ItemOnBlockRules';
+import {
+  END_PORTAL_BLOCK_ID,
+  END_PORTAL_FRAME_BLOCK_ID,
+  fillEndPortalFrameBlock,
+  findCompleteEndPortalCenter,
+  getEndPortalInteriorCells,
+} from '../world/EndPortalRules';
 import { coordinateRandom } from '../engine/DeterministicRandom';
 import { createServerPlacementCells, getDoorSidePosition, horizontalFacingFromYaw, isPlacementReplaceableBlockName, resolveDoorHinge, signRotationFromYaw } from './ServerPlacementRules';
 import { ItemRegistry } from '../items/ItemRegistry';
@@ -1360,6 +1367,24 @@ export class GameServer {
     });
   }
 
+  private isServerWaterNearby(x: number, y: number, z: number, dimension: number): boolean {
+    for (let dx = -4; dx <= 4; dx++) {
+      for (let dy = 0; dy <= 1; dy++) {
+        for (let dz = -4; dz <= 4; dz++) {
+          const id = this.getBlock(x + dx, y + dy, z + dz, dimension) & 0x3ff;
+          if (id === 8 || id === 9) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private consumeServerHeldItem(session: PlayerSession, held: ItemStack) {
+    if (session.gameMode === 'creative') return;
+    session.inventory[session.selectedSlot] = consumeHeldStack(held);
+    this.syncPlayerInventory(session);
+  }
+
   private handleServerBlockItemUse(session: PlayerSession, intent: ServerBlockItemUseIntent, held: ItemStack): boolean {
     if (!isValidWorldY(intent.y, WORLD_HEIGHT)) return false;
     if (!isBlockActionInReach(session, intent.x, intent.y, intent.z, session.gameMode)) return false;
@@ -1434,6 +1459,99 @@ export class GameServer {
       this.setBlock(intent.x, intent.y, intent.z, stripped.id, session.dimension, metadata);
       this.broadcastServerBlockUpdate(intent.x, intent.y, intent.z, stripped.id, session.dimension, metadata);
       this.damageServerHeldTool(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: intent.x, y: intent.y, z: intent.z,
+      });
+      return true;
+    }
+
+    if (itemOnBlockKind === 'hoe') {
+      if (intent.face === 'down') return false;
+      if (!resolveHoeFarmlandTargetName(targetBlock.name)) return false;
+      if (intent.y + 1 >= WORLD_HEIGHT || this.getBlock(intent.x, intent.y + 1, intent.z, session.dimension) !== 0) return false;
+      const farmland = BlockRegistry.getByName('farmland');
+      if (!farmland) return false;
+      const moisture = this.isServerWaterNearby(intent.x, intent.y, intent.z, session.dimension) ? 7 : 0;
+      const packedFarmland = (moisture << 10) | farmland.id;
+      this.setBlock(intent.x, intent.y, intent.z, packedFarmland, session.dimension, null);
+      this.broadcastServerBlockUpdate(intent.x, intent.y, intent.z, packedFarmland, session.dimension, null);
+      this.damageServerHeldTool(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: intent.x, y: intent.y, z: intent.z,
+      });
+      return true;
+    }
+
+    if (itemOnBlockKind === 'fire_charge') {
+      if (targetBlock.name === 'tnt') {
+        this.setBlock(intent.x, intent.y, intent.z, 0, session.dimension);
+        this.broadcastServerBlockUpdate(intent.x, intent.y, intent.z, 0, session.dimension);
+        const id = this.nextEntityId++;
+        this.primedTnt.set(id, {
+          id,
+          position: new THREE.Vector3(intent.x + 0.5, intent.y + 0.5, intent.z + 0.5),
+          fuseSeconds: SERVER_TNT_FUSE_SECONDS,
+          dimension: session.dimension,
+        });
+        this.consumeServerHeldItem(session, held);
+        this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+          type: 'place', x: intent.x, y: intent.y, z: intent.z,
+        });
+        return true;
+      }
+
+      const place = adjacentBlockPosition(intent.x, intent.y, intent.z, intent.face);
+      if (!isValidWorldY(place.y, WORLD_HEIGHT) || this.getBlock(place.x, place.y, place.z, session.dimension) !== 0) return false;
+      const portalUpdates: Array<{ x: number; y: number; z: number; id: number }> = [];
+      const activated = this.dimensionGen.findAndActivatePortalFrame(
+        (x, y, z) => this.getBlock(x, y, z, session.dimension),
+        (x, y, z, id) => {
+          this.setBlock(x, y, z, id, session.dimension);
+          portalUpdates.push({ x, y, z, id });
+        },
+        place.x,
+        place.y,
+        place.z,
+      );
+      if (activated) {
+        for (const update of portalUpdates) {
+          this.broadcastServerBlockUpdate(update.x, update.y, update.z, update.id, session.dimension);
+        }
+        this.consumeServerHeldItem(session, held);
+        return true;
+      }
+
+      const fire = BlockRegistry.getByName('fire');
+      if (!fire) return false;
+      this.setBlock(place.x, place.y, place.z, fire.id, session.dimension);
+      this.broadcastServerBlockUpdate(place.x, place.y, place.z, fire.id, session.dimension);
+      this.consumeServerHeldItem(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: place.x, y: place.y, z: place.z,
+      });
+      return true;
+    }
+
+    if (itemOnBlockKind === 'ender_eye') {
+      if ((targetBlockId & 0x3ff) !== END_PORTAL_FRAME_BLOCK_ID) return false;
+      const filledFrame = fillEndPortalFrameBlock(targetBlockId);
+      if (filledFrame === null) return false;
+      this.setBlock(intent.x, intent.y, intent.z, filledFrame, session.dimension);
+      this.broadcastServerBlockUpdate(intent.x, intent.y, intent.z, filledFrame, session.dimension);
+      this.consumeServerHeldItem(session, held);
+
+      const center = findCompleteEndPortalCenter(
+        (x, y, z) => this.getBlock(x, y, z, session.dimension),
+        intent.x,
+        intent.y,
+        intent.z,
+      );
+      if (center) {
+        for (const cell of getEndPortalInteriorCells(center.x, center.y, center.z)) {
+          this.setBlock(cell.x, cell.y, cell.z, END_PORTAL_BLOCK_ID, session.dimension);
+          this.broadcastServerBlockUpdate(cell.x, cell.y, cell.z, END_PORTAL_BLOCK_ID, session.dimension);
+        }
+      }
       this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
         type: 'place', x: intent.x, y: intent.y, z: intent.z,
       });

@@ -62,7 +62,7 @@ import {
   type WorldContext,
 } from '../world/BehaviorRegistry';
 import { planBlockPlacement } from '../world/BlockPlacement';
-import { resolveAxeStrippedBlockName, resolveShovelPathTargetName, rotateBoneMealSpreadOffsets26_3 } from '../world/ItemOnBlockRules';
+import { resolveAxeStrippedBlockName, resolveHoeFarmlandTargetName, resolveShovelPathTargetName, rotateBoneMealSpreadOffsets26_3 } from '../world/ItemOnBlockRules';
 import { fallingLeafParticle26_3, shouldPrioritizeShieldUse26_3 } from '../world/WildernessBoundChanges26_3';
 import { useStrawBed as resolveStrawBedUse26_3 } from '../world/WildernessBound26_3';
 import {
@@ -911,6 +911,10 @@ export class Game {
       id: 'minecraft:flint_and_steel',
       use: ({ target }) => ({ handled: this.tryUseFlintAndSteel(target), cooldown: 0.25 }),
     });
+    this.behaviors.registerItem('fire_charge', {
+      id: 'minecraft:fire_charge',
+      use: ({ target }) => ({ handled: this.tryUseFireCharge(target), cooldown: 0.25 }),
+    });
     this.behaviors.registerItem([], {
       id: 'minecraft:shears',
       use: ({ target }) => ({ handled: this.tryUseShears(target), cooldown: 0.25 }),
@@ -952,6 +956,10 @@ export class Game {
       id: 'minecraft:ender_eye',
       use: ({ target }) => {
         if (target && (target.blockId & 0x3FF) === END_PORTAL_FRAME_ID) {
+          const held = this.inventory.getSlot(this.player.selectedSlot);
+          if (held && this.sendServerBlockItemUse(held, target)) {
+            return { handled: true, cooldown: 0.25 };
+          }
           const { x, y, z } = target.position;
           const activated = this.useEnderEyeOnPortalFrame(x, y, z);
           if (activated) {
@@ -3821,6 +3829,44 @@ export class Game {
     return true;
   }
 
+  private tryUseFireCharge(target?: BlockInteractionContext): boolean {
+    if (!target) return false;
+    const held = this.inventory.getSlot(this.player.selectedSlot);
+    if (held && this.sendServerBlockItemUse(held, target)) return true;
+
+    if (target.block.name === 'tnt') {
+      this.igniteTNT(target.position.x, target.position.y, target.position.z);
+      if (this.gameMode !== 'creative') this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+      return true;
+    }
+
+    const position = this.getAdjacentBlockPosition(target);
+    if (!position) return false;
+
+    const activated = this.chunks.dimensionGen.findAndActivatePortalFrame(
+      (x, y, z) => this.chunks.getBlock(x, y, z),
+      (x, y, z, id) => this.chunks.setBlock(x, y, z, id),
+      position.x,
+      position.y,
+      position.z,
+    );
+    if (activated) {
+      this.sound.playBlockPlace(0);
+      if (this.gameMode !== 'creative') this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+      return true;
+    }
+
+    if (this.chunks.getBlock(position.x, position.y, position.z) !== 0) return false;
+    const fire = BlockRegistry.getByName('fire');
+    if (!fire) return false;
+    this.chunks.setBlock(position.x, position.y, position.z, fire.id);
+    this.chunks.setBlockMeta(position.x, position.y, position.z, null);
+    this.redstone.observeBlockChange(position.x, position.y, position.z);
+    this.sound.playBlockPlace(fire.id);
+    if (this.gameMode !== 'creative') this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    return true;
+  }
+
   private tryUseShears(target?: BlockInteractionContext): boolean {
     if (!target) return false;
     const held = this.inventory.getSlot(this.player.selectedSlot);
@@ -3926,11 +3972,13 @@ export class Game {
   }
 
   private tryTillFarmland(target?: BlockInteractionContext): boolean {
-    if (!target) return false;
-    const targetBaseId = target.blockId & 0x3FF;
-    if (targetBaseId !== 2 && targetBaseId !== 3) return false;
-
+    if (!target || target.face === 'down') return false;
+    if (!resolveHoeFarmlandTargetName(target.block.name)) return false;
     const { x, y, z } = target.position;
+    if (this.chunks.getBlock(x, y + 1, z) !== 0) return false;
+    const held = this.inventory.getSlot(this.player.selectedSlot);
+    if (held && this.sendServerBlockItemUse(held, target)) return true;
+
     const moisture = this.isWaterNearby(x, y, z) ? 7 : 0;
     this.chunks.setBlock(x, y, z, (moisture << 10) | 60);
     this.chunks.setBlockMeta(x, y, z, null);

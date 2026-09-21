@@ -343,7 +343,7 @@ export class SoundSystem {
     hiss.start(now);
   }
 
-  /** Java goat-horn resource event first, with a procedural fallback when no pack is active. */
+  /** Wind Charge resource events first, with procedural fallbacks when no pack is active. */
   playWindChargeThrow() {
     if (this.playFirstResourceSound(['entity.wind_charge.throw'], 0.55)) return;
     const ctx = this.ensureCtx();
@@ -355,7 +355,7 @@ export class SoundSystem {
     if (this.playFirstResourceSound(['entity.generic.wind_burst'], 1.0)) return;
     const ctx = this.ensureCtx();
     if (!ctx) return;
-    this.synthNoiseCall(ctx, 0.28, 0.24, 950);
+    this.synthNoiseCall(ctx, 'bandpass', 950, 0.28, 0.24, 0.45);
   }
 
   playGoatHorn(soundIndex = 0) {

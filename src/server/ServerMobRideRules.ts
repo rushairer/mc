@@ -1,4 +1,4 @@
-export type ServerMobRideAction = 'mount' | 'dismount';
+export type ServerMobRideAction = 'mount' | 'dismount' | 'interact';
 
 export interface ServerMobRideInteraction {
   mobId: number;
@@ -19,7 +19,7 @@ export function parseServerMobRideInteraction(payload: unknown): ServerMobRideIn
   const raw = payload as Record<string, unknown>;
   const mobId = Number(raw.mobId);
   if (!Number.isInteger(mobId) || mobId < 0) return null;
-  if (raw.action !== 'mount' && raw.action !== 'dismount') return null;
+  if (raw.action !== 'mount' && raw.action !== 'dismount' && raw.action !== 'interact') return null;
   return { mobId, action: raw.action };
 }
 

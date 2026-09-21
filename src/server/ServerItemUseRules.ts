@@ -59,6 +59,7 @@ export function isSupportedServerItemUseName(name: string, kind: ServerItemUseIn
     || name === 'boat'
     || name.endsWith('_boat')
     || name.includes('minecart')
+    || name === 'armor_stand'
     || isSpawnEggItemName(name)
     || isServerSignStylingItemName(name)
     || serverItemOnBlockKind(name) !== null;

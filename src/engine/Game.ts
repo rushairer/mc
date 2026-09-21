@@ -352,6 +352,7 @@ export class Game {
   private serverContainerCursor: ItemStack | null = null;
   private vehicleInputSendTimer = 0;
   private mobInputSendTimer = 0;
+  private leashLines = new Map<number, THREE.Line>();
   private openHopperPos: THREE.Vector3 | null = null;
   private openFurnacePos: THREE.Vector3 | null = null;
   private openBrewingPos: THREE.Vector3 | null = null;
@@ -2598,6 +2599,8 @@ export class Game {
       this.resolveCollisions();
     }
 
+    this.updateLeashedMobs(dt, isNetworkConnected);
+
     if (!this.chatOpen && (this.input.isMouseDown(0) || this.input.isMouseDown(2))) {
       this.player.startSwing();
     }
@@ -4115,6 +4118,78 @@ export class Game {
     this.sound.playLever();
     this.notifyState();
     return { handled: true, cooldown: 0.25 };
+  }
+
+  private updateLeashedMobs(dt: number, networkAuthoritative: boolean) {
+    const active = new Set<number>();
+
+    for (const mob of this.mobs.mobs.values()) {
+      if (!mob.leashHolderId || !isLeashableMobType(mob.def.type)) continue;
+
+      let holder: THREE.Vector3 | null = null;
+      const localHolder =
+        mob.leashHolderId === 'local-player' ||
+        (!!this.network.playerId && mob.leashHolderId === this.network.playerId);
+      if (localHolder) {
+        holder = this.player.position.clone().add(new THREE.Vector3(0, 1.0, 0));
+      } else {
+        const remote = this.network.otherPlayers.get(mob.leashHolderId);
+        if (remote) holder = remote.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0));
+      }
+      if (!holder) continue;
+
+      active.add(mob.id);
+      const center = mob.position.clone().add(new THREE.Vector3(0, mob.height * 0.55, 0));
+
+      if (!networkAuthoritative && localHolder) {
+        const distance = leashDistance(holder, center);
+        if (shouldBreakLeash(distance)) {
+          mob.leashHolderId = null;
+          if (this.gameMode !== 'creative') {
+            this.droppedItems.spawnItem(
+              420,
+              1,
+              mob.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+              new THREE.Vector3(0, 0.8, 0),
+              0.25,
+            );
+          }
+          const stale = this.leashLines.get(mob.id);
+          if (stale) {
+            this.renderer.scene.remove(stale);
+            stale.geometry.dispose();
+            (stale.material as THREE.Material).dispose();
+            this.leashLines.delete(mob.id);
+          }
+          continue;
+        }
+
+        const pull = leashPullVector(holder, center);
+        mob.velocity.x += pull.x * dt;
+        mob.velocity.y += pull.y * dt;
+        mob.velocity.z += pull.z * dt;
+      }
+
+      let line = this.leashLines.get(mob.id);
+      if (!line) {
+        line = new THREE.Line(
+          new THREE.BufferGeometry(),
+          new THREE.LineBasicMaterial({ color: 0x6b4a2b }),
+        );
+        line.name = 'mob_leash';
+        this.renderer.scene.add(line);
+        this.leashLines.set(mob.id, line);
+      }
+      line.geometry.setFromPoints([holder, center]);
+    }
+
+    for (const [mobId, line] of this.leashLines) {
+      if (active.has(mobId)) continue;
+      this.renderer.scene.remove(line);
+      line.geometry.dispose();
+      (line.material as THREE.Material).dispose();
+      this.leashLines.delete(mobId);
+    }
   }
 
   private tryPlaceBoat(stack: ItemStack, target?: BlockInteractionContext): boolean {

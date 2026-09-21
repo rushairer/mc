@@ -746,6 +746,38 @@ export class Player {
       const mat = new THREE.MeshLambertMaterial({ color });
       const mesh = new THREE.Mesh(geo, mat);
       group.add(mesh);
+    } else if (name.startsWith('record_') || name.startsWith('music_disc_')) {
+      const disc = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.14, 0.14, 0.018, 24),
+        new THREE.MeshLambertMaterial({ color: 0x171717 }),
+      );
+      const labelColor = parseInt(VisualResolver.getTextureColor(name, name).slice(1), 16);
+      const label = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.045, 0.045, 0.021, 16),
+        new THREE.MeshLambertMaterial({ color: labelColor }),
+      );
+      disc.rotation.x = Math.PI / 2;
+      label.rotation.x = Math.PI / 2;
+      label.position.z = 0.012;
+      group.add(disc, label);
+      group.rotation.set(0.15, -0.45, -0.2);
+    } else if (name === 'totem_of_undying') {
+      const gold = new THREE.MeshLambertMaterial({ color: 0xd9b83f });
+      const green = new THREE.MeshLambertMaterial({ color: 0x4a8d4e });
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, 0.045), gold);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.09, 0.055), gold);
+      const armL = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.045, 0.04), gold);
+      const armR = armL.clone();
+      const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.018, 0.012), green);
+      const eyeR = eyeL.clone();
+      body.position.y = -0.03;
+      head.position.y = 0.12;
+      armL.position.set(-0.105, 0.01, 0);
+      armR.position.set(0.105, 0.01, 0);
+      eyeL.position.set(-0.025, 0.13, 0.035);
+      eyeR.position.set(0.025, 0.13, 0.035);
+      group.add(body, head, armL, armR, eyeL, eyeR);
+      group.rotation.set(0.25, -0.45, 0.1);
     } else if (itemDef.toolType === 'bow' || itemDef.toolType === 'crossbow') {
       const woodMat = new THREE.MeshLambertMaterial({ color: 0x6b3f1d });
       const stringMat = new THREE.MeshLambertMaterial({ color: 0xe8e0c8 });

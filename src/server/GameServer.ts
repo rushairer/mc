@@ -1201,25 +1201,52 @@ export class GameServer {
         const blockName = BlockRegistry.get(blockId)?.name;
         if (isFenceBlockName(blockName)) {
           const holderId = fenceLeashHolderId(session.dimension, { x, y, z });
-          let tied = 0;
-          for (const mob of this.mobs.values()) {
-            if (
-              mob.dimension !== session.dimension ||
-              mob.leashHolderId !== session.id ||
-              !isLeashableMobType(mob.type)
-            ) continue;
-            mob.leashHolderId = holderId;
-            tied++;
+          const fenceCenter = { x: x + 0.5, y: y + 0.65, z: z + 0.5 };
+          const playerLeashed = Array.from(this.mobs.values()).filter((mob) =>
+            mob.dimension === session.dimension &&
+            mob.leashHolderId === session.id &&
+            isLeashableMobType(mob.type)
+          );
+          const attachable = playerLeashed.filter((mob) =>
+            leashDistance(fenceCenter, {
+              x: mob.position.x,
+              y: mob.position.y + (MOB_DEFS[mob.type]?.height ?? 1) * 0.55,
+              z: mob.position.z,
+            }) <= 12
+          );
+          const fenceLeashed = Array.from(this.mobs.values()).filter((mob) =>
+            mob.dimension === session.dimension &&
+            mob.leashHolderId === holderId &&
+            isLeashableMobType(mob.type) &&
+            leashDistance(fenceCenter, {
+              x: mob.position.x,
+              y: mob.position.y + (MOB_DEFS[mob.type]?.height ?? 1) * 0.55,
+              z: mob.position.z,
+            }) <= 12
+          );
+
+          const nextHolderId = attachable.length > 0
+            ? holderId
+            : playerLeashed.length === 0 && fenceLeashed.length > 0
+              ? session.id
+              : null;
+          const affected = attachable.length > 0 ? attachable : nextHolderId === session.id ? fenceLeashed : [];
+
+          for (const mob of affected) {
+            mob.leashHolderId = nextHolderId ?? undefined;
             this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_STATE, {
               id: mob.id,
               health: mob.health,
               hurtTimer: mob.hurtTimer,
-              leashHolderId: holderId,
+              leashHolderId: nextHolderId,
             });
           }
-          if (tied > 0) {
+          if (affected.length > 0) {
             this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
-              type: 'place', x: x + 0.5, y: y + 0.5, z: z + 0.5,
+              type: nextHolderId === holderId ? 'place' : 'pickup',
+              x: x + 0.5,
+              y: y + 0.5,
+              z: z + 0.5,
             });
           }
           break;

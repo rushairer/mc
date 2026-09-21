@@ -3232,8 +3232,9 @@ export class GameServer {
     // Tick primed TNT created by server-authoritative Flint and Steel use.
     this.tickPrimedTnt(dt);
 
-    // Dynamic Mob Spawner
-    if (this.mobs.size < 30 && Math.random() < 0.15) {
+    // Dynamic Mob Spawner. Placed Armor Stands do not consume the natural mob budget.
+    const naturalMobCount = Array.from(this.mobs.values()).filter(mob => mob.type !== 'armor_stand').length;
+    if (naturalMobCount < 30 && Math.random() < 0.15) {
       this.attemptMobSpawning();
     }
   }

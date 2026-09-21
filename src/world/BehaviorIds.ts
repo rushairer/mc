@@ -85,6 +85,7 @@ export function inferItemBehaviorId(rawName: string): string | undefined {
   if (name === 'painting') return 'minecraft:painting';
   if (name === 'lead') return 'minecraft:lead';
   if (name.startsWith('record_') || name.startsWith('music_disc_')) return 'minecraft:music_disc';
+  if (name === 'totem_of_undying') return 'minecraft:totem_of_undying';
   if (name.endsWith('_spawn_egg')) return 'minecraft:spawn_egg';
   if (THROWABLE_ITEM_NAMES.has(name)) return 'minecraft:throwable';
   if (name === 'ender_eye') return 'minecraft:ender_eye';

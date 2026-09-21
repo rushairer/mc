@@ -31,6 +31,7 @@ export class MobSystem {
   public difficulty = 'normal';
   public doMobSpawning = true;
   private scene: THREE.Scene;
+  private itemVisualFactory: ((itemId: number) => THREE.Object3D | null) | null = null;
   private spawnTimer = 0;
   private spawnedVillages: Set<string> = new Set();
   private spawnedEndCities: Set<string> = new Set();
@@ -38,6 +39,11 @@ export class MobSystem {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+  }
+
+  setItemVisualFactory(factory: ((itemId: number) => THREE.Object3D | null) | null) {
+    this.itemVisualFactory = factory;
+    for (const mob of this.mobs.values()) mob.setItemVisualFactory(factory);
   }
 
   update(
@@ -362,6 +368,7 @@ export class MobSystem {
       : ordinaryMobCount >= MAX_RESTORED_MOBS_PER_DIMENSION && type !== 'wither';
     if ((this.difficulty === 'peaceful' && MOB_DEFS[type].hostile) || atRuntimeCap) return null;
     const mob = new Mob(type, x, y, z, size, profession);
+    mob.setItemVisualFactory(this.itemVisualFactory);
     this.mobs.set(mob.id, mob);
     this.scene.add(mob.mesh);
     return mob;

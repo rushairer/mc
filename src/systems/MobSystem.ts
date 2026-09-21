@@ -344,7 +344,7 @@ export class MobSystem {
   }
 
   spawnMob(type: MobType, x: number, y: number, z: number, size?: number, profession?: VillagerProfession): Mob | null {
-    const atRuntimeCap = this.mobs.size >= MAX_RESTORED_MOBS_PER_DIMENSION && type !== 'wither';
+    const atRuntimeCap = this.mobs.size >= MAX_RESTORED_MOBS_PER_DIMENSION && type !== 'wither' && type !== 'armor_stand';
     if ((this.difficulty === 'peaceful' && MOB_DEFS[type].hostile) || atRuntimeCap) return null;
     const mob = new Mob(type, x, y, z, size, profession);
     this.mobs.set(mob.id, mob);

@@ -131,6 +131,7 @@ import {
   canPlaceHangingEntity,
   choosePaintingVariant,
   hangingEntityWorldPosition,
+  hangingEntityYaw,
   isLeashableMobType,
   isPaintingVariant,
   leashDistance,
@@ -1725,6 +1726,58 @@ export class GameServer {
     const targetBlock = BlockRegistry.get(targetBlockId);
     if (!targetBlock) return false;
 
+    if (itemName === 'item_frame' || itemName === 'painting') {
+      if (!intent.face) return false;
+      const type: HangingEntityType = itemName === 'painting' ? 'painting' : 'item_frame';
+      const canPlace = canPlaceHangingEntity(
+        type,
+        { x: intent.x, y: intent.y, z: intent.z },
+        intent.face,
+        (x, y, z) => this.isSolidBlock(x, y, z, session.dimension),
+        (x, y, z) => {
+          for (const mob of this.mobs.values()) {
+            if (mob.dimension !== session.dimension || mob.health <= 0) continue;
+            if (
+              Math.abs(mob.position.x - x) < 0.6 &&
+              Math.abs(mob.position.y - y) < 0.6 &&
+              Math.abs(mob.position.z - z) < 0.6
+            ) return true;
+          }
+          return false;
+        },
+      );
+      if (!canPlace) return false;
+
+      const pos = hangingEntityWorldPosition({ x: intent.x, y: intent.y, z: intent.z }, intent.face);
+      const variant = type === 'painting'
+        ? choosePaintingVariant(this.seed, { x: intent.x, y: intent.y, z: intent.z })
+        : undefined;
+      this.spawnMob(
+        type,
+        pos.x,
+        pos.y,
+        pos.z,
+        session.dimension,
+        false,
+        false,
+        false,
+        false,
+        false,
+        undefined,
+        undefined,
+        [],
+        intent.face,
+        undefined,
+        0,
+        variant,
+      );
+      this.consumeServerHeldItem(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: pos.x, y: pos.y, z: pos.z,
+      });
+      return true;
+    }
+
     if (itemName === 'armor_stand') {
       const place = adjacentBlockPosition(intent.x, intent.y, intent.z, intent.face);
       if (!isValidWorldY(place.y, WORLD_HEIGHT) || !isValidWorldY(place.y + 1, WORLD_HEIGHT)) return false;
@@ -2905,7 +2958,11 @@ export class GameServer {
       type,
       position: new THREE.Vector3(x, y, z),
       velocity: new THREE.Vector3(0, 0, 0),
-      yaw: Number.isFinite(yaw) ? yaw! : Math.random() * Math.PI * 2,
+      yaw: Number.isFinite(yaw)
+        ? yaw!
+        : hangingFace
+          ? hangingEntityYaw(hangingFace)
+          : Math.random() * Math.PI * 2,
       pitch: 0,
       health: MOB_DEFS[type]?.health || 20,
       maxHealth: MOB_DEFS[type]?.health || 20,

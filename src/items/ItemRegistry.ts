@@ -193,7 +193,7 @@ for (const item of rawItems) {
     } else if (name === 'bow' || name === 'crossbow' || name === 'trident' || name === 'mace' || name === 'brush' || name === 'fishing_rod' || name === 'shears') {
       category = 'tool';
       toolType = name === 'trident' ? 'trident' : name;
-      durability = item.maxDurability ?? (name === 'fishing_rod' ? 64 : name === 'shears' ? 238 : 384);
+      durability = item.maxDurability ?? (name === 'mace' ? 500 : name === 'fishing_rod' ? 64 : name === 'shears' ? 238 : 384);
       damage = name === 'trident' ? 9 : name === 'mace' ? 6 : 1;
     } else if (name.endsWith('_helmet') || name.endsWith('_chestplate') || name.endsWith('_leggings') || name.endsWith('_boots')) {
       category = 'armor';

@@ -3509,87 +3509,87 @@
   },
   {
     "id": 2256,
-    "displayName": "13 Disc",
+    "displayName": "Music Disc 13",
     "name": "record_13",
-    "stackSize": 64,
-    "officialId": "minecraft:record_13"
+    "stackSize": 1,
+    "officialId": "minecraft:music_disc_13"
   },
   {
     "id": 2257,
-    "displayName": "Cat Disc",
+    "displayName": "Music Disc Cat",
     "name": "record_cat",
     "stackSize": 1,
-    "officialId": "minecraft:record_cat"
+    "officialId": "minecraft:music_disc_cat"
   },
   {
     "id": 2258,
-    "displayName": "Blocks Disc",
+    "displayName": "Music Disc Blocks",
     "name": "record_blocks",
     "stackSize": 1,
-    "officialId": "minecraft:record_blocks"
+    "officialId": "minecraft:music_disc_blocks"
   },
   {
     "id": 2259,
-    "displayName": "Chirp Disc",
+    "displayName": "Music Disc Chirp",
     "name": "record_chirp",
     "stackSize": 1,
-    "officialId": "minecraft:record_chirp"
+    "officialId": "minecraft:music_disc_chirp"
   },
   {
     "id": 2260,
-    "displayName": "Far Disc",
+    "displayName": "Music Disc Far",
     "name": "record_far",
     "stackSize": 1,
-    "officialId": "minecraft:record_far"
+    "officialId": "minecraft:music_disc_far"
   },
   {
     "id": 2261,
-    "displayName": "Mall Disc",
+    "displayName": "Music Disc Mall",
     "name": "record_mall",
     "stackSize": 1,
-    "officialId": "minecraft:record_mall"
+    "officialId": "minecraft:music_disc_mall"
   },
   {
     "id": 2262,
-    "displayName": "Mellohi Disc",
+    "displayName": "Music Disc Mellohi",
     "name": "record_mellohi",
     "stackSize": 1,
-    "officialId": "minecraft:record_mellohi"
+    "officialId": "minecraft:music_disc_mellohi"
   },
   {
     "id": 2263,
-    "displayName": "Stal Disc",
+    "displayName": "Music Disc Stal",
     "name": "record_stal",
     "stackSize": 1,
-    "officialId": "minecraft:record_stal"
+    "officialId": "minecraft:music_disc_stal"
   },
   {
     "id": 2264,
-    "displayName": "Strad Disc",
+    "displayName": "Music Disc Strad",
     "name": "record_strad",
     "stackSize": 1,
-    "officialId": "minecraft:record_strad"
+    "officialId": "minecraft:music_disc_strad"
   },
   {
     "id": 2265,
-    "displayName": "Ward Disc",
+    "displayName": "Music Disc Ward",
     "name": "record_ward",
     "stackSize": 1,
-    "officialId": "minecraft:record_ward"
+    "officialId": "minecraft:music_disc_ward"
   },
   {
     "id": 2266,
-    "displayName": "11 Disc",
+    "displayName": "Music Disc 11",
     "name": "record_11",
     "stackSize": 1,
-    "officialId": "minecraft:record_11"
+    "officialId": "minecraft:music_disc_11"
   },
   {
     "id": 2267,
-    "displayName": "Wait Disc",
+    "displayName": "Music Disc Wait",
     "name": "record_wait",
     "stackSize": 1,
-    "officialId": "minecraft:record_wait"
+    "officialId": "minecraft:music_disc_wait"
   },
   {
     "id": "minecraft:acacia_chest_boat",
@@ -4729,70 +4729,70 @@
     "id": "minecraft:music_disc_5",
     "displayName": "Music Disc 5",
     "name": "music_disc_5",
-    "stackSize": 64,
+    "stackSize": 1,
     "runtimeId": 20162
   },
   {
     "id": "minecraft:music_disc_bounce",
     "displayName": "Music Disc Bounce",
     "name": "music_disc_bounce",
-    "stackSize": 64,
+    "stackSize": 1,
     "runtimeId": 20163
   },
   {
     "id": "minecraft:music_disc_creator",
     "displayName": "Music Disc Creator",
     "name": "music_disc_creator",
-    "stackSize": 64,
+    "stackSize": 1,
     "runtimeId": 20164
   },
   {
     "id": "minecraft:music_disc_creator_music_box",
     "displayName": "Music Disc Creator Music Box",
     "name": "music_disc_creator_music_box",
-    "stackSize": 64,
+    "stackSize": 1,
     "runtimeId": 20165
   },
   {
     "id": "minecraft:music_disc_lava_chicken",
     "displayName": "Music Disc Lava Chicken",
     "name": "music_disc_lava_chicken",
-    "stackSize": 64,
+    "stackSize": 1,
     "runtimeId": 20166
   },
   {
     "id": "minecraft:music_disc_otherside",
     "displayName": "Music Disc Otherside",
     "name": "music_disc_otherside",
-    "stackSize": 64,
+    "stackSize": 1,
     "runtimeId": 20167
   },
   {
     "id": "minecraft:music_disc_pigstep",
     "displayName": "Music Disc Pigstep",
     "name": "music_disc_pigstep",
-    "stackSize": 64,
+    "stackSize": 1,
     "runtimeId": 20168
   },
   {
     "id": "minecraft:music_disc_precipice",
     "displayName": "Music Disc Precipice",
     "name": "music_disc_precipice",
-    "stackSize": 64,
+    "stackSize": 1,
     "runtimeId": 20169
   },
   {
     "id": "minecraft:music_disc_relic",
     "displayName": "Music Disc Relic",
     "name": "music_disc_relic",
-    "stackSize": 64,
+    "stackSize": 1,
     "runtimeId": 20170
   },
   {
     "id": "minecraft:music_disc_tears",
     "displayName": "Music Disc Tears",
     "name": "music_disc_tears",
-    "stackSize": 64,
+    "stackSize": 1,
     "runtimeId": 20171
   },
   {

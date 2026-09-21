@@ -343,6 +343,21 @@ export class SoundSystem {
     hiss.start(now);
   }
 
+  /** Java goat-horn resource event first, with a procedural fallback when no pack is active. */
+  playGoatHorn(soundIndex = 0) {
+    const index = Math.max(0, Math.min(7, Math.floor(soundIndex)));
+    if (this.playFirstResourceSound([`item.goat_horn.sound.${index}`, 'item.goat_horn.play'], 1.15)) return;
+
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    const profiles = [
+      [196, 131], [220, 147], [174, 116], [247, 165],
+      [262, 175], [147, 98], [165, 110], [233, 155],
+    ] as const;
+    const [from, to] = profiles[index];
+    this.synthToneCall(ctx, 'sawtooth', from, to, 1.25, 0.28);
+  }
+
   playXP() {
     if (this.playFirstResourceSound(['entity.experience_orb.pickup'])) return;
 

@@ -66,6 +66,8 @@ export function inferItemBehaviorId(rawName: string): string | undefined {
   if (name === 'bow') return 'minecraft:bow';
   if (name === 'crossbow') return 'minecraft:crossbow';
   if (name === 'shield') return 'minecraft:shield';
+  if (name === 'spyglass') return 'minecraft:spyglass';
+  if (name === 'goat_horn') return 'minecraft:goat_horn';
   if (name === 'potion') return 'minecraft:potion';
   if (name === 'milk_bucket') return 'minecraft:milk';
   if (name === 'bucket' || name === 'water_bucket' || name === 'lava_bucket' || name === 'powder_snow_bucket') return 'minecraft:bucket';

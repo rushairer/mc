@@ -4276,7 +4276,11 @@ export class Game {
     return { handled: true, cooldown: 0.25 };
   }
 
-  private tryTieLeashedMobsToFence(position: BlockPosition, blockName: string): boolean {
+  private tryTieLeashedMobsToFence(
+    position: BlockPosition,
+    blockName: string,
+    heldItem: ItemStack | null,
+  ): boolean {
     if (!isFenceBlockName(blockName)) return false;
     const localHolderId = this.network.playerId ?? 'local-player';
     const fenceHolderId = fenceLeashHolderId(this.chunks.currentDimension, position);
@@ -4305,8 +4309,15 @@ export class Game {
         z: mob.position.z,
       }) <= LEAD_SNAP_DISTANCE
     );
+    const heldName = heldItem ? ItemRegistry.get(heldItem.id)?.name : undefined;
+    const shearing = heldName === 'shears' && fenceLeashed.length > 0;
+    const transferBack =
+      !this.input.isKeyDown('shift') &&
+      attachable.length === 0 &&
+      playerLeashed.length === 0 &&
+      fenceLeashed.length > 0;
 
-    if (attachable.length === 0 && !(playerLeashed.length === 0 && fenceLeashed.length > 0)) return false;
+    if (!shearing && attachable.length === 0 && !transferBack) return false;
 
     if (this.isMultiplayerNetworkConnected()) {
       this.network.send(PacketType.C2S_INTERACT_BLOCK, {
@@ -4317,9 +4328,23 @@ export class Game {
       return true;
     }
 
-    if (attachable.length > 0) {
+    if (shearing) {
+      for (const mob of fenceLeashed) {
+        mob.leashHolderId = null;
+        if (this.gameMode !== 'creative') {
+          this.droppedItems.spawnItem(
+            420,
+            1,
+            mob.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+            new THREE.Vector3(0, 0.8, 0),
+            0.25,
+          );
+        }
+      }
+      if (this.gameMode !== 'creative') this.inventory.damageTool(this.player.selectedSlot);
+    } else if (attachable.length > 0) {
       for (const mob of attachable) mob.leashHolderId = fenceHolderId;
-    } else {
+    } else if (transferBack) {
       for (const mob of fenceLeashed) mob.leashHolderId = 'local-player';
     }
     this.sound.playLever();

@@ -95,6 +95,7 @@ import { applySaturationStew26_3 } from '../world/SuspiciousStew26_3';
 import { findChorusFruitDestination26_3 } from '../world/TeleportRules26_3';
 import { GOAT_HORN_COOLDOWN_SECONDS, goatHornSoundIndex, spyglassFov } from '../items/SpecialItemUseRules';
 import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, windBurstImpulse } from '../items/WindChargeRules';
+import { getMaceSmashBonus, getMaceSmashImpulse, isMaceSmash, MACE_HEAVY_SMASH_THRESHOLD } from '../items/MaceRules';
 import { getButtonPressTicks } from '../world/ButtonRules';
 import {
   applySignInteraction,
@@ -353,6 +354,8 @@ export class Game {
   private activeItemUse: ActiveItemUse | null = null;
   private goatHornCooldown = 0;
   private windChargeCooldown = 0;
+  private maceFallStartY: number | null = null;
+  private maceFallDistance = 0;
   private stepTimer = 0;
   private perspectiveMode: 'first' | 'third' = 'first';
   private container: HTMLElement;
@@ -2452,6 +2455,8 @@ export class Game {
       this.player.velocity.set(0, 0, 0);
     }
 
+    this.updateMaceFallTracking();
+
     // Portal teleportation check
     const px = Math.floor(this.player.position.x);
     const py = Math.floor(this.player.position.y);
@@ -2950,8 +2955,9 @@ export class Game {
     // ─── Left click: attack mobs OR break blocks ───
     const selectedItemStack = this.inventory.getSlot(this.player.selectedSlot);
     const selectedItemId = selectedItemStack?.id ?? 0;
-    const isHoldingSword = ItemRegistry.isTool(selectedItemId) &&
-      ItemRegistry.get(selectedItemId)?.toolType === 'sword';
+    const selectedItemDef = ItemRegistry.get(selectedItemId);
+    const isHoldingSword = ItemRegistry.isTool(selectedItemId) && selectedItemDef?.toolType === 'sword';
+    const isHoldingMace = selectedItemDef?.toolType === 'mace';
     const isHoldingTool = ItemRegistry.isTool(selectedItemId);
     const baseAttackDamage = isHoldingTool
       ? (ItemRegistry.get(selectedItemId)?.damage ?? 1)
@@ -2966,12 +2972,13 @@ export class Game {
     const attackCooldownDuration = this.getAttackCooldownDuration(selectedItemId);
     const attackCooldownProgress = this.getAttackCooldownProgress();
     const isCriticalMelee = isChargedMeleeAttack(attackCooldownProgress) && this.isCriticalMeleeAttack();
+    const maceSmashActive = isHoldingMace && isMaceSmash(this.maceFallDistance);
     const meleeAttackDamage = calculateMeleeDamage({
       baseAttributeDamage: attributeAttackDamage,
       enchantmentDamage: enchantmentAttackDamage,
       cooldownProgress: attackCooldownProgress,
-      critical: isCriticalMelee,
-    });
+      critical: maceSmashActive ? false : isCriticalMelee,
+    }) + (maceSmashActive ? getMaceSmashBonus(this.maceFallDistance) : 0);
 
     if (!this.chatOpen && this.input.isMouseDown(0) && this.swordSwingTimer <= 0) {
         // First: try to attack vehicle
@@ -3071,6 +3078,9 @@ export class Game {
       );
 
       if (mobHit.hit) {
+        if (maceSmashActive && mobHit.mob) {
+          this.applyLocalMaceSmash(mobHit.mob.position, this.maceFallDistance, mobHit.mob.id);
+        }
         this.swordSwingTimer = 0.4;
         this.startAttackCooldown(attackCooldownDuration);
         if (mobHit.mob) {
@@ -5575,6 +5585,34 @@ export class Game {
 
     if (type === 'firework_rocket') {
       this.handleFireworkExplosion(pos, fromPlayer);
+    }
+  }
+
+  private updateMaceFallTracking() {
+    if (this.player.flying || this.riddenMob || this.riddenVehicle || this.player.onGround) {
+      this.maceFallStartY = null;
+      this.maceFallDistance = 0;
+      return;
+    }
+    if (this.player.velocity.y < 0) {
+      if (this.maceFallStartY === null) this.maceFallStartY = this.player.position.y;
+      this.maceFallDistance = Math.max(this.maceFallDistance, this.maceFallStartY - this.player.position.y);
+    }
+  }
+
+  private applyLocalMaceSmash(impact: THREE.Vector3, fallDistance: number, struckMobId: number) {
+    this.player.velocity.y = 0;
+    this.survival.resetFall();
+    this.maceFallStartY = null;
+    this.maceFallDistance = 0;
+    this.sound.playMaceSmash(fallDistance > MACE_HEAVY_SMASH_THRESHOLD);
+    this.particles.spawnBlockBreak(impact.x, impact.y, impact.z, 0x9aa6ad, fallDistance > 5 ? 34 : 22);
+
+    for (const mob of this.mobs.mobs.values()) {
+      if (mob.id === struckMobId || mob.health <= 0) continue;
+      const impulse = getMaceSmashImpulse(impact, mob.position, fallDistance);
+      if (Math.abs(impulse.x) + Math.abs(impulse.y) + Math.abs(impulse.z) <= 1e-6) continue;
+      mob.velocity.add(new THREE.Vector3(impulse.x, impulse.y, impulse.z));
     }
   }
 

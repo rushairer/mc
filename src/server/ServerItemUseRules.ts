@@ -56,7 +56,6 @@ export function isSupportedServerItemUseName(name: string, kind: ServerItemUseIn
     || name === 'powder_snow_bucket'
     || name === 'flint_and_steel'
     || name === 'shears'
-    || name === 'brush'
     || name === 'boat'
     || name.endsWith('_boat')
     || name.includes('minecart')

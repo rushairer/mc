@@ -57,6 +57,23 @@ export function hangingEntityPosition(
   }
 }
 
+export function hangingSupportPositionFromWorld(
+  position: { x: number; y: number; z: number },
+  face: BlockFacing,
+): BlockPosition {
+  const fx = Math.floor(position.x);
+  const fy = Math.floor(position.y);
+  const fz = Math.floor(position.z);
+  switch (face) {
+    case 'north': return { x: fx, y: fy, z: fz + 1 };
+    case 'south': return { x: fx, y: fy, z: fz - 1 };
+    case 'east': return { x: fx - 1, y: fy, z: fz };
+    case 'west': return { x: fx + 1, y: fy, z: fz };
+    case 'up': return { x: fx, y: fy - 1, z: fz };
+    case 'down': return { x: fx, y: fy + 1, z: fz };
+  }
+}
+
 export function hangingEntityWorldPosition(
   support: BlockPosition,
   face: BlockFacing,

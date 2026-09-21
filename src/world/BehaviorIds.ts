@@ -78,6 +78,7 @@ export function inferItemBehaviorId(rawName: string): string | undefined {
   if (name.endsWith('_axe')) return 'minecraft:axe';
   if (name.endsWith('_hoe')) return 'minecraft:hoe';
   if (name === 'fishing_rod') return 'minecraft:fishing_rod';
+  if (name === 'armor_stand') return 'minecraft:armor_stand';
   if (name.endsWith('_spawn_egg')) return 'minecraft:spawn_egg';
   if (THROWABLE_ITEM_NAMES.has(name)) return 'minecraft:throwable';
   if (name === 'ender_eye') return 'minecraft:ender_eye';

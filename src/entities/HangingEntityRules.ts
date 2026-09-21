@@ -87,6 +87,10 @@ export function canPlaceHangingEntity(
   return true;
 }
 
+export function isPaintingVariant(value: unknown): value is PaintingVariant {
+  return typeof value === 'string' && (PAINTING_VARIANTS_1X1 as readonly string[]).includes(value);
+}
+
 export function choosePaintingVariant(seed: number, position: BlockPosition): PaintingVariant {
   let hash = (seed | 0) ^ Math.imul(position.x | 0, 73428767) ^ Math.imul(position.y | 0, 912931) ^ Math.imul(position.z | 0, 438289);
   hash ^= hash >>> 16;

@@ -6,7 +6,12 @@ import { VillageSystem, type VillagerProfession } from './VillageSystem';
 import { cloneItemStack } from '../items/ItemStackRules';
 import type { WorldGen } from '../world/WorldGen';
 import { BiomeType } from '../world/WorldGen';
-import { MAX_RESTORED_MOBS_PER_DIMENSION, type SerializedMob } from './SaveSystem';
+import {
+  MAX_RESTORED_DECORATIVE_ENTITIES_PER_DIMENSION,
+  MAX_RESTORED_MOBS_PER_DIMENSION,
+  type SerializedMob,
+} from './SaveSystem';
+import { isPaintingVariant } from '../entities/HangingEntityRules';
 import type { EndGenerator } from '../world/EndGenerator';
 import { EnchantSystem } from './EnchantSystem';
 import { UNDEAD_MOB_TYPES } from './PotionEffect';
@@ -212,7 +217,9 @@ export class MobSystem {
     // Spawn new mobs
     if (this.doMobSpawning && this.difficulty !== 'peaceful') {
       this.spawnTimer += dt;
-      const naturalMobCount = Array.from(this.mobs.values()).filter(mob => mob.def.type !== 'armor_stand').length;
+      const naturalMobCount = Array.from(this.mobs.values()).filter(
+        mob => mob.def.type !== 'armor_stand' && mob.def.type !== 'item_frame' && mob.def.type !== 'painting',
+      ).length;
       if (this.spawnTimer >= SPAWN_INTERVAL && naturalMobCount < MAX_MOBS && getBlock) {
         this.spawnTimer = 0;
         this.trySpawn(playerPos, isNight ?? false, getBlock, dimension, worldGen);
@@ -345,7 +352,14 @@ export class MobSystem {
   }
 
   spawnMob(type: MobType, x: number, y: number, z: number, size?: number, profession?: VillagerProfession): Mob | null {
-    const atRuntimeCap = this.mobs.size >= MAX_RESTORED_MOBS_PER_DIMENSION && type !== 'wither' && type !== 'armor_stand';
+    const decorative = type === 'armor_stand' || type === 'item_frame' || type === 'painting';
+    const ordinaryMobCount = Array.from(this.mobs.values()).filter(
+      mob => mob.def.type !== 'armor_stand' && mob.def.type !== 'item_frame' && mob.def.type !== 'painting',
+    ).length;
+    const decorativeCount = this.mobs.size - ordinaryMobCount;
+    const atRuntimeCap = decorative
+      ? decorativeCount >= MAX_RESTORED_DECORATIVE_ENTITIES_PER_DIMENSION
+      : ordinaryMobCount >= MAX_RESTORED_MOBS_PER_DIMENSION && type !== 'wither';
     if ((this.difficulty === 'peaceful' && MOB_DEFS[type].hostile) || atRuntimeCap) return null;
     const mob = new Mob(type, x, y, z, size, profession);
     this.mobs.set(mob.id, mob);
@@ -378,6 +392,11 @@ export class MobSystem {
         armorStandEquipment: mob.def.type === 'armor_stand'
           ? mob.armorStandEquipment.map((stack) => cloneItemStack(stack))
           : undefined,
+        hangingFace: mob.hangingFace ?? undefined,
+        itemFrameItem: mob.def.type === 'item_frame' ? cloneItemStack(mob.itemFrameItem) ?? undefined : undefined,
+        itemFrameRotation: mob.def.type === 'item_frame' ? mob.itemFrameRotation : undefined,
+        paintingVariant: mob.def.type === 'painting' ? mob.paintingVariant : undefined,
+        leashHolderId: mob.leashHolderId ?? undefined,
         isSheared: mob.isSheared,
         isAngry: mob.isAngry,
         angerTimer: mob.angerTimer,
@@ -388,7 +407,15 @@ export class MobSystem {
     this.dispose();
     if (!savedMobs) return;
 
-    for (const saved of savedMobs.slice(0, MAX_RESTORED_MOBS_PER_DIMENSION)) {
+    let ordinaryRestored = 0;
+    let decorativeRestored = 0;
+    for (const saved of savedMobs) {
+      const decorative = saved.type === 'armor_stand' || saved.type === 'item_frame' || saved.type === 'painting';
+      if (decorative) {
+        if (decorativeRestored >= MAX_RESTORED_DECORATIVE_ENTITIES_PER_DIMENSION) continue;
+      } else if (ordinaryRestored >= MAX_RESTORED_MOBS_PER_DIMENSION) {
+        continue;
+      }
       if (saved.dimension !== undefined && saved.dimension !== dimension) continue;
       if (!MOB_DEFS[saved.type]) continue;
 
@@ -397,6 +424,8 @@ export class MobSystem {
         : undefined;
       const mob = this.spawnMob(saved.type, saved.x, saved.y, saved.z, saved.size, profession);
       if (!mob) continue;
+      if (decorative) decorativeRestored++;
+      else ordinaryRestored++;
       mob.isBaby = !!saved.isBaby;
       mob.babyAge = Math.max(0, saved.babyAge ?? 0);
       mob.loveTimer = Math.max(0, saved.loveTimer ?? 0);
@@ -413,6 +442,14 @@ export class MobSystem {
       if (mob.def.type === 'armor_stand') {
         mob.setArmorStandEquipmentSnapshot(saved.armorStandEquipment ?? []);
       }
+      if (mob.def.type === 'item_frame') {
+        mob.setHangingFace(saved.hangingFace ?? null);
+        mob.setItemFrameState(saved.itemFrameItem ?? null, saved.itemFrameRotation ?? 0);
+      } else if (mob.def.type === 'painting') {
+        mob.setHangingFace(saved.hangingFace ?? null);
+        if (isPaintingVariant(saved.paintingVariant)) mob.setPaintingVariant(saved.paintingVariant);
+      }
+      mob.leashHolderId = typeof saved.leashHolderId === 'string' ? saved.leashHolderId : null;
       mob.isSheared = !!saved.isSheared;
       mob.isAngry = !!saved.isAngry;
       mob.angerTimer = Math.max(0, saved.angerTimer ?? 0);
@@ -438,7 +475,10 @@ export class MobSystem {
       if (this.spawnedVillages.has(village.id)) continue;
       let blockedByCap = false;
       for (const point of village.spawnPoints) {
-        if (this.mobs.size >= MAX_RESTORED_MOBS_PER_DIMENSION) {
+        const ordinaryMobCount = Array.from(this.mobs.values()).filter(
+          mob => mob.def.type !== 'armor_stand' && mob.def.type !== 'item_frame' && mob.def.type !== 'painting',
+        ).length;
+        if (ordinaryMobCount >= MAX_RESTORED_MOBS_PER_DIMENSION) {
           blockedByCap = true;
           break;
         }

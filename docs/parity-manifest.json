@@ -30,7 +30,7 @@
   },
   "inventory": {
     "baseBlockDefinitions": 1251,
-    "baseItemDefinitions": 722,
+    "baseItemDefinitions": 724,
     "implementedMobTypes": 24,
     "implementedBiomes": 11,
     "implementedEnchantments": 4,

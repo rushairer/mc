@@ -4,11 +4,11 @@ export type ServerBundleAction =
   | { action: 'extract_to_inventory'; bundleSlot: number; selectedIndex: number };
 
 function validInventorySlot(value: unknown): value is number {
-  return Number.isInteger(value) && Number(value) >= 0 && Number(value) < 36;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < 36;
 }
 
 function validSelectedIndex(value: unknown): value is number {
-  return Number.isInteger(value) && Number(value) >= 0 && Number(value) < 64;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < 64;
 }
 
 export function parseServerBundleAction(payload: unknown): ServerBundleAction | null {

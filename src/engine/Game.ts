@@ -15,6 +15,17 @@ import { Mob } from '../entities/Mob';
 import { shouldTameEntity } from '../entities/EntityInteractionRules';
 import { canApplySaddle, canControlMountedMob, canMountMob, getNameTagLabel } from '../entities/MobItemInteractionRules';
 import { armorStandSlotIndex, canPlaceArmorStandAt, firstEquippedArmorStandSlot, snapArmorStandYaw } from '../entities/ArmorStandRules';
+import {
+  canPlaceHangingEntity,
+  choosePaintingVariant,
+  hangingEntityWorldPosition,
+  isLeashableMobType,
+  leashDistance,
+  leashPullVector,
+  shouldBreakLeash,
+  type HangingEntityType,
+} from '../entities/HangingEntityRules';
+import { cloneItemStack } from '../items/ItemStackRules';
 import { ParticleSystem } from '../systems/ParticleSystem';
 import { FluidSystem } from '../systems/FluidSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
@@ -953,6 +964,14 @@ export class Game {
       id: 'minecraft:armor_stand',
       use: ({ stack, target }) => ({ handled: this.tryPlaceArmorStand(stack, target), cooldown: 0.35 }),
     });
+    this.behaviors.registerItem('item_frame', {
+      id: 'minecraft:item_frame',
+      use: ({ stack, target }) => ({ handled: this.tryPlaceHangingEntity('item_frame', stack, target), cooldown: 0.25 }),
+    });
+    this.behaviors.registerItem('painting', {
+      id: 'minecraft:painting',
+      use: ({ stack, target }) => ({ handled: this.tryPlaceHangingEntity('painting', stack, target), cooldown: 0.25 }),
+    });
     this.behaviors.registerItem([], {
       id: 'minecraft:spawn_egg',
       use: ({ stack, target }) => ({ handled: this.tryUseSpawnEgg(stack, target), cooldown: 0.25 }),
@@ -1036,7 +1055,7 @@ export class Game {
         'mob:zombie', 'mob:skeleton', 'mob:creeper', 'mob:spider', 'mob:cow', 'mob:pig', 'mob:sheep', 'mob:chicken',
         'mob:blaze', 'mob:zombie_pigman', 'mob:magma_cube', 'mob:wither_skeleton', 'mob:villager', 'mob:enderman',
         'mob:witch', 'mob:iron_golem', 'mob:wolf', 'mob:cat', 'mob:horse', 'mob:shulker', 'mob:pillager',
-        'mob:wither', 'mob:guardian', 'mob:vex', 'mob:armor_stand',
+        'mob:wither', 'mob:guardian', 'mob:vex', 'mob:armor_stand', 'mob:item_frame', 'mob:painting',
       ],
       {
         id: 'minecraft:mob_interaction',
@@ -1120,6 +1139,16 @@ export class Game {
     if (target.def.type === 'armor_stand') {
       const result = this.tryInteractArmorStand(target, heldItem);
       if (result.handled) return result;
+    }
+
+    if (target.def.type === 'item_frame') {
+      return this.tryInteractItemFrame(target, heldItem);
+    }
+    if (target.def.type === 'painting') {
+      return { handled: false };
+    }
+    if (heldItemName === 'lead' && isLeashableMobType(target.def.type)) {
+      return this.tryUseLeadOnMob(target, heldItem!);
     }
 
     const nameTagLabel = heldItemName === 'name_tag' ? getNameTagLabel(heldItem) : null;

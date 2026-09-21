@@ -126,6 +126,7 @@ import {
 import { MOB_DEFS, Mob, type MobType } from '../entities/Mob';
 import { shouldTameEntity } from '../entities/EntityInteractionRules';
 import { canApplySaddle, canControlMountedMob, canMountMob, getNameTagLabel } from '../entities/MobItemInteractionRules';
+import { armorStandSlotIndex, canPlaceArmorStandAt, firstEquippedArmorStandSlot, snapArmorStandYaw } from '../entities/ArmorStandRules';
 import { CHUNK_SIZE, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
 import type { ItemStack, BlockMetadata } from '../types';
 import { createHurtCooldownState, resolveHurtDamage, tickHurtCooldown, type HurtCooldownState } from '../systems/HurtCooldown';
@@ -201,6 +202,7 @@ interface ServerMob {
   isSitting?: boolean;
   isSaddled?: boolean;
   customName?: string;
+  armorStandEquipment?: (ItemStack | null)[];
   isSheared?: boolean;
   riderId?: string;
   riderInput?: ServerMobRideInput;
@@ -439,6 +441,9 @@ export class GameServer {
           isSitting: mob.isSitting,
           isSaddled: mob.isSaddled,
           customName: mob.customName,
+          armorStandEquipment: mob.type === 'armor_stand'
+            ? (mob.armorStandEquipment ?? []).map((stack) => cloneItemStack(stack))
+            : undefined,
           isSheared: mob.isSheared,
           riderId: mob.riderId ?? null
         });
@@ -581,6 +586,11 @@ export class GameServer {
         isSitting: mob.isSitting,
         isSaddled: mob.isSaddled,
         customName: mob.customName,
+        yaw: mob.yaw,
+        pitch: mob.pitch,
+        armorStandEquipment: mob.type === 'armor_stand'
+          ? (mob.armorStandEquipment ?? []).map((stack) => cloneItemStack(stack))
+          : undefined,
         isSheared: mob.isSheared
       });
     }

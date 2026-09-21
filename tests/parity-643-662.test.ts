@@ -42,7 +42,7 @@ test('644: Item Frames require solid support, empty attachment space, and may us
 
 test('645: Paintings attach only to vertical supported faces', () => {
   const support = { x: 0, y: 64, z: 0 };
-  const solid = () => true;
+  const solid = (x: number, y: number, z: number) => x === 0 && y === 64 && z === 0;
   assert.equal(canPlaceHangingEntity('painting', support, 'north', solid, () => false), true);
   assert.equal(canPlaceHangingEntity('painting', support, 'east', solid, () => false), true);
   assert.equal(canPlaceHangingEntity('painting', support, 'up', solid, () => false), false);

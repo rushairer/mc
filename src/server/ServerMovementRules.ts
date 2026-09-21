@@ -11,6 +11,7 @@ export interface ServerMoveIntent {
   flying: boolean;
   onGround: boolean;
   sprinting: boolean;
+  sneaking: boolean;
 }
 
 export interface ServerMovementSnapshot {
@@ -40,6 +41,7 @@ export function parseServerMoveIntent(payload: unknown): ServerMoveIntent | null
     flying: raw.flying === true,
     onGround: raw.onGround === true,
     sprinting: raw.sprinting === true,
+    sneaking: raw.sneaking === true,
   };
 }
 

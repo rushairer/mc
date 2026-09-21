@@ -15,6 +15,24 @@ import { Mob } from '../entities/Mob';
 import { shouldTameEntity } from '../entities/EntityInteractionRules';
 import { canApplySaddle, canControlMountedMob, canMountMob, getNameTagLabel } from '../entities/MobItemInteractionRules';
 import { armorStandSlotIndex, canPlaceArmorStandAt, firstEquippedArmorStandSlot, snapArmorStandYaw } from '../entities/ArmorStandRules';
+import {
+  LEAD_SNAP_DISTANCE,
+  canPlaceHangingEntity,
+  choosePaintingVariant,
+  hangingEntityWorldPosition,
+  hangingSupportPositionFromWorld,
+  fenceLeashHolderId,
+  isFenceBlockName,
+  isLeashableMobType,
+  mobLeashHolderId,
+  parseFenceLeashHolderId,
+  parseMobLeashHolderId,
+  leashDistance,
+  leashPullVector,
+  shouldBreakLeash,
+  type HangingEntityType,
+} from '../entities/HangingEntityRules';
+import { cloneItemStack } from '../items/ItemStackRules';
 import { ParticleSystem } from '../systems/ParticleSystem';
 import { FluidSystem } from '../systems/FluidSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
@@ -341,6 +359,7 @@ export class Game {
   private serverContainerCursor: ItemStack | null = null;
   private vehicleInputSendTimer = 0;
   private mobInputSendTimer = 0;
+  private leashLines = new Map<number, THREE.Line>();
   private openHopperPos: THREE.Vector3 | null = null;
   private openFurnacePos: THREE.Vector3 | null = null;
   private openBrewingPos: THREE.Vector3 | null = null;
@@ -432,6 +451,7 @@ export class Game {
     // Spawn
     const spawn = this.findSafeWorldSpawnPosition();
     this.player = new Player(spawn.x, spawn.y, spawn.z);
+    this.mobs.setItemVisualFactory((itemId) => this.player.createItemVisualMesh(itemId));
     this.droppedItems = new DroppedItemSystem(this.renderer.scene, (itemId) => this.player.createItemVisualMesh(itemId));
     this.hoppers = new HopperSystem(this.chunks, this.droppedItems, () => this.notifyState());
     this.chunks.update(spawn.x, spawn.z);
@@ -702,6 +722,13 @@ export class Game {
       },
     });
     this.behaviors.registerBlock([], {
+      id: 'minecraft:fence',
+      interact: ({ position, block, heldItem }) => ({
+        handled: this.tryTieLeashedMobsToFence(position, block.name, heldItem),
+        cooldown: 0.25,
+      }),
+    });
+    this.behaviors.registerBlock([], {
       id: 'minecraft:iron_door',
       preventsItemUse: true,
       interact: () => ({ handled: true, cooldown: 0.25 }), // iron doors cannot be hand-opened
@@ -953,6 +980,19 @@ export class Game {
       id: 'minecraft:armor_stand',
       use: ({ stack, target }) => ({ handled: this.tryPlaceArmorStand(stack, target), cooldown: 0.35 }),
     });
+    this.behaviors.registerItem('item_frame', {
+      id: 'minecraft:item_frame',
+      use: ({ stack, target }) => ({ handled: this.tryPlaceHangingEntity('item_frame', stack, target), cooldown: 0.25 }),
+    });
+    this.behaviors.registerItem('painting', {
+      id: 'minecraft:painting',
+      use: ({ stack, target }) => ({ handled: this.tryPlaceHangingEntity('painting', stack, target), cooldown: 0.25 }),
+    });
+    this.behaviors.registerItem('lead', {
+      id: 'minecraft:lead',
+      // Entity-target use is dispatched by minecraft:mob_interaction.
+      use: () => ({ handled: false }),
+    });
     this.behaviors.registerItem([], {
       id: 'minecraft:spawn_egg',
       use: ({ stack, target }) => ({ handled: this.tryUseSpawnEgg(stack, target), cooldown: 0.25 }),
@@ -1036,7 +1076,7 @@ export class Game {
         'mob:zombie', 'mob:skeleton', 'mob:creeper', 'mob:spider', 'mob:cow', 'mob:pig', 'mob:sheep', 'mob:chicken',
         'mob:blaze', 'mob:zombie_pigman', 'mob:magma_cube', 'mob:wither_skeleton', 'mob:villager', 'mob:enderman',
         'mob:witch', 'mob:iron_golem', 'mob:wolf', 'mob:cat', 'mob:horse', 'mob:shulker', 'mob:pillager',
-        'mob:wither', 'mob:guardian', 'mob:vex', 'mob:armor_stand',
+        'mob:wither', 'mob:guardian', 'mob:vex', 'mob:armor_stand', 'mob:item_frame', 'mob:painting',
       ],
       {
         id: 'minecraft:mob_interaction',
@@ -1122,6 +1162,32 @@ export class Game {
       if (result.handled) return result;
     }
 
+    if (target.def.type === 'item_frame') {
+      return this.tryInteractItemFrame(target, heldItem);
+    }
+    if (target.def.type === 'painting') {
+      return { handled: false };
+    }
+    if (heldItemName === 'shears') {
+      const snipped = this.tryShearLeashConnections(target, heldItem!);
+      if (snipped.handled) return snipped;
+    }
+
+    if (this.input.isKeyDown('shift')) {
+      const transferred = this.tryTransferPlayerLeashesToMob(target);
+      if (transferred.handled) return transferred;
+    }
+
+    if (heldItemName === 'lead' && isLeashableMobType(target.def.type)) {
+      return this.tryUseLeadOnMob(target, heldItem!);
+    }
+    const localLeashOwner =
+      target.leashHolderId === 'local-player' ||
+      (!!this.network.playerId && target.leashHolderId === this.network.playerId);
+    if (!heldItem && localLeashOwner && isLeashableMobType(target.def.type)) {
+      return this.tryDetachLeadFromMob(target);
+    }
+
     const nameTagLabel = heldItemName === 'name_tag' ? getNameTagLabel(heldItem) : null;
     if (nameTagLabel) {
       if (heldItem && this.sendServerEntityItemUse(heldItem, target.id)) {
@@ -1144,6 +1210,35 @@ export class Game {
       target.isSaddled = true;
       this.consumeInteractionItem();
       this.sound.playLever();
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    if (
+      heldItemName === 'shears' &&
+      (target.def.type === 'horse' || target.def.type === 'pig') &&
+      target.isSaddled &&
+      !target.isRidden &&
+      !this.input.isKeyDown('shift')
+    ) {
+      if (heldItem && this.sendServerEntityItemUse(heldItem, target.id)) {
+        return { handled: true, cooldown: 0.25 };
+      }
+      target.isSaddled = false;
+      if (this.gameMode !== 'creative') {
+        const saddle = ItemRegistry.getByName('saddle');
+        if (saddle) {
+          this.droppedItems.spawnItem(
+            saddle.id,
+            1,
+            target.position.clone().add(new THREE.Vector3(0, 0.55, 0)),
+            new THREE.Vector3(0, 0.9, 0),
+            0.25,
+          );
+        }
+        this.inventory.damageTool(this.player.selectedSlot);
+      }
+      this.sound.playLever();
+      this.notifyState();
       return { handled: true, cooldown: 0.25 };
     }
 
@@ -2567,7 +2662,10 @@ export class Game {
 
       // Resolve collisions (mob-mob, player-mob)
       this.resolveCollisions();
+      this.breakUnsupportedHangingEntities();
     }
+
+    this.updateLeashedMobs(dt, isNetworkConnected);
 
     if (!this.chatOpen && (this.input.isMouseDown(0) || this.input.isMouseDown(2))) {
       this.player.startSwing();
@@ -2614,6 +2712,7 @@ export class Game {
         flying: this.player.flying,
         onGround: this.player.onGround,
         sprinting: this.input.isKeyDown('control') && this.input.isKeyDown('w') && this.player.hunger > 6 && !this.player.flying,
+        sneaking: this.input.isKeyDown('shift'),
       });
       this.network.update(dt);
     }
@@ -2885,6 +2984,31 @@ export class Game {
         // First: try server-authoritative player/mob attack in multiplayer.
         const dir = this.player.forward;
         const entityReach = this.gameMode === 'creative' ? 5 : 3;
+
+        if (!isNetworkConnected) {
+          const decorativeTarget = this.mobs.getMobInRay(this.player.eyePosition, dir, entityReach);
+          if (
+            decorativeTarget?.def.type === 'item_frame' &&
+            decorativeTarget.itemFrameItem &&
+            this.gameMode !== 'creative'
+          ) {
+            const released = cloneItemStack(decorativeTarget.itemFrameItem);
+            decorativeTarget.setItemFrameItem(null);
+            if (released) {
+              this.droppedItems.spawnStack(
+                released,
+                decorativeTarget.position.clone(),
+                new THREE.Vector3((Math.random() - 0.5) * 0.35, 0.8, (Math.random() - 0.5) * 0.35),
+                0.25,
+              );
+            }
+            this.sound.playPickup();
+            this.swordSwingTimer = 0.4;
+            this.startAttackCooldown(attackCooldownDuration);
+            return;
+          }
+        }
+
         if (isNetworkConnected) {
           const playerId = this.network.getOtherPlayerInRay(this.player.eyePosition, dir, entityReach);
           if (playerId) {
@@ -3985,6 +4109,410 @@ export class Game {
     return { handled: true, cooldown: 0.25 };
   }
 
+  private tryPlaceHangingEntity(
+    type: HangingEntityType,
+    stack: ItemStack,
+    target?: BlockInteractionContext,
+  ): boolean {
+    if (!target?.face) return false;
+    if (this.sendServerBlockItemUse(stack, target)) return true;
+
+    const canPlace = canPlaceHangingEntity(
+      type,
+      target.position,
+      target.face,
+      (x, y, z) => this.chunks.isSolidBlock(x, y, z),
+      (x, y, z) => Array.from(this.mobs.mobs.values()).some((mob) =>
+        mob.health > 0 &&
+        Math.abs(mob.position.x - x) < 0.6 &&
+        Math.abs(mob.position.y - y) < 0.6 &&
+        Math.abs(mob.position.z - z) < 0.6
+      ),
+    );
+    if (!canPlace) return false;
+
+    const pos = hangingEntityWorldPosition(target.position, target.face);
+    const entity = this.mobs.spawnMob(type, pos.x, pos.y, pos.z);
+    if (!entity) return false;
+    entity.setHangingFace(target.face);
+    if (type === 'painting') {
+      entity.setPaintingVariant(choosePaintingVariant(this.seed, target.position));
+    }
+
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+    this.sound.playBlockPlace(target.blockId);
+    this.notifyState();
+    return true;
+  }
+
+  private tryInteractItemFrame(target: Mob, heldItem: ItemStack | null) {
+    if (target.def.type !== 'item_frame') return { handled: false };
+
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_MOB_INTERACT, { mobId: target.id, action: 'interact' });
+      return { handled: true, cooldown: 0.2 };
+    }
+
+    if (!target.itemFrameItem) {
+      if (!heldItem) return { handled: false };
+      target.setItemFrameItem(heldItem);
+      if (this.gameMode !== 'creative') {
+        this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+      }
+      this.sound.playLever();
+      this.notifyState();
+      return { handled: true, cooldown: 0.2 };
+    }
+
+    target.rotateItemFrame();
+    this.sound.playLever();
+    this.notifyState();
+    return { handled: true, cooldown: 0.2 };
+  }
+
+  private tryUseLeadOnMob(target: Mob, heldItem: ItemStack) {
+    if (!isLeashableMobType(target.def.type)) return { handled: false };
+    const localHolderId = this.network.playerId ?? 'local-player';
+    if (target.leashHolderId === 'local-player' || target.leashHolderId === localHolderId) {
+      return { handled: false };
+    }
+
+    const existingFenceHolder = parseFenceLeashHolderId(target.leashHolderId);
+    const existingMobHolder = parseMobLeashHolderId(target.leashHolderId);
+    const heldByOtherPlayer =
+      !!target.leashHolderId &&
+      !existingFenceHolder &&
+      existingMobHolder === null &&
+      target.leashHolderId !== localHolderId &&
+      target.leashHolderId !== 'local-player';
+    if (heldByOtherPlayer) return { handled: false };
+
+    if (this.sendServerEntityItemUse(heldItem, target.id)) {
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    if (target.leashHolderId && this.gameMode !== 'creative') {
+      this.droppedItems.spawnItem(
+        420,
+        1,
+        target.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+        new THREE.Vector3(0, 0.8, 0),
+        0.25,
+      );
+    }
+    target.leashHolderId = 'local-player';
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+    this.sound.playLever();
+    this.notifyState();
+    return { handled: true, cooldown: 0.25 };
+  }
+
+  private tryTransferPlayerLeashesToMob(target: Mob) {
+    if (target.def.type === 'item_frame' || target.def.type === 'painting' || target.def.type === 'armor_stand') {
+      return { handled: false };
+    }
+
+    const localHolderId = this.network.playerId ?? 'local-player';
+    const holderId = mobLeashHolderId(target.id);
+    const targetCenter = {
+      x: target.position.x,
+      y: target.position.y + target.height * 0.55,
+      z: target.position.z,
+    };
+    const attachable = Array.from(this.mobs.mobs.values()).filter((mob) =>
+      mob.id !== target.id &&
+      isLeashableMobType(mob.def.type) &&
+      (mob.leashHolderId === 'local-player' || mob.leashHolderId === localHolderId) &&
+      leashDistance(targetCenter, {
+        x: mob.position.x,
+        y: mob.position.y + mob.height * 0.55,
+        z: mob.position.z,
+      }) <= LEAD_SNAP_DISTANCE
+    );
+    if (attachable.length === 0) return { handled: false };
+
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_MOB_INTERACT, { mobId: target.id, action: 'transfer_leashes' });
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    for (const mob of attachable) mob.leashHolderId = holderId;
+    this.sound.playLever();
+    this.notifyState();
+    return { handled: true, cooldown: 0.25 };
+  }
+
+  private tryShearLeashConnections(target: Mob, heldItem: ItemStack) {
+    const childHolderId = mobLeashHolderId(target.id);
+    const childConnections = Array.from(this.mobs.mobs.values()).filter(
+      (mob) => mob.leashHolderId === childHolderId,
+    );
+    const ownConnection = !!target.leashHolderId && isLeashableMobType(target.def.type);
+    if (!ownConnection && childConnections.length === 0) return { handled: false };
+
+    if (this.sendServerEntityItemUse(heldItem, target.id)) {
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    const broken = ownConnection ? [target, ...childConnections] : childConnections;
+    for (const mob of broken) {
+      mob.leashHolderId = null;
+      if (this.gameMode !== 'creative') {
+        this.droppedItems.spawnItem(
+          420,
+          1,
+          mob.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+          new THREE.Vector3(0, 0.8, 0),
+          0.25,
+        );
+      }
+    }
+    if (this.gameMode !== 'creative') this.inventory.damageTool(this.player.selectedSlot);
+    this.sound.playLever();
+    this.notifyState();
+    return { handled: true, cooldown: 0.25 };
+  }
+
+  private tryTieLeashedMobsToFence(
+    position: BlockPosition,
+    blockName: string,
+    heldItem: ItemStack | null,
+  ): boolean {
+    if (!isFenceBlockName(blockName)) return false;
+    const localHolderId = this.network.playerId ?? 'local-player';
+    const fenceHolderId = fenceLeashHolderId(this.chunks.currentDimension, position);
+    const fenceCenter = {
+      x: position.x + 0.5,
+      y: position.y + 0.65,
+      z: position.z + 0.5,
+    };
+    const playerLeashed = Array.from(this.mobs.mobs.values()).filter((mob) =>
+      isLeashableMobType(mob.def.type) &&
+      (mob.leashHolderId === 'local-player' || mob.leashHolderId === localHolderId)
+    );
+    const attachable = playerLeashed.filter((mob) =>
+      leashDistance(fenceCenter, {
+        x: mob.position.x,
+        y: mob.position.y + mob.height * 0.55,
+        z: mob.position.z,
+      }) <= LEAD_SNAP_DISTANCE
+    );
+    const fenceLeashed = Array.from(this.mobs.mobs.values()).filter((mob) =>
+      isLeashableMobType(mob.def.type) &&
+      mob.leashHolderId === fenceHolderId &&
+      leashDistance(fenceCenter, {
+        x: mob.position.x,
+        y: mob.position.y + mob.height * 0.55,
+        z: mob.position.z,
+      }) <= LEAD_SNAP_DISTANCE
+    );
+    const heldName = heldItem ? ItemRegistry.get(heldItem.id)?.name : undefined;
+    const shearing = heldName === 'shears' && fenceLeashed.length > 0;
+    const transferBack =
+      !this.input.isKeyDown('shift') &&
+      attachable.length === 0 &&
+      playerLeashed.length === 0 &&
+      fenceLeashed.length > 0;
+
+    if (!shearing && attachable.length === 0 && !transferBack) return false;
+
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_INTERACT_BLOCK, {
+        x: position.x,
+        y: position.y,
+        z: position.z,
+      });
+      return true;
+    }
+
+    if (shearing) {
+      for (const mob of fenceLeashed) {
+        mob.leashHolderId = null;
+        if (this.gameMode !== 'creative') {
+          this.droppedItems.spawnItem(
+            420,
+            1,
+            mob.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+            new THREE.Vector3(0, 0.8, 0),
+            0.25,
+          );
+        }
+      }
+      if (this.gameMode !== 'creative') this.inventory.damageTool(this.player.selectedSlot);
+    } else if (attachable.length > 0) {
+      for (const mob of attachable) mob.leashHolderId = fenceHolderId;
+    } else if (transferBack) {
+      for (const mob of fenceLeashed) mob.leashHolderId = 'local-player';
+    }
+    this.sound.playLever();
+    this.notifyState();
+    return true;
+  }
+
+  private tryDetachLeadFromMob(target: Mob) {
+    if (!target.leashHolderId || !isLeashableMobType(target.def.type)) return { handled: false };
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_MOB_INTERACT, { mobId: target.id, action: 'interact' });
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    target.leashHolderId = null;
+    if (this.gameMode !== 'creative') {
+      this.droppedItems.spawnItem(
+        420,
+        1,
+        target.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+        new THREE.Vector3(0, 0.8, 0),
+        0.25,
+      );
+    }
+    this.sound.playPickup();
+    this.notifyState();
+    return { handled: true, cooldown: 0.25 };
+  }
+
+  private breakUnsupportedHangingEntities() {
+    const broken: Mob[] = [];
+    for (const mob of this.mobs.mobs.values()) {
+      if ((mob.def.type !== 'item_frame' && mob.def.type !== 'painting') || !mob.hangingFace) continue;
+      const support = hangingSupportPositionFromWorld(mob.position, mob.hangingFace);
+      if (!this.chunks.isSolidBlock(support.x, support.y, support.z)) broken.push(mob);
+    }
+    for (const mob of broken) {
+      this.handleMobDeath(mob, 0);
+      this.mobs.removeMob(mob.id);
+    }
+  }
+
+  private updateLeashedMobs(dt: number, networkAuthoritative: boolean) {
+    const active = new Set<number>();
+
+    for (const mob of this.mobs.mobs.values()) {
+      if (!mob.leashHolderId || !isLeashableMobType(mob.def.type)) continue;
+
+      const localHolder =
+        mob.leashHolderId === 'local-player' ||
+        (!!this.network.playerId && mob.leashHolderId === this.network.playerId);
+      const fenceHolder = parseFenceLeashHolderId(mob.leashHolderId);
+      const holderMobId = parseMobLeashHolderId(mob.leashHolderId);
+      const holderMob = holderMobId === null ? null : this.mobs.mobs.get(holderMobId) ?? null;
+      let holder: THREE.Vector3 | null = null;
+
+      if (localHolder) {
+        holder = this.player.position.clone().add(new THREE.Vector3(0, 1.0, 0));
+      } else if (fenceHolder && fenceHolder.dimension === this.chunks.currentDimension) {
+        holder = new THREE.Vector3(
+          fenceHolder.position.x + 0.5,
+          fenceHolder.position.y + 0.65,
+          fenceHolder.position.z + 0.5,
+        );
+      } else if (holderMob && holderMob.id !== mob.id && holderMob.health > 0) {
+        holder = holderMob.position.clone().add(new THREE.Vector3(0, holderMob.height * 0.55, 0));
+      } else {
+        const remote = this.network.otherPlayers.get(mob.leashHolderId);
+        if (remote) holder = remote.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0));
+      }
+
+      const locallyResolvableHolder = localHolder || !!fenceHolder || holderMobId !== null;
+      if (!holder) {
+        if (!networkAuthoritative && locallyResolvableHolder) {
+          mob.leashHolderId = null;
+          if (this.gameMode !== 'creative') {
+            this.droppedItems.spawnItem(
+              420,
+              1,
+              mob.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+              new THREE.Vector3(0, 0.8, 0),
+              0.25,
+            );
+          }
+        }
+        continue;
+      }
+
+      active.add(mob.id);
+      const center = mob.position.clone().add(new THREE.Vector3(0, mob.height * 0.55, 0));
+
+      if (!networkAuthoritative && locallyResolvableHolder) {
+        if (fenceHolder) {
+          const block = BlockRegistry.get(this.chunks.getBlock(
+            fenceHolder.position.x,
+            fenceHolder.position.y,
+            fenceHolder.position.z,
+          ));
+          if (!block || !isFenceBlockName(block.name)) {
+            mob.leashHolderId = null;
+            if (this.gameMode !== 'creative') {
+              this.droppedItems.spawnItem(
+                420,
+                1,
+                mob.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+                new THREE.Vector3(0, 0.8, 0),
+                0.25,
+              );
+            }
+            continue;
+          }
+        }
+
+        const distance = leashDistance(holder, center);
+        if (shouldBreakLeash(distance)) {
+          mob.leashHolderId = null;
+          if (this.gameMode !== 'creative') {
+            this.droppedItems.spawnItem(
+              420,
+              1,
+              mob.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+              new THREE.Vector3(0, 0.8, 0),
+              0.25,
+            );
+          }
+          const stale = this.leashLines.get(mob.id);
+          if (stale) {
+            this.renderer.scene.remove(stale);
+            stale.geometry.dispose();
+            (stale.material as THREE.Material).dispose();
+            this.leashLines.delete(mob.id);
+          }
+          continue;
+        }
+
+        const pull = leashPullVector(holder, center);
+        mob.velocity.x += pull.x * dt;
+        mob.velocity.y += pull.y * dt;
+        mob.velocity.z += pull.z * dt;
+        if (Math.abs(pull.x) + Math.abs(pull.z) > 1e-6) {
+          mob.yaw = Math.atan2(holder.x - center.x, holder.z - center.z);
+          mob.mesh.rotation.y = mob.yaw;
+        }
+      }
+
+      let line = this.leashLines.get(mob.id);
+      if (!line) {
+        line = new THREE.Line(
+          new THREE.BufferGeometry(),
+          new THREE.LineBasicMaterial({ color: 0x6b4a2b }),
+        );
+        line.name = 'mob_leash';
+        this.renderer.scene.add(line);
+        this.leashLines.set(mob.id, line);
+      }
+      line.geometry.setFromPoints([holder, center]);
+    }
+
+    for (const [mobId, line] of this.leashLines) {
+      if (active.has(mobId)) continue;
+      this.renderer.scene.remove(line);
+      line.geometry.dispose();
+      (line.material as THREE.Material).dispose();
+      this.leashLines.delete(mobId);
+    }
+  }
+
   private tryPlaceBoat(stack: ItemStack, target?: BlockInteractionContext): boolean {
     if (!target) return false;
     if (this.sendServerBlockItemUse(stack, target)) return true;
@@ -4464,6 +4992,18 @@ export class Game {
       }
     }
 
+    if (mob.def.type === 'item_frame' && mob.itemFrameItem && this.gameMode !== 'creative') {
+      const framed = cloneItemStack(mob.itemFrameItem);
+      if (framed) {
+        this.droppedItems.spawnStack(
+          framed,
+          mob.position.clone(),
+          new THREE.Vector3((Math.random() - 0.5) * 0.4, 1.0, (Math.random() - 0.5) * 0.4),
+          0.25,
+        );
+      }
+    }
+
     if (mob.def.type === 'armor_stand' && this.gameMode !== 'creative') {
       for (const stack of mob.armorStandEquipment) {
         if (!stack) continue;
@@ -4478,13 +5018,14 @@ export class Game {
 
     // Drop items in 3D world (magma cubes only drop if size === 1)
     const isMagmaCube = mob.def.type === 'magma_cube';
+    const decorative = mob.def.type === 'armor_stand' || mob.def.type === 'item_frame' || mob.def.type === 'painting';
     const shouldDrop = (!isMagmaCube || mob.size === 1)
-      && !(mob.def.type === 'armor_stand' && this.gameMode === 'creative');
+      && !(decorative && this.gameMode === 'creative');
 
     if (shouldDrop) {
       for (const drop of mob.def.drops) {
         // P3.3: Looting applies to living-mob loot, not the Armor Stand item itself.
-        const rolls = mob.def.type === 'armor_stand' ? 1 : 1 + lootingLevel;
+        const rolls = decorative ? 1 : 1 + lootingLevel;
         for (let roll = 0; roll < rolls; roll++) {
           if (Math.random() < drop.chance) {
             const dropPos = mob.position.clone().add(new THREE.Vector3(0, 0.5, 0));

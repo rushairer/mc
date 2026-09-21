@@ -7,8 +7,10 @@ import { isSafeTeleportDestination26_3 } from '../world/TeleportRules26_3';
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { cloneItemStack } from '../items/ItemStackRules';
+import type { BlockFacing } from '../types';
+import { hangingEntityYaw, itemFrameDisplayStack, nextItemFrameRotation, type PaintingVariant } from './HangingEntityRules';
 
-export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker' | 'pillager' | 'wither' | 'guardian' | 'vex' | 'armor_stand';
+export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker' | 'pillager' | 'wither' | 'guardian' | 'vex' | 'armor_stand' | 'item_frame' | 'painting';
 
 export interface MobDef {
   type: MobType;
@@ -52,6 +54,8 @@ const MOB_DEFS: Record<MobType, MobDef> = {
   guardian: { type: 'guardian', health: 30,  speed: 2.0, damage: 6, hostile: true, width: 0.8, height: 0.8, bodyColor: 0x5c8c8c, headColor: 0x5c8c8c, eyeColor: 0xFF5500, xpDrop: 10, drops: [{ id: 409, count: 1, chance: 0.4 }] },
   vex:      { type: 'vex',      health: 14,  speed: 4.0, damage: 3, hostile: true, width: 0.4, height: 0.8, bodyColor: 0xbfd3ff, headColor: 0xbfd3ff, eyeColor: 0xFF0000, xpDrop: 3,  drops: [] },
   armor_stand: { type: 'armor_stand', health: 2, speed: 0, damage: 0, hostile: false, width: 0.5, height: 1.975, bodyColor: 0x9a6a38, headColor: 0x9a6a38, xpDrop: 0, drops: [{ id: 416, count: 1, chance: 1.0 }] },
+  item_frame: { type: 'item_frame', health: 1, speed: 0, damage: 0, hostile: false, width: 0.75, height: 0.75, bodyColor: 0x7a4b25, xpDrop: 0, drops: [{ id: 389, count: 1, chance: 1.0 }] },
+  painting: { type: 'painting', health: 1, speed: 0, damage: 0, hostile: false, width: 0.98, height: 0.98, bodyColor: 0x8b5a2b, xpDrop: 0, drops: [{ id: 321, count: 1, chance: 1.0 }] },
 };
 
 const MOB_MAX_AIR = 15.0;
@@ -119,6 +123,13 @@ export class Mob {
   private customNameLabel: THREE.Sprite | null = null;
   armorStandEquipment: (ItemStack | null)[] = [null, null, null, null];
   private armorStandEquipmentMesh: THREE.Group | null = null;
+  hangingFace: BlockFacing | null = null;
+  itemFrameItem: ItemStack | null = null;
+  itemFrameRotation = 0;
+  paintingVariant: PaintingVariant = 'kebab';
+  leashHolderId: string | null = null;
+  private itemFrameDisplayMesh: THREE.Group | null = null;
+  private itemVisualFactory: ((itemId: number) => THREE.Object3D | null) | null = null;
   /** Sheep shearing state; regrowth can reset this when grass-eating is modeled. */
   isSheared = false;
   targetMob: Mob | null = null;
@@ -167,6 +178,45 @@ export class Mob {
     if (this.def.type !== 'armor_stand') return;
     this.armorStandEquipment = [0, 1, 2, 3].map(index => cloneItemStack(equipment[index]));
     this.refreshArmorStandEquipmentVisual();
+  }
+
+  setHangingFace(face: BlockFacing | null) {
+    this.hangingFace = face;
+    if (!face) return;
+    this.yaw = hangingEntityYaw(face);
+    this.mesh.rotation.set(0, this.yaw, 0);
+    if (face === 'up') this.mesh.rotation.x = -Math.PI / 2;
+    else if (face === 'down') this.mesh.rotation.x = Math.PI / 2;
+  }
+
+  setItemVisualFactory(factory: ((itemId: number) => THREE.Object3D | null) | null) {
+    this.itemVisualFactory = factory;
+    if (this.def.type === 'item_frame') this.refreshItemFrameDisplay();
+  }
+
+  setItemFrameItem(stack: ItemStack | null) {
+    if (this.def.type !== 'item_frame') return;
+    this.itemFrameItem = itemFrameDisplayStack(stack);
+    this.refreshItemFrameDisplay();
+  }
+
+  rotateItemFrame() {
+    if (this.def.type !== 'item_frame' || !this.itemFrameItem) return;
+    this.itemFrameRotation = nextItemFrameRotation(this.itemFrameRotation);
+    this.refreshItemFrameDisplay();
+  }
+
+  setItemFrameState(stack: ItemStack | null, rotation = 0) {
+    if (this.def.type !== 'item_frame') return;
+    this.itemFrameItem = itemFrameDisplayStack(stack);
+    this.itemFrameRotation = ((Math.trunc(rotation) % 8) + 8) % 8;
+    this.refreshItemFrameDisplay();
+  }
+
+  setPaintingVariant(variant: PaintingVariant) {
+    if (this.def.type !== 'painting') return;
+    this.paintingVariant = variant;
+    this.refreshPaintingVisual();
   }
 
   get width(): number {
@@ -220,6 +270,67 @@ export class Mob {
     this.refreshSaddleVisual();
     this.refreshCustomNameLabel();
     this.refreshArmorStandEquipmentVisual();
+    this.refreshItemFrameDisplay();
+    this.refreshPaintingVisual();
+  }
+
+  private refreshItemFrameDisplay() {
+    if (!this.mesh || this.def.type !== 'item_frame') return;
+    if (this.itemFrameDisplayMesh) {
+      this.mesh.remove(this.itemFrameDisplayMesh);
+      this.itemFrameDisplayMesh.traverse(child => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          if (Array.isArray(child.material)) child.material.forEach(material => material.dispose());
+          else child.material.dispose();
+        }
+      });
+      this.itemFrameDisplayMesh = null;
+    }
+    if (!this.itemFrameItem) return;
+
+    const group = new THREE.Group();
+    group.name = 'item_frame_display';
+    group.rotation.z = -(this.itemFrameRotation * Math.PI / 4);
+
+    const visual = this.itemVisualFactory?.(this.itemFrameItem.id) ?? null;
+    if (visual) {
+      visual.name = 'item_frame_item';
+      visual.position.z = 0.075;
+      visual.rotation.set(0, 0, 0);
+      visual.scale.multiplyScalar(0.78);
+      group.add(visual);
+    } else {
+      const hue = ((this.itemFrameItem.id * 47) % 360) / 360;
+      const color = new THREE.Color().setHSL(hue, 0.55, 0.58);
+      const plate = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 0.34, 0.035),
+        new THREE.MeshLambertMaterial({ color }),
+      );
+      plate.name = 'item_frame_item';
+      plate.position.z = 0.065;
+      group.add(plate);
+    }
+
+    this.mesh.add(group);
+    this.itemFrameDisplayMesh = group;
+  }
+
+  private refreshPaintingVisual() {
+    if (!this.mesh || this.def.type !== 'painting') return;
+    const canvas = this.mesh.getObjectByName('painting_canvas');
+    if (!(canvas instanceof THREE.Mesh)) return;
+    const palette: Record<PaintingVariant, number> = {
+      kebab: 0xb45f3a,
+      aztec: 0x466b7a,
+      alban: 0xc4a56d,
+      aztec2: 0x6f4a7e,
+      bomb: 0x8b3f35,
+      plant: 0x547a45,
+      wasteland: 0x9b835e,
+    };
+    const material = canvas.material as THREE.MeshLambertMaterial;
+    material.color.setHex(palette[this.paintingVariant] ?? palette.kebab);
   }
 
   private refreshArmorStandEquipmentVisual() {
@@ -365,7 +476,31 @@ export class Mob {
     const bodyColor = this.def.bodyColor;
     const headColor = this.def.headColor ?? bodyColor;
 
-    if (type === 'armor_stand') {
+    if (type === 'item_frame') {
+      const wood = new THREE.MeshLambertMaterial({ color: 0x7a4b25 });
+      const leather = new THREE.MeshLambertMaterial({ color: 0x9a6a38 });
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.72, 0.045), leather);
+      back.name = 'item_frame_back';
+      const edge = 0.09;
+      const top = new THREE.Mesh(new THREE.BoxGeometry(0.82, edge, 0.085), wood);
+      const bottom = top.clone();
+      const left = new THREE.Mesh(new THREE.BoxGeometry(edge, 0.64, 0.085), wood);
+      const right = left.clone();
+      top.position.set(0, 0.365, 0.025);
+      bottom.position.set(0, -0.365, 0.025);
+      left.position.set(-0.365, 0, 0.025);
+      right.position.set(0.365, 0, 0.025);
+      group.add(back, top, bottom, left, right);
+    } else if (type === 'painting') {
+      const frameMat = new THREE.MeshLambertMaterial({ color: 0x5c381d });
+      const canvasMat = new THREE.MeshLambertMaterial({ color: 0xb45f3a });
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.98, 0.045), frameMat);
+      back.name = 'painting_frame';
+      const canvas = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.86, 0.025), canvasMat);
+      canvas.name = 'painting_canvas';
+      canvas.position.z = 0.038;
+      group.add(back, canvas);
+    } else if (type === 'armor_stand') {
       const wood = new THREE.MeshLambertMaterial({ color: 0x9a6a38 });
       const darkWood = new THREE.MeshLambertMaterial({ color: 0x6d4727 });
       const base = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.08, 0.72), darkWood);
@@ -1284,6 +1419,13 @@ export class Mob {
 
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
+
+    if (this.def.type === 'item_frame' || this.def.type === 'painting') {
+      this.velocity.set(0, 0, 0);
+      this.mesh.position.copy(this.position);
+      return;
+    }
+
     this.despawnTimer += dt;
 
     if (this.def.type === 'guardian') {
@@ -1809,7 +1951,7 @@ export class Mob {
   ) {
     const distToPlayer = this.position.distanceTo(playerPos);
 
-    if (this.def.type === 'armor_stand') {
+    if (this.def.type === 'armor_stand' || this.def.type === 'item_frame' || this.def.type === 'painting') {
       this.aiState = 'idle';
       this.velocity.x = 0;
       this.velocity.z = 0;

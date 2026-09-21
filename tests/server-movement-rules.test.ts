@@ -27,8 +27,20 @@ test('movement parser normalizes boolean movement flags without trusting truthy 
   });
   assert.deepEqual(parsed, {
     x: 0, y: 64, z: 0, yaw: 0, pitch: 0,
-    flying: false, onGround: true, sprinting: false,
+    flying: false, onGround: true, sprinting: false, sneaking: false,
   });
+});
+
+test('movement parser carries sneaking as a strict boolean for server interaction rules', () => {
+  const parsed = parseServerMoveIntent({
+    x: 0, y: 64, z: 0, yaw: 0, pitch: 0,
+    sneaking: true,
+  });
+  assert.equal(parsed?.sneaking, true);
+  assert.equal(parseServerMoveIntent({
+    x: 0, y: 64, z: 0, yaw: 0, pitch: 0,
+    sneaking: 'true',
+  })?.sneaking, false);
 });
 
 test('distance squared is computed from authoritative previous coordinates', () => {

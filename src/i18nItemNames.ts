@@ -139,11 +139,10 @@ const ZH_CN_EXACT: Dict = {
   'Straw Bed': '稻草床',
   "Bottle o' Enchanting": '附魔之瓶',
   'Name Tag': '命名牌',
-  'Carrot on a Stick': '胡蘿蔔釣竿',
-  'Armor Stand': '盔甲架',
-  'Name Tag': '命名牌',
   'Carrot on a Stick': '胡萝卜钓竿',
   'Armor Stand': '盔甲架',
+  'Item Frame': '物品展示框',
+  Lead: '拴绳',
 };
 
 const ZH_TW_EXACT: Dict = {
@@ -214,6 +213,12 @@ const ZH_TW_EXACT: Dict = {
   'Red Shrub': '紅灌木',
   'Straw Bed': '稻草床',
   "Bottle o' Enchanting": '附魔之瓶',
+  'Name Tag': '命名牌',
+  'Carrot on a Stick': '胡蘿蔔釣竿',
+  'Armor Stand': '盔甲架',
+  'Item Frame': '物品展示框',
+  Painting: '畫',
+  Lead: '拴繩',
 };
 
 const ZH_CN_WORDS: Dict = {

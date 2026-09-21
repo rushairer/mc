@@ -1053,6 +1053,22 @@ export class GameServer {
         const blockId = this.getBlock(x, y, z, session.dimension);
         if (blockId === 0) break;
 
+        const blockMeta = this.getBlockMetadata(x, y, z, session.dimension);
+        const jukeboxDisc = getStoredJukeboxDisc(blockMeta?.jukeboxDisc);
+        if (jukeboxDisc) {
+          this.spawnDroppedStack(
+            jukeboxDisc,
+            x + 0.5,
+            y + 0.8,
+            z + 0.5,
+            session.dimension,
+            0.5,
+          );
+          this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+            type: 'jukebox', playing: false, x: x + 0.5, y: y + 0.5, z: z + 0.5,
+          });
+        }
+
         this.setBlock(x, y, z, 0, session.dimension);
         const tool = session.inventory[session.selectedSlot];
         if (tool && ItemRegistry.isTool(tool.id)) {

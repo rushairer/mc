@@ -146,6 +146,34 @@ export function isLeashableMobType(type: MobType): boolean {
   return LEASHABLE_MOBS.has(type);
 }
 
+export function isFenceBlockName(rawName: string | undefined): boolean {
+  if (!rawName) return false;
+  const name = rawName.replace(/^minecraft:/, '');
+  return name === 'fence' || name.endsWith('_fence');
+}
+
+export function fenceLeashHolderId(
+  dimension: number,
+  position: BlockPosition,
+): string {
+  return `fence:${dimension}:${position.x}:${position.y}:${position.z}`;
+}
+
+export function parseFenceLeashHolderId(value: string | null | undefined): {
+  dimension: number;
+  position: BlockPosition;
+} | null {
+  if (!value) return null;
+  const match = /^fence:(-?\d+):(-?\d+):(-?\d+):(-?\d+)$/.exec(value);
+  if (!match) return null;
+  const dimension = Number(match[1]);
+  const x = Number(match[2]);
+  const y = Number(match[3]);
+  const z = Number(match[4]);
+  if (![dimension, x, y, z].every(Number.isInteger)) return null;
+  return { dimension, position: { x, y, z } };
+}
+
 export function leashDistance(
   holder: { x: number; y: number; z: number },
   mob: { x: number; y: number; z: number },

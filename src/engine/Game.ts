@@ -4483,8 +4483,8 @@ export class Game {
 
     if (shouldDrop) {
       for (const drop of mob.def.drops) {
-        // P3.3: Looting adds up to `level` extra drop rolls per entry.
-        const rolls = 1 + lootingLevel;
+        // P3.3: Looting applies to living-mob loot, not the Armor Stand item itself.
+        const rolls = mob.def.type === 'armor_stand' ? 1 : 1 + lootingLevel;
         for (let roll = 0; roll < rolls; roll++) {
           if (Math.random() < drop.chance) {
             const dropPos = mob.position.clone().add(new THREE.Vector3(0, 0.5, 0));

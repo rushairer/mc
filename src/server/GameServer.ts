@@ -536,6 +536,20 @@ export class GameServer {
         }
         session.ridingMobId = undefined;
       }
+      for (const mob of this.mobs.values()) {
+        if (mob.leashHolderId !== session.id) continue;
+        mob.leashHolderId = undefined;
+        if (session.gameMode !== 'creative') {
+          this.spawnDroppedItem(420, 1, mob.position.x, mob.position.y + 0.4, mob.position.z, mob.dimension, 0.25);
+        }
+        this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_STATE, {
+          id: mob.id,
+          health: mob.health,
+          hurtTimer: mob.hurtTimer,
+          leashHolderId: null,
+        });
+      }
+
       if (session.ridingVehicleId !== undefined) {
         const vehicle = this.vehicles.get(session.ridingVehicleId);
         if (vehicle?.riderId === session.id) {
@@ -1414,6 +1428,45 @@ export class GameServer {
           if (!isEntityAttackInReach(session, mob.position, session.gameMode)) break;
 
           session.lastAttackTick = this.gameTick;
+
+          const decorative =
+            mob.type === 'armor_stand' || mob.type === 'item_frame' || mob.type === 'painting';
+          if (decorative && session.gameMode === 'creative') {
+            this.mobs.delete(mob.id);
+            this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_DESPAWN, { id: mob.id });
+            this.broadcastDimension(mob.dimension, PacketType.S2C_SOUND, {
+              type: 'break', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+            });
+            break;
+          }
+
+          if (mob.type === 'item_frame' && mob.itemFrameItem) {
+            const framed = cloneItemStack(mob.itemFrameItem);
+            mob.itemFrameItem = undefined;
+            mob.itemFrameRotation = 0;
+            if (framed) {
+              this.spawnDroppedStack(
+                framed,
+                mob.position.x,
+                mob.position.y,
+                mob.position.z,
+                mob.dimension,
+                0.25,
+              );
+            }
+            this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_STATE, {
+              id: mob.id,
+              health: mob.health,
+              hurtTimer: mob.hurtTimer,
+              itemFrameItem: null,
+              itemFrameRotation: 0,
+            });
+            this.broadcastDimension(mob.dimension, PacketType.S2C_SOUND, {
+              type: 'break', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+            });
+            break;
+          }
+
           mob.health -= damage;
           mob.hurtTimer = 0.5;
           this.applyMeleeKnockbackToMob(session, mob, knockback.strength);
@@ -3077,6 +3130,24 @@ export class GameServer {
     this.mobs.delete(mob.id);
     this.broadcast(PacketType.S2C_MOB_DESPAWN, { id: mob.id });
     
+    if (mob.leashHolderId) {
+      const holder = this.players.get(mob.leashHolderId);
+      if (!holder || holder.gameMode !== 'creative') {
+        this.spawnDroppedItem(420, 1, mob.position.x, mob.position.y + 0.4, mob.position.z, mob.dimension, 0.25);
+      }
+    }
+
+    if (mob.type === 'item_frame' && mob.itemFrameItem) {
+      this.spawnDroppedStack(
+        mob.itemFrameItem,
+        mob.position.x,
+        mob.position.y,
+        mob.position.z,
+        mob.dimension,
+        0.25,
+      );
+    }
+
     if (mob.type === 'armor_stand') {
       for (const stack of mob.armorStandEquipment ?? []) {
         if (!stack) continue;
@@ -3382,8 +3453,10 @@ export class GameServer {
     // Tick primed TNT created by server-authoritative Flint and Steel use.
     this.tickPrimedTnt(dt);
 
-    // Dynamic Mob Spawner. Placed Armor Stands do not consume the natural mob budget.
-    const naturalMobCount = Array.from(this.mobs.values()).filter(mob => mob.type !== 'armor_stand').length;
+    // Decorative entities do not consume the natural mob budget.
+    const naturalMobCount = Array.from(this.mobs.values()).filter(
+      mob => mob.type !== 'armor_stand' && mob.type !== 'item_frame' && mob.type !== 'painting',
+    ).length;
     if (naturalMobCount < 30 && Math.random() < 0.15) {
       this.attemptMobSpawning();
     }

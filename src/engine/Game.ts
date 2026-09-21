@@ -4393,32 +4393,50 @@ export class Game {
     for (const mob of this.mobs.mobs.values()) {
       if (!mob.leashHolderId || !isLeashableMobType(mob.def.type)) continue;
 
-      let holder: THREE.Vector3 | null = null;
       const localHolder =
         mob.leashHolderId === 'local-player' ||
         (!!this.network.playerId && mob.leashHolderId === this.network.playerId);
+      const fenceHolder = parseFenceLeashHolderId(mob.leashHolderId);
+      const holderMobId = parseMobLeashHolderId(mob.leashHolderId);
+      const holderMob = holderMobId === null ? null : this.mobs.mobs.get(holderMobId) ?? null;
+      let holder: THREE.Vector3 | null = null;
+
       if (localHolder) {
         holder = this.player.position.clone().add(new THREE.Vector3(0, 1.0, 0));
+      } else if (fenceHolder && fenceHolder.dimension === this.chunks.currentDimension) {
+        holder = new THREE.Vector3(
+          fenceHolder.position.x + 0.5,
+          fenceHolder.position.y + 0.65,
+          fenceHolder.position.z + 0.5,
+        );
+      } else if (holderMob && holderMob.id !== mob.id && holderMob.health > 0) {
+        holder = holderMob.position.clone().add(new THREE.Vector3(0, holderMob.height * 0.55, 0));
       } else {
-        const fenceHolder = parseFenceLeashHolderId(mob.leashHolderId);
-        if (fenceHolder && fenceHolder.dimension === this.chunks.currentDimension) {
-          holder = new THREE.Vector3(
-            fenceHolder.position.x + 0.5,
-            fenceHolder.position.y + 0.65,
-            fenceHolder.position.z + 0.5,
-          );
-        } else {
-          const remote = this.network.otherPlayers.get(mob.leashHolderId);
-          if (remote) holder = remote.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0));
-        }
+        const remote = this.network.otherPlayers.get(mob.leashHolderId);
+        if (remote) holder = remote.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0));
       }
-      if (!holder) continue;
+
+      const locallyResolvableHolder = localHolder || !!fenceHolder || holderMobId !== null;
+      if (!holder) {
+        if (!networkAuthoritative && locallyResolvableHolder) {
+          mob.leashHolderId = null;
+          if (this.gameMode !== 'creative') {
+            this.droppedItems.spawnItem(
+              420,
+              1,
+              mob.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+              new THREE.Vector3(0, 0.8, 0),
+              0.25,
+            );
+          }
+        }
+        continue;
+      }
 
       active.add(mob.id);
       const center = mob.position.clone().add(new THREE.Vector3(0, mob.height * 0.55, 0));
 
-      const fenceHolder = parseFenceLeashHolderId(mob.leashHolderId);
-      if (!networkAuthoritative && (localHolder || fenceHolder)) {
+      if (!networkAuthoritative && locallyResolvableHolder) {
         if (fenceHolder) {
           const block = BlockRegistry.get(this.chunks.getBlock(
             fenceHolder.position.x,
@@ -4466,6 +4484,10 @@ export class Game {
         mob.velocity.x += pull.x * dt;
         mob.velocity.y += pull.y * dt;
         mob.velocity.z += pull.z * dt;
+        if (Math.abs(pull.x) + Math.abs(pull.z) > 1e-6) {
+          mob.yaw = Math.atan2(holder.x - center.x, holder.z - center.z);
+          mob.mesh.rotation.y = mob.yaw;
+        }
       }
 
       let line = this.leashLines.get(mob.id);

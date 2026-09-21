@@ -345,6 +345,16 @@ export class SoundSystem {
   }
 
   /** Wind Charge resource events first, with procedural fallbacks when no pack is active. */
+  playBrush(blockName: 'suspicious_sand' | 'suspicious_gravel' = 'suspicious_sand') {
+    const event = blockName === 'suspicious_gravel'
+      ? 'item.brush.brushing.gravel'
+      : 'item.brush.brushing.sand';
+    if (this.playFirstResourceSound([event], 0.6)) return;
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    this.synthNoiseCall(ctx, 'bandpass', blockName === 'suspicious_gravel' ? 1450 : 1050, 0.12, 0.1, 0.16);
+  }
+
   playMaceSmash(heavy = false) {
     const event = heavy ? 'item.mace.smash_ground_heavy' : 'item.mace.smash_ground';
     if (this.playFirstResourceSound([event], heavy ? 1.2 : 1.0)) return;

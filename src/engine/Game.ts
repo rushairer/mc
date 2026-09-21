@@ -2914,6 +2914,31 @@ export class Game {
         // First: try server-authoritative player/mob attack in multiplayer.
         const dir = this.player.forward;
         const entityReach = this.gameMode === 'creative' ? 5 : 3;
+
+        if (!isNetworkConnected) {
+          const decorativeTarget = this.mobs.getMobInRay(this.player.eyePosition, dir, entityReach);
+          if (
+            decorativeTarget?.def.type === 'item_frame' &&
+            decorativeTarget.itemFrameItem &&
+            this.gameMode !== 'creative'
+          ) {
+            const released = cloneItemStack(decorativeTarget.itemFrameItem);
+            decorativeTarget.setItemFrameItem(null);
+            if (released) {
+              this.droppedItems.spawnStack(
+                released,
+                decorativeTarget.position.clone(),
+                new THREE.Vector3((Math.random() - 0.5) * 0.35, 0.8, (Math.random() - 0.5) * 0.35),
+                0.25,
+              );
+            }
+            this.sound.playPickup();
+            this.swordSwingTimer = 0.4;
+            this.startAttackCooldown(attackCooldownDuration);
+            return;
+          }
+        }
+
         if (isNetworkConnected) {
           const playerId = this.network.getOtherPlayerInRay(this.player.eyePosition, dir, entityReach);
           if (playerId) {
@@ -4571,6 +4596,18 @@ export class Game {
       }
     }
 
+    if (mob.def.type === 'item_frame' && mob.itemFrameItem && this.gameMode !== 'creative') {
+      const framed = cloneItemStack(mob.itemFrameItem);
+      if (framed) {
+        this.droppedItems.spawnStack(
+          framed,
+          mob.position.clone(),
+          new THREE.Vector3((Math.random() - 0.5) * 0.4, 1.0, (Math.random() - 0.5) * 0.4),
+          0.25,
+        );
+      }
+    }
+
     if (mob.def.type === 'armor_stand' && this.gameMode !== 'creative') {
       for (const stack of mob.armorStandEquipment) {
         if (!stack) continue;
@@ -4585,13 +4622,14 @@ export class Game {
 
     // Drop items in 3D world (magma cubes only drop if size === 1)
     const isMagmaCube = mob.def.type === 'magma_cube';
+    const decorative = mob.def.type === 'armor_stand' || mob.def.type === 'item_frame' || mob.def.type === 'painting';
     const shouldDrop = (!isMagmaCube || mob.size === 1)
-      && !(mob.def.type === 'armor_stand' && this.gameMode === 'creative');
+      && !(decorative && this.gameMode === 'creative');
 
     if (shouldDrop) {
       for (const drop of mob.def.drops) {
         // P3.3: Looting applies to living-mob loot, not the Armor Stand item itself.
-        const rolls = mob.def.type === 'armor_stand' ? 1 : 1 + lootingLevel;
+        const rolls = decorative ? 1 : 1 + lootingLevel;
         for (let roll = 0; roll < rolls; roll++) {
           if (Math.random() < drop.chance) {
             const dropPos = mob.position.clone().add(new THREE.Vector3(0, 0.5, 0));

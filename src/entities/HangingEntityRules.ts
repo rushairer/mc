@@ -159,6 +159,18 @@ export function fenceLeashHolderId(
   return `fence:${dimension}:${position.x}:${position.y}:${position.z}`;
 }
 
+export function mobLeashHolderId(mobId: number): string {
+  return `mob:${Math.trunc(mobId)}`;
+}
+
+export function parseMobLeashHolderId(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const match = /^mob:(\d+)$/.exec(value);
+  if (!match) return null;
+  const id = Number(match[1]);
+  return Number.isInteger(id) && id >= 0 ? id : null;
+}
+
 export function parseFenceLeashHolderId(value: string | null | undefined): {
   dimension: number;
   position: BlockPosition;

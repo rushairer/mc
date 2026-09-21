@@ -1675,18 +1675,21 @@ export class Game {
     this.notifyState();
   }
 
-  dropItemFromUI(itemId: number, count: number) {
-    if (count <= 0) return;
+  dropStackFromUI(stack: ItemStack) {
+    if (stack.count <= 0) return;
 
     const lookDir = this.player.forward.clone();
     const spawnPos = this.player.eyePosition.clone().sub(new THREE.Vector3(0, 0.2, 0));
-    
     const velocity = lookDir.multiplyScalar(3.5).add(new THREE.Vector3(0, 2.0, 0));
     velocity.x += (Math.random() - 0.5) * 0.5;
     velocity.z += (Math.random() - 0.5) * 0.5;
 
-    this.droppedItems.spawnItem(itemId, count, spawnPos, velocity, 1.5);
+    this.droppedItems.spawnStack(stack, spawnPos, velocity, 1.5);
     this.notifyState();
+  }
+
+  dropItemFromUI(itemId: number, count: number) {
+    this.dropStackFromUI({ id: itemId, count });
   }
 
   onStateChange(listener: GameStateListener) {

@@ -130,8 +130,8 @@ const ITEM_PLACE_BLOCK_OVERRIDES: Record<number, number> = {
   430: 196, // acacia door
   431: 197, // dark oak door
   435: 207, // beetroot seeds
-  20311: 30997, // suspicious sand
-  20312: 30998, // suspicious gravel
+  20311: 30835, // suspicious sand
+  20312: 30834, // suspicious gravel
 };
 
 const items: Map<number, ItemDef> = new Map();

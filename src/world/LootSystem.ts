@@ -80,6 +80,8 @@ export const BLOCK_LOOT_TABLES: Readonly<Record<string, LootTable>> = {
   'redstone_ore': { pools: [{ rolls: 1, entries: [{ itemId: 331, min: 1, max: 1 }] }] }, // -> redstone dust
   'lapis_ore': { pools: [{ rolls: 1, entries: [{ itemId: (4 << 10) | 351, min: 1, max: 1 }] }] }, // lapis lazuli (dye metadata 4)
   'gravel': { pools: [{ rolls: 1, entries: [{ itemId: 318, min: 1, max: 1, weight: 1 }, { itemId: 13, min: 1, max: 1, weight: 9 }] }] }, // flint 10% / gravel 90%
+  'suspicious_sand': EMPTY_LOOT_TABLE,
+  'suspicious_gravel': EMPTY_LOOT_TABLE,
   'clay': { pools: [{ rolls: 1, entries: [{ itemId: 337, min: 1, max: 1 }] }] },         // clay block -> clay ball
   'cauldron': { pools: [{ rolls: 1, entries: [{ itemId: 380, min: 1, max: 1 }] }] },     // cauldron block -> cauldron item
 };

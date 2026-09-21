@@ -16,6 +16,7 @@ import { shouldTameEntity } from '../entities/EntityInteractionRules';
 import { canApplySaddle, canControlMountedMob, canMountMob, getNameTagLabel } from '../entities/MobItemInteractionRules';
 import { armorStandSlotIndex, canPlaceArmorStandAt, firstEquippedArmorStandSlot, snapArmorStandYaw } from '../entities/ArmorStandRules';
 import {
+  LEAD_SNAP_DISTANCE,
   canPlaceHangingEntity,
   choosePaintingVariant,
   hangingEntityWorldPosition,
@@ -4146,11 +4147,34 @@ export class Game {
   private tryTieLeashedMobsToFence(position: BlockPosition, blockName: string): boolean {
     if (!isFenceBlockName(blockName)) return false;
     const localHolderId = this.network.playerId ?? 'local-player';
-    const candidates = Array.from(this.mobs.mobs.values()).filter((mob) =>
+    const fenceHolderId = fenceLeashHolderId(this.chunks.currentDimension, position);
+    const fenceCenter = {
+      x: position.x + 0.5,
+      y: position.y + 0.65,
+      z: position.z + 0.5,
+    };
+    const playerLeashed = Array.from(this.mobs.mobs.values()).filter((mob) =>
       isLeashableMobType(mob.def.type) &&
       (mob.leashHolderId === 'local-player' || mob.leashHolderId === localHolderId)
     );
-    if (candidates.length === 0) return false;
+    const attachable = playerLeashed.filter((mob) =>
+      leashDistance(fenceCenter, {
+        x: mob.position.x,
+        y: mob.position.y + mob.height * 0.55,
+        z: mob.position.z,
+      }) <= LEAD_SNAP_DISTANCE
+    );
+    const fenceLeashed = Array.from(this.mobs.mobs.values()).filter((mob) =>
+      isLeashableMobType(mob.def.type) &&
+      mob.leashHolderId === fenceHolderId &&
+      leashDistance(fenceCenter, {
+        x: mob.position.x,
+        y: mob.position.y + mob.height * 0.55,
+        z: mob.position.z,
+      }) <= LEAD_SNAP_DISTANCE
+    );
+
+    if (attachable.length === 0 && !(playerLeashed.length === 0 && fenceLeashed.length > 0)) return false;
 
     if (this.isMultiplayerNetworkConnected()) {
       this.network.send(PacketType.C2S_INTERACT_BLOCK, {
@@ -4161,8 +4185,11 @@ export class Game {
       return true;
     }
 
-    const holderId = fenceLeashHolderId(this.chunks.currentDimension, position);
-    for (const mob of candidates) mob.leashHolderId = holderId;
+    if (attachable.length > 0) {
+      for (const mob of attachable) mob.leashHolderId = fenceHolderId;
+    } else {
+      for (const mob of fenceLeashed) mob.leashHolderId = 'local-player';
+    }
     this.sound.playLever();
     this.notifyState();
     return true;

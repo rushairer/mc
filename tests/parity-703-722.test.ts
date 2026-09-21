@@ -256,7 +256,7 @@ test('719: local Totem activation resets health/effects and creates eight absorp
 
 test('720: local fatal damage attempts held Totem activation before opening the death UI', () => {
   const source = readFileSync(new URL('../src/engine/Game.ts', import.meta.url), 'utf8');
-  const start = source.indexOf('damagePlayer(');
+  const start = source.indexOf('\n  damagePlayer(');
   const end = source.indexOf('\n  submitChat', start);
   const method = source.slice(start, end);
   const activate = method.indexOf('this.tryActivateHeldTotem(type, resultingHealth)');

@@ -1550,7 +1550,6 @@ export class GameServer {
           break;
         }
 
-        if (intent.action === 'interact') break;
         if (!canMountMob(mob.type, !!mob.isBaby, !!mob.isTamed)) break;
 
         if (intent.action === 'mount') {

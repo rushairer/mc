@@ -2244,6 +2244,22 @@ export class GameServer {
     if (!itemName || !mob || mob.dimension !== session.dimension || mob.health <= 0) return false;
     if (!isEntityAttackInReach(session, mob.position, session.gameMode)) return false;
 
+    if (itemName === 'lead') {
+      if (!isLeashableMobType(mob.type) || mob.leashHolderId) return false;
+      mob.leashHolderId = session.id;
+      this.consumeServerHeldItem(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_MOB_STATE, {
+        id: mob.id,
+        health: mob.health,
+        hurtTimer: mob.hurtTimer,
+        leashHolderId: session.id,
+      });
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+      });
+      return true;
+    }
+
     if (itemName === 'name_tag') {
       const customName = getNameTagLabel(held);
       if (!customName) return false;

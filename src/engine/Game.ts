@@ -1200,6 +1200,55 @@ export class Game {
       return { handled: true, cooldown: 0.25 };
     }
 
+    if (heldItemName === 'shears' && target.leashHolderId && isLeashableMobType(target.def.type)) {
+      if (heldItem && this.sendServerEntityItemUse(heldItem, target.id)) {
+        return { handled: true, cooldown: 0.25 };
+      }
+      target.leashHolderId = null;
+      if (this.gameMode !== 'creative') {
+        this.droppedItems.spawnItem(
+          420,
+          1,
+          target.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+          new THREE.Vector3(0, 0.8, 0),
+          0.25,
+        );
+        this.inventory.damageTool(this.player.selectedSlot);
+      }
+      this.sound.playLever();
+      this.notifyState();
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    if (
+      heldItemName === 'shears' &&
+      (target.def.type === 'horse' || target.def.type === 'pig') &&
+      target.isSaddled &&
+      !target.isRidden &&
+      !this.input.isKeyDown('shift')
+    ) {
+      if (heldItem && this.sendServerEntityItemUse(heldItem, target.id)) {
+        return { handled: true, cooldown: 0.25 };
+      }
+      target.isSaddled = false;
+      if (this.gameMode !== 'creative') {
+        const saddle = ItemRegistry.getByName('saddle');
+        if (saddle) {
+          this.droppedItems.spawnItem(
+            saddle.id,
+            1,
+            target.position.clone().add(new THREE.Vector3(0, 0.55, 0)),
+            new THREE.Vector3(0, 0.9, 0),
+            0.25,
+          );
+        }
+        this.inventory.damageTool(this.player.selectedSlot);
+      }
+      this.sound.playLever();
+      this.notifyState();
+      return { handled: true, cooldown: 0.25 };
+    }
+
     if (target.def.type === 'sheep' && heldItemName === 'shears' && !target.isBaby && !target.isSheared) {
       if (heldItem && this.sendServerEntityItemUse(heldItem, target.id)) {
         return { handled: true, cooldown: 0.25 };
@@ -2670,6 +2719,7 @@ export class Game {
         flying: this.player.flying,
         onGround: this.player.onGround,
         sprinting: this.input.isKeyDown('control') && this.input.isKeyDown('w') && this.player.hunger > 6 && !this.player.flying,
+        sneaking: this.input.isKeyDown('shift'),
       });
       this.network.update(dt);
     }

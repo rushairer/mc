@@ -4172,15 +4172,105 @@ export class Game {
   }
 
   private tryUseLeadOnMob(target: Mob, heldItem: ItemStack) {
-    if (!isLeashableMobType(target.def.type) || target.leashHolderId) return { handled: false };
+    if (!isLeashableMobType(target.def.type)) return { handled: false };
+    const localHolderId = this.network.playerId ?? 'local-player';
+    if (target.leashHolderId === 'local-player' || target.leashHolderId === localHolderId) {
+      return { handled: false };
+    }
+
+    const existingFenceHolder = parseFenceLeashHolderId(target.leashHolderId);
+    const existingMobHolder = parseMobLeashHolderId(target.leashHolderId);
+    const heldByOtherPlayer =
+      !!target.leashHolderId &&
+      !existingFenceHolder &&
+      existingMobHolder === null &&
+      target.leashHolderId !== localHolderId &&
+      target.leashHolderId !== 'local-player';
+    if (heldByOtherPlayer) return { handled: false };
+
     if (this.sendServerEntityItemUse(heldItem, target.id)) {
       return { handled: true, cooldown: 0.25 };
     }
 
+    if (target.leashHolderId && this.gameMode !== 'creative') {
+      this.droppedItems.spawnItem(
+        420,
+        1,
+        target.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+        new THREE.Vector3(0, 0.8, 0),
+        0.25,
+      );
+    }
     target.leashHolderId = 'local-player';
     if (this.gameMode !== 'creative') {
       this.inventory.removeFromSlot(this.player.selectedSlot, 1);
     }
+    this.sound.playLever();
+    this.notifyState();
+    return { handled: true, cooldown: 0.25 };
+  }
+
+  private tryTransferPlayerLeashesToMob(target: Mob) {
+    if (target.def.type === 'item_frame' || target.def.type === 'painting' || target.def.type === 'armor_stand') {
+      return { handled: false };
+    }
+
+    const localHolderId = this.network.playerId ?? 'local-player';
+    const holderId = mobLeashHolderId(target.id);
+    const targetCenter = {
+      x: target.position.x,
+      y: target.position.y + target.height * 0.55,
+      z: target.position.z,
+    };
+    const attachable = Array.from(this.mobs.mobs.values()).filter((mob) =>
+      mob.id !== target.id &&
+      isLeashableMobType(mob.def.type) &&
+      (mob.leashHolderId === 'local-player' || mob.leashHolderId === localHolderId) &&
+      leashDistance(targetCenter, {
+        x: mob.position.x,
+        y: mob.position.y + mob.height * 0.55,
+        z: mob.position.z,
+      }) <= LEAD_SNAP_DISTANCE
+    );
+    if (attachable.length === 0) return { handled: false };
+
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_MOB_INTERACT, { mobId: target.id, action: 'transfer_leashes' });
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    for (const mob of attachable) mob.leashHolderId = holderId;
+    this.sound.playLever();
+    this.notifyState();
+    return { handled: true, cooldown: 0.25 };
+  }
+
+  private tryShearLeashConnections(target: Mob, heldItem: ItemStack) {
+    const childHolderId = mobLeashHolderId(target.id);
+    const childConnections = Array.from(this.mobs.mobs.values()).filter(
+      (mob) => mob.leashHolderId === childHolderId,
+    );
+    const ownConnection = !!target.leashHolderId && isLeashableMobType(target.def.type);
+    if (!ownConnection && childConnections.length === 0) return { handled: false };
+
+    if (this.sendServerEntityItemUse(heldItem, target.id)) {
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    const broken = ownConnection ? [target, ...childConnections] : childConnections;
+    for (const mob of broken) {
+      mob.leashHolderId = null;
+      if (this.gameMode !== 'creative') {
+        this.droppedItems.spawnItem(
+          420,
+          1,
+          mob.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+          new THREE.Vector3(0, 0.8, 0),
+          0.25,
+        );
+      }
+    }
+    if (this.gameMode !== 'creative') this.inventory.damageTool(this.player.selectedSlot);
     this.sound.playLever();
     this.notifyState();
     return { handled: true, cooldown: 0.25 };

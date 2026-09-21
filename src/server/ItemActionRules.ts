@@ -13,7 +13,7 @@ export const BOW_MIN_SPEED = 18;
 export const BOW_MAX_SPEED = 32;
 
 export type ItemActionKind = 'throw' | 'bow_release' | 'ender_eye_throw';
-export type ThrowableProjectileType = 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'firework_rocket';
+export type ThrowableProjectileType = 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'firework_rocket' | 'experience_bottle';
 
 export interface ItemActionRequest {
   action: ItemActionKind;
@@ -87,6 +87,7 @@ export function getThrowableProjectileType(itemId: number): ThrowableProjectileT
   if (name.includes('potion') || baseId === 373) return 'potion';
   if (def?.toolType === 'trident' || name === 'trident') return 'trident';
   if (name === 'firework_rocket' || name === 'fireworks') return 'firework_rocket';
+  if (name === 'experience_bottle' || baseId === 384) return 'experience_bottle';
   return null;
 }
 

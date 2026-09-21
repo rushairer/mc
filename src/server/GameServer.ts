@@ -3186,6 +3186,57 @@ export class GameServer {
         }
       }
 
+      // Rider input is applied after normal passive AI so an authorized rider wins steering.
+      if (mob.riderId) {
+        const rider = this.players.get(mob.riderId);
+        if (!rider || rider.ridingMobId !== mob.id || rider.dimension !== mob.dimension) {
+          mob.riderId = undefined;
+          mob.riderInput = createIdleServerMobRideInput(mob.id);
+          this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_RIDER, { mobId: mob.id, riderId: null });
+        } else {
+          const held = rider.inventory[rider.selectedSlot];
+          const heldName = held ? ItemRegistry.get(held.id)?.name : undefined;
+          const canControl = canControlMountedMob(mob.type, !!mob.isTamed, !!mob.isSaddled, heldName);
+          const input = mob.riderInput ?? createIdleServerMobRideInput(mob.id);
+          if (canControl) {
+            let moveX = 0;
+            let moveZ = 0;
+            if (input.forward) {
+              moveX += Math.sin(rider.yaw);
+              moveZ += Math.cos(rider.yaw);
+            }
+            if (input.back) {
+              moveX -= Math.sin(rider.yaw);
+              moveZ -= Math.cos(rider.yaw);
+            }
+            if (input.left) {
+              moveX += Math.sin(rider.yaw + Math.PI / 2);
+              moveZ += Math.cos(rider.yaw + Math.PI / 2);
+            }
+            if (input.right) {
+              moveX -= Math.sin(rider.yaw + Math.PI / 2);
+              moveZ -= Math.cos(rider.yaw + Math.PI / 2);
+            }
+            const move = new THREE.Vector3(moveX, 0, moveZ);
+            if (move.lengthSq() > 0) {
+              move.normalize();
+              const speedMultiplier = mob.type === 'horse' ? 1.5 : 0.9;
+              const speed = (MOB_DEFS[mob.type]?.speed || 2.0) * speedMultiplier;
+              mob.velocity.x = move.x * speed;
+              mob.velocity.z = move.z * speed;
+              mob.yaw = Math.atan2(move.x, move.z);
+            } else {
+              mob.velocity.x = 0;
+              mob.velocity.z = 0;
+            }
+            if (mob.type === 'horse' && input.jump && mob.onGround) {
+              mob.velocity.y = 9.5;
+              mob.onGround = false;
+            }
+          }
+        }
+      }
+
       // Creeper Explosion ticking
       if (mob.type === 'creeper' && mob.fuseTimer >= 0) {
         mob.fuseTimer += dt;

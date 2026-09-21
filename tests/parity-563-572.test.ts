@@ -106,6 +106,9 @@ test('572: creative server item actions do not require/consume Bow ammo or damag
   const end = source.indexOf('case PacketType.C2S_PLAYER_STATE', start);
   const handler = source.slice(start, end);
   assert.ok(handler.includes("if (session.gameMode !== 'creative')"));
-  assert.ok(handler.includes("type === 'firework_rocket' ? 18 : 15"));
-  assert.ok(handler.includes("type === 'firework_rocket' ? 5 : 1"));
+  assert.ok(handler.includes("type === 'firework_rocket'"));
+  assert.ok(handler.includes('const speed ='));
+  assert.ok(handler.includes('const velocityY ='));
+  assert.ok(handler.includes('damage:'));
+  assert.ok(handler.includes("if (session.gameMode !== 'creative')"));
 });

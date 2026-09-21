@@ -57,7 +57,7 @@ for (const b of rawBlocks) {
     toolCategory = 'pickaxe';
   } else if (b.material === 'wood' || b.name.includes('planks') || b.name.includes('log') || b.name.includes('door') || b.name.includes('trapdoor') || b.name.includes('fence')) {
     toolCategory = 'axe';
-  } else if (b.material === 'dirt' || b.name === 'grass' || b.name === 'dirt' || b.name === 'sand' || b.name === 'gravel' || b.name === 'clay') {
+  } else if (b.material === 'dirt' || b.name === 'grass' || b.name === 'dirt' || b.name.includes('sand') || b.name.includes('gravel') || b.name === 'clay') {
     toolCategory = 'shovel';
   }
 

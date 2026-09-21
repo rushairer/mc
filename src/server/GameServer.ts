@@ -131,6 +131,7 @@ import {
   canPlaceHangingEntity,
   choosePaintingVariant,
   hangingEntityWorldPosition,
+  hangingSupportPositionFromWorld,
   hangingEntityYaw,
   isLeashableMobType,
   isPaintingVariant,
@@ -1291,6 +1292,31 @@ export class GameServer {
 
         if (intent.action === 'interact') {
           const held = session.inventory[session.selectedSlot];
+
+          if (!held && mob.leashHolderId === session.id && isLeashableMobType(mob.type)) {
+            mob.leashHolderId = undefined;
+            if (session.gameMode !== 'creative') {
+              this.spawnDroppedItem(
+                420,
+                1,
+                mob.position.x,
+                mob.position.y + 0.4,
+                mob.position.z,
+                mob.dimension,
+                0.25,
+              );
+            }
+            this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_STATE, {
+              id: mob.id,
+              health: mob.health,
+              hurtTimer: mob.hurtTimer,
+              leashHolderId: null,
+            });
+            this.broadcastDimension(mob.dimension, PacketType.S2C_SOUND, {
+              type: 'pickup', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+            });
+            break;
+          }
 
           if (mob.type === 'item_frame') {
             if (!mob.itemFrameItem) {
@@ -3465,6 +3491,13 @@ export class GameServer {
   private tickMobs(dt: number) {
     for (const mob of this.mobs.values()) {
       if (mob.type === 'item_frame' || mob.type === 'painting') {
+        if (mob.hangingFace) {
+          const support = hangingSupportPositionFromWorld(mob.position, mob.hangingFace);
+          if (!this.isSolidBlock(support.x, support.y, support.z, mob.dimension)) {
+            this.handleMobDeath(mob);
+            continue;
+          }
+        }
         mob.velocity.set(0, 0, 0);
         mob.aiState = 'idle';
         mob.wanderTarget = null;

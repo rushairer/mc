@@ -233,6 +233,11 @@ export class NetworkClient {
         break;
       }
 
+      case PacketType.S2C_TOTEM_ACTIVATE: {
+        this.game.applyServerTotemActivation();
+        break;
+      }
+
       case PacketType.S2C_MOB_SPAWN: {
         const {
           id, type, x, y, z, yaw, pitch, health,
@@ -516,7 +521,7 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_SOUND: {
-        const { type } = packet.payload;
+        const { type, songId, playing } = packet.payload;
         if (type === 'break') this.game.sound.playBlockBreak(1);
         else if (type === 'place') this.game.sound.playBlockPlace(1);
         else if (type === 'hurt') this.game.sound.playHurt();
@@ -524,6 +529,12 @@ export class NetworkClient {
         else if (type === 'pickup') this.game.sound.playPickup();
         else if (type === 'xp') this.game.sound.playXP();
         else if (type === 'explode') this.game.sound.playExplosion();
+        else if (type === 'jukebox') {
+          if (playing === false) this.game.sound.stopJukeboxSong();
+          else if (typeof songId === 'string') this.game.sound.playJukeboxSong(songId);
+        } else if (type === 'totem') {
+          this.game.sound.playTotemUse();
+        }
         break;
       }
 

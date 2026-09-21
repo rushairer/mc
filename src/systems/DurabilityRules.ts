@@ -33,7 +33,7 @@ export function getDurabilityUseChance(level: number, kind: DurabilityItemKind):
 
 /** Java melee durability use: swords cost one point; ordinary tools cost two. */
 export function getMeleeDurabilityCost(toolType?: string): number {
-  if (toolType === 'sword') return 1;
+  if (toolType === 'sword' || toolType === 'mace') return 1;
   if (toolType === 'axe' || toolType === 'pickaxe' || toolType === 'shovel' || toolType === 'hoe') {
     return 2;
   }

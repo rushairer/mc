@@ -31,6 +31,18 @@ test('movement parser normalizes boolean movement flags without trusting truthy 
   });
 });
 
+test('movement parser carries sneaking as a strict boolean for server interaction rules', () => {
+  const parsed = parseServerMoveIntent({
+    x: 0, y: 64, z: 0, yaw: 0, pitch: 0,
+    sneaking: true,
+  });
+  assert.equal(parsed?.sneaking, true);
+  assert.equal(parseServerMoveIntent({
+    x: 0, y: 64, z: 0, yaw: 0, pitch: 0,
+    sneaking: 'true',
+  })?.sneaking, false);
+});
+
 test('distance squared is computed from authoritative previous coordinates', () => {
   assert.equal(movementDistanceSquared({ x: 0, y: 0, z: 0 }, { x: 3, y: 4, z: 0 }), 25);
 });

@@ -126,6 +126,7 @@ import {
 } from '../items/TotemRules';
 import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, WIND_CHARGE_SPEED, windBurstImpulse } from '../items/WindChargeRules';
 import { getMaceSmashBonus, getMaceSmashImpulse, isMaceSmash, MACE_HEAVY_SMASH_THRESHOLD } from '../items/MaceRules';
+import { brushedReplacementName, isSuspiciousBlockName, normalizeArchaeologyLootCount } from '../items/ArchaeologyRules';
 import {
   ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
   ITEM_ENTITY_DESPAWN_SECONDS,
@@ -2111,6 +2112,39 @@ export class GameServer {
     const targetBlockId = this.getBlock(intent.x, intent.y, intent.z, session.dimension);
     const targetBlock = BlockRegistry.get(targetBlockId);
     if (!targetBlock) return false;
+
+    if (itemName === 'brush') {
+      if (!isSuspiciousBlockName(targetBlock.name)) return false;
+      const replacementName = brushedReplacementName(targetBlock.name);
+      const replacement = replacementName ? BlockRegistry.getByName(replacementName) : undefined;
+      if (!replacement) return false;
+
+      const metadata = this.getBlockMetadata(intent.x, intent.y, intent.z, session.dimension);
+      this.setBlock(intent.x, intent.y, intent.z, replacement.id, session.dimension, null);
+      this.broadcastServerBlockUpdate(intent.x, intent.y, intent.z, replacement.id, session.dimension, null);
+
+      const lootCount = normalizeArchaeologyLootCount(metadata?.archaeologyLootCount);
+      if (metadata?.archaeologyNatural && metadata.archaeologyLootItemId && lootCount > 0) {
+        this.spawnDroppedItem(
+          metadata.archaeologyLootItemId,
+          lootCount,
+          intent.x + 0.5,
+          intent.y + 0.65,
+          intent.z + 0.5,
+          session.dimension,
+          0.25,
+        );
+      }
+
+      this.damageServerHeldTool(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: targetBlock.name === 'suspicious_gravel' ? 'brush_gravel' : 'brush_sand',
+        x: intent.x + 0.5,
+        y: intent.y + 0.5,
+        z: intent.z + 0.5,
+      });
+      return true;
+    }
 
     if (itemName === 'item_frame' || itemName === 'painting') {
       if (!intent.face) return false;

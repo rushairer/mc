@@ -2652,7 +2652,36 @@ export class TextureAtlas {
             const name = item.name;
             ctx.fillStyle = colors.hex;
 
-            if (name.endsWith('_cushion')) {
+            if (name.startsWith('record_') || name.startsWith('music_disc_')) {
+              // Recognizable Minecraft-style record silhouette; the center label remains
+              // per-disc distinct so neighboring Music Discs do not collapse visually.
+              ctx.fillStyle = '#171717';
+              ctx.fillRect(x + 4, y + 3, 8, 10);
+              ctx.fillRect(x + 3, y + 4, 10, 8);
+              ctx.fillStyle = '#2b2b2b';
+              ctx.fillRect(x + 5, y + 4, 6, 8);
+              ctx.fillRect(x + 4, y + 5, 8, 6);
+              ctx.fillStyle = colors.hex;
+              ctx.fillRect(x + 6, y + 6, 4, 4);
+              ctx.fillStyle = '#111111';
+              ctx.fillRect(x + 7, y + 7, 2, 2);
+              ctx.fillStyle = 'rgba(255,255,255,0.24)';
+              ctx.fillRect(x + 5, y + 4, 4, 1);
+            } else if (name === 'totem_of_undying') {
+              ctx.fillStyle = '#d9b83f';
+              ctx.fillRect(x + 6, y + 2, 4, 4);
+              ctx.fillRect(x + 5, y + 6, 6, 5);
+              ctx.fillRect(x + 3, y + 7, 2, 2);
+              ctx.fillRect(x + 11, y + 7, 2, 2);
+              ctx.fillRect(x + 5, y + 11, 2, 3);
+              ctx.fillRect(x + 9, y + 11, 2, 3);
+              ctx.fillStyle = '#4a8d4e';
+              ctx.fillRect(x + 6, y + 6, 1, 3);
+              ctx.fillRect(x + 9, y + 6, 1, 3);
+              ctx.fillStyle = '#8ce7e7';
+              ctx.fillRect(x + 6, y + 3, 1, 1);
+              ctx.fillRect(x + 9, y + 3, 1, 1);
+            } else if (name.endsWith('_cushion')) {
               const dye = name.slice(0, -'_cushion'.length);
               const dyeColors: Record<string, string> = {
                 white: '#f0f0f0', orange: '#f9801d', magenta: '#c74ebd', light_blue: '#3ab3da',
@@ -2831,6 +2860,12 @@ export class TextureAtlas {
             }
           });
         }
+      }
+
+      if (item.name.startsWith('record_')) {
+        const canonicalName = item.officialId.replace(/^minecraft:/, '');
+        this.aliasTile(canonicalName, item.name);
+        this.aliasTile(`item:${canonicalName}`, item.name);
       }
     }
 

@@ -19,6 +19,7 @@ export class SoundSystem {
   private activeAmbientGain: GainNode | null = null;
   private currentAmbientType = '';
   private resourceSounds: Map<string, AudioBuffer[]> = new Map();
+  private activeJukeboxSources: Array<OscillatorNode | AudioBufferSourceNode> = [];
   // ─── P4.1: procedural background music ───
   private musicTimer: ReturnType<typeof setInterval> | null = null;
   // ─── P4.2: rain ambience ───
@@ -359,6 +360,83 @@ export class SoundSystem {
     osc.connect(gain).connect(this.sfxGain!);
     osc.start();
     osc.stop(ctx.currentTime + 0.12);
+  }
+
+  stopJukeboxSong() {
+    for (const source of this.activeJukeboxSources) {
+      try { source.stop(); } catch (e) {}
+    }
+    this.activeJukeboxSources = [];
+  }
+
+  /** Play a resource-pack jukebox song when present, otherwise a short deterministic synthesized motif. */
+  playJukeboxSong(songId: string) {
+    this.stopJukeboxSong();
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+
+    const resourceKey = [`music_disc.${songId}`, `record.${songId}`]
+      .find((candidate) => this.resourceSounds.has(candidate));
+    if (resourceKey) {
+      const buffers = this.resourceSounds.get(resourceKey)!;
+      const source = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      source.buffer = buffers[Math.floor(Math.random() * buffers.length)];
+      gain.gain.value = 0.55;
+      source.connect(gain).connect(this.musicGain ?? this.sfxGain!);
+      source.start();
+      this.activeJukeboxSources = [source];
+      source.onended = () => {
+        this.activeJukeboxSources = this.activeJukeboxSources.filter((entry) => entry !== source);
+      };
+      return;
+    }
+
+    const hash = Array.from(songId).reduce((sum, ch) => (sum * 31 + ch.charCodeAt(0)) >>> 0, 17);
+    const base = 164.81 * Math.pow(2, (hash % 12) / 12);
+    const intervals = [0, 4, 7, 12, 7, 4, 2, 9, 0, 5, 9, 12, 9, 5, 4, 7];
+    const now = ctx.currentTime;
+    const sources: OscillatorNode[] = [];
+    intervals.forEach((interval, index) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const start = now + index * 0.28;
+      const end = start + 0.24;
+      osc.type = index % 4 === 0 ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(base * Math.pow(2, interval / 12), start);
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.linearRampToValueAtTime(0.08, start + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.001, end);
+      osc.connect(gain).connect(this.musicGain ?? this.sfxGain!);
+      osc.start(start);
+      osc.stop(end + 0.02);
+      sources.push(osc);
+    });
+    this.activeJukeboxSources = sources;
+    const last = sources[sources.length - 1];
+    last.onended = () => {
+      if (this.activeJukeboxSources === sources) this.activeJukeboxSources = [];
+    };
+  }
+
+  playTotemUse() {
+    if (this.playFirstResourceSound(['item.totem.use'], 0.9)) return;
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    [392, 523.25, 659.25, 783.99].forEach((freq, index) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const start = now + index * 0.045;
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, start);
+      gain.gain.setValueAtTime(0.001, start);
+      gain.gain.linearRampToValueAtTime(0.18, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.32);
+      osc.connect(gain).connect(this.sfxGain!);
+      osc.start(start);
+      osc.stop(start + 0.35);
+    });
   }
 
   playAdvancement() {
@@ -1328,6 +1406,7 @@ export class SoundSystem {
 
   dispose() {
     this.stopMusic();
+    this.stopJukeboxSong();
     this.updateRainAmbience('clear');
     if (this.activeAmbientOsc) {
       try {

@@ -9,6 +9,15 @@ import { RecipeBookUI } from './RecipeBookUI';
 import { useI18n } from '../i18n';
 import { EnchantSystem } from '../systems/EnchantSystem';
 import { PotionEffects } from '../systems/PotionEffect';
+import {
+  BUNDLE_CAPACITY,
+  bundleFullnessFraction,
+  bundleUsedCapacity,
+  insertIntoBundle,
+  isBundleStack,
+  removeOneFromBundle,
+  visibleBundleContents,
+} from '../items/BundleRules';
 
 interface InventoryUIProps {
   inventory: Inventory;
@@ -68,6 +77,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
   const [craftResult, setCraftResult] = useState<ItemStack | null>(null);
   const [creativeSearch, setCreativeSearch] = useState('');
   const [recipeBookOpen, setRecipeBookOpen] = useState(false);
+  const [bundleSelectedIndex, setBundleSelectedIndex] = useState<Record<string, number>>({});
   const recipeEntries = useRef(getAllRecipeBookEntries()).current;
   const [hoveredSlot, setHoveredSlot] = useState<{
     item: ItemStack;
@@ -198,6 +208,17 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     // Inventory slot click
     const slotItem = inventory.getSlot(slotIndex);
 
+    if (heldItem && slotItem && isBundleStack(slotItem)) {
+      const result = insertIntoBundle(slotItem, heldItem);
+      if (result.insertedCount > 0) {
+        inventory.setSlot(slotIndex, result.bundle);
+        setHeldItem(result.remaining);
+        setHoveredSlot(null);
+        onInventoryChange();
+        return;
+      }
+    }
+
     if (heldItem && slotItem && heldItem.id === slotItem.id) {
       // Stack items
       const maxStack = ItemRegistry.getMaxStackSize(heldItem.id);
@@ -221,6 +242,41 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
 
     onInventoryChange();
   }, [heldItem, inventory, craftingGrid, onInventoryChange]);
+
+  const handleBundleContextMenu = useCallback((
+    e: React.MouseEvent,
+    item: ItemStack | null,
+    index: number,
+    slotType: 'inventory' | 'armor' | 'offhand' | 'crafting',
+  ) => {
+    if (slotType !== 'inventory' || !item || heldItem || !isBundleStack(item)) return;
+    e.preventDefault();
+    const key = `${slotType}:${index}`;
+    const result = removeOneFromBundle(item, bundleSelectedIndex[key] ?? 0);
+    if (!result.removed) return;
+    inventory.setSlot(index, result.bundle);
+    setHeldItem(result.removed);
+    setHoveredSlot(null);
+    onInventoryChange();
+  }, [bundleSelectedIndex, heldItem, inventory, onInventoryChange]);
+
+  const handleBundleWheel = useCallback((
+    e: React.WheelEvent,
+    item: ItemStack | null,
+    index: number,
+    slotType: 'inventory' | 'armor' | 'offhand' | 'crafting',
+  ) => {
+    if (slotType !== 'inventory' || !item || heldItem || !isBundleStack(item)) return;
+    const visible = visibleBundleContents(item);
+    if (visible.length <= 1) return;
+    e.preventDefault();
+    const key = `${slotType}:${index}`;
+    setBundleSelectedIndex((previous) => {
+      const current = Math.max(0, Math.min(visible.length - 1, previous[key] ?? 0));
+      const direction = e.deltaY > 0 ? 1 : -1;
+      return { ...previous, [key]: (current + direction + visible.length) % visible.length };
+    });
+  }, [heldItem]);
 
   const handleArmorSlotClick = useCallback((armorSlotIndex: number) => {
     const expectedSlots: ('helmet' | 'chestplate' | 'leggings' | 'boots')[] = ['helmet', 'chestplate', 'leggings', 'boots'];
@@ -403,6 +459,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
           setHoveredSlot(null);
           onClick();
         }}
+        onContextMenu={(e) => handleBundleContextMenu(e, item, index, slotType)}
+        onWheel={(e) => handleBundleWheel(e, item, index, slotType)}
         onMouseEnter={(e) => {
           if (item && itemDef && !heldItem) {
             setHoveredSlot({
@@ -1017,6 +1075,58 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
             <span style={{ color: '#55FF55', fontSize: '10px' }}>
               {t('durability', { current: hoveredSlot.item.durability, max: hoveredSlot.itemDef.durability })}
             </span>
+          )}
+          {isBundleStack(hoveredSlot.item) && (
+            <>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 28px)',
+                gap: '2px',
+                paddingTop: '3px',
+                minHeight: '28px',
+              }}>
+                {visibleBundleContents(hoveredSlot.item).map((entry, visibleIndex) => {
+                  const def = ItemRegistry.get(entry.id);
+                  const key = `${hoveredSlot.type}:${hoveredSlot.index}`;
+                  const selected = (bundleSelectedIndex[key] ?? 0) === visibleIndex;
+                  return (
+                    <div
+                      key={`${entry.id}:${visibleIndex}`}
+                      title={def ? getLocalizedItemName(entry.id, def.displayName) : String(entry.id)}
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        position: 'relative',
+                        boxSizing: 'border-box',
+                        border: selected ? '1px solid #fff' : '1px solid #4a4050',
+                        background: selected ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.18)',
+                      }}
+                    >
+                      <div style={getItemIconStyle(entry.id, 24)} />
+                      {entry.count > 1 && (
+                        <span style={{
+                          position: 'absolute',
+                          right: '1px',
+                          bottom: '-1px',
+                          fontSize: '8px',
+                          fontWeight: 'bold',
+                        }}>{entry.count}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <span style={{ color: '#b5b5b5', fontSize: '9px' }}>
+                {bundleUsedCapacity(hoveredSlot.item)}/{BUNDLE_CAPACITY}
+              </span>
+              <div style={{ width: '100%', height: '3px', background: '#170f18' }}>
+                <div style={{
+                  width: `${bundleFullnessFraction(hoveredSlot.item) * 100}%`,
+                  height: '100%',
+                  background: '#b28bd4',
+                }} />
+              </div>
+            </>
           )}
         </div>
       )}

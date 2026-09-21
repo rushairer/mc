@@ -573,7 +573,11 @@ export class RedstoneSystem {
     getBlockMeta: (x: number, y: number, z: number) => any
   ): number | null {
     const meta = getBlockMeta(x, y, z);
-    if (!meta || !meta.containerType || !meta.inventory) return null;
+    if (!meta) return null;
+    if (Number.isFinite(meta.jukeboxComparatorOutput)) {
+      return Math.max(0, Math.min(15, Math.floor(meta.jukeboxComparatorOutput)));
+    }
+    if (!meta.containerType || !meta.inventory) return null;
     const inventory: any[] = meta.inventory;
     let sumCounts = 0;
     let sumMaxStacks = 0;

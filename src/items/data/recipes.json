@@ -6419,6 +6419,54 @@
       }
     }
   ],
+  "20015": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 0
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20015,
+        "metadata": 0
+      }
+    }
+  ],
+  "20020": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 4
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20020,
+        "metadata": 0
+      }
+    }
+  ],
+  "20031": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 3
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20031,
+        "metadata": 0
+      }
+    }
+  ],
   "20036": [
     {
       "inShape": [
@@ -6432,6 +6480,118 @@
       "result": {
         "count": 1,
         "id": 20036,
+        "metadata": 0
+      }
+    }
+  ],
+  "20072": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 6
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20072,
+        "metadata": 0
+      }
+    }
+  ],
+  "20114": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 8
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20114,
+        "metadata": 0
+      }
+    }
+  ],
+  "20117": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 2
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20117,
+        "metadata": 0
+      }
+    }
+  ],
+  "20140": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 12
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20140,
+        "metadata": 0
+      }
+    }
+  ],
+  "20143": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 7
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20143,
+        "metadata": 0
+      }
+    }
+  ],
+  "20146": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 10
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20146,
+        "metadata": 0
+      }
+    }
+  ],
+  "20151": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 13
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20151,
         "metadata": 0
       }
     }
@@ -6468,6 +6628,102 @@
       "result": {
         "count": 1,
         "id": 20189,
+        "metadata": 0
+      }
+    }
+  ],
+  "20194": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 14
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20194,
+        "metadata": 0
+      }
+    }
+  ],
+  "20209": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 9
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20209,
+        "metadata": 0
+      }
+    }
+  ],
+  "20221": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 5
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20221,
+        "metadata": 0
+      }
+    }
+  ],
+  "20231": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 1
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20231,
+        "metadata": 0
+      }
+    }
+  ],
+  "20291": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 15
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20291,
+        "metadata": 0
+      }
+    }
+  ],
+  "20302": [
+    {
+      "ingredients": [
+        20036,
+        {
+          "id": 351,
+          "metadata": 11
+        }
+      ],
+      "result": {
+        "count": 1,
+        "id": 20302,
         "metadata": 0
       }
     }

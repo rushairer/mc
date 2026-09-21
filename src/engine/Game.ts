@@ -62,6 +62,7 @@ import {
   type WorldContext,
 } from '../world/BehaviorRegistry';
 import { planBlockPlacement } from '../world/BlockPlacement';
+import { spawnEggMobTypeForItemName } from '../world/SpawnEggRules';
 import { resolveAxeStrippedBlockName, resolveHoeFarmlandTargetName, resolveShovelPathTargetName, rotateBoneMealSpreadOffsets26_3 } from '../world/ItemOnBlockRules';
 import { fallingLeafParticle26_3, shouldPrioritizeShieldUse26_3 } from '../world/WildernessBoundChanges26_3';
 import { useStrawBed as resolveStrawBedUse26_3 } from '../world/WildernessBound26_3';
@@ -89,7 +90,7 @@ import { canAcceptFurnaceOutput, getFurnaceCookSpeed, getFurnaceFuelBurnTime, ge
 import { getBedHeadPosition, getBedOtherPosition, isMonsterWithinBedSleepRange, resolveBedUse } from '../world/BedRules';
 import { getDamageShake, normalizeDamageFlash } from '../systems/FeelRules';
 import { rollBlockLoot, rollLootTable, type LootTable } from '../world/LootSystem';
-import { getBlockXpRange, rollXp, BREEDING_XP_RANGE, FISHING_XP_RANGE } from '../world/XpRules';
+import { getBlockXpRange, rollXp, BREEDING_XP_RANGE, FISHING_XP_RANGE, EXPERIENCE_BOTTLE_XP_RANGE } from '../world/XpRules';
 import type { WorldTickPayload, WorldTickType } from '../world/WorldTick';
 import { getAttackCooldownSeconds } from '../items/CombatAttributes';
 import { calculateMeleeDamage, getSweepDamage, isChargedMeleeAttack } from '../systems/CombatRules';
@@ -117,6 +118,7 @@ const ENDER_PEARL_ID = 368;
 const SNOWBALL_ID = 332;
 const EGG_ID = 344;
 const FISHING_ROD_ID = 346;
+const EXPERIENCE_BOTTLE_ID = 384;
 const RAW_FISH_ID = 349;
 const RAW_SALMON_ID = (1 << 10) | 349;
 const CLOWNFISH_ID = (2 << 10) | 349;
@@ -944,11 +946,15 @@ export class Game {
       id: 'minecraft:hoe',
       use: ({ target }) => ({ handled: this.tryTillFarmland(target), cooldown: 0.25 }),
     });
+    this.behaviors.registerItem([], {
+      id: 'minecraft:spawn_egg',
+      use: ({ stack, target }) => ({ handled: this.tryUseSpawnEgg(stack, target), cooldown: 0.25 }),
+    });
     this.behaviors.registerItem('fishing_rod', {
       id: 'minecraft:fishing_rod',
       use: ({ stack }) => ({ handled: this.tryUseFishingRod(stack.id), cooldown: 0.35 }),
     });
-    this.behaviors.registerItem(['snowball', 'egg', 'ender_pearl', 'trident', 'fireworks', 'firework_rocket'], {
+    this.behaviors.registerItem(['snowball', 'egg', 'ender_pearl', 'trident', 'fireworks', 'firework_rocket', 'experience_bottle'], {
       id: 'minecraft:throwable',
       use: ({ stack }) => ({
         handled: this.tryThrowHeldProjectile(stack.id),
@@ -3781,6 +3787,26 @@ export class Game {
     return true;
   }
 
+  private tryUseSpawnEgg(stack: ItemStack, target?: BlockInteractionContext): boolean {
+    if (!target) return false;
+    const itemName = ItemRegistry.get(stack.id)?.name ?? '';
+    const mobType = spawnEggMobTypeForItemName(itemName);
+    if (!mobType) return false;
+    if (this.sendServerBlockItemUse(stack, target)) return true;
+
+    const position = this.getAdjacentBlockPosition(target);
+    if (!position) return false;
+    const mob = this.mobs.spawnMob(mobType, position.x + 0.5, position.y, position.z + 0.5);
+    if (!mob) return false;
+
+    this.sound.playLever();
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+    this.notifyState();
+    return true;
+  }
+
   private tryPlaceBoat(stack: ItemStack, target?: BlockInteractionContext): boolean {
     if (!target) return false;
     if (this.sendServerBlockItemUse(stack, target)) return true;
@@ -4732,6 +4758,15 @@ export class Game {
   }
 
   private handleThrowableImpact(type: ProjectileType, pos: THREE.Vector3, fromPlayer: boolean) {
+    if (type === 'experience_bottle') {
+      this.particles.spawnXP(pos.x, pos.y, pos.z, 12);
+      this.sound.playXP();
+      if (!this.isMultiplayerNetworkConnected() && fromPlayer) {
+        this.xp.spawnXP(rollXp(EXPERIENCE_BOTTLE_XP_RANGE, Math.random), pos.clone());
+      }
+      return;
+    }
+
     if (type === 'snowball') {
       this.particles.spawnBlockBreak(pos.x, pos.y, pos.z, 0xf4fbff, 12);
       this.sound.playBlockBreak(80);
@@ -5966,9 +6001,28 @@ export class Game {
       heldItemId !== ENDER_PEARL_ID &&
       heldItemId !== TRIDENT_ID &&
       heldItemId !== FIREWORK_ROCKET_ID &&
-      heldItemId !== MODERN_FIREWORK_ROCKET_ID
+      heldItemId !== MODERN_FIREWORK_ROCKET_ID &&
+      heldItemId !== EXPERIENCE_BOTTLE_ID &&
+      ItemRegistry.get(heldItemId)?.name !== 'experience_bottle'
     ) {
       return false;
+    }
+
+    if (heldItemId === EXPERIENCE_BOTTLE_ID || ItemRegistry.get(heldItemId)?.name === 'experience_bottle') {
+      if (this.sendItemAction({ action: 'throw', itemId: heldItemId })) {
+        this.sound.playLever();
+        this.placeCooldown = 0.35;
+        return true;
+      }
+      const origin = this.player.eyePosition.clone().add(this.player.forward.clone().multiplyScalar(0.35));
+      this.projectiles.shootExperienceBottle(origin, this.player.forward, true);
+      this.sound.playLever();
+      if (this.gameMode !== 'creative') {
+        this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+      }
+      this.placeCooldown = 0.35;
+      this.notifyState();
+      return true;
     }
 
     if (heldItemId === FIREWORK_ROCKET_ID || heldItemId === MODERN_FIREWORK_ROCKET_ID) {

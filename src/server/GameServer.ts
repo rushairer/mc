@@ -3862,6 +3862,8 @@ export class GameServer {
       if (mob.leashHolderId && isLeashableMobType(mob.type)) {
         const playerHolder = this.players.get(mob.leashHolderId);
         const fenceHolder = parseFenceLeashHolderId(mob.leashHolderId);
+        const holderMobId = parseMobLeashHolderId(mob.leashHolderId);
+        const holderMob = holderMobId === null ? undefined : this.mobs.get(holderMobId);
         let holderPos: { x: number; y: number; z: number } | null = null;
         let dropOnBreak = false;
 
@@ -3883,12 +3885,24 @@ export class GameServer {
             };
             dropOnBreak = true;
           }
+        } else if (
+          holderMob &&
+          holderMob.id !== mob.id &&
+          holderMob.dimension === mob.dimension &&
+          holderMob.health > 0
+        ) {
+          holderPos = {
+            x: holderMob.position.x,
+            y: holderMob.position.y + (MOB_DEFS[holderMob.type]?.height ?? 1.0) * 0.55,
+            z: holderMob.position.z,
+          };
+          dropOnBreak = true;
         }
 
         if (!holderPos) {
-          const wasFenceHolder = !!fenceHolder;
+          const hadPersistentHolder = !!fenceHolder || holderMobId !== null;
           mob.leashHolderId = undefined;
-          if (wasFenceHolder) {
+          if (hadPersistentHolder) {
             this.spawnDroppedItem(
               420,
               1,
@@ -3936,6 +3950,9 @@ export class GameServer {
             mob.velocity.x += pull.x * dt;
             mob.velocity.y += pull.y * dt;
             mob.velocity.z += pull.z * dt;
+            if (Math.abs(pull.x) + Math.abs(pull.z) > 1e-6) {
+              mob.yaw = Math.atan2(holderPos.x - mobCenter.x, holderPos.z - mobCenter.z);
+            }
           }
         }
       }

@@ -146,6 +146,7 @@ const ZH_CN_EXACT: Dict = {
   Spyglass: '望远镜',
   'Goat Horn': '山羊角',
   'Wind Charge': '风弹',
+  'Totem of Undying': '不死图腾',
 };
 
 const ZH_TW_EXACT: Dict = {
@@ -225,6 +226,7 @@ const ZH_TW_EXACT: Dict = {
   Spyglass: '望遠鏡',
   'Goat Horn': '山羊角',
   'Wind Charge': '風彈',
+  'Totem of Undying': '不死圖騰',
 };
 
 const ZH_CN_WORDS: Dict = {
@@ -323,6 +325,11 @@ const translateWords = (name: string, words: Dict) => {
 };
 
 const translateSpecialPatterns = (displayName: string, words: Dict): string | null => {
+  const musicDisc = displayName.match(/^Music Disc (.+)$/);
+  if (musicDisc) {
+    return `${words === ZH_TW_WORDS ? '音樂唱片' : '音乐唱片'} ${musicDisc[1]}`;
+  }
+
   const spawnEgg = displayName.match(/^(.+) Spawn Egg$/);
   if (spawnEgg) {
     const entityNames = words === ZH_TW_WORDS ? SPAWN_EGG_ENTITY_ZH_TW : SPAWN_EGG_ENTITY_ZH_CN;

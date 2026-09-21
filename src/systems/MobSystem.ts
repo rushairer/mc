@@ -521,9 +521,12 @@ export class MobSystem {
     for (const mob of this.mobs.values()) {
       // Simple AABB ray intersection
       const hw = mob.width / 2;
+      const hanging = mob.def.type === 'item_frame' || mob.def.type === 'painting';
+      const minY = hanging ? mob.position.y - mob.height / 2 : mob.position.y;
+      const maxY = hanging ? mob.position.y + mob.height / 2 : mob.position.y + mob.height;
       const box = new THREE.Box3(
-        new THREE.Vector3(mob.position.x - hw, mob.position.y, mob.position.z - hw),
-        new THREE.Vector3(mob.position.x + hw, mob.position.y + mob.height, mob.position.z + hw)
+        new THREE.Vector3(mob.position.x - hw, minY, mob.position.z - hw),
+        new THREE.Vector3(mob.position.x + hw, maxY, mob.position.z + hw)
       );
 
       const intersection = new THREE.Vector3();
@@ -598,9 +601,12 @@ export class MobSystem {
       if (allowed && !allowed.has(mob.def.type)) continue;
 
       const hw = mob.width / 2;
+      const hanging = mob.def.type === 'item_frame' || mob.def.type === 'painting';
+      const minY = hanging ? mob.position.y - mob.height / 2 : mob.position.y;
+      const maxY = hanging ? mob.position.y + mob.height / 2 : mob.position.y + mob.height;
       const box = new THREE.Box3(
-        new THREE.Vector3(mob.position.x - hw, mob.position.y, mob.position.z - hw),
-        new THREE.Vector3(mob.position.x + hw, mob.position.y + mob.height, mob.position.z + hw)
+        new THREE.Vector3(mob.position.x - hw, minY, mob.position.z - hw),
+        new THREE.Vector3(mob.position.x + hw, maxY, mob.position.z + hw)
       );
 
       const intersection = new THREE.Vector3();
@@ -642,7 +648,10 @@ export class MobSystem {
 
       let blockedByCap = false;
       for (const [dx, dy, dz] of offsets) {
-        if (this.mobs.size >= MAX_RESTORED_MOBS_PER_DIMENSION) {
+        const ordinaryMobCount = Array.from(this.mobs.values()).filter(
+          mob => mob.def.type !== 'armor_stand' && mob.def.type !== 'item_frame' && mob.def.type !== 'painting',
+        ).length;
+        if (ordinaryMobCount >= MAX_RESTORED_MOBS_PER_DIMENSION) {
           blockedByCap = true;
           break;
         }

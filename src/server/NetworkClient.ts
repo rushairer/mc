@@ -5,6 +5,7 @@ import { Chunk } from '../world/Chunk';
 import { ChunkManager } from '../world/ChunkManager';
 import { CHUNK_SIZE } from '../constants';
 import * as THREE from 'three';
+import { isPaintingVariant } from '../entities/HangingEntityRules';
 
 export class NetworkClient {
   private socket: any; // MockWebSocket or WebSocket
@@ -233,7 +234,12 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_MOB_SPAWN: {
-        const { id, type, x, y, z, yaw, pitch, health, isBaby, isTamed, isSitting, isSaddled, customName, armorStandEquipment, isSheared, riderId } = packet.payload;
+        const {
+          id, type, x, y, z, yaw, pitch, health,
+          isBaby, isTamed, isSitting, isSaddled, customName,
+          armorStandEquipment, hangingFace, itemFrameItem, itemFrameRotation,
+          paintingVariant, leashHolderId, isSheared, riderId,
+        } = packet.payload;
         // Spawns mob client-side
         const mob = this.game.mobs.spawnMob(type, x, y, z);
         if (mob) {
@@ -254,6 +260,15 @@ export class NetworkClient {
           if (type === 'armor_stand' && Array.isArray(armorStandEquipment)) {
             mob.setArmorStandEquipmentSnapshot(armorStandEquipment);
           }
+          if ((type === 'item_frame' || type === 'painting') && hangingFace) {
+            mob.setHangingFace(hangingFace);
+          }
+          if (type === 'item_frame') {
+            mob.setItemFrameState(itemFrameItem ?? null, itemFrameRotation ?? 0);
+          } else if (type === 'painting' && isPaintingVariant(paintingVariant)) {
+            mob.setPaintingVariant(paintingVariant);
+          }
+          mob.leashHolderId = typeof leashHolderId === 'string' && leashHolderId ? leashHolderId : null;
           if (isSheared) mob.isSheared = true;
           if (riderId !== undefined) this.game.applyServerMobRider(id, riderId ?? null);
         }
@@ -290,7 +305,11 @@ export class NetworkClient {
       }
 
       case PacketType.S2C_MOB_STATE: {
-        const { id, health, hurtTimer, fuseTimer, isTamed, isSitting, isSaddled, customName, armorStandEquipment, isSheared } = packet.payload;
+        const {
+          id, health, hurtTimer, fuseTimer, isTamed, isSitting, isSaddled,
+          customName, armorStandEquipment, itemFrameItem, itemFrameRotation,
+          leashHolderId, isSheared,
+        } = packet.payload;
         const mob = this.game.mobs.mobs.get(id);
         if (mob) {
           if (health !== undefined) mob.health = health;
@@ -302,6 +321,15 @@ export class NetworkClient {
           if (customName !== undefined) mob.customName = typeof customName === 'string' && customName.trim() ? customName.trim().slice(0, 50) : null;
           if (mob.def.type === 'armor_stand' && Array.isArray(armorStandEquipment)) {
             mob.setArmorStandEquipmentSnapshot(armorStandEquipment);
+          }
+          if (mob.def.type === 'item_frame' && (itemFrameItem !== undefined || itemFrameRotation !== undefined)) {
+            mob.setItemFrameState(
+              itemFrameItem === undefined ? mob.itemFrameItem : itemFrameItem,
+              itemFrameRotation === undefined ? mob.itemFrameRotation : itemFrameRotation,
+            );
+          }
+          if (leashHolderId !== undefined) {
+            mob.leashHolderId = typeof leashHolderId === 'string' && leashHolderId ? leashHolderId : null;
           }
           if (isSheared !== undefined) mob.isSheared = !!isSheared;
         }

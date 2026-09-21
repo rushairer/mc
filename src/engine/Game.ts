@@ -19,6 +19,7 @@ import {
   canPlaceHangingEntity,
   choosePaintingVariant,
   hangingEntityWorldPosition,
+  hangingSupportPositionFromWorld,
   isLeashableMobType,
   leashDistance,
   leashPullVector,
@@ -1150,6 +1151,12 @@ export class Game {
     }
     if (heldItemName === 'lead' && isLeashableMobType(target.def.type)) {
       return this.tryUseLeadOnMob(target, heldItem!);
+    }
+    const localLeashOwner =
+      target.leashHolderId === 'local-player' ||
+      (!!this.network.playerId && target.leashHolderId === this.network.playerId);
+    if (!heldItem && localLeashOwner && isLeashableMobType(target.def.type)) {
+      return this.tryDetachLeadFromMob(target);
     }
 
     const nameTagLabel = heldItemName === 'name_tag' ? getNameTagLabel(heldItem) : null;
@@ -2597,6 +2604,7 @@ export class Game {
 
       // Resolve collisions (mob-mob, player-mob)
       this.resolveCollisions();
+      this.breakUnsupportedHangingEntities();
     }
 
     this.updateLeashedMobs(dt, isNetworkConnected);
@@ -4118,6 +4126,41 @@ export class Game {
     this.sound.playLever();
     this.notifyState();
     return { handled: true, cooldown: 0.25 };
+  }
+
+  private tryDetachLeadFromMob(target: Mob) {
+    if (!target.leashHolderId || !isLeashableMobType(target.def.type)) return { handled: false };
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_MOB_INTERACT, { mobId: target.id, action: 'interact' });
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    target.leashHolderId = null;
+    if (this.gameMode !== 'creative') {
+      this.droppedItems.spawnItem(
+        420,
+        1,
+        target.position.clone().add(new THREE.Vector3(0, 0.4, 0)),
+        new THREE.Vector3(0, 0.8, 0),
+        0.25,
+      );
+    }
+    this.sound.playPickup();
+    this.notifyState();
+    return { handled: true, cooldown: 0.25 };
+  }
+
+  private breakUnsupportedHangingEntities() {
+    const broken: Mob[] = [];
+    for (const mob of this.mobs.mobs.values()) {
+      if ((mob.def.type !== 'item_frame' && mob.def.type !== 'painting') || !mob.hangingFace) continue;
+      const support = hangingSupportPositionFromWorld(mob.position, mob.hangingFace);
+      if (!this.chunks.isSolidBlock(support.x, support.y, support.z)) broken.push(mob);
+    }
+    for (const mob of broken) {
+      this.handleMobDeath(mob, 0);
+      this.mobs.removeMob(mob.id);
+    }
   }
 
   private updateLeashedMobs(dt: number, networkAuthoritative: boolean) {

@@ -849,13 +849,37 @@ export class GameServer {
         const intent = parseServerMoveIntent(packet.payload);
         const invalidY = !intent || intent.y < -64 || intent.y > WORLD_HEIGHT + 64;
         const flightSpoof = intent ? isSurvivalFlightSpoof(intent, session.gameMode === 'creative') : true;
-        const tooFast = intent ? isMoveTooFast(session, intent) : true;
+        const tooFast = intent && session.ridingMobId === undefined ? isMoveTooFast(session, intent) : false;
         if (!intent || invalidY || flightSpoof || tooFast) {
           this.sendTo(session, PacketType.S2C_POSITION_CORRECTION, {
             x: session.x, y: session.y, z: session.z,
             yaw: session.yaw, pitch: session.pitch,
           });
           break;
+        }
+
+        if (session.ridingMobId !== undefined) {
+          const riddenMob = this.mobs.get(session.ridingMobId);
+          if (riddenMob?.riderId === session.id && riddenMob.dimension === session.dimension) {
+            session.yaw = intent.yaw;
+            session.pitch = intent.pitch;
+            session.onGround = riddenMob.onGround;
+            session.sprinting = false;
+            session.flying = false;
+            this.broadcastExcept(playerId, PacketType.S2C_PLAYER_MOVE, {
+              playerId,
+              x: session.x,
+              y: session.y,
+              z: session.z,
+              yaw: session.yaw,
+              pitch: session.pitch,
+              flying: false,
+              onGround: session.onGround,
+              sprinting: false,
+            });
+            break;
+          }
+          session.ridingMobId = undefined;
         }
 
         session.descending = isDescendingAirborne(
@@ -1152,7 +1176,7 @@ export class GameServer {
         if (!isEntityAttackInReach(session, vehicle.position, session.gameMode)) break;
 
         if (intent.action === 'mount') {
-          if (session.ridingVehicleId !== undefined || vehicle.riderId) break;
+          if (session.ridingVehicleId !== undefined || session.ridingMobId !== undefined || vehicle.riderId) break;
           vehicle.riderId = session.id;
           session.ridingVehicleId = vehicle.id;
           vehicle.input = createIdleServerVehicleInput(vehicle.id);
@@ -2897,6 +2921,15 @@ export class GameServer {
     const deathZ = player.z;
     const deathDimension = player.dimension;
     this.closeServerContainer(player);
+    if (player.ridingMobId !== undefined) {
+      const mob = this.mobs.get(player.ridingMobId);
+      if (mob?.riderId === player.id) {
+        mob.riderId = undefined;
+        mob.riderInput = createIdleServerMobRideInput(mob.id);
+        this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_RIDER, { mobId: mob.id, riderId: null });
+      }
+      player.ridingMobId = undefined;
+    }
     const deathXp = getDeathXpDrop(player.xpLevel);
     // Drop inventory in the world.
     for (let i = 0; i < 36; i++) {

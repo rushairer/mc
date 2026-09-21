@@ -115,6 +115,16 @@ import { ItemRegistry } from '../items/ItemRegistry';
 import { cloneItemStack } from '../items/ItemStackRules';
 import { getDefaultUseRemainderItemId } from '../items/ItemUseRules';
 import {
+  getJukeboxSong,
+  getStoredJukeboxDisc,
+  isJukeboxPlayableItemName,
+} from '../world/JukeboxRules';
+import {
+  consumeTotemStack,
+  findHeldTotemHand,
+  shouldActivateTotem,
+} from '../items/TotemRules';
+import {
   ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
   ITEM_ENTITY_DESPAWN_SECONDS,
   ITEM_ENTITY_MERGE_INTERVAL_SECONDS,
@@ -1237,6 +1247,57 @@ export class GameServer {
         if (!isBlockActionInReach(session, x, y, z, session.gameMode)) break;
         const blockId = this.getBlock(x, y, z, session.dimension);
         const blockName = BlockRegistry.get(blockId)?.name;
+        if (blockName === 'jukebox') {
+          const held = session.inventory[session.selectedSlot];
+          const heldName = held ? ItemRegistry.get(held.id)?.name : undefined;
+          const currentMeta = this.getBlockMetadata(x, y, z, session.dimension) ?? {};
+          const storedDisc = getStoredJukeboxDisc(currentMeta.jukeboxDisc);
+
+          if (storedDisc) {
+            const nextMeta: BlockMetadata = { ...currentMeta };
+            delete nextMeta.jukeboxDisc;
+            delete nextMeta.jukeboxSong;
+            delete nextMeta.jukeboxComparatorOutput;
+            this.setBlock(x, y, z, blockId, session.dimension, nextMeta);
+            this.broadcastServerBlockUpdate(x, y, z, blockId, session.dimension, nextMeta);
+            this.spawnDroppedStack(
+              storedDisc,
+              x + 0.5,
+              y + 1.0,
+              z + 0.5,
+              session.dimension,
+              0.25,
+            );
+            this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+              type: 'jukebox', playing: false, x: x + 0.5, y: y + 0.5, z: z + 0.5,
+            });
+            break;
+          }
+
+          if (held && isJukeboxPlayableItemName(heldName)) {
+            const song = getJukeboxSong(heldName);
+            const jukeboxDisc = getStoredJukeboxDisc(held);
+            if (!song || !jukeboxDisc) break;
+            const nextMeta: BlockMetadata = {
+              ...currentMeta,
+              jukeboxDisc,
+              jukeboxSong: song.songId,
+              jukeboxComparatorOutput: song.comparatorOutput,
+            };
+            this.setBlock(x, y, z, blockId, session.dimension, nextMeta);
+            this.broadcastServerBlockUpdate(x, y, z, blockId, session.dimension, nextMeta);
+            this.consumeServerHeldItem(session, held);
+            this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+              type: 'jukebox',
+              songId: song.songId,
+              playing: true,
+              x: x + 0.5,
+              y: y + 0.5,
+              z: z + 0.5,
+            });
+          }
+          break;
+        }
         if (isFenceBlockName(blockName)) {
           const holderId = fenceLeashHolderId(session.dimension, { x, y, z });
           const fenceCenter = { x: x + 0.5, y: y + 0.65, z: z + 0.5 };
@@ -3232,7 +3293,30 @@ export class GameServer {
 
     const mitigated = mitigateServerPlayerDamage(hurt.appliedDamage, kind, player.armor);
     player.armor = damageServerArmorForHit(player.armor, hurt.appliedDamage, kind);
-    player.health = Math.max(0, player.health - mitigated);
+    const resultingHealth = Math.max(0, player.health - mitigated);
+    const selected = player.inventory[player.selectedSlot];
+    const totemHand = shouldActivateTotem(kind, resultingHealth)
+      ? findHeldTotemHand(selected, player.offhand, (itemId) => ItemRegistry.get(itemId)?.name)
+      : null;
+
+    if (totemHand) {
+      if (totemHand === 'mainhand') {
+        player.inventory[player.selectedSlot] = consumeTotemStack(selected);
+      } else {
+        player.offhand = consumeTotemStack(player.offhand);
+      }
+      player.health = 1;
+      player.healthAuthorityLockSeconds = Math.max(player.healthAuthorityLockSeconds, 1);
+      this.syncPlayerInventory(player);
+      this.syncPlayerState(player);
+      this.sendTo(player, PacketType.S2C_TOTEM_ACTIVATE, {});
+      this.broadcastDimension(player.dimension, PacketType.S2C_SOUND, {
+        type: 'totem', x: player.x, y: player.y, z: player.z,
+      });
+      return mitigated;
+    }
+
+    player.health = resultingHealth;
     player.healthAuthorityLockSeconds = Math.max(player.healthAuthorityLockSeconds, 1);
     this.syncPlayerInventory(player);
     this.syncPlayerState(player);

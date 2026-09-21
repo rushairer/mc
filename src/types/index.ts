@@ -104,6 +104,12 @@ export interface BlockMetadata {
   campfireItems?: (ItemStack | null)[];
   campfireCookTimes?: number[];
   campfireCookDueTicks?: number[];
+  /** Item currently stored by a Jukebox. */
+  jukeboxDisc?: ItemStack;
+  /** Canonical jukebox song id, e.g. "cat" or "bounce". */
+  jukeboxSong?: string;
+  /** Comparator output encoded by the inserted jukebox song (0-15). */
+  jukeboxComparatorOutput?: number;
 }
 
 export interface SerializedBlockMetadata {

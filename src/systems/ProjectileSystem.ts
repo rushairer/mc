@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 import type { PotionEffectData } from './PotionEffect';
 
-export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'trident' | 'firework_rocket' | 'fireball' | 'potion' | 'shulker_bullet' | 'eye_of_ender' | 'wither_skull';
+export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'trident' | 'firework_rocket' | 'experience_bottle' | 'fireball' | 'potion' | 'shulker_bullet' | 'eye_of_ender' | 'wither_skull';
 
 export interface Projectile {
   id: number;
@@ -88,6 +88,26 @@ export class ProjectileSystem {
     mesh.position.copy(potion.position);
   }
 
+  shootExperienceBottle(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean) {
+    const mesh = this.createPotionMesh('#7fd34e');
+    const vel = direction.clone().normalize().multiplyScalar(15);
+    vel.y += 2.5;
+    const projectile: Projectile = {
+      id: this.nextId++,
+      type: 'experience_bottle',
+      position: origin.clone(),
+      velocity: vel,
+      damage: 0,
+      fromPlayer,
+      lifetime: THROWABLE_LIFETIME,
+      mesh,
+      inGround: false,
+    };
+    this.projectiles.set(projectile.id, projectile);
+    this.addProjectileMesh(mesh);
+    mesh.position.copy(projectile.position);
+  }
+
   shootThrowable(type: 'snowball' | 'egg' | 'ender_pearl', origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean) {
     const mesh = this.createThrowableMesh(type);
     const vel = direction.clone().normalize().multiplyScalar(THROWABLE_SPEED);
@@ -148,7 +168,7 @@ export class ProjectileSystem {
    * (the id is re-keyed by the network client afterwards).
    */
   spawnServerProjectile(
-    type: 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'fireball' | 'shulker_bullet' | 'firework_rocket' | 'eye_of_ender',
+    type: 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'fireball' | 'shulker_bullet' | 'firework_rocket' | 'experience_bottle' | 'eye_of_ender',
     position: THREE.Vector3,
     velocity: THREE.Vector3,
     damage: number = 4,
@@ -162,7 +182,9 @@ export class ProjectileSystem {
           ? this.createPotionMesh()
           : type === 'firework_rocket'
             ? this.createFireworkRocketMesh()
-            : type === 'eye_of_ender'
+            : type === 'experience_bottle'
+              ? this.createPotionMesh('#7fd34e')
+              : type === 'eye_of_ender'
               ? this.createEnderEyeMesh()
               : this.createThrowableMesh(type as 'snowball' | 'egg' | 'ender_pearl');
     const projectile: Projectile = {
@@ -437,7 +459,7 @@ export class ProjectileSystem {
       if (proj.inGround) continue;
 
       // Apply gravity / Ender Eye movement
-      if (proj.type === 'arrow' || proj.type === 'potion' || proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident') {
+      if (proj.type === 'arrow' || proj.type === 'potion' || proj.type === 'experience_bottle' || proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident') {
         proj.velocity.y += ARROW_GRAVITY * dt;
       } else if (proj.type === 'eye_of_ender') {
         if (proj.lifetime > 1.5) {
@@ -473,7 +495,7 @@ export class ProjectileSystem {
               if (onPotionSplash) {
                 onPotionSplash(proj.position, proj.fromPlayer, proj.damage, proj.potionEffect, proj.potionVariant);
               }
-            } else if (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket') {
+            } else if (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket' || proj.type === 'experience_bottle') {
               if (onProjectileImpact) {
                 onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
               }
@@ -486,7 +508,7 @@ export class ProjectileSystem {
         }
       }
 
-      if (hitBlock && (proj.type === 'potion' || proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket')) {
+      if (hitBlock && (proj.type === 'potion' || proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket' || proj.type === 'experience_bottle')) {
         toRemove.push(id);
         continue;
       }
@@ -505,13 +527,13 @@ export class ProjectileSystem {
             if (onPotionSplash) {
               onPotionSplash(proj.position, proj.fromPlayer, proj.damage, proj.potionEffect, proj.potionVariant);
             }
-          } else {
+          } else if (proj.type !== 'experience_bottle') {
             const kb = proj.velocity.clone().normalize().multiplyScalar(2);
             kb.y = 1;
             kb.multiplyScalar(1 + (proj.knockbackBonus ?? 0));
             hitPlayer(proj.damage, kb, proj.type);
           }
-          if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket')) {
+          if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket' || proj.type === 'experience_bottle')) {
             onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
           }
           toRemove.push(id);
@@ -531,13 +553,13 @@ export class ProjectileSystem {
               if (onPotionSplash) {
                 onPotionSplash(proj.position, proj.fromPlayer, proj.damage, proj.potionEffect, proj.potionVariant);
               }
-            } else {
+            } else if (proj.type !== 'experience_bottle') {
               const kb = proj.velocity.clone().normalize().multiplyScalar(2);
               kb.y = 1;
               kb.multiplyScalar(1 + (proj.knockbackBonus ?? 0));
               hitMob(mob.id, proj.damage, kb, proj.type, proj.onFire ?? false);
             }
-            if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket')) {
+            if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket' || proj.type === 'experience_bottle')) {
               onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
             }
             toRemove.push(id);

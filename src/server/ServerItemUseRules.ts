@@ -49,7 +49,7 @@ export function parseServerItemUseIntent(payload: unknown): ServerItemUseIntent 
 }
 
 export function isSupportedServerItemUseName(name: string, kind: ServerItemUseIntent['kind']): boolean {
-  if (kind === 'entity') return name === 'shears' || name === 'saddle' || name === 'name_tag';
+  if (kind === 'entity') return name === 'shears' || name === 'saddle' || name === 'name_tag' || name === 'lead';
   return name === 'bucket'
     || name === 'water_bucket'
     || name === 'lava_bucket'
@@ -60,6 +60,8 @@ export function isSupportedServerItemUseName(name: string, kind: ServerItemUseIn
     || name.endsWith('_boat')
     || name.includes('minecart')
     || name === 'armor_stand'
+    || name === 'item_frame'
+    || name === 'painting'
     || isSpawnEggItemName(name)
     || isServerSignStylingItemName(name)
     || serverItemOnBlockKind(name) !== null;

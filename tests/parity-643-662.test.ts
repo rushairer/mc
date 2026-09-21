@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { Mob } from '../src/entities/Mob';
 import { MobSystem } from '../src/systems/MobSystem';
-import { inferItemBehaviorId } from '../src/world/BehaviorIds';
+import { inferBlockBehaviorId, inferItemBehaviorId } from '../src/world/BehaviorIds';
 import { isSupportedServerItemUseName } from '../src/server/ServerItemUseRules';
 import { localizeItemDisplayName } from '../src/i18nItemNames';
 import {
@@ -15,7 +15,10 @@ import {
   hangingEntityWorldPosition,
   hangingEntityYaw,
   hangingSupportPositionFromWorld,
+  fenceLeashHolderId,
+  isFenceBlockName,
   isLeashableMobType,
+  parseFenceLeashHolderId,
   leashPullVector,
   nextItemFrameRotation,
   shouldBreakLeash,
@@ -206,6 +209,9 @@ test('657: Lead is a dedicated behavior and only supported mob families can be l
   assert.equal(isLeashableMobType('iron_golem'), true);
   assert.equal(isLeashableMobType('zombie'), false);
   assert.equal(isLeashableMobType('item_frame'), false);
+  assert.equal(inferBlockBehaviorId('oak_fence'), 'minecraft:fence');
+  assert.equal(isFenceBlockName('oak_fence'), true);
+  assert.equal(isFenceBlockName('oak_fence_gate'), false);
 });
 
 test('658: Lead attachment is server authoritative in multiplayer and consumes survival inventory there', () => {
@@ -236,16 +242,24 @@ test('659: Lead has six blocks of slack and applies a bounded pull beyond that d
   assert.ok(Math.abs(pulled.x) <= 6);
 });
 
-test('660: Lead snaps beyond twelve blocks, returns a Lead in survival, and supports active detach', () => {
+test('660: Lead snaps beyond twelve blocks, supports active detach, and transfers to fence anchors', () => {
   assert.equal(LEAD_SNAP_DISTANCE, 12);
   assert.equal(shouldBreakLeash(12), false);
   assert.equal(shouldBreakLeash(12.001), true);
+  const fenceId = fenceLeashHolderId(0, { x: 4, y: 64, z: 7 });
+  assert.deepEqual(parseFenceLeashHolderId(fenceId), {
+    dimension: 0,
+    position: { x: 4, y: 64, z: 7 },
+  });
+
   const client = readFileSync(new URL('../src/engine/Game.ts', import.meta.url), 'utf8');
   assert.ok(client.includes('private tryDetachLeadFromMob'));
+  assert.ok(client.includes('private tryTieLeashedMobsToFence'));
   assert.ok(client.includes('if (shouldBreakLeash(distance))'));
   assert.ok(client.includes('this.droppedItems.spawnItem(\n              420,'));
   const server = readFileSync(new URL('../src/server/GameServer.ts', import.meta.url), 'utf8');
   assert.ok(server.includes('if (shouldBreakLeash(distance))'));
+  assert.ok(server.includes('fenceLeashHolderId(session.dimension, { x, y, z })'));
   assert.ok(server.includes('leashHolderId: null'));
 });
 
@@ -256,6 +270,7 @@ test('661: Lead ownership synchronizes over the mob state channel and renders a 
   const game = readFileSync(new URL('../src/engine/Game.ts', import.meta.url), 'utf8');
   assert.ok(game.includes('private leashLines = new Map<number, THREE.Line>()'));
   assert.ok(game.includes("line.name = 'mob_leash'"));
+  assert.ok(game.includes('parseFenceLeashHolderId(mob.leashHolderId)'));
   assert.ok(game.includes('line.geometry.setFromPoints([holder, center])'));
 });
 

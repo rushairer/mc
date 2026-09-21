@@ -71,7 +71,7 @@ test('628: server Armor Stand placement owns space validation, yaw, spawn, and i
 
 test('629: Armor Stand is static and does not enter ordinary mob wandering AI', () => {
   const mobSource = readFileSync(new URL('../src/entities/Mob.ts', import.meta.url), 'utf8');
-  assert.ok(mobSource.includes("if (this.def.type === 'armor_stand')"));
+  assert.ok(mobSource.includes("this.def.type === 'armor_stand'"));
   assert.ok(mobSource.includes("this.aiState = 'idle'"));
   const server = readFileSync(new URL('../src/server/GameServer.ts', import.meta.url), 'utf8');
   const tickStart = server.indexOf('private tickMobs');
@@ -187,8 +187,9 @@ test('640: Armor Stand break drops equipped stacks and the stand item is never L
   const method = source.slice(start, end);
   assert.ok(method.includes("mob.def.type === 'armor_stand' && this.gameMode !== 'creative'"));
   assert.ok(method.includes('this.droppedItems.spawnStack('));
-  assert.ok(method.includes("mob.def.type === 'armor_stand' ? 1 : 1 + lootingLevel"));
-  assert.ok(method.includes("mob.def.type === 'armor_stand' && this.gameMode === 'creative'"));
+  assert.ok(method.includes('const decorative ='));
+  assert.ok(method.includes('const rolls = decorative ? 1 : 1 + lootingLevel'));
+  assert.ok(method.includes("decorative && this.gameMode === 'creative'"));
 });
 
 test('641: server Armor Stand death returns equipped stacks and its base item with zero XP', () => {
@@ -207,8 +208,9 @@ test('641: server Armor Stand death returns equipped stacks and its base item wi
 
 test('642: placed Armor Stands do not consume natural mob-spawning capacity on client or server', () => {
   const mobSystem = readFileSync(new URL('../src/systems/MobSystem.ts', import.meta.url), 'utf8');
-  assert.ok(mobSystem.includes("filter(mob => mob.def.type !== 'armor_stand')"));
-  assert.ok(mobSystem.includes("type !== 'wither' && type !== 'armor_stand'"));
+  assert.ok(mobSystem.includes("mob.def.type !== 'armor_stand'"));
+  assert.ok(mobSystem.includes("const decorative = type === 'armor_stand'"));
+  assert.ok(mobSystem.includes('ordinaryMobCount >= MAX_RESTORED_MOBS_PER_DIMENSION'));
   const server = readFileSync(new URL('../src/server/GameServer.ts', import.meta.url), 'utf8');
-  assert.ok(server.includes("filter(mob => mob.type !== 'armor_stand')"));
+  assert.ok(server.includes("mob.type !== 'armor_stand'"));
 });

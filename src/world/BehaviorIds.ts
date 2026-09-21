@@ -50,6 +50,7 @@ export function inferBlockBehaviorId(rawName: string): string | undefined {
   if (name.includes('trapdoor')) return 'minecraft:trapdoor';
   if (name.endsWith('_button')) return 'minecraft:button';
   if (name.includes('fence_gate')) return 'minecraft:fence_gate';
+  if (name === 'fence' || name.endsWith('_fence')) return 'minecraft:fence';
   if (name.endsWith('_door')) {
     return name === 'iron_door' ? 'minecraft:iron_door' : 'minecraft:door';
   }

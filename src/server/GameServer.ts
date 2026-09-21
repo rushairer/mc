@@ -1995,11 +1995,44 @@ export class GameServer {
 
   private handleServerEntityItemUse(session: PlayerSession, entityId: number, held: ItemStack): boolean {
     const itemName = ItemRegistry.get(held.id)?.name;
-    if (itemName !== 'shears') return false;
-
     const mob = this.mobs.get(entityId);
-    if (!mob || mob.dimension !== session.dimension || mob.type !== 'sheep') return false;
+    if (!itemName || !mob || mob.dimension !== session.dimension || mob.health <= 0) return false;
     if (!isEntityAttackInReach(session, mob.position, session.gameMode)) return false;
+
+    if (itemName === 'name_tag') {
+      const customName = getNameTagLabel(held);
+      if (!customName) return false;
+      mob.customName = customName;
+      this.consumeServerHeldItem(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_MOB_STATE, {
+        id: mob.id,
+        health: mob.health,
+        hurtTimer: mob.hurtTimer,
+        customName,
+      });
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+      });
+      return true;
+    }
+
+    if (itemName === 'saddle') {
+      if (!canApplySaddle(mob.type, !!mob.isBaby, !!mob.isTamed, !!mob.isSaddled)) return false;
+      mob.isSaddled = true;
+      this.consumeServerHeldItem(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_MOB_STATE, {
+        id: mob.id,
+        health: mob.health,
+        hurtTimer: mob.hurtTimer,
+        isSaddled: true,
+      });
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+      });
+      return true;
+    }
+
+    if (itemName !== 'shears' || mob.type !== 'sheep') return false;
     if (mob.isBaby || mob.isSheared) return false;
 
     mob.isSheared = true;
@@ -2748,6 +2781,11 @@ export class GameServer {
   }
 
   private handleMobDeath(mob: ServerMob) {
+    if (mob.riderId) {
+      const rider = this.players.get(mob.riderId);
+      if (rider?.ridingMobId === mob.id) rider.ridingMobId = undefined;
+      this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_RIDER, { mobId: mob.id, riderId: null });
+    }
     this.mobs.delete(mob.id);
     this.broadcast(PacketType.S2C_MOB_DESPAWN, { id: mob.id });
     

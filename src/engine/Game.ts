@@ -4464,6 +4464,18 @@ export class Game {
       }
     }
 
+    if (mob.def.type === 'armor_stand' && this.gameMode !== 'creative') {
+      for (const stack of mob.armorStandEquipment) {
+        if (!stack) continue;
+        this.droppedItems.spawnStack(
+          stack,
+          mob.position.clone().add(new THREE.Vector3(0, 0.75, 0)),
+          new THREE.Vector3((Math.random() - 0.5) * 0.4, 1.1, (Math.random() - 0.5) * 0.4),
+          0.5,
+        );
+      }
+    }
+
     // Drop items in 3D world (magma cubes only drop if size === 1)
     const isMagmaCube = mob.def.type === 'magma_cube';
     const shouldDrop = !isMagmaCube || mob.size === 1;

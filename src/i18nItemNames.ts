@@ -142,6 +142,7 @@ const ZH_CN_EXACT: Dict = {
   'Carrot on a Stick': '胡萝卜钓竿',
   'Armor Stand': '盔甲架',
   'Item Frame': '物品展示框',
+  'Glow Item Frame': '荧光物品展示框',
   Lead: '拴绳',
 };
 
@@ -217,6 +218,7 @@ const ZH_TW_EXACT: Dict = {
   'Carrot on a Stick': '胡蘿蔔釣竿',
   'Armor Stand': '盔甲架',
   'Item Frame': '物品展示框',
+  'Glow Item Frame': '螢光物品展示框',
   Painting: '畫',
   Lead: '拴繩',
 };

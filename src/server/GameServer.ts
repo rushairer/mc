@@ -3668,9 +3668,45 @@ export class GameServer {
       }
 
       if (mob.leashHolderId && isLeashableMobType(mob.type)) {
-        const holder = this.players.get(mob.leashHolderId);
-        if (!holder || holder.dimension !== mob.dimension) {
+        const playerHolder = this.players.get(mob.leashHolderId);
+        const fenceHolder = parseFenceLeashHolderId(mob.leashHolderId);
+        let holderPos: { x: number; y: number; z: number } | null = null;
+        let dropOnBreak = false;
+
+        if (playerHolder && playerHolder.dimension === mob.dimension) {
+          holderPos = { x: playerHolder.x, y: playerHolder.y + 1.0, z: playerHolder.z };
+          dropOnBreak = playerHolder.gameMode !== 'creative';
+        } else if (fenceHolder && fenceHolder.dimension === mob.dimension) {
+          const blockName = BlockRegistry.get(this.getBlock(
+            fenceHolder.position.x,
+            fenceHolder.position.y,
+            fenceHolder.position.z,
+            mob.dimension,
+          ))?.name;
+          if (isFenceBlockName(blockName)) {
+            holderPos = {
+              x: fenceHolder.position.x + 0.5,
+              y: fenceHolder.position.y + 0.65,
+              z: fenceHolder.position.z + 0.5,
+            };
+            dropOnBreak = true;
+          }
+        }
+
+        if (!holderPos) {
+          const wasFenceHolder = !!fenceHolder;
           mob.leashHolderId = undefined;
+          if (wasFenceHolder) {
+            this.spawnDroppedItem(
+              420,
+              1,
+              mob.position.x,
+              mob.position.y + 0.4,
+              mob.position.z,
+              mob.dimension,
+              0.25,
+            );
+          }
           this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_STATE, {
             id: mob.id,
             health: mob.health,
@@ -3678,7 +3714,6 @@ export class GameServer {
             leashHolderId: null,
           });
         } else {
-          const holderPos = { x: holder.x, y: holder.y + 1.0, z: holder.z };
           const mobCenter = {
             x: mob.position.x,
             y: mob.position.y + (MOB_DEFS[mob.type]?.height ?? 1.0) * 0.55,
@@ -3687,7 +3722,7 @@ export class GameServer {
           const distance = leashDistance(holderPos, mobCenter);
           if (shouldBreakLeash(distance)) {
             mob.leashHolderId = undefined;
-            if (holder.gameMode !== 'creative') {
+            if (dropOnBreak) {
               this.spawnDroppedItem(
                 420,
                 1,

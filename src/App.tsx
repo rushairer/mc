@@ -216,10 +216,19 @@ export const App: React.FC = () => {
   }, []);
 
   const handleDropItem = useCallback((itemId: number, count: number) => {
-    if (gameRef.current) {
-      gameRef.current.dropItemFromUI(itemId, count);
-    }
+    gameRef.current?.dropItemFromUI(itemId, count);
   }, []);
+
+  const handleDropStack = useCallback((stack: ItemStack) => {
+    gameRef.current?.dropStackFromUI(stack);
+  }, []);
+
+  const handleBundleInventoryAction = useCallback((
+    action: 'insert_from_slot' | 'extract_to_inventory',
+    bundleSlot: number,
+    sourceSlot?: number,
+    selectedIndex = 0,
+  ) => gameRef.current?.bundleInventoryAction(action, bundleSlot, sourceSlot, selectedIndex) ?? false, []);
 
   const handleEnchantItem = useCallback((item: ItemStack, cost: number, enchantment: Enchantment) => {
     return gameRef.current?.enchantItem(item, cost, enchantment) ?? null;
@@ -562,6 +571,8 @@ export const App: React.FC = () => {
           getItemIconStyle={getItemIconStyle}
           gameMode={gameState.gameMode}
           onDropItem={handleDropItem}
+          onDropStack={handleDropStack}
+          onBundleInventoryAction={handleBundleInventoryAction}
         />
       )}
 

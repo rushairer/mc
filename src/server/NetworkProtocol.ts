@@ -21,6 +21,9 @@ export enum PacketType {
   /** Server-authoritative Boat / Chest Boat interaction and controls. */
   C2S_VEHICLE_INTERACT = 'C2S_VEHICLE_INTERACT',
   C2S_VEHICLE_INPUT = 'C2S_VEHICLE_INPUT',
+  /** Server-authoritative Horse / Pig mounting and steering. */
+  C2S_MOB_INTERACT = 'C2S_MOB_INTERACT',
+  C2S_MOB_INPUT = 'C2S_MOB_INPUT',
   /** Server-authoritative fishing cast/reel intent. */
   C2S_FISHING_ACTION = 'C2S_FISHING_ACTION',
   /** P5.2 — client uploads player state so server pushes never revert it. */
@@ -52,6 +55,7 @@ export enum PacketType {
   S2C_MOB_MOVE = 'S2C_MOB_MOVE',
   S2C_MOB_DESPAWN = 'S2C_MOB_DESPAWN',
   S2C_MOB_STATE = 'S2C_MOB_STATE',
+  S2C_MOB_RIDER = 'S2C_MOB_RIDER',
   S2C_DROPPED_ITEM_SPAWN = 'S2C_DROPPED_ITEM_SPAWN',
   S2C_DROPPED_ITEM_MOVE = 'S2C_DROPPED_ITEM_MOVE',
   S2C_DROPPED_ITEM_UPDATE = 'S2C_DROPPED_ITEM_UPDATE',

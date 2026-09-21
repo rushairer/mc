@@ -107,6 +107,10 @@ export class Mob {
   isTamed = false;
   isSitting = false;
   isRidden = false;
+  private _isSaddled = false;
+  private _customName: string | null = null;
+  private saddleMesh: THREE.Group | null = null;
+  private customNameLabel: THREE.Sprite | null = null;
   /** Sheep shearing state; regrowth can reset this when grass-eating is modeled. */
   isSheared = false;
   targetMob: Mob | null = null;
@@ -121,6 +125,25 @@ export class Mob {
   private shelfMushroomBounceSound26_3: 'block.shelf_mushroom.bounce' | null = null;
 
   static nextId = 1;
+
+  get isSaddled(): boolean {
+    return this._isSaddled;
+  }
+
+  set isSaddled(value: boolean) {
+    this._isSaddled = !!value;
+    this.refreshSaddleVisual();
+  }
+
+  get customName(): string | null {
+    return this._customName;
+  }
+
+  set customName(value: string | null) {
+    const normalized = typeof value === 'string' && value.trim() ? value.trim().slice(0, 50) : null;
+    this._customName = normalized;
+    this.refreshCustomNameLabel();
+  }
 
   get width(): number {
     let w = this.def.type === 'magma_cube' ? this.def.width * (this.size / 3) : this.def.width;
@@ -170,6 +193,76 @@ export class Mob {
       this.mesh.scale.setScalar(size / 3);
     }
     this.mesh.position.set(x, y, z);
+    this.refreshSaddleVisual();
+    this.refreshCustomNameLabel();
+  }
+
+  private refreshSaddleVisual() {
+    if (!this.mesh) return;
+    if (this.saddleMesh) {
+      this.mesh.remove(this.saddleMesh);
+      this.saddleMesh.traverse(child => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          if (Array.isArray(child.material)) child.material.forEach(material => material.dispose());
+          else child.material.dispose();
+        }
+      });
+      this.saddleMesh = null;
+    }
+    if (!this._isSaddled || (this.def.type !== 'horse' && this.def.type !== 'pig')) return;
+
+    const group = new THREE.Group();
+    group.name = 'saddle';
+    const leather = new THREE.MeshLambertMaterial({ color: 0x6b3f24 });
+    const darkLeather = new THREE.MeshLambertMaterial({ color: 0x3f2415 });
+    const seat = new THREE.Mesh(
+      new THREE.BoxGeometry(this.def.type === 'horse' ? 0.72 : 0.55, 0.12, this.def.type === 'horse' ? 0.72 : 0.58),
+      leather,
+    );
+    seat.position.y = this.def.type === 'horse' ? 1.34 : 0.78;
+    const strapLeft = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.48, 0.12), darkLeather);
+    const strapRight = strapLeft.clone();
+    strapLeft.position.set(-0.35, this.def.type === 'horse' ? 1.1 : 0.58, 0);
+    strapRight.position.set(0.35, this.def.type === 'horse' ? 1.1 : 0.58, 0);
+    group.add(seat, strapLeft, strapRight);
+    this.mesh.add(group);
+    this.saddleMesh = group;
+  }
+
+  private refreshCustomNameLabel() {
+    if (!this.mesh) return;
+    if (this.customNameLabel) {
+      this.mesh.remove(this.customNameLabel);
+      this.customNameLabel.material.map?.dispose();
+      this.customNameLabel.material.dispose();
+      this.customNameLabel = null;
+    }
+    if (!this._customName || typeof document === 'undefined') return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 96;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.font = 'bold 42px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const textWidth = Math.min(480, Math.ceil(ctx.measureText(this._customName).width + 36));
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect((512 - textWidth) / 2, 14, textWidth, 68);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(this._customName, 256, 48, 470);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+    const sprite = new THREE.Sprite(material);
+    sprite.name = 'custom_name';
+    sprite.position.set(0, this.height + 0.42, 0);
+    sprite.scale.set(2.8, 0.525, 1);
+    this.mesh.add(sprite);
+    this.customNameLabel = sprite;
   }
 
   private createMesh(): THREE.Group {

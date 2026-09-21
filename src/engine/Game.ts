@@ -13,6 +13,7 @@ import { SurvivalSystem } from '../systems/SurvivalSystem';
 import { MobSystem } from '../systems/MobSystem';
 import { Mob } from '../entities/Mob';
 import { shouldTameEntity } from '../entities/EntityInteractionRules';
+import { canApplySaddle, canControlMountedMob, canMountMob, getNameTagLabel } from '../entities/MobItemInteractionRules';
 import { ParticleSystem } from '../systems/ParticleSystem';
 import { FluidSystem } from '../systems/FluidSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
@@ -338,6 +339,7 @@ export class Game {
   private openChestVehicleId: number | null = null;
   private serverContainerCursor: ItemStack | null = null;
   private vehicleInputSendTimer = 0;
+  private mobInputSendTimer = 0;
   private openHopperPos: THREE.Vector3 | null = null;
   private openFurnacePos: THREE.Vector3 | null = null;
   private openBrewingPos: THREE.Vector3 | null = null;
@@ -1025,7 +1027,12 @@ export class Game {
       },
     });
     this.behaviors.registerEntity(
-      ['mob:cow', 'mob:pig', 'mob:sheep', 'mob:chicken', 'mob:villager', 'mob:wolf', 'mob:cat', 'mob:horse'],
+      [
+        'mob:zombie', 'mob:skeleton', 'mob:creeper', 'mob:spider', 'mob:cow', 'mob:pig', 'mob:sheep', 'mob:chicken',
+        'mob:blaze', 'mob:zombie_pigman', 'mob:magma_cube', 'mob:wither_skeleton', 'mob:villager', 'mob:enderman',
+        'mob:witch', 'mob:iron_golem', 'mob:wolf', 'mob:cat', 'mob:horse', 'mob:shulker', 'mob:pillager',
+        'mob:wither', 'mob:guardian', 'mob:vex',
+      ],
       {
         id: 'minecraft:mob_interaction',
         interact: ({ target, heldItem }) => target instanceof Mob
@@ -1104,6 +1111,31 @@ export class Game {
   private tryInteractMob(target: Mob, heldItem: ItemStack | null) {
     const heldItemId = heldItem?.id ?? 0;
     const heldItemName = heldItem ? ItemRegistry.get(heldItem.id)?.name : undefined;
+
+    const nameTagLabel = heldItemName === 'name_tag' ? getNameTagLabel(heldItem) : null;
+    if (nameTagLabel) {
+      if (heldItem && this.sendServerEntityItemUse(heldItem, target.id)) {
+        return { handled: true, cooldown: 0.25 };
+      }
+      target.customName = nameTagLabel;
+      this.consumeInteractionItem();
+      this.sound.playLever();
+      this.spawnMobInteractionParticles(target, 0x55ff55, 8);
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    if (
+      heldItemName === 'saddle' &&
+      canApplySaddle(target.def.type, target.isBaby, target.isTamed, target.isSaddled)
+    ) {
+      if (heldItem && this.sendServerEntityItemUse(heldItem, target.id)) {
+        return { handled: true, cooldown: 0.25 };
+      }
+      target.isSaddled = true;
+      this.consumeInteractionItem();
+      this.sound.playLever();
+      return { handled: true, cooldown: 0.25 };
+    }
 
     if (target.def.type === 'sheep' && heldItemName === 'shears' && !target.isBaby && !target.isSheared) {
       if (heldItem && this.sendServerEntityItemUse(heldItem, target.id)) {
@@ -1216,7 +1248,28 @@ export class Game {
       }
     }
 
-    if (target.def.type === 'horse') {
+    if ((target.def.type === 'horse' || target.def.type === 'pig') && canMountMob(target.def.type, target.isBaby, target.isTamed)) {
+      if (this.isMultiplayerNetworkConnected()) {
+        this.network.send(PacketType.C2S_MOB_INTERACT, { mobId: target.id, action: 'mount' });
+        return { handled: true, cooldown: 0.5 };
+      }
+
+      if (target.def.type === 'horse' && !target.isTamed) {
+        const tamed = shouldTameEntity(
+          this.seed,
+          this.worldTickScheduler.getCurrentTick(),
+          target.id,
+          0,
+          0.2,
+        );
+        if (tamed) {
+          target.isTamed = true;
+          this.spawnMobInteractionParticles(target, 0xff5555, 15);
+        } else {
+          this.spawnMobInteractionParticles(target, 0x555555, 8);
+        }
+      }
+
       this.riddenMob = target;
       target.isRidden = true;
       target.isSitting = false;
@@ -1566,6 +1619,17 @@ export class Game {
       this.riddenVehicle = vehicle;
     } else if (this.riddenVehicle?.id === vehicleId) {
       this.riddenVehicle = null;
+    }
+  }
+
+  applyServerMobRider(mobId: number, riderId: string | null) {
+    const mob = this.mobs.mobs.get(mobId);
+    if (!mob) return;
+    mob.isRidden = riderId !== null;
+    if (riderId === this.network.playerId) {
+      this.riddenMob = mob;
+    } else if (this.riddenMob?.id === mobId) {
+      this.riddenMob = null;
     }
   }
 
@@ -2084,57 +2148,87 @@ export class Game {
       }
     }
 
-    // Riding Horse controls
+    // Riding Horse / Pig controls. Mounting and steering are separate in Java:
+    // unsaddled horses can be mounted for taming, but only a tamed+saddled horse is steerable;
+    // pigs require both a saddle and a Carrot on a Stick for player steering.
     if (this.riddenMob) {
-      const forward = this.chatOpen ? false : this.input.isKeyDown('w');
-      const back = this.chatOpen ? false : this.input.isKeyDown('s');
-      const left = this.chatOpen ? false : this.input.isKeyDown('a');
-      const right = this.chatOpen ? false : this.input.isKeyDown('d');
-      const jump = this.chatOpen ? false : this.input.isKeyDown(' ');
-      
-      const yaw = this.player.yaw;
-      let moveX = 0;
-      let moveZ = 0;
-      
-      if (forward) {
-        moveX += Math.sin(yaw);
-        moveZ += Math.cos(yaw);
-      }
-      if (back) {
-        moveX -= Math.sin(yaw);
-        moveZ -= Math.cos(yaw);
-      }
-      if (left) {
-        moveX += Math.sin(yaw + Math.PI / 2);
-        moveZ += Math.cos(yaw + Math.PI / 2);
-      }
-      if (right) {
-        moveX -= Math.sin(yaw + Math.PI / 2);
-        moveZ -= Math.cos(yaw + Math.PI / 2);
-      }
-      
-      const dir = new THREE.Vector3(moveX, 0, moveZ);
-      if (dir.lengthSq() > 0) {
-        dir.normalize();
-        this.riddenMob.velocity.x = dir.x * this.riddenMob.speed * 1.5;
-        this.riddenMob.velocity.z = dir.z * this.riddenMob.speed * 1.5;
-        this.riddenMob.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+      const heldRideItem = this.inventory.getSlot(this.player.selectedSlot);
+      const heldRideItemName = heldRideItem ? ItemRegistry.get(heldRideItem.id)?.name : undefined;
+      const canControl = canControlMountedMob(
+        this.riddenMob.def.type,
+        this.riddenMob.isTamed,
+        this.riddenMob.isSaddled,
+        heldRideItemName,
+      );
+      const forward = canControl && !this.chatOpen && this.input.isKeyDown('w');
+      const back = canControl && !this.chatOpen && this.input.isKeyDown('s');
+      const left = canControl && !this.chatOpen && this.input.isKeyDown('a');
+      const right = canControl && !this.chatOpen && this.input.isKeyDown('d');
+      const jump = canControl && this.riddenMob.def.type === 'horse' && !this.chatOpen && this.input.isKeyDown(' ');
+
+      if (this.isMultiplayerNetworkConnected()) {
+        this.mobInputSendTimer -= dt;
+        if (this.mobInputSendTimer <= 0) {
+          this.mobInputSendTimer = 0.05;
+          this.network.send(PacketType.C2S_MOB_INPUT, {
+            mobId: this.riddenMob.id,
+            forward,
+            back,
+            left,
+            right,
+            jump,
+          });
+        }
       } else {
-        this.riddenMob.velocity.x = 0;
-        this.riddenMob.velocity.z = 0;
+        const yaw = this.player.yaw;
+        let moveX = 0;
+        let moveZ = 0;
+
+        if (forward) {
+          moveX += Math.sin(yaw);
+          moveZ += Math.cos(yaw);
+        }
+        if (back) {
+          moveX -= Math.sin(yaw);
+          moveZ -= Math.cos(yaw);
+        }
+        if (left) {
+          moveX += Math.sin(yaw + Math.PI / 2);
+          moveZ += Math.cos(yaw + Math.PI / 2);
+        }
+        if (right) {
+          moveX -= Math.sin(yaw + Math.PI / 2);
+          moveZ -= Math.cos(yaw + Math.PI / 2);
+        }
+
+        const dir = new THREE.Vector3(moveX, 0, moveZ);
+        if (dir.lengthSq() > 0) {
+          dir.normalize();
+          this.riddenMob.velocity.x = dir.x * this.riddenMob.speed * 1.5;
+          this.riddenMob.velocity.z = dir.z * this.riddenMob.speed * 1.5;
+          this.riddenMob.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+        } else if (canControl) {
+          this.riddenMob.velocity.x = 0;
+          this.riddenMob.velocity.z = 0;
+        }
+
+        if (jump && this.riddenMob.onGround) {
+          this.riddenMob.velocity.y = 9.5;
+          this.riddenMob.onGround = false;
+        }
       }
-      
-      if (jump && this.riddenMob.onGround) {
-        this.riddenMob.velocity.y = 9.5;
-        this.riddenMob.onGround = false;
-      }
-      
+
       // Dismount with Shift key
       const dismount = this.chatOpen ? false : this.input.isKeyDown('shift');
-      if (dismount) {
-        this.riddenMob.isRidden = false;
-        this.riddenMob = null;
-        this.player.position.x += 1.2;
+      if (dismount && this.placeCooldown <= 0) {
+        if (this.isMultiplayerNetworkConnected()) {
+          this.network.send(PacketType.C2S_MOB_INTERACT, { mobId: this.riddenMob.id, action: 'dismount' });
+        } else {
+          this.riddenMob.isRidden = false;
+          this.riddenMob = null;
+          this.player.position.x += 1.2;
+        }
+        this.placeCooldown = 0.5;
       }
     }
 

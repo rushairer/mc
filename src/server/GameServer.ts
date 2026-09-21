@@ -35,6 +35,12 @@ import {
   type ServerVehicleInputIntent,
 } from './ServerVehicleRules';
 import {
+  createIdleServerMobRideInput,
+  parseServerMobRideInput,
+  parseServerMobRideInteraction,
+  type ServerMobRideInput,
+} from './ServerMobRideRules';
+import {
   applyKnockbackResistance,
   getAttackStrength,
   getNetheriteKnockbackResistance,
@@ -118,6 +124,8 @@ import {
   mergeItemEntityStacks,
 } from '../items/ItemEntityRules';
 import { MOB_DEFS, Mob, type MobType } from '../entities/Mob';
+import { shouldTameEntity } from '../entities/EntityInteractionRules';
+import { canApplySaddle, canControlMountedMob, canMountMob, getNameTagLabel } from '../entities/MobItemInteractionRules';
 import { CHUNK_SIZE, RENDER_DISTANCE, SEA_LEVEL, WORLD_HEIGHT } from '../constants';
 import type { ItemStack, BlockMetadata } from '../types';
 import { createHurtCooldownState, resolveHurtDamage, tickHurtCooldown, type HurtCooldownState } from '../systems/HurtCooldown';
@@ -165,6 +173,7 @@ interface PlayerSession {
   healthAuthorityLockSeconds: number;
   openContainer?: OpenServerContainer;
   ridingVehicleId?: number;
+  ridingMobId?: number;
   /** P5.2 — guards one-time death handling. */
   dead?: boolean;
 }
@@ -190,7 +199,11 @@ interface ServerMob {
   isBaby?: boolean;
   isTamed?: boolean;
   isSitting?: boolean;
+  isSaddled?: boolean;
+  customName?: string;
   isSheared?: boolean;
+  riderId?: string;
+  riderInput?: ServerMobRideInput;
   isAngry?: boolean;
   angerTimer?: number;
 }
@@ -424,7 +437,10 @@ export class GameServer {
           isBaby: mob.isBaby,
           isTamed: mob.isTamed,
           isSitting: mob.isSitting,
-          isSheared: mob.isSheared
+          isSaddled: mob.isSaddled,
+          customName: mob.customName,
+          isSheared: mob.isSheared,
+          riderId: mob.riderId ?? null
         });
       }
     }
@@ -480,6 +496,18 @@ export class GameServer {
       console.log(`Player ${session.username} disconnected.`);
       this.closeServerContainer(session);
       this.fishingStates.delete(session.id);
+      if (session.ridingMobId !== undefined) {
+        const mob = this.mobs.get(session.ridingMobId);
+        if (mob?.riderId === session.id) {
+          mob.riderId = undefined;
+          mob.riderInput = createIdleServerMobRideInput(mob.id);
+          this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_RIDER, {
+            mobId: mob.id,
+            riderId: null,
+          });
+        }
+        session.ridingMobId = undefined;
+      }
       if (session.ridingVehicleId !== undefined) {
         const vehicle = this.vehicles.get(session.ridingVehicleId);
         if (vehicle?.riderId === session.id) {
@@ -551,6 +579,8 @@ export class GameServer {
         isBaby: mob.isBaby,
         isTamed: mob.isTamed,
         isSitting: mob.isSitting,
+        isSaddled: mob.isSaddled,
+        customName: mob.customName,
         isSheared: mob.isSheared
       });
     }
@@ -673,7 +703,9 @@ export class GameServer {
             mData.isBaby,
             mData.isTamed,
             mData.isSitting,
-            mData.isSheared
+            mData.isSheared,
+            mData.isSaddled,
+            mData.customName
           );
         }
       }
@@ -817,13 +849,37 @@ export class GameServer {
         const intent = parseServerMoveIntent(packet.payload);
         const invalidY = !intent || intent.y < -64 || intent.y > WORLD_HEIGHT + 64;
         const flightSpoof = intent ? isSurvivalFlightSpoof(intent, session.gameMode === 'creative') : true;
-        const tooFast = intent ? isMoveTooFast(session, intent) : true;
+        const tooFast = intent && session.ridingMobId === undefined ? isMoveTooFast(session, intent) : false;
         if (!intent || invalidY || flightSpoof || tooFast) {
           this.sendTo(session, PacketType.S2C_POSITION_CORRECTION, {
             x: session.x, y: session.y, z: session.z,
             yaw: session.yaw, pitch: session.pitch,
           });
           break;
+        }
+
+        if (session.ridingMobId !== undefined) {
+          const riddenMob = this.mobs.get(session.ridingMobId);
+          if (riddenMob?.riderId === session.id && riddenMob.dimension === session.dimension) {
+            session.yaw = intent.yaw;
+            session.pitch = intent.pitch;
+            session.onGround = riddenMob.onGround;
+            session.sprinting = false;
+            session.flying = false;
+            this.broadcastExcept(playerId, PacketType.S2C_PLAYER_MOVE, {
+              playerId,
+              x: session.x,
+              y: session.y,
+              z: session.z,
+              yaw: session.yaw,
+              pitch: session.pitch,
+              flying: false,
+              onGround: session.onGround,
+              sprinting: false,
+            });
+            break;
+          }
+          session.ridingMobId = undefined;
         }
 
         session.descending = isDescendingAirborne(
@@ -1120,7 +1176,7 @@ export class GameServer {
         if (!isEntityAttackInReach(session, vehicle.position, session.gameMode)) break;
 
         if (intent.action === 'mount') {
-          if (session.ridingVehicleId !== undefined || vehicle.riderId) break;
+          if (session.ridingVehicleId !== undefined || session.ridingMobId !== undefined || vehicle.riderId) break;
           vehicle.riderId = session.id;
           session.ridingVehicleId = vehicle.id;
           vehicle.input = createIdleServerVehicleInput(vehicle.id);
@@ -1164,6 +1220,56 @@ export class GameServer {
         if (!vehicle || vehicle.dimension !== session.dimension) break;
         if (vehicle.riderId !== session.id || session.ridingVehicleId !== vehicle.id) break;
         vehicle.input = intent;
+        break;
+      }
+
+      case PacketType.C2S_MOB_INTERACT: {
+        const intent = parseServerMobRideInteraction(packet.payload);
+        if (!intent) break;
+        const mob = this.mobs.get(intent.mobId);
+        if (!mob || mob.dimension !== session.dimension || mob.health <= 0) break;
+        if (!isEntityAttackInReach(session, mob.position, session.gameMode)) break;
+        if (!canMountMob(mob.type, !!mob.isBaby, !!mob.isTamed)) break;
+
+        if (intent.action === 'mount') {
+          if (session.ridingVehicleId !== undefined || session.ridingMobId !== undefined || mob.riderId) break;
+          if (mob.type === 'horse' && !mob.isTamed) {
+            mob.isTamed = shouldTameEntity(this.seed, this.gameTick, mob.id, 0, 0.2);
+            this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_STATE, {
+              id: mob.id,
+              health: mob.health,
+              hurtTimer: mob.hurtTimer,
+              isTamed: mob.isTamed,
+            });
+          }
+          mob.riderId = session.id;
+          mob.riderInput = createIdleServerMobRideInput(mob.id);
+          session.ridingMobId = mob.id;
+          this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_RIDER, {
+            mobId: mob.id,
+            riderId: session.id,
+          });
+          break;
+        }
+
+        if (mob.riderId !== session.id || session.ridingMobId !== mob.id) break;
+        mob.riderId = undefined;
+        mob.riderInput = createIdleServerMobRideInput(mob.id);
+        session.ridingMobId = undefined;
+        this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_RIDER, {
+          mobId: mob.id,
+          riderId: null,
+        });
+        break;
+      }
+
+      case PacketType.C2S_MOB_INPUT: {
+        const intent = parseServerMobRideInput(packet.payload);
+        if (!intent) break;
+        const mob = this.mobs.get(intent.mobId);
+        if (!mob || mob.dimension !== session.dimension) break;
+        if (mob.riderId !== session.id || session.ridingMobId !== mob.id) break;
+        mob.riderInput = intent;
         break;
       }
 
@@ -1913,11 +2019,44 @@ export class GameServer {
 
   private handleServerEntityItemUse(session: PlayerSession, entityId: number, held: ItemStack): boolean {
     const itemName = ItemRegistry.get(held.id)?.name;
-    if (itemName !== 'shears') return false;
-
     const mob = this.mobs.get(entityId);
-    if (!mob || mob.dimension !== session.dimension || mob.type !== 'sheep') return false;
+    if (!itemName || !mob || mob.dimension !== session.dimension || mob.health <= 0) return false;
     if (!isEntityAttackInReach(session, mob.position, session.gameMode)) return false;
+
+    if (itemName === 'name_tag') {
+      const customName = getNameTagLabel(held);
+      if (!customName) return false;
+      mob.customName = customName;
+      this.consumeServerHeldItem(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_MOB_STATE, {
+        id: mob.id,
+        health: mob.health,
+        hurtTimer: mob.hurtTimer,
+        customName,
+      });
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+      });
+      return true;
+    }
+
+    if (itemName === 'saddle') {
+      if (!canApplySaddle(mob.type, !!mob.isBaby, !!mob.isTamed, !!mob.isSaddled)) return false;
+      mob.isSaddled = true;
+      this.consumeServerHeldItem(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_MOB_STATE, {
+        id: mob.id,
+        health: mob.health,
+        hurtTimer: mob.hurtTimer,
+        isSaddled: true,
+      });
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+      });
+      return true;
+    }
+
+    if (itemName !== 'shears' || mob.type !== 'sheep') return false;
     if (mob.isBaby || mob.isSheared) return false;
 
     mob.isSheared = true;
@@ -2602,7 +2741,19 @@ export class GameServer {
 
   // --- Entity Spawning & Ticking ---
 
-  spawnMob(type: MobType, x: number, y: number, z: number, dimension: number, isBaby = false, isTamed = false, isSitting = false, isSheared = false): ServerMob {
+  spawnMob(
+    type: MobType,
+    x: number,
+    y: number,
+    z: number,
+    dimension: number,
+    isBaby = false,
+    isTamed = false,
+    isSitting = false,
+    isSheared = false,
+    isSaddled = false,
+    customName?: string,
+  ): ServerMob {
     const id = this.nextEntityId++;
     const mob: ServerMob = {
       id,
@@ -2625,7 +2776,10 @@ export class GameServer {
       isBaby,
       isTamed,
       isSitting,
-      isSheared
+      isSaddled,
+      customName: typeof customName === 'string' && customName.trim() ? customName.trim().slice(0, 50) : undefined,
+      isSheared,
+      riderInput: createIdleServerMobRideInput(id)
     };
 
     this.mobs.set(id, mob);
@@ -2641,13 +2795,21 @@ export class GameServer {
       isBaby,
       isTamed,
       isSitting,
-      isSheared
+      isSaddled,
+      customName: mob.customName,
+      isSheared,
+      riderId: null
     });
 
     return mob;
   }
 
   private handleMobDeath(mob: ServerMob) {
+    if (mob.riderId) {
+      const rider = this.players.get(mob.riderId);
+      if (rider?.ridingMobId === mob.id) rider.ridingMobId = undefined;
+      this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_RIDER, { mobId: mob.id, riderId: null });
+    }
     this.mobs.delete(mob.id);
     this.broadcast(PacketType.S2C_MOB_DESPAWN, { id: mob.id });
     
@@ -2759,6 +2921,15 @@ export class GameServer {
     const deathZ = player.z;
     const deathDimension = player.dimension;
     this.closeServerContainer(player);
+    if (player.ridingMobId !== undefined) {
+      const mob = this.mobs.get(player.ridingMobId);
+      if (mob?.riderId === player.id) {
+        mob.riderId = undefined;
+        mob.riderInput = createIdleServerMobRideInput(mob.id);
+        this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_RIDER, { mobId: mob.id, riderId: null });
+      }
+      player.ridingMobId = undefined;
+    }
     const deathXp = getDeathXpDrop(player.xpLevel);
     // Drop inventory in the world.
     for (let i = 0; i < 36; i++) {
@@ -3045,6 +3216,60 @@ export class GameServer {
             mob.velocity.x = 0;
             mob.velocity.z = 0;
           }
+        }
+      }
+
+      // Rider input is applied after normal passive AI so an authorized rider wins steering.
+      if (mob.riderId) {
+        const rider = this.players.get(mob.riderId);
+        if (!rider || rider.ridingMobId !== mob.id || rider.dimension !== mob.dimension) {
+          mob.riderId = undefined;
+          mob.riderInput = createIdleServerMobRideInput(mob.id);
+          this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_RIDER, { mobId: mob.id, riderId: null });
+        } else {
+          const held = rider.inventory[rider.selectedSlot];
+          const heldName = held ? ItemRegistry.get(held.id)?.name : undefined;
+          const canControl = canControlMountedMob(mob.type, !!mob.isTamed, !!mob.isSaddled, heldName);
+          const input = mob.riderInput ?? createIdleServerMobRideInput(mob.id);
+          if (canControl) {
+            let moveX = 0;
+            let moveZ = 0;
+            if (input.forward) {
+              moveX += Math.sin(rider.yaw);
+              moveZ += Math.cos(rider.yaw);
+            }
+            if (input.back) {
+              moveX -= Math.sin(rider.yaw);
+              moveZ -= Math.cos(rider.yaw);
+            }
+            if (input.left) {
+              moveX += Math.sin(rider.yaw + Math.PI / 2);
+              moveZ += Math.cos(rider.yaw + Math.PI / 2);
+            }
+            if (input.right) {
+              moveX -= Math.sin(rider.yaw + Math.PI / 2);
+              moveZ -= Math.cos(rider.yaw + Math.PI / 2);
+            }
+            const move = new THREE.Vector3(moveX, 0, moveZ);
+            if (move.lengthSq() > 0) {
+              move.normalize();
+              const speedMultiplier = mob.type === 'horse' ? 1.5 : 0.9;
+              const speed = (MOB_DEFS[mob.type]?.speed || 2.0) * speedMultiplier;
+              mob.velocity.x = move.x * speed;
+              mob.velocity.z = move.z * speed;
+              mob.yaw = Math.atan2(move.x, move.z);
+            } else {
+              mob.velocity.x = 0;
+              mob.velocity.z = 0;
+            }
+            if (mob.type === 'horse' && input.jump && mob.onGround) {
+              mob.velocity.y = 9.5;
+              mob.onGround = false;
+            }
+          }
+          rider.x = mob.position.x;
+          rider.y = mob.position.y + (MOB_DEFS[mob.type]?.height ?? 1.0) * 0.75;
+          rider.z = mob.position.z;
         }
       }
 

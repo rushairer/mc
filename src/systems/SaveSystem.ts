@@ -107,6 +107,8 @@ export interface SerializedMob {
   breedCooldown?: number;
   isTamed?: boolean;
   isSitting?: boolean;
+  isSaddled?: boolean;
+  customName?: string;
   isSheared?: boolean;
   isAngry?: boolean;
   angerTimer?: number;
@@ -322,6 +324,10 @@ function sanitizeMobs(
       z,
       health,
       dimension,
+      isSaddled: !!mob.isSaddled,
+      customName: typeof mob.customName === 'string' && mob.customName.trim()
+        ? mob.customName.trim().slice(0, 50)
+        : undefined,
     });
   }
 

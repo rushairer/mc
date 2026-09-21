@@ -399,7 +399,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({
       } else if (e.key.toLowerCase() === 'q') {
         if (heldItem) {
           const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? heldItem.count : 1;
-          onDropItem?.(heldItem.id, dropCount);
+          if (onDropStack) onDropStack({ ...heldItem, count: dropCount });
+          else onDropItem?.(heldItem.id, dropCount);
           setHeldItem(prev => {
             if (!prev) return null;
             const nextCount = prev.count - dropCount;
@@ -412,7 +413,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({
             const slotItem = inventory.getSlot(index);
             if (slotItem) {
               const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? slotItem.count : 1;
-              onDropItem?.(slotItem.id, dropCount);
+              if (onDropStack) onDropStack({ ...slotItem, count: dropCount });
+              else onDropItem?.(slotItem.id, dropCount);
               if (slotItem.count <= dropCount) {
                 inventory.setSlot(index, null);
                 setHoveredSlot(null);
@@ -426,7 +428,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({
             const armorItem = inventory.armor?.[index];
             if (armorItem) {
               const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? armorItem.count : 1;
-              onDropItem?.(armorItem.id, dropCount);
+              if (onDropStack) onDropStack({ ...armorItem, count: dropCount });
+              else onDropItem?.(armorItem.id, dropCount);
               if (armorItem.count <= dropCount) {
                 inventory.armor[index] = null;
                 setHoveredSlot(null);
@@ -440,7 +443,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({
             const offhandItem = inventory.getOffhand();
             if (offhandItem) {
               const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? offhandItem.count : 1;
-              onDropItem?.(offhandItem.id, dropCount);
+              if (onDropStack) onDropStack({ ...offhandItem, count: dropCount });
+              else onDropItem?.(offhandItem.id, dropCount);
               if (offhandItem.count <= dropCount) {
                 inventory.setOffhand(null);
                 setHoveredSlot(null);
@@ -456,7 +460,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [handleClose, heldItem, hoveredSlot, inventory, onDropItem, onInventoryChange]);
+  }, [handleClose, heldItem, hoveredSlot, inventory, onDropItem, onDropStack, onInventoryChange]);
 
   const armorPlaceholders = [
     <svg key="helmet" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.25, color: '#fff' }}>
@@ -740,8 +744,10 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({
     <div
       onClick={() => {
         if (heldItem) {
-          onDropItem?.(heldItem.id, heldItem.count);
+          if (onDropStack) onDropStack(heldItem);
+          else onDropItem?.(heldItem.id, heldItem.count);
           setHeldItem(null);
+          setHeldOriginSlot(null);
           onInventoryChange();
         }
       }}

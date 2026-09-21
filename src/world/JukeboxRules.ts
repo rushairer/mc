@@ -1,4 +1,5 @@
 import type { ItemStack } from '../types';
+import { cloneItemStack } from '../items/ItemStackRules';
 
 export interface JukeboxSongDefinition {
   songId: string;
@@ -64,6 +65,8 @@ export function getJukeboxComparatorOutput(name: string | undefined): number {
 }
 
 export function getStoredJukeboxDisc(stack: ItemStack | null | undefined): ItemStack | null {
-  if (!stack) return null;
-  return { ...stack, count: 1 };
+  const copy = cloneItemStack(stack);
+  if (!copy) return null;
+  copy.count = 1;
+  return copy;
 }

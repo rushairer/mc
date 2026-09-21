@@ -212,7 +212,8 @@ export class MobSystem {
     // Spawn new mobs
     if (this.doMobSpawning && this.difficulty !== 'peaceful') {
       this.spawnTimer += dt;
-      if (this.spawnTimer >= SPAWN_INTERVAL && this.mobs.size < MAX_MOBS && getBlock) {
+      const naturalMobCount = Array.from(this.mobs.values()).filter(mob => mob.def.type !== 'armor_stand').length;
+      if (this.spawnTimer >= SPAWN_INTERVAL && naturalMobCount < MAX_MOBS && getBlock) {
         this.spawnTimer = 0;
         this.trySpawn(playerPos, isNight ?? false, getBlock, dimension, worldGen);
       }

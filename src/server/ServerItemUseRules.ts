@@ -61,6 +61,7 @@ export function isSupportedServerItemUseName(name: string, kind: ServerItemUseIn
     || name.includes('minecart')
     || name === 'armor_stand'
     || name === 'item_frame'
+    || name === 'glow_item_frame'
     || name === 'painting'
     || isSpawnEggItemName(name)
     || isServerSignStylingItemName(name)

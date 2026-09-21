@@ -2667,6 +2667,27 @@ export class TextureAtlas {
               ctx.fillRect(x + 7, y + 7, 2, 2);
               ctx.fillStyle = 'rgba(255,255,255,0.24)';
               ctx.fillRect(x + 5, y + 4, 4, 1);
+            } else if (name === 'bundle' || name.endsWith('_bundle')) {
+              const dye = name === 'bundle' ? '' : name.slice(0, -'_bundle'.length);
+              const dyeColors: Record<string, string> = {
+                white: '#f0f0f0', orange: '#f9801d', magenta: '#c74ebd', light_blue: '#3ab3da',
+                yellow: '#fed83d', lime: '#80c71f', pink: '#f38baa', gray: '#474f52',
+                light_gray: '#9d9d97', cyan: '#169c9c', purple: '#8932b8', blue: '#3c44aa',
+                brown: '#835432', green: '#5e7c16', red: '#b02e26', black: '#1d1d21',
+              };
+              const cloth = dyeColors[dye] ?? '#9a7448';
+              ctx.fillStyle = '#604022';
+              ctx.fillRect(x + 6, y + 2, 4, 2);
+              ctx.fillRect(x + 5, y + 4, 6, 1);
+              ctx.fillStyle = cloth;
+              ctx.fillRect(x + 4, y + 5, 8, 7);
+              ctx.fillRect(x + 5, y + 12, 6, 2);
+              ctx.fillStyle = 'rgba(255,255,255,0.22)';
+              ctx.fillRect(x + 5, y + 6, 1, 5);
+              ctx.fillRect(x + 6, y + 5, 4, 1);
+              ctx.fillStyle = 'rgba(0,0,0,0.24)';
+              ctx.fillRect(x + 5, y + 11, 6, 1);
+              ctx.fillRect(x + 7, y + 4, 2, 1);
             } else if (name === 'totem_of_undying') {
               ctx.fillStyle = '#d9b83f';
               ctx.fillRect(x + 6, y + 2, 4, 4);

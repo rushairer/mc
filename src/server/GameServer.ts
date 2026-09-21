@@ -68,6 +68,8 @@ import {
 import { getDeathXpDrop, resetXpAfterDeath, shouldDropStackOnDeath } from './ServerDeathRules';
 import { applyGiveToInventory, canExecuteServerCommand, isValidWeatherArgument, validateGiveCount } from './ServerCommandRules';
 import { getProjectileImpactBehavior } from './ServerProjectileRules';
+import { spawnEggMobTypeForItemName } from '../world/SpawnEggRules';
+import { EXPERIENCE_BOTTLE_XP_RANGE, rollXp } from '../world/XpRules';
 import {
   canPlaceHeldBlock,
   consumeHeldStack,
@@ -235,7 +237,7 @@ interface ServerFishingState {
 
 interface ServerProjectile {
   id: number;
-  type: 'arrow' | 'fireball' | 'shulker_bullet' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'firework_rocket' | 'eye_of_ender';
+  type: 'arrow' | 'fireball' | 'shulker_bullet' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'firework_rocket' | 'experience_bottle' | 'eye_of_ender';
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   ownerId?: string;
@@ -1300,7 +1302,7 @@ export class GameServer {
         const speed = type === 'firework_rocket' ? 18 : 15;
         const velocityY = type === 'firework_rocket' ? 4.5 : 2.5;
         this.spawnProjectile(session, type, origin, dir.multiplyScalar(speed), {
-          damage: type === 'trident' ? 9 : type === 'firework_rocket' ? 5 : 1,
+          damage: type === 'experience_bottle' ? 0 : type === 'trident' ? 9 : type === 'firework_rocket' ? 5 : 1,
           velocityY,
           potionEffect,
         });
@@ -1530,6 +1532,19 @@ export class GameServer {
     const targetBlockId = this.getBlock(intent.x, intent.y, intent.z, session.dimension);
     const targetBlock = BlockRegistry.get(targetBlockId);
     if (!targetBlock) return false;
+
+    const spawnEggMobType = spawnEggMobTypeForItemName(itemName);
+    if (spawnEggMobType) {
+      const place = adjacentBlockPosition(intent.x, intent.y, intent.z, intent.face);
+      if (!isValidWorldY(place.y, WORLD_HEIGHT)) return false;
+      if (this.isSolidBlock(place.x, place.y, place.z, session.dimension)) return false;
+      this.spawnMob(spawnEggMobType, place.x + 0.5, place.y, place.z + 0.5, session.dimension);
+      this.consumeServerHeldItem(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: place.x, y: place.y, z: place.z,
+      });
+      return true;
+    }
 
     if (itemName === 'bucket') {
       const filledName = bucketFillItemName(targetBlock.name);
@@ -3246,6 +3261,21 @@ export class GameServer {
     });
   }
 
+  private resolveExperienceBottleImpact(proj: ServerProjectile): boolean {
+    if (proj.type !== 'experience_bottle') return false;
+
+    const owner = proj.ownerId ? this.players.get(proj.ownerId) : undefined;
+    if (owner && owner.dimension === proj.dimension) {
+      this.addServerXp(owner, rollXp(EXPERIENCE_BOTTLE_XP_RANGE, Math.random));
+    }
+    this.broadcastDimension(proj.dimension, PacketType.S2C_SOUND, {
+      type: 'pickup', x: proj.position.x, y: proj.position.y, z: proj.position.z,
+    });
+    this.projectiles.delete(proj.id);
+    this.broadcastDimension(proj.dimension, PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
+    return true;
+  }
+
   private resolveEnderPearlImpact(proj: ServerProjectile): boolean {
     if (proj.type !== 'ender_pearl') return false;
     const behavior = getProjectileImpactBehavior('ender_pearl');
@@ -3340,6 +3370,7 @@ export class GameServer {
       
       const hitBlock = this.isSolidBlock(px, py, pz, proj.dimension);
       if (hitBlock) {
+        if (this.resolveExperienceBottleImpact(proj)) continue;
         if (this.resolveEnderPearlImpact(proj)) continue;
         this.projectiles.delete(proj.id);
         this.broadcastDimension(proj.dimension, PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
@@ -3353,6 +3384,10 @@ export class GameServer {
         if (player.dimension === proj.dimension && player.id !== proj.ownerId) {
           const pPos = new THREE.Vector3(player.x, player.y + 0.9, player.z);
           if (proj.position.distanceTo(pPos) < 1.0) {
+            if (this.resolveExperienceBottleImpact(proj)) {
+              hitSomeone = true;
+              break;
+            }
             if (this.resolveEnderPearlImpact(proj)) {
               hitSomeone = true;
               break;
@@ -3373,6 +3408,10 @@ export class GameServer {
         if (mob.dimension === proj.dimension) {
           const mPos = new THREE.Vector3(mob.position.x, mob.position.y + 0.8, mob.position.z);
           if (proj.position.distanceTo(mPos) < 0.8) {
+            if (this.resolveExperienceBottleImpact(proj)) {
+              hitSomeone = true;
+              break;
+            }
             if (this.resolveEnderPearlImpact(proj)) {
               hitSomeone = true;
               break;

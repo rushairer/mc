@@ -1267,7 +1267,10 @@ export class GameServer {
 
       case PacketType.C2S_HELD_ITEM_CHANGE: {
         const { slot } = packet.payload;
-        if (isValidHotbarSlot(slot)) session.selectedSlot = slot;
+        if (isValidHotbarSlot(slot)) {
+          if (slot !== session.selectedSlot) session.activeBrush = undefined;
+          session.selectedSlot = slot;
+        }
         break;
       }
 
@@ -3842,6 +3845,7 @@ export class GameServer {
     player.shieldUseSeconds = 0;
     player.shieldDisabledSeconds = 0;
     player.windChargeCooldownSeconds = 0;
+    player.activeBrush = undefined;
     player.maceFallStartY = null;
     player.maceFallDistance = 0;
     player.hurtCooldown = createHurtCooldownState();

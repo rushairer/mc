@@ -3081,6 +3081,9 @@ export class Game {
         if (maceSmashActive && mobHit.mob) {
           this.applyLocalMaceSmash(mobHit.mob.position, this.maceFallDistance, mobHit.mob.id);
         }
+        if (isHoldingMace && this.gameMode !== 'creative') {
+          this.inventory.damageTool(this.player.selectedSlot, 1);
+        }
         this.swordSwingTimer = 0.4;
         this.startAttackCooldown(attackCooldownDuration);
         if (mobHit.mob) {

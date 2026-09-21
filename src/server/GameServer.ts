@@ -744,7 +744,12 @@ export class GameServer {
             mData.isSaddled,
             mData.customName,
             mData.yaw,
-            mData.armorStandEquipment
+            mData.armorStandEquipment,
+            mData.hangingFace,
+            mData.itemFrameItem,
+            mData.itemFrameRotation,
+            mData.paintingVariant,
+            mData.leashHolderId === 'local-player' ? session.id : undefined
           );
         }
       }
@@ -2888,6 +2893,11 @@ export class GameServer {
     customName?: string,
     yaw?: number,
     armorStandEquipment: readonly (ItemStack | null)[] = [],
+    hangingFace?: BlockFacing,
+    itemFrameItem?: ItemStack,
+    itemFrameRotation = 0,
+    paintingVariant?: string,
+    leashHolderId?: string,
   ): ServerMob {
     const id = this.nextEntityId++;
     const mob: ServerMob = {
@@ -2916,6 +2926,11 @@ export class GameServer {
       armorStandEquipment: type === 'armor_stand'
         ? [0, 1, 2, 3].map((index) => cloneItemStack(armorStandEquipment[index]))
         : undefined,
+      hangingFace,
+      itemFrameItem: type === 'item_frame' ? cloneItemStack(itemFrameItem) ?? undefined : undefined,
+      itemFrameRotation: type === 'item_frame' ? ((Math.trunc(itemFrameRotation) % 8) + 8) % 8 : undefined,
+      paintingVariant: type === 'painting' && isPaintingVariant(paintingVariant) ? paintingVariant : undefined,
+      leashHolderId,
       isSheared,
       riderInput: createIdleServerMobRideInput(id)
     };
@@ -2938,6 +2953,11 @@ export class GameServer {
       armorStandEquipment: mob.type === 'armor_stand'
         ? (mob.armorStandEquipment ?? []).map((stack) => cloneItemStack(stack))
         : undefined,
+      hangingFace: mob.hangingFace,
+      itemFrameItem: mob.type === 'item_frame' ? cloneItemStack(mob.itemFrameItem) : undefined,
+      itemFrameRotation: mob.type === 'item_frame' ? mob.itemFrameRotation ?? 0 : undefined,
+      paintingVariant: mob.type === 'painting' ? mob.paintingVariant : undefined,
+      leashHolderId: mob.leashHolderId ?? null,
       isSheared,
       riderId: null
     });

@@ -1,6 +1,7 @@
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { isServerSignStylingItemName } from './ServerSignRules';
+import { isSpawnEggItemName } from '../world/SpawnEggRules';
 
 export type ServerItemUseFace = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
 
@@ -58,6 +59,7 @@ export function isSupportedServerItemUseName(name: string, kind: ServerItemUseIn
     || name === 'boat'
     || name.endsWith('_boat')
     || name.includes('minecart')
+    || isSpawnEggItemName(name)
     || isServerSignStylingItemName(name)
     || serverItemOnBlockKind(name) !== null;
 }

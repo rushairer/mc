@@ -1276,8 +1276,38 @@ export class GameServer {
         if (!isEntityAttackInReach(session, mob.position, session.gameMode)) break;
 
         if (intent.action === 'interact') {
-          if (mob.type !== 'armor_stand') break;
           const held = session.inventory[session.selectedSlot];
+
+          if (mob.type === 'item_frame') {
+            if (!mob.itemFrameItem) {
+              if (!held) break;
+              const framed = cloneItemStack(held);
+              if (!framed) break;
+              framed.count = 1;
+              mob.itemFrameItem = framed;
+              mob.itemFrameRotation = 0;
+              if (session.gameMode !== 'creative') {
+                session.inventory[session.selectedSlot] = consumeHeldStack(held);
+                this.syncPlayerInventory(session);
+              }
+            } else {
+              mob.itemFrameRotation = nextItemFrameRotation(mob.itemFrameRotation ?? 0);
+            }
+
+            this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_STATE, {
+              id: mob.id,
+              health: mob.health,
+              hurtTimer: mob.hurtTimer,
+              itemFrameItem: cloneItemStack(mob.itemFrameItem),
+              itemFrameRotation: mob.itemFrameRotation ?? 0,
+            });
+            this.broadcastDimension(mob.dimension, PacketType.S2C_SOUND, {
+              type: 'place', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+            });
+            break;
+          }
+
+          if (mob.type !== 'armor_stand') break;
           const heldDef = held ? ItemRegistry.get(held.id) : undefined;
           const equipment = mob.armorStandEquipment ?? [null, null, null, null];
 

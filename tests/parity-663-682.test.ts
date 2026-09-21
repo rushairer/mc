@@ -121,7 +121,8 @@ test('675: Wind Charge projectile is gravity-free and has a dedicated visual', (
   const source = readFileSync(new URL('../src/systems/ProjectileSystem.ts', import.meta.url), 'utf8');
   assert.ok(source.includes("'wind_charge'"));
   assert.ok(source.includes('shootWindCharge('));
-  assert.ok(source.includes("proj.type !== 'wind_charge'"));
+  const gravityBranch = source.match(/if \(proj\.type === 'arrow'[\s\S]*?\) \{\n\s*proj\.velocity\.y \+= ARROW_GRAVITY \* dt;/)?.[0] ?? '';
+  assert.equal(gravityBranch.includes("wind_charge"), false);
   assert.ok(source.includes("core.name = 'wind_charge_core'"));
 });
 

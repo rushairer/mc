@@ -94,6 +94,7 @@ export interface SaveData {
 }
 
 export interface SerializedMob {
+  entityId?: number;
   type: MobType;
   x: number;
   y: number;
@@ -327,6 +328,9 @@ function sanitizeMobs(
     seen.add(key);
     valid.push({
       ...mob,
+      entityId: Number.isInteger(mob.entityId) && Number(mob.entityId) >= 0
+        ? Math.trunc(Number(mob.entityId))
+        : undefined,
       type: mob.type as MobType,
       x,
       y,

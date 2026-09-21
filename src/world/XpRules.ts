@@ -30,6 +30,7 @@ export const BLOCK_XP_RULES: Readonly<Record<string, XpRange>> = {
 
 export const FISHING_XP_RANGE: XpRange = { min: 1, max: 6 };
 export const BREEDING_XP_RANGE: XpRange = { min: 1, max: 7 };
+export const EXPERIENCE_BOTTLE_XP_RANGE: XpRange = { min: 3, max: 11 };
 
 export function getBlockXpRange(blockName: string): XpRange | undefined {
   return BLOCK_XP_RULES[blockName];

@@ -3243,8 +3243,8 @@ export class GameServer {
   }
 
   private resolveEnderPearlImpact(proj: ServerProjectile): boolean {
-    const behavior = getProjectileImpactBehavior(proj.type);
-    if (!behavior.teleportsOwner) return false;
+    if (proj.type !== 'ender_pearl') return false;
+    const behavior = getProjectileImpactBehavior('ender_pearl');
 
     const owner = proj.ownerId ? this.players.get(proj.ownerId) : undefined;
     if (owner && owner.dimension === proj.dimension) {

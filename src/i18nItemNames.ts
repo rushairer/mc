@@ -137,6 +137,7 @@ const ZH_CN_EXACT: Dict = {
   'Shelf Mushroom': '层孔菇',
   'Red Shrub': '红灌木',
   'Straw Bed': '稻草床',
+  "Bottle o' Enchanting": '附魔之瓶',
 };
 
 const ZH_TW_EXACT: Dict = {
@@ -206,6 +207,7 @@ const ZH_TW_EXACT: Dict = {
   'Shelf Mushroom': '層孔菇',
   'Red Shrub': '紅灌木',
   'Straw Bed': '稻草床',
+  "Bottle o' Enchanting": '附魔之瓶',
 };
 
 const ZH_CN_WORDS: Dict = {
@@ -241,7 +243,10 @@ const ZH_CN_WORDS: Dict = {
   void: '空位', wart: '疣', water: '水', weighted: '测重', wheat: '小麦', white: '白色',
   wither: '凋灵', wood: '木', wooden: '木', wool: '羊毛', written: '成书', yellow: '黄色',
   poplar: '杨木', cushion: '坐垫', straw: '稻草', shelf: '层孔', shrub: '灌木',
-  zombie: '僵尸',
+  zombie: '僵尸', creeper: '苦力怕', cow: '牛', pig: '猪', sheep: '绵羊', chicken: '鸡',
+  villager: '村民', enderman: '末影人', witch: '女巫', wolf: '狼', cat: '猫',
+  shulker: '潜影贝', pillager: '掠夺者', guardian: '守卫者', vex: '恼鬼',
+  magma: '岩浆', cube: '怪', iron: '铁', golem: '傀儡',
 };
 
 const ZH_TW_WORDS: Dict = {
@@ -267,7 +272,10 @@ const ZH_TW_WORDS: Dict = {
   tipped: '藥水', torch: '火把', trapdoor: '地板門', trapped: '陷阱', tripwire: '絆線',
   wart: '疙瘩', weighted: '測重', white: '白色', wither: '凋零', wooden: '木製',
   poplar: '楊木', cushion: '坐墊', straw: '稻草', shelf: '層孔', shrub: '灌木',
-  yellow: '黃色', zombie: '殭屍',
+  yellow: '黃色', zombie: '殭屍', creeper: '苦力怕', cow: '牛', pig: '豬', sheep: '綿羊', chicken: '雞',
+  villager: '村民', enderman: '終界使者', witch: '女巫', wolf: '狼', cat: '貓',
+  shulker: '界伏蚌', pillager: '掠奪者', guardian: '深海守衛', vex: '惱鬼',
+  magma: '岩漿', cube: '立方怪', iron: '鐵', golem: '魔像',
 };
 
 const MATERIAL_SUFFIXES = new Set(['sword', 'shovel', 'pickaxe', 'axe', 'hoe', 'helmet', 'chestplate', 'leggings', 'boots']);
@@ -290,6 +298,9 @@ const translateWords = (name: string, words: Dict) => {
 };
 
 const translateSpecialPatterns = (displayName: string, words: Dict): string | null => {
+  const spawnEgg = displayName.match(/^(.+) Spawn Egg$/);
+  if (spawnEgg) return `${translateWords(spawnEgg[1], words)}刷怪蛋`;
+
   const blockOf = displayName.match(/^Block of (.+)$/);
   if (blockOf) return `${translateWords(blockOf[1], words)}块`;
 

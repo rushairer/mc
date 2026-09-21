@@ -1354,6 +1354,47 @@ export class GameServer {
         if (!mob || mob.dimension !== session.dimension || mob.health <= 0) break;
         if (!isEntityAttackInReach(session, mob.position, session.gameMode)) break;
 
+        if (intent.action === 'transfer_leashes') {
+          if (!session.sneaking) break;
+          if (mob.type === 'item_frame' || mob.type === 'painting' || mob.type === 'armor_stand') break;
+
+          const holderId = mobLeashHolderId(mob.id);
+          const holderCenter = {
+            x: mob.position.x,
+            y: mob.position.y + (MOB_DEFS[mob.type]?.height ?? 1) * 0.55,
+            z: mob.position.z,
+          };
+          let transferred = 0;
+          for (const child of this.mobs.values()) {
+            if (
+              child.id === mob.id ||
+              child.dimension !== mob.dimension ||
+              child.leashHolderId !== session.id ||
+              !isLeashableMobType(child.type)
+            ) continue;
+            const childCenter = {
+              x: child.position.x,
+              y: child.position.y + (MOB_DEFS[child.type]?.height ?? 1) * 0.55,
+              z: child.position.z,
+            };
+            if (leashDistance(holderCenter, childCenter) > LEAD_SNAP_DISTANCE) continue;
+            child.leashHolderId = holderId;
+            transferred++;
+            this.broadcastDimension(child.dimension, PacketType.S2C_MOB_STATE, {
+              id: child.id,
+              health: child.health,
+              hurtTimer: child.hurtTimer,
+              leashHolderId: holderId,
+            });
+          }
+          if (transferred > 0) {
+            this.broadcastDimension(mob.dimension, PacketType.S2C_SOUND, {
+              type: 'place', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+            });
+          }
+          break;
+        }
+
         if (intent.action === 'interact') {
           const held = session.inventory[session.selectedSlot];
 
@@ -2387,30 +2428,40 @@ export class GameServer {
     if (!itemName || !mob || mob.dimension !== session.dimension || mob.health <= 0) return false;
     if (!isEntityAttackInReach(session, mob.position, session.gameMode)) return false;
 
-    if (itemName === 'shears' && mob.leashHolderId && isLeashableMobType(mob.type)) {
-      mob.leashHolderId = undefined;
-      if (session.gameMode !== 'creative') {
-        this.spawnDroppedItem(
-          420,
-          1,
-          mob.position.x,
-          mob.position.y + 0.4,
-          mob.position.z,
-          mob.dimension,
-          0.25,
-        );
+    if (itemName === 'shears') {
+      const childHolderId = mobLeashHolderId(mob.id);
+      const children = Array.from(this.mobs.values()).filter(
+        (child) => child.leashHolderId === childHolderId,
+      );
+      const ownConnection = !!mob.leashHolderId && isLeashableMobType(mob.type);
+      if (ownConnection || children.length > 0) {
+        const broken = ownConnection ? [mob, ...children] : children;
+        for (const child of broken) {
+          child.leashHolderId = undefined;
+          if (session.gameMode !== 'creative') {
+            this.spawnDroppedItem(
+              420,
+              1,
+              child.position.x,
+              child.position.y + 0.4,
+              child.position.z,
+              child.dimension,
+              0.25,
+            );
+          }
+          this.broadcastDimension(child.dimension, PacketType.S2C_MOB_STATE, {
+            id: child.id,
+            health: child.health,
+            hurtTimer: child.hurtTimer,
+            leashHolderId: null,
+          });
+        }
+        this.damageServerHeldTool(session, held);
+        this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+          type: 'break', x: mob.position.x, y: mob.position.y, z: mob.position.z,
+        });
+        return true;
       }
-      this.damageServerHeldTool(session, held);
-      this.broadcastDimension(session.dimension, PacketType.S2C_MOB_STATE, {
-        id: mob.id,
-        health: mob.health,
-        hurtTimer: mob.hurtTimer,
-        leashHolderId: null,
-      });
-      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
-        type: 'break', x: mob.position.x, y: mob.position.y, z: mob.position.z,
-      });
-      return true;
     }
 
     if (
@@ -2447,7 +2498,29 @@ export class GameServer {
     }
 
     if (itemName === 'lead') {
-      if (!isLeashableMobType(mob.type) || mob.leashHolderId) return false;
+      if (!isLeashableMobType(mob.type)) return false;
+      if (mob.leashHolderId === session.id) return false;
+
+      const fenceHolder = parseFenceLeashHolderId(mob.leashHolderId);
+      const mobHolderId = parseMobLeashHolderId(mob.leashHolderId);
+      const heldByOtherPlayer =
+        !!mob.leashHolderId &&
+        !fenceHolder &&
+        mobHolderId === null &&
+        mob.leashHolderId !== session.id;
+      if (heldByOtherPlayer) return false;
+
+      if (mob.leashHolderId && session.gameMode !== 'creative') {
+        this.spawnDroppedItem(
+          420,
+          1,
+          mob.position.x,
+          mob.position.y + 0.4,
+          mob.position.z,
+          mob.dimension,
+          0.25,
+        );
+      }
       mob.leashHolderId = session.id;
       this.consumeServerHeldItem(session, held);
       this.broadcastDimension(session.dimension, PacketType.S2C_MOB_STATE, {

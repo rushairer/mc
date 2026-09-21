@@ -1016,16 +1016,35 @@ export class Game {
     this.behaviors.registerItem('brush', {
       id: 'minecraft:brush',
       canStartUse: ({ target }) => !!target && isSuspiciousBlockName(target.block.name),
-      startUse: ({ target }) => {
+      startUse: ({ stack, target }) => {
         if (!target || !isSuspiciousBlockName(target.block.name)) return { handled: false };
         const { x, y, z } = target.position;
         this.activeBrushTarget = { x, y, z, key: archaeologyTargetKey(x, y, z) };
         this.brushLastStage = 0;
+        if (this.isMultiplayerNetworkConnected()) {
+          this.network.send(PacketType.C2S_BRUSH_ACTION, {
+            action: 'start', itemId: stack.id, x, y, z,
+          });
+        }
         return { handled: true };
       },
       continueUse: ({ stack, target }, progress) =>
         this.continueBrushUse(stack, target, progress.elapsedSeconds),
-      stopUse: () => {
+      stopUse: ({ stack }, progress) => {
+        const active = this.activeBrushTarget;
+        if (
+          active
+          && progress.reason !== 'completed'
+          && this.isMultiplayerNetworkConnected()
+        ) {
+          this.network.send(PacketType.C2S_BRUSH_ACTION, {
+            action: 'cancel',
+            itemId: stack.id,
+            x: active.x,
+            y: active.y,
+            z: active.z,
+          });
+        }
         this.resetBrushUseProgress();
         return { handled: true };
       },
@@ -6036,7 +6055,16 @@ export class Game {
     const replacementName = brushedReplacementName(current?.name);
     if (!replacementName) return false;
 
-    if (this.sendServerBlockItemUse(stack, target)) return true;
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_BRUSH_ACTION, {
+        action: 'complete',
+        itemId: stack.id,
+        x,
+        y,
+        z,
+      });
+      return true;
+    }
 
     const replacement = BlockRegistry.getByName(replacementName);
     if (!replacement) return false;

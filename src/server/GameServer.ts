@@ -16,6 +16,7 @@ import {
   parseServerItemUseIntent,
   replaceOneHeldItem,
   type ServerBlockItemUseIntent,
+  isMinecartItemName,
   serverItemOnBlockKind,
   vehicleTypeForBoatItemName,
 } from './ServerItemUseRules';
@@ -203,7 +204,7 @@ interface ServerPrimedTnt {
 
 interface ServerVehicle {
   id: number;
-  type: 'boat' | 'chest_boat';
+  type: 'boat' | 'chest_boat' | 'minecart';
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   rotationY: number;
@@ -217,7 +218,7 @@ interface ServerVehicle {
 
 interface ServerProjectile {
   id: number;
-  type: 'arrow' | 'fireball' | 'shulker_bullet' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident';
+  type: 'arrow' | 'fireball' | 'shulker_bullet' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'firework_rocket';
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   ownerId?: string;
@@ -1233,14 +1234,18 @@ export class GameServer {
         const dir = new THREE.Vector3(request.direction.x, request.direction.y, request.direction.z);
 
         if (request.action === 'bow_release') {
-          const ammoSlot = session.inventory.findIndex((slot) => slot && (slot.id & 0x3FF) === 262);
-          if (ammoSlot < 0) break;
-          const ammo = session.inventory[ammoSlot]!;
-          ammo.count -= 1;
-          if (ammo.count <= 0) session.inventory[ammoSlot] = null;
+          if (session.gameMode !== 'creative') {
+            const ammoSlot = session.inventory.findIndex((slot) => slot && (slot.id & 0x3FF) === 262);
+            if (ammoSlot < 0) break;
+            const ammo = session.inventory[ammoSlot]!;
+            ammo.count -= 1;
+            if (ammo.count <= 0) session.inventory[ammoSlot] = null;
+          }
 
           const params = getBowReleaseParams(request.power ?? 0, getServerBowPowerLevel(held));
-          session.inventory[session.selectedSlot] = damageDurableStack(held, 1, 'tool');
+          if (session.gameMode !== 'creative') {
+            session.inventory[session.selectedSlot] = damageDurableStack(held, 1, 'tool');
+          }
           this.spawnProjectile(session, 'arrow', origin, dir.multiplyScalar(params.speed), {
             damage: params.damage,
             velocityY: 0.5,
@@ -1255,15 +1260,19 @@ export class GameServer {
         const type = getThrowableProjectileType(held!.id);
         if (!type) break;
         const potionEffect = type === 'potion' ? held?.potion?.effect : undefined;
-        this.spawnProjectile(session, type, origin, dir.multiplyScalar(15), {
-          damage: type === 'trident' ? 9 : 1,
-          velocityY: 2.5,
+        const speed = type === 'firework_rocket' ? 18 : 15;
+        const velocityY = type === 'firework_rocket' ? 4.5 : 2.5;
+        this.spawnProjectile(session, type, origin, dir.multiplyScalar(speed), {
+          damage: type === 'trident' ? 9 : type === 'firework_rocket' ? 5 : 1,
+          velocityY,
           potionEffect,
         });
-        if (type === 'trident') {
-          session.inventory[session.selectedSlot] = damageDurableStack(held, 1, 'tool');
-        } else {
-          session.inventory[session.selectedSlot] = consumeOne(held!);
+        if (session.gameMode !== 'creative') {
+          if (type === 'trident') {
+            session.inventory[session.selectedSlot] = damageDurableStack(held, 1, 'tool');
+          } else {
+            session.inventory[session.selectedSlot] = consumeOne(held!);
+          }
         }
         this.syncPlayerInventory(session);
         break;
@@ -1668,6 +1677,39 @@ export class GameServer {
       return true;
     }
 
+    if (isMinecartItemName(itemName)) {
+      if (!BlockRegistry.isRail(targetBlockId)) return false;
+      const vehicle: ServerVehicle = {
+        id: this.nextEntityId++,
+        type: 'minecart',
+        position: new THREE.Vector3(intent.x + 0.5, intent.y + 0.05, intent.z + 0.5),
+        velocity: new THREE.Vector3(),
+        rotationY: session.yaw,
+        speed: 0,
+        sourceItemId: held.id,
+        dimension: session.dimension,
+        inventory: null,
+        input: createIdleServerVehicleInput(this.nextEntityId - 1),
+      };
+      this.vehicles.set(vehicle.id, vehicle);
+      this.broadcastDimension(session.dimension, PacketType.S2C_VEHICLE_SPAWN, {
+        id: vehicle.id,
+        type: vehicle.type,
+        sourceItemId: vehicle.sourceItemId,
+        x: vehicle.position.x,
+        y: vehicle.position.y,
+        z: vehicle.position.z,
+        rotationY: vehicle.rotationY,
+        riderId: null,
+        dimension: vehicle.dimension,
+      });
+      this.consumeServerHeldItem(session, held);
+      this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+        type: 'place', x: intent.x, y: intent.y, z: intent.z,
+      });
+      return true;
+    }
+
     const vehicleType = vehicleTypeForBoatItemName(itemName);
     if (vehicleType) {
       const place = adjacentBlockPosition(intent.x, intent.y, intent.z, intent.face);
@@ -1837,53 +1879,129 @@ export class GameServer {
     });
   }
 
+  private tickServerMinecartPhysics(vehicle: ServerVehicle, dt: number) {
+    const cx = Math.floor(vehicle.position.x);
+    const cy = Math.floor(vehicle.position.y);
+    const cz = Math.floor(vehicle.position.z);
+    const block = this.getBlock(cx, cy, cz, vehicle.dimension);
+
+    if (BlockRegistry.isRail(block)) {
+      const meta = (block >> 10) & 0xf;
+      const baseBlockId = block & 0x3ff;
+      const powered = baseBlockId === 27;
+      const northSouth = meta === 0 || meta === 4 || meta === 5;
+
+      if (northSouth) {
+        vehicle.position.x += (cx + 0.5 - vehicle.position.x) * Math.min(1, dt * 15);
+        vehicle.rotationY = 0;
+      } else {
+        vehicle.position.z += (cz + 0.5 - vehicle.position.z) * Math.min(1, dt * 15);
+        vehicle.rotationY = Math.PI / 2;
+      }
+
+      let acceleration = 0;
+      if (powered) acceleration = 12;
+      else if (vehicle.riderId) {
+        if (vehicle.input.forward && !vehicle.input.back) acceleration = 4;
+        else if (vehicle.input.back && !vehicle.input.forward) acceleration = -4;
+      }
+
+      const speedLimit = powered ? 10 : 6;
+      if (northSouth) {
+        vehicle.velocity.x = 0;
+        let direction = Math.sign(vehicle.velocity.z);
+        if (direction === 0 && vehicle.riderId) {
+          direction = vehicle.input.forward ? 1 : vehicle.input.back ? -1 : 0;
+        }
+        vehicle.velocity.z += direction * acceleration * dt;
+        vehicle.velocity.z *= Math.pow(powered ? 0.99 : 0.92, dt * 10);
+        vehicle.velocity.z = THREE.MathUtils.clamp(vehicle.velocity.z, -speedLimit, speedLimit);
+      } else {
+        vehicle.velocity.z = 0;
+        let direction = Math.sign(vehicle.velocity.x);
+        if (direction === 0 && vehicle.riderId) {
+          direction = vehicle.input.forward ? 1 : vehicle.input.back ? -1 : 0;
+        }
+        vehicle.velocity.x += direction * acceleration * dt;
+        vehicle.velocity.x *= Math.pow(powered ? 0.99 : 0.92, dt * 10);
+        vehicle.velocity.x = THREE.MathUtils.clamp(vehicle.velocity.x, -speedLimit, speedLimit);
+      }
+
+      vehicle.position.y = cy + 0.05;
+      vehicle.velocity.y = 0;
+      vehicle.position.addScaledVector(vehicle.velocity, dt);
+      vehicle.speed = Math.hypot(vehicle.velocity.x, vehicle.velocity.z);
+      return;
+    }
+
+    vehicle.velocity.y -= 18 * dt;
+    vehicle.velocity.x *= Math.pow(0.5, dt * 10);
+    vehicle.velocity.z *= Math.pow(0.5, dt * 10);
+    const previous = vehicle.position.clone();
+    vehicle.position.addScaledVector(vehicle.velocity, dt);
+    if (this.isSolidBlock(
+      Math.floor(vehicle.position.x),
+      Math.floor(vehicle.position.y),
+      Math.floor(vehicle.position.z),
+      vehicle.dimension,
+    )) {
+      vehicle.position.copy(previous);
+      vehicle.velocity.set(0, 0, 0);
+    }
+    vehicle.speed = Math.hypot(vehicle.velocity.x, vehicle.velocity.z);
+  }
+
   private tickServerVehicles(dt: number) {
     for (const vehicle of this.vehicles.values()) {
-      const bx = Math.floor(vehicle.position.x);
-      const by = Math.floor(vehicle.position.y);
-      const bz = Math.floor(vehicle.position.z);
-      const current = this.getBlock(bx, by, bz, vehicle.dimension);
-      const below = this.getBlock(bx, Math.max(0, by - 1), bz, vehicle.dimension);
-      const inWater = BlockRegistry.isWater(current) || BlockRegistry.isWater(below);
-
-      if (inWater) {
-        const surfaceY = Math.floor(vehicle.position.y) + 0.9;
-        vehicle.velocity.y += (surfaceY - vehicle.position.y) * Math.min(1, dt * 10) * 5;
-        vehicle.velocity.y *= Math.pow(0.7, dt * 10);
+      if (vehicle.type === 'minecart') {
+        this.tickServerMinecartPhysics(vehicle, dt);
       } else {
-        vehicle.velocity.y -= 18 * dt;
-      }
+        const bx = Math.floor(vehicle.position.x);
+        const by = Math.floor(vehicle.position.y);
+        const bz = Math.floor(vehicle.position.z);
+        const current = this.getBlock(bx, by, bz, vehicle.dimension);
+        const below = this.getBlock(bx, Math.max(0, by - 1), bz, vehicle.dimension);
+        const inWater = BlockRegistry.isWater(current) || BlockRegistry.isWater(below);
 
-      if (vehicle.riderId) {
-        const input = vehicle.input;
-        let speedTarget = 0;
-        let rotationSpeed = 0;
-        if (input.forward && !input.back) speedTarget = inWater ? 6.5 : 1.5;
-        else if (input.back && !input.forward) speedTarget = inWater ? -3 : -0.8;
-        if (input.left && !input.right) rotationSpeed = 2;
-        else if (input.right && !input.left) rotationSpeed = -2;
-        vehicle.rotationY += rotationSpeed * dt;
-        vehicle.speed += (speedTarget - vehicle.speed) * Math.min(1, dt * (inWater ? 3 : 5));
-        vehicle.velocity.x = Math.sin(vehicle.rotationY) * vehicle.speed;
-        vehicle.velocity.z = Math.cos(vehicle.rotationY) * vehicle.speed;
-      } else {
-        const friction = inWater ? 0.95 : 0.8;
-        vehicle.velocity.x *= Math.pow(friction, dt * 10);
-        vehicle.velocity.z *= Math.pow(friction, dt * 10);
-        vehicle.speed = Math.hypot(vehicle.velocity.x, vehicle.velocity.z);
-      }
+        if (inWater) {
+          const surfaceY = Math.floor(vehicle.position.y) + 0.9;
+          vehicle.velocity.y += (surfaceY - vehicle.position.y) * Math.min(1, dt * 10) * 5;
+          vehicle.velocity.y *= Math.pow(0.7, dt * 10);
+        } else {
+          vehicle.velocity.y -= 18 * dt;
+        }
 
-      const previous = vehicle.position.clone();
-      vehicle.position.addScaledVector(vehicle.velocity, dt);
-      const nx = Math.floor(vehicle.position.x);
-      const ny = Math.floor(vehicle.position.y + 0.1);
-      const nz = Math.floor(vehicle.position.z);
-      if (this.isSolidBlock(nx, ny, nz, vehicle.dimension)) {
-        vehicle.position.x = previous.x;
-        vehicle.position.z = previous.z;
-        vehicle.velocity.x = 0;
-        vehicle.velocity.z = 0;
-        vehicle.speed = 0;
+        if (vehicle.riderId) {
+          const input = vehicle.input;
+          let speedTarget = 0;
+          let rotationSpeed = 0;
+          if (input.forward && !input.back) speedTarget = inWater ? 6.5 : 1.5;
+          else if (input.back && !input.forward) speedTarget = inWater ? -3 : -0.8;
+          if (input.left && !input.right) rotationSpeed = 2;
+          else if (input.right && !input.left) rotationSpeed = -2;
+          vehicle.rotationY += rotationSpeed * dt;
+          vehicle.speed += (speedTarget - vehicle.speed) * Math.min(1, dt * (inWater ? 3 : 5));
+          vehicle.velocity.x = Math.sin(vehicle.rotationY) * vehicle.speed;
+          vehicle.velocity.z = Math.cos(vehicle.rotationY) * vehicle.speed;
+        } else {
+          const friction = inWater ? 0.95 : 0.8;
+          vehicle.velocity.x *= Math.pow(friction, dt * 10);
+          vehicle.velocity.z *= Math.pow(friction, dt * 10);
+          vehicle.speed = Math.hypot(vehicle.velocity.x, vehicle.velocity.z);
+        }
+
+        const previous = vehicle.position.clone();
+        vehicle.position.addScaledVector(vehicle.velocity, dt);
+        const nx = Math.floor(vehicle.position.x);
+        const ny = Math.floor(vehicle.position.y + 0.1);
+        const nz = Math.floor(vehicle.position.z);
+        if (this.isSolidBlock(nx, ny, nz, vehicle.dimension)) {
+          vehicle.position.x = previous.x;
+          vehicle.position.z = previous.z;
+          vehicle.velocity.x = 0;
+          vehicle.velocity.z = 0;
+          vehicle.speed = 0;
+        }
       }
 
       if (vehicle.riderId) {
@@ -1893,7 +2011,7 @@ export class GameServer {
           vehicle.input = createIdleServerVehicleInput(vehicle.id);
         } else {
           rider.x = vehicle.position.x;
-          rider.y = vehicle.position.y + 0.55;
+          rider.y = vehicle.position.y + (vehicle.type === 'minecart' ? 0.35 : 0.55);
           rider.z = vehicle.position.z;
         }
       }
@@ -1910,7 +2028,7 @@ export class GameServer {
     }
   }
 
-  private tickPrimedTnt(dt: number) {
+  private tickPrimedTnt(dt: number) {  private tickPrimedTnt(dt: number) {
     for (const tnt of Array.from(this.primedTnt.values())) {
       tnt.fuseSeconds -= dt;
       if (tnt.fuseSeconds > 0) continue;
@@ -2995,9 +3113,15 @@ export class GameServer {
   private tickProjectiles(dt: number) {
     for (const proj of this.projectiles.values()) {
       proj.age += dt;
-      if (proj.age > 30) { // Despawn after 30 seconds
+      const maxAge = proj.type === 'firework_rocket' ? 1.6 : 30;
+      if (proj.age > maxAge) {
         this.projectiles.delete(proj.id);
         this.broadcastDimension(proj.dimension, PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
+        if (proj.type === 'firework_rocket') {
+          this.broadcastDimension(proj.dimension, PacketType.S2C_SOUND, {
+            type: 'explode', x: proj.position.x, y: proj.position.y, z: proj.position.z,
+          });
+        }
         continue;
       }
 

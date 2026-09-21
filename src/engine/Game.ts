@@ -3797,11 +3797,12 @@ export class Game {
     return true;
   }
 
-  private tryPlaceMinecart(_stack: ItemStack, target?: BlockInteractionContext): boolean {
+  private tryPlaceMinecart(stack: ItemStack, target?: BlockInteractionContext): boolean {
     if (!target || !BlockRegistry.isRail(target.blockId)) return false;
+    if (this.sendServerBlockItemUse(stack, target)) return true;
     const { x, y, z } = target.position;
 
-    this.vehicles.spawnVehicle('minecart', new THREE.Vector3(x + 0.5, y + 0.05, z + 0.5));
+    this.vehicles.spawnVehicle('minecart', new THREE.Vector3(x + 0.5, y + 0.05, z + 0.5), stack.id);
     this.sound.playBlockPlace(1);
     if (this.gameMode !== 'creative') {
       this.inventory.removeFromSlot(this.player.selectedSlot, 1);
@@ -4654,11 +4655,7 @@ export class Game {
     const direction = this.player.forward.clone();
     // P5.1: multiplayer splash potions spawn server-side.
     if (this.sendItemAction({ action: 'throw', itemId: stack.id, potionEffect: stack.potion?.effect })) {
-      if (this.gameMode !== 'creative') {
-        this.inventory.removeItem(stack.id, 1);
-      }
       this.sound.playBowShoot(1);
-      this.notifyState();
       return;
     }
     this.projectiles.shootPotion(origin, direction, true, 2, stack.potion?.effect, stack.potion?.variant as 'splash' | 'lingering');
@@ -5904,6 +5901,11 @@ export class Game {
     }
 
     if (heldItemId === FIREWORK_ROCKET_ID || heldItemId === MODERN_FIREWORK_ROCKET_ID) {
+      if (this.sendItemAction({ action: 'throw', itemId: heldItemId })) {
+        this.sound.playLever();
+        this.placeCooldown = 0.4;
+        return true;
+      }
       const origin = this.player.eyePosition.clone().add(this.player.forward.clone().multiplyScalar(0.45));
       this.projectiles.shootFireworkRocket(origin, this.player.forward, true);
       this.sound.playLever();
@@ -5920,11 +5922,7 @@ export class Game {
     if (heldItemId === TRIDENT_ID) {
       // P5.1: multiplayer throws spawn server-side.
       if (this.sendItemAction({ action: 'throw', itemId: heldItemId })) {
-        if (this.gameMode !== 'creative') {
-          this.inventory.removeFromSlot(this.player.selectedSlot, 1);
-        }
         this.placeCooldown = 0.7;
-        this.notifyState();
         return true;
       }
       const origin = this.player.eyePosition.clone().add(this.player.forward.clone().multiplyScalar(0.45));
@@ -5943,11 +5941,7 @@ export class Game {
     const type = heldItemId === SNOWBALL_ID ? 'snowball' : heldItemId === EGG_ID ? 'egg' : 'ender_pearl';
     // P5.1: multiplayer throws spawn server-side.
     if (this.sendItemAction({ action: 'throw', itemId: heldItemId })) {
-      if (this.gameMode !== 'creative') {
-        this.inventory.removeFromSlot(this.player.selectedSlot, 1);
-      }
       this.placeCooldown = type === 'ender_pearl' ? 0.8 : 0.35;
-      this.notifyState();
       return true;
     }
     const origin = this.player.eyePosition.clone().add(this.player.forward.clone().multiplyScalar(0.35));

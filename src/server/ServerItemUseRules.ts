@@ -57,6 +57,7 @@ export function isSupportedServerItemUseName(name: string, kind: ServerItemUseIn
     || name === 'shears'
     || name === 'boat'
     || name.endsWith('_boat')
+    || name.includes('minecart')
     || isServerSignStylingItemName(name)
     || serverItemOnBlockKind(name) !== null;
 }
@@ -105,6 +106,10 @@ export function vehicleTypeForBoatItemName(name: string): 'boat' | 'chest_boat' 
   if (name === 'boat' || (name.endsWith('_boat') && !name.endsWith('_chest_boat'))) return 'boat';
   if (name.endsWith('_chest_boat')) return 'chest_boat';
   return null;
+}
+
+export function isMinecartItemName(name: string): boolean {
+  return name === 'minecart' || name.endsWith('_minecart');
 }
 
 export type ServerItemOnBlockKind = 'axe' | 'shovel' | 'hoe' | 'bone_meal' | 'fire_charge' | 'ender_eye';

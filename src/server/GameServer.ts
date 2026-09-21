@@ -114,6 +114,7 @@ import { createServerPlacementCells, getDoorSidePosition, horizontalFacingFromYa
 import { ItemRegistry } from '../items/ItemRegistry';
 import { cloneItemStack } from '../items/ItemStackRules';
 import { getDefaultUseRemainderItemId } from '../items/ItemUseRules';
+import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, WIND_CHARGE_SPEED, windBurstImpulse } from '../items/WindChargeRules';
 import {
   ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
   ITEM_ENTITY_DESPAWN_SECONDS,
@@ -190,6 +191,7 @@ interface PlayerSession {
   isBlocking: boolean;
   shieldUseSeconds: number;
   shieldDisabledSeconds: number;
+  windChargeCooldownSeconds: number;
   lastAttackTick: number | null;
   hurtCooldown: HurtCooldownState;
   healthAuthorityLockSeconds: number;
@@ -278,7 +280,7 @@ interface ServerFishingState {
 
 interface ServerProjectile {
   id: number;
-  type: 'arrow' | 'fireball' | 'shulker_bullet' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'firework_rocket' | 'experience_bottle' | 'eye_of_ender';
+  type: 'arrow' | 'fireball' | 'shulker_bullet' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'firework_rocket' | 'experience_bottle' | 'eye_of_ender' | 'wind_charge';
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   ownerId?: string;
@@ -382,6 +384,7 @@ export class GameServer {
       isBlocking: false,
       shieldUseSeconds: 0,
       shieldDisabledSeconds: 0,
+      windChargeCooldownSeconds: 0,
       lastAttackTick: null,
       hurtCooldown: createHurtCooldownState(),
       healthAuthorityLockSeconds: 0
@@ -1762,11 +1765,19 @@ export class GameServer {
 
         const type = getThrowableProjectileType(held!.id);
         if (!type) break;
+        if (type === 'wind_charge') {
+          if (session.windChargeCooldownSeconds > 0) break;
+          session.windChargeCooldownSeconds = WIND_CHARGE_COOLDOWN_SECONDS;
+        }
         const potionEffect = type === 'potion' ? held?.potion?.effect : undefined;
-        const speed = type === 'firework_rocket' ? 18 : 15;
-        const velocityY = type === 'firework_rocket' ? 4.5 : 2.5;
+        const speed = type === 'wind_charge'
+          ? WIND_CHARGE_SPEED
+          : type === 'firework_rocket'
+            ? 18
+            : 15;
+        const velocityY = type === 'wind_charge' ? 0 : type === 'firework_rocket' ? 4.5 : 2.5;
         this.spawnProjectile(session, type, origin, dir.multiplyScalar(speed), {
-          damage: type === 'experience_bottle' ? 0 : type === 'trident' ? 9 : type === 'firework_rocket' ? 5 : 1,
+          damage: type === 'experience_bottle' ? 0 : type === 'wind_charge' ? WIND_CHARGE_DIRECT_DAMAGE : type === 'trident' ? 9 : type === 'firework_rocket' ? 5 : 1,
           velocityY,
           potionEffect,
         });
@@ -1776,6 +1787,11 @@ export class GameServer {
           } else {
             session.inventory[session.selectedSlot] = consumeOne(held!);
           }
+        }
+        if (type === 'wind_charge') {
+          this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+            type: 'wind_charge_throw', x: origin.x, y: origin.y, z: origin.z,
+          });
         }
         this.syncPlayerInventory(session);
         break;
@@ -3604,6 +3620,7 @@ export class GameServer {
     player.isBlocking = false;
     player.shieldUseSeconds = 0;
     player.shieldDisabledSeconds = 0;
+    player.windChargeCooldownSeconds = 0;
     player.hurtCooldown = createHurtCooldownState();
     player.healthAuthorityLockSeconds = 0;
     player.lastAttackTick = null;
@@ -3686,6 +3703,7 @@ export class GameServer {
     for (const player of this.players.values()) {
       player.hurtCooldown = tickHurtCooldown(player.hurtCooldown, dt);
       player.shieldDisabledSeconds = Math.max(0, player.shieldDisabledSeconds - dt);
+      player.windChargeCooldownSeconds = Math.max(0, player.windChargeCooldownSeconds - dt);
       player.healthAuthorityLockSeconds = Math.max(0, player.healthAuthorityLockSeconds - dt);
       if (player.isBlocking && player.shieldDisabledSeconds <= 0 && this.getBlockingShieldSlot(player)) {
         player.shieldUseSeconds += dt;
@@ -4305,6 +4323,32 @@ export class GameServer {
     return true;
   }
 
+  private resolveWindChargeBurst(proj: ServerProjectile) {
+    if (proj.type !== 'wind_charge') return;
+
+    for (const player of this.players.values()) {
+      if (player.dimension !== proj.dimension) continue;
+      const impulse = windBurstImpulse(proj.position, { x: player.x, y: player.y + 0.9, z: player.z });
+      if (Math.abs(impulse.x) + Math.abs(impulse.y) + Math.abs(impulse.z) <= 1e-6) continue;
+      this.sendTo(player, PacketType.S2C_PLAYER_VELOCITY, impulse);
+    }
+
+    for (const mob of this.mobs.values()) {
+      if (mob.dimension !== proj.dimension) continue;
+      const impulse = windBurstImpulse(proj.position, {
+        x: mob.position.x,
+        y: mob.position.y + 0.8,
+        z: mob.position.z,
+      });
+      if (Math.abs(impulse.x) + Math.abs(impulse.y) + Math.abs(impulse.z) <= 1e-6) continue;
+      mob.velocity.add(new THREE.Vector3(impulse.x, impulse.y, impulse.z));
+    }
+
+    this.broadcastDimension(proj.dimension, PacketType.S2C_SOUND, {
+      type: 'wind_burst', x: proj.position.x, y: proj.position.y, z: proj.position.z,
+    });
+  }
+
   private tickProjectiles(dt: number) {
     for (const proj of this.projectiles.values()) {
       proj.age += dt;
@@ -4352,7 +4396,7 @@ export class GameServer {
         continue;
       }
 
-      if (proj.type !== 'firework_rocket') {
+      if (proj.type !== 'firework_rocket' && proj.type !== 'wind_charge') {
         proj.velocity.y -= 9.8 * dt;
       }
       proj.position.addScaledVector(proj.velocity, dt);
@@ -4364,6 +4408,7 @@ export class GameServer {
       
       const hitBlock = this.isSolidBlock(px, py, pz, proj.dimension);
       if (hitBlock) {
+        if (proj.type === 'wind_charge') this.resolveWindChargeBurst(proj);
         if (this.resolveExperienceBottleImpact(proj)) continue;
         if (this.resolveEnderPearlImpact(proj)) continue;
         this.projectiles.delete(proj.id);
@@ -4387,6 +4432,7 @@ export class GameServer {
               break;
             }
             this.applyServerDamageToPlayer(player, proj.damage, 'projectile', proj.position, false);
+            if (proj.type === 'wind_charge') this.resolveWindChargeBurst(proj);
             this.projectiles.delete(proj.id);
             this.broadcastDimension(proj.dimension, PacketType.S2C_PROJECTILE_DESPAWN, { id: proj.id });
             hitSomeone = true;
@@ -4411,6 +4457,7 @@ export class GameServer {
               break;
             }
             mob.health -= proj.damage;
+            if (proj.type === 'wind_charge') this.resolveWindChargeBurst(proj);
             mob.hurtTimer = 0.5;
             this.broadcast(PacketType.S2C_MOB_STATE, {
               id: mob.id,

@@ -143,6 +143,8 @@ export interface ItemStack {
   durability?: number;
   chargedProjectileId?: number;
   customName?: string;
+  /** Java goat-horn instrument data component; absent stacks use ponder. */
+  goatHornInstrument?: 'ponder' | 'sing' | 'seek' | 'feel' | 'admire' | 'call' | 'yearn' | 'dream';
   enchantments?: { id: EnchantmentId; level: number }[];
   potion?: {
     kind: PotionKind;

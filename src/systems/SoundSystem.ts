@@ -343,6 +343,35 @@ export class SoundSystem {
     hiss.start(now);
   }
 
+  /** Wind Charge resource events first, with procedural fallbacks when no pack is active. */
+  playWindChargeThrow() {
+    if (this.playFirstResourceSound(['entity.wind_charge.throw'], 0.55)) return;
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    this.synthToneCall(ctx, 'sine', 360, 220, 0.13, 0.11);
+  }
+
+  playWindBurst() {
+    if (this.playFirstResourceSound(['entity.generic.wind_burst'], 1.0)) return;
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    this.synthNoiseCall(ctx, 'bandpass', 950, 0.28, 0.24, 0.45);
+  }
+
+  playGoatHorn(soundIndex = 0) {
+    const index = Math.max(0, Math.min(7, Math.floor(soundIndex)));
+    if (this.playFirstResourceSound([`item.goat_horn.sound.${index}`, 'item.goat_horn.play'], 1.15)) return;
+
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    const profiles = [
+      [196, 131], [220, 147], [174, 116], [247, 165],
+      [262, 175], [147, 98], [165, 110], [233, 155],
+    ] as const;
+    const [from, to] = profiles[index];
+    this.synthToneCall(ctx, 'sawtooth', from, to, 1.25, 0.28);
+  }
+
   playXP() {
     if (this.playFirstResourceSound(['entity.experience_orb.pickup'])) return;
 

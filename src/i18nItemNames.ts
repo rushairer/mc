@@ -143,6 +143,9 @@ const ZH_CN_EXACT: Dict = {
   'Armor Stand': '盔甲架',
   'Item Frame': '物品展示框',
   Lead: '拴绳',
+  Spyglass: '望远镜',
+  'Goat Horn': '山羊角',
+  'Wind Charge': '风弹',
 };
 
 const ZH_TW_EXACT: Dict = {
@@ -219,6 +222,9 @@ const ZH_TW_EXACT: Dict = {
   'Item Frame': '物品展示框',
   Painting: '畫',
   Lead: '拴繩',
+  Spyglass: '望遠鏡',
+  'Goat Horn': '山羊角',
+  'Wind Charge': '風彈',
 };
 
 const ZH_CN_WORDS: Dict = {

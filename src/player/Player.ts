@@ -784,6 +784,47 @@ export class Player {
       featherB.position.y = -0.18;
       group.add(shaft, head, featherA, featherB);
       group.rotation.set(Math.PI / 3, -Math.PI / 4, 0);
+    } else if (name === 'spyglass') {
+      const brass = new THREE.MeshLambertMaterial({ color: 0xb9823e });
+      const dark = new THREE.MeshLambertMaterial({ color: 0x5b3d22 });
+      const glass = new THREE.MeshLambertMaterial({ color: 0x8fd7e8, emissive: 0x12333a });
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 0.32, 8), brass);
+      body.name = 'spyglass_body';
+      const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.064, 0.064, 0.12, 8), dark);
+      grip.name = 'spyglass_grip';
+      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.018, 8), glass);
+      lens.name = 'spyglass_lens';
+      body.rotation.z = Math.PI / 2;
+      grip.rotation.z = Math.PI / 2;
+      lens.rotation.z = Math.PI / 2;
+      grip.position.x = -0.04;
+      lens.position.x = 0.17;
+      group.add(body, grip, lens);
+      group.rotation.set(Math.PI / 5, -Math.PI / 5, Math.PI / 12);
+    } else if (name === 'wind_charge') {
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(0.085, 8, 8),
+        new THREE.MeshLambertMaterial({ color: 0xc8eef1, emissive: 0x31565b, transparent: true, opacity: 0.9 })
+      );
+      core.name = 'wind_charge_item_core';
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.12, 0.016, 6, 12),
+        new THREE.MeshLambertMaterial({ color: 0xe8ffff, emissive: 0x53777b, transparent: true, opacity: 0.85 })
+      );
+      ring.name = 'wind_charge_item_ring';
+      group.add(core, ring);
+      group.rotation.set(Math.PI / 5, -Math.PI / 4, 0);
+    } else if (name === 'goat_horn') {
+      const hornMat = new THREE.MeshLambertMaterial({ color: 0xd8c79f });
+      const darkHornMat = new THREE.MeshLambertMaterial({ color: 0x6e604c });
+      const curve = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.035, 6, 14, Math.PI * 1.35), hornMat);
+      curve.name = 'goat_horn_curve';
+      const mouth = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.038, 0.08, 7), darkHornMat);
+      mouth.name = 'goat_horn_mouth';
+      mouth.rotation.z = Math.PI / 2;
+      mouth.position.set(-0.12, -0.035, 0);
+      group.add(curve, mouth);
+      group.rotation.set(Math.PI / 2.8, -Math.PI / 5, -Math.PI / 8);
     } else if (itemDef.toolType === 'fishing_rod') {
       const rodMat = new THREE.MeshLambertMaterial({ color: 0x5a3518 });
       const lineMat = new THREE.MeshLambertMaterial({ color: 0xdedede });

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BlockRegistry } from '../world/BlockRegistry';
 import type { PotionEffectData } from './PotionEffect';
 
-export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'trident' | 'firework_rocket' | 'experience_bottle' | 'fireball' | 'potion' | 'shulker_bullet' | 'eye_of_ender' | 'wither_skull';
+export type ProjectileType = 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'trident' | 'firework_rocket' | 'experience_bottle' | 'wind_charge' | 'fireball' | 'potion' | 'shulker_bullet' | 'eye_of_ender' | 'wither_skull';
 
 export interface Projectile {
   id: number;
@@ -130,6 +130,24 @@ export class ProjectileSystem {
     mesh.position.copy(projectile.position);
   }
 
+  shootWindCharge(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage = 1) {
+    const mesh = this.createWindChargeMesh();
+    const projectile: Projectile = {
+      id: this.nextId++,
+      type: 'wind_charge',
+      position: origin.clone(),
+      velocity: direction.clone().normalize().multiplyScalar(30),
+      damage,
+      fromPlayer,
+      lifetime: 12,
+      mesh,
+      inGround: false,
+    };
+    mesh.position.copy(origin);
+    this.addProjectileMesh(mesh);
+    this.projectiles.set(projectile.id, projectile);
+  }
+
   shootArrow(
     origin: THREE.Vector3,
     direction: THREE.Vector3,
@@ -168,7 +186,7 @@ export class ProjectileSystem {
    * (the id is re-keyed by the network client afterwards).
    */
   spawnServerProjectile(
-    type: 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'fireball' | 'shulker_bullet' | 'firework_rocket' | 'experience_bottle' | 'eye_of_ender',
+    type: 'arrow' | 'snowball' | 'egg' | 'ender_pearl' | 'potion' | 'trident' | 'fireball' | 'shulker_bullet' | 'firework_rocket' | 'experience_bottle' | 'eye_of_ender' | 'wind_charge',
     position: THREE.Vector3,
     velocity: THREE.Vector3,
     damage: number = 4,
@@ -180,6 +198,8 @@ export class ProjectileSystem {
         ? this.createTridentMesh()
         : type === 'potion'
           ? this.createPotionMesh()
+          : type === 'wind_charge'
+            ? this.createWindChargeMesh()
           : type === 'firework_rocket'
             ? this.createFireworkRocketMesh()
             : type === 'experience_bottle'
@@ -366,6 +386,22 @@ export class ProjectileSystem {
     return group;
   }
 
+  private createWindChargeMesh(): THREE.Group {
+    const group = new THREE.Group();
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.13, 8, 8),
+      new THREE.MeshLambertMaterial({ color: 0xc8eef1, emissive: 0x31565b, transparent: true, opacity: 0.9 })
+    );
+    core.name = 'wind_charge_core';
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.18, 0.025, 6, 12),
+      new THREE.MeshLambertMaterial({ color: 0xe8ffff, emissive: 0x53777b, transparent: true, opacity: 0.8 })
+    );
+    ring.name = 'wind_charge_ring';
+    group.add(core, ring);
+    return group;
+  }
+
   private createEnderEyeMesh(): THREE.Mesh {
     const geo = new THREE.SphereGeometry(0.18, 8, 8);
     const mat = new THREE.MeshLambertMaterial({
@@ -495,7 +531,7 @@ export class ProjectileSystem {
               if (onPotionSplash) {
                 onPotionSplash(proj.position, proj.fromPlayer, proj.damage, proj.potionEffect, proj.potionVariant);
               }
-            } else if (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket' || proj.type === 'experience_bottle') {
+            } else if (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket' || proj.type === 'experience_bottle' || proj.type === 'wind_charge') {
               if (onProjectileImpact) {
                 onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
               }
@@ -508,7 +544,7 @@ export class ProjectileSystem {
         }
       }
 
-      if (hitBlock && (proj.type === 'potion' || proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket' || proj.type === 'experience_bottle')) {
+      if (hitBlock && (proj.type === 'potion' || proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket' || proj.type === 'experience_bottle' || proj.type === 'wind_charge')) {
         toRemove.push(id);
         continue;
       }
@@ -533,7 +569,7 @@ export class ProjectileSystem {
             kb.multiplyScalar(1 + (proj.knockbackBonus ?? 0));
             hitPlayer(proj.damage, kb, proj.type);
           }
-          if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket' || proj.type === 'experience_bottle')) {
+          if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket' || proj.type === 'experience_bottle' || proj.type === 'wind_charge')) {
             onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
           }
           toRemove.push(id);
@@ -559,7 +595,7 @@ export class ProjectileSystem {
               kb.multiplyScalar(1 + (proj.knockbackBonus ?? 0));
               hitMob(mob.id, proj.damage, kb, proj.type, proj.onFire ?? false);
             }
-            if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket' || proj.type === 'experience_bottle')) {
+            if (onProjectileImpact && (proj.type === 'snowball' || proj.type === 'egg' || proj.type === 'ender_pearl' || proj.type === 'trident' || proj.type === 'firework_rocket' || proj.type === 'experience_bottle' || proj.type === 'wind_charge')) {
               onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
             }
             toRemove.push(id);
@@ -578,6 +614,10 @@ export class ProjectileSystem {
       }
       if (proj.type === 'trident') {
         proj.mesh.rotation.z += dt * 12;
+      }
+      if (proj.type === 'wind_charge') {
+        proj.mesh.rotation.x += dt * 7;
+        proj.mesh.rotation.z += dt * 9;
       }
       if (proj.type === 'firework_rocket') {
         proj.velocity.multiplyScalar(1 + dt * 0.8);

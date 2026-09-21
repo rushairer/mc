@@ -93,6 +93,8 @@ import {
 } from '../world/WildernessBoundGameplay26_3';
 import { applySaturationStew26_3 } from '../world/SuspiciousStew26_3';
 import { findChorusFruitDestination26_3 } from '../world/TeleportRules26_3';
+import { GOAT_HORN_COOLDOWN_SECONDS, goatHornSoundIndex, spyglassFov } from '../items/SpecialItemUseRules';
+import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, windBurstImpulse } from '../items/WindChargeRules';
 import { getButtonPressTicks } from '../world/ButtonRules';
 import {
   applySignInteraction,
@@ -349,6 +351,8 @@ export class Game {
   private eatingTimer = 0;
   private chewSoundTimer = 0;
   private activeItemUse: ActiveItemUse | null = null;
+  private goatHornCooldown = 0;
+  private windChargeCooldown = 0;
   private stepTimer = 0;
   private perspectiveMode: 'first' | 'third' = 'first';
   private container: HTMLElement;
@@ -886,6 +890,28 @@ export class Game {
       continueUse: () => ({ handled: true }),
       stopUse: () => ({ handled: true }),
     });
+    this.behaviors.registerItem('spyglass', {
+      id: 'minecraft:spyglass',
+      startUse: () => {
+        this.setSpyglassActive(true);
+        return { handled: true };
+      },
+      continueUse: () => ({ handled: true }),
+      stopUse: () => {
+        this.setSpyglassActive(false);
+        return { handled: true };
+      },
+    });
+    this.behaviors.registerItem('goat_horn', {
+      id: 'minecraft:goat_horn',
+      use: ({ stack }) => {
+        if (this.goatHornCooldown > 0) return { handled: true, cooldown: 0.1 };
+        this.goatHornCooldown = GOAT_HORN_COOLDOWN_SECONDS;
+        this.sound.playGoatHorn(goatHornSoundIndex(stack.goatHornInstrument));
+        this.swordSwingTimer = Math.max(this.swordSwingTimer, 0.35);
+        return { handled: true, cooldown: 0.25 };
+      },
+    });
     this.behaviors.registerItem('food', {
       id: 'minecraft:food',
       canStartUse: ({ stack }) => this.canConsumeFood(stack),
@@ -1000,6 +1026,10 @@ export class Game {
     this.behaviors.registerItem('fishing_rod', {
       id: 'minecraft:fishing_rod',
       use: ({ stack }) => ({ handled: this.tryUseFishingRod(stack.id), cooldown: 0.35 }),
+    });
+    this.behaviors.registerItem('wind_charge', {
+      id: 'minecraft:wind_charge',
+      use: ({ stack }) => ({ handled: this.tryThrowWindCharge(stack.id), cooldown: 0.05 }),
     });
     this.behaviors.registerItem(['snowball', 'egg', 'ender_pearl', 'trident', 'fireworks', 'firework_rocket', 'experience_bottle'], {
       id: 'minecraft:throwable',
@@ -2110,6 +2140,8 @@ export class Game {
     const wasAttackCoolingDown = this.attackCooldownTimer > 0;
     this.breakCooldown = Math.max(0, this.breakCooldown - dt);
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
+    this.goatHornCooldown = Math.max(0, this.goatHornCooldown - dt);
+    this.windChargeCooldown = Math.max(0, this.windChargeCooldown - dt);
     this.damageFlashTimer = Math.max(0, this.damageFlashTimer - dt);
     this.swordSwingTimer = Math.max(0, this.swordSwingTimer - dt);
     this.attackCooldownTimer = Math.max(0, this.attackCooldownTimer - dt);
@@ -5490,6 +5522,11 @@ export class Game {
   }
 
   private handleThrowableImpact(type: ProjectileType, pos: THREE.Vector3, fromPlayer: boolean) {
+    if (type === 'wind_charge') {
+      this.applyWindChargeBurst(pos);
+      return;
+    }
+
     if (type === 'experience_bottle') {
       this.particles.spawnXP(pos.x, pos.y, pos.z, 12);
       this.sound.playXP();
@@ -5538,6 +5575,28 @@ export class Game {
 
     if (type === 'firework_rocket') {
       this.handleFireworkExplosion(pos, fromPlayer);
+    }
+  }
+
+  private applyWindChargeBurst(pos: THREE.Vector3) {
+    this.particles.spawnBlockBreak(pos.x, pos.y, pos.z, 0xd8f7f8, 28);
+    this.sound.playWindBurst();
+
+    const playerImpulse = windBurstImpulse(pos, {
+      x: this.player.position.x,
+      y: this.player.position.y + 0.9,
+      z: this.player.position.z,
+    });
+    this.player.velocity.add(new THREE.Vector3(playerImpulse.x, playerImpulse.y, playerImpulse.z));
+
+    for (const mob of this.mobs.mobs.values()) {
+      const impulse = windBurstImpulse(pos, {
+        x: mob.position.x,
+        y: mob.position.y + mob.height * 0.5,
+        z: mob.position.z,
+      });
+      if (Math.abs(impulse.x) + Math.abs(impulse.y) + Math.abs(impulse.z) <= 1e-6) continue;
+      mob.velocity.add(new THREE.Vector3(impulse.x, impulse.y, impulse.z));
     }
   }
 
@@ -5768,6 +5827,14 @@ export class Game {
       stack,
       target: this.getTargetBlockInteractionContext(stack),
     };
+  }
+
+  private setSpyglassActive(active: boolean) {
+    const nextFov = spyglassFov(70, active);
+    if (Math.abs(this.renderer.camera.fov - nextFov) > 1e-6) {
+      this.renderer.camera.fov = nextFov;
+      this.renderer.camera.updateProjectionMatrix();
+    }
   }
 
   private stopActiveItemUse(reason: ItemUseStopReason): boolean {
@@ -6723,6 +6790,26 @@ export class Game {
       dirY: dir.y,
       dirZ: dir.z,
     });
+    return true;
+  }
+
+  private tryThrowWindCharge(heldItemId: number): boolean {
+    if (ItemRegistry.get(heldItemId)?.name !== 'wind_charge') return false;
+    if (this.windChargeCooldown > 0) return true;
+
+    this.windChargeCooldown = WIND_CHARGE_COOLDOWN_SECONDS;
+    if (this.sendItemAction({ action: 'throw', itemId: heldItemId })) {
+      this.sound.playWindChargeThrow();
+      return true;
+    }
+
+    const origin = this.player.eyePosition.clone().add(this.player.forward.clone().multiplyScalar(0.35));
+    this.projectiles.shootWindCharge(origin, this.player.forward, true, WIND_CHARGE_DIRECT_DAMAGE);
+    this.sound.playWindChargeThrow();
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+    this.notifyState();
     return true;
   }
 

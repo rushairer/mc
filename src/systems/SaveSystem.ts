@@ -150,7 +150,7 @@ const VALID_MOB_TYPES = new Set<MobType>([
   'zombie', 'skeleton', 'creeper', 'spider', 'cow', 'pig', 'sheep', 'chicken',
   'blaze', 'zombie_pigman', 'magma_cube', 'wither_skeleton', 'villager', 'enderman',
   'witch', 'iron_golem', 'wolf', 'cat', 'horse', 'shulker', 'pillager', 'wither',
-  'guardian', 'vex', 'armor_stand', 'item_frame', 'painting',
+  'guardian', 'vex', 'armor_stand', 'item_frame', 'glow_item_frame', 'painting',
 ]);
 const HOSTILE_MOB_TYPES = new Set<MobType>([
   'zombie', 'skeleton', 'creeper', 'spider', 'blaze', 'zombie_pigman', 'magma_cube',
@@ -354,11 +354,11 @@ function sanitizeMobs(
       hangingFace: ['north', 'south', 'east', 'west', 'up', 'down'].includes(String(mob.hangingFace))
         ? mob.hangingFace as BlockFacing
         : undefined,
-      itemFrameItem: mob.type === 'item_frame' && mob.itemFrameItem && typeof mob.itemFrameItem === 'object'
+      itemFrameItem: (mob.type === 'item_frame' || mob.type === 'glow_item_frame') && mob.itemFrameItem && typeof mob.itemFrameItem === 'object'
         && Number.isInteger(mob.itemFrameItem.id) && mob.itemFrameItem.id > 0
         ? { ...mob.itemFrameItem, count: 1 }
         : undefined,
-      itemFrameRotation: mob.type === 'item_frame'
+      itemFrameRotation: mob.type === 'item_frame' || mob.type === 'glow_item_frame'
         ? ((Math.trunc(finiteOr(mob.itemFrameRotation, 0)) % 8) + 8) % 8
         : undefined,
       paintingVariant: mob.type === 'painting' && typeof mob.paintingVariant === 'string'
@@ -381,7 +381,7 @@ function sanitizeMobs(
 
   const maxMobs = protectRecoveredPlayer ? MAX_RECOVERED_MOBS_PER_DIMENSION : MAX_RESTORED_MOBS_PER_DIMENSION;
   const isDecorative = (mob: SerializedMob) =>
-    mob.type === 'armor_stand' || mob.type === 'item_frame' || mob.type === 'painting';
+    mob.type === 'armor_stand' || mob.type === 'item_frame' || mob.type === 'glow_item_frame' || mob.type === 'painting';
   const ordinary = valid.filter((mob) => !isDecorative(mob));
   const decorative = valid.filter(isDecorative);
   if (ordinary.length > maxMobs) {

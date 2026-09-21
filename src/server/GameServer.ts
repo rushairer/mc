@@ -128,6 +128,7 @@ import { shouldTameEntity } from '../entities/EntityInteractionRules';
 import { canApplySaddle, canControlMountedMob, canMountMob, getNameTagLabel } from '../entities/MobItemInteractionRules';
 import { armorStandSlotIndex, canPlaceArmorStandAt, firstEquippedArmorStandSlot, snapArmorStandYaw } from '../entities/ArmorStandRules';
 import {
+  LEAD_SNAP_DISTANCE,
   canPlaceHangingEntity,
   choosePaintingVariant,
   hangingEntityWorldPosition,
@@ -1212,7 +1213,7 @@ export class GameServer {
               x: mob.position.x,
               y: mob.position.y + (MOB_DEFS[mob.type]?.height ?? 1) * 0.55,
               z: mob.position.z,
-            }) <= 12
+            }) <= LEAD_SNAP_DISTANCE
           );
           const fenceLeashed = Array.from(this.mobs.values()).filter((mob) =>
             mob.dimension === session.dimension &&
@@ -1222,7 +1223,7 @@ export class GameServer {
               x: mob.position.x,
               y: mob.position.y + (MOB_DEFS[mob.type]?.height ?? 1) * 0.55,
               z: mob.position.z,
-            }) <= 12
+            }) <= LEAD_SNAP_DISTANCE
           );
 
           const nextHolderId = attachable.length > 0

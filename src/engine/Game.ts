@@ -4295,6 +4295,69 @@ export class Game {
     return { handled: true, cooldown: 0.25 };
   }
 
+  private tryInteractJukebox(
+    position: BlockPosition,
+    blockId: number,
+    heldItem: ItemStack | null,
+  ): boolean {
+    const block = BlockRegistry.get(blockId);
+    if (block?.name !== 'jukebox') return false;
+
+    const currentMeta = this.chunks.getBlockMeta(position.x, position.y, position.z) ?? {};
+    const storedDisc = getStoredJukeboxDisc(currentMeta.jukeboxDisc);
+    const heldName = heldItem ? ItemRegistry.get(heldItem.id)?.name : undefined;
+    const heldIsDisc = isJukeboxPlayableItemName(heldName);
+    if (!storedDisc && !heldIsDisc) return false;
+
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_INTERACT_BLOCK, {
+        x: position.x,
+        y: position.y,
+        z: position.z,
+      });
+      return true;
+    }
+
+    if (storedDisc) {
+      const nextMeta: BlockMetadata = { ...currentMeta };
+      delete nextMeta.jukeboxDisc;
+      delete nextMeta.jukeboxSong;
+      delete nextMeta.jukeboxComparatorOutput;
+      this.chunks.setBlockMeta(position.x, position.y, position.z, nextMeta, true);
+      this.sound.stopJukeboxSong();
+      this.droppedItems.spawnStack(
+        storedDisc,
+        new THREE.Vector3(position.x + 0.5, position.y + 1.0, position.z + 0.5),
+        new THREE.Vector3(0, 1.2, 0),
+        0.25,
+      );
+      this.applyRedstoneToNeighbors(position.x, position.y, position.z);
+      this.notifyState();
+      return true;
+    }
+
+    if (!heldItem) return false;
+    const song = getJukeboxSong(heldName);
+    if (!song) return false;
+    const jukeboxDisc = getStoredJukeboxDisc(heldItem);
+    if (!jukeboxDisc) return false;
+
+    const nextMeta: BlockMetadata = {
+      ...currentMeta,
+      jukeboxDisc,
+      jukeboxSong: song.songId,
+      jukeboxComparatorOutput: song.comparatorOutput,
+    };
+    this.chunks.setBlockMeta(position.x, position.y, position.z, nextMeta, true);
+    if (this.gameMode !== 'creative') {
+      this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+    }
+    this.sound.playJukeboxSong(song.songId);
+    this.applyRedstoneToNeighbors(position.x, position.y, position.z);
+    this.notifyState();
+    return true;
+  }
+
   private tryTieLeashedMobsToFence(
     position: BlockPosition,
     blockName: string,
@@ -5996,6 +6059,59 @@ export class Game {
     return shieldFacesSource(facing.x, facing.z, sourceToPlayer.x, sourceToPlayer.z);
   }
 
+  private applyTotemEffects(playSound = true) {
+    this.player.health = 1;
+    this.potionEffects.clear();
+    this.player.absorption = 0;
+
+    for (const effect of TOTEM_OF_UNDYING_EFFECTS) {
+      this.potionEffects.apply(effect, (amount) => {
+        this.player.health = Math.min(20, this.player.health + amount);
+      });
+      if (effect.id === 'absorption') {
+        this.player.absorption = 4 * effect.level;
+      }
+    }
+
+    if (playSound) this.sound.playTotemUse();
+    this.particles.spawnBlockBreak(
+      this.player.position.x,
+      this.player.position.y + 1,
+      this.player.position.z,
+      0xf2d64b,
+      36,
+    );
+  }
+
+  private tryActivateHeldTotem(type: PlayerDamageKind, resultingHealth: number): boolean {
+    if (!shouldActivateTotem(type, resultingHealth)) return false;
+
+    const selected = this.inventory.getSlot(this.player.selectedSlot);
+    const offhand = this.inventory.getOffhand();
+    const hand = findHeldTotemHand(
+      selected,
+      offhand,
+      (itemId) => ItemRegistry.get(itemId)?.name,
+    );
+    if (!hand) return false;
+
+    if (hand === 'mainhand') {
+      this.inventory.setSlot(this.player.selectedSlot, consumeTotemStack(selected));
+    } else {
+      this.inventory.setOffhand(consumeTotemStack(offhand));
+    }
+
+    this.applyTotemEffects(true);
+    this.notifyState();
+    return true;
+  }
+
+  /** Apply the server-authoritative Totem effects after inventory/health sync. */
+  applyServerTotemActivation() {
+    this.applyTotemEffects(false);
+    this.notifyState();
+  }
+
   damagePlayer(
     amount: number,
     type: PlayerDamageKind,
@@ -6072,14 +6188,20 @@ export class Game {
       finalDamage = Math.max(0, finalDamage - absorbed);
     }
 
-    this.player.health = Math.max(0, this.player.health - Math.max(0, finalDamage));
+    const resultingHealth = Math.max(0, this.player.health - Math.max(0, finalDamage));
+    const totemActivated =
+      !this.network.isConnected &&
+      this.tryActivateHeldTotem(type, resultingHealth);
+    if (!totemActivated) {
+      this.player.health = resultingHealth;
+    }
 
     if (knockback) {
       this.player.velocity.add(knockback);
     }
 
     this.damageFlashTimer = 0.3;
-    this.sound.playHurt();
+    if (!totemActivated) this.sound.playHurt();
 
     this.particles.spawnDamageParticles(
       this.player.position.x,

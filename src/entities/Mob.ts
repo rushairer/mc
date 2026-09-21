@@ -129,6 +129,7 @@ export class Mob {
   paintingVariant: PaintingVariant = 'kebab';
   leashHolderId: string | null = null;
   private itemFrameDisplayMesh: THREE.Group | null = null;
+  private itemVisualFactory: ((itemId: number) => THREE.Object3D | null) | null = null;
   /** Sheep shearing state; regrowth can reset this when grass-eating is modeled. */
   isSheared = false;
   targetMob: Mob | null = null;
@@ -186,6 +187,11 @@ export class Mob {
     this.mesh.rotation.set(0, this.yaw, 0);
     if (face === 'up') this.mesh.rotation.x = -Math.PI / 2;
     else if (face === 'down') this.mesh.rotation.x = Math.PI / 2;
+  }
+
+  setItemVisualFactory(factory: ((itemId: number) => THREE.Object3D | null) | null) {
+    this.itemVisualFactory = factory;
+    if (this.def.type === 'item_frame') this.refreshItemFrameDisplay();
   }
 
   setItemFrameItem(stack: ItemStack | null) {
@@ -286,15 +292,26 @@ export class Mob {
     const group = new THREE.Group();
     group.name = 'item_frame_display';
     group.rotation.z = -(this.itemFrameRotation * Math.PI / 4);
-    const hue = ((this.itemFrameItem.id * 47) % 360) / 360;
-    const color = new THREE.Color().setHSL(hue, 0.55, 0.58);
-    const plate = new THREE.Mesh(
-      new THREE.BoxGeometry(0.34, 0.34, 0.035),
-      new THREE.MeshLambertMaterial({ color }),
-    );
-    plate.name = 'item_frame_item';
-    plate.position.z = 0.065;
-    group.add(plate);
+
+    const visual = this.itemVisualFactory?.(this.itemFrameItem.id) ?? null;
+    if (visual) {
+      visual.name = 'item_frame_item';
+      visual.position.z = 0.075;
+      visual.rotation.set(0, 0, 0);
+      visual.scale.multiplyScalar(0.78);
+      group.add(visual);
+    } else {
+      const hue = ((this.itemFrameItem.id * 47) % 360) / 360;
+      const color = new THREE.Color().setHSL(hue, 0.55, 0.58);
+      const plate = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 0.34, 0.035),
+        new THREE.MeshLambertMaterial({ color }),
+      );
+      plate.name = 'item_frame_item';
+      plate.position.z = 0.065;
+      group.add(plate);
+    }
+
     this.mesh.add(group);
     this.itemFrameDisplayMesh = group;
   }

@@ -393,6 +393,9 @@ export const VisualResolver = {
 
     const placeBlockId = ItemRegistry.getPlaceBlockId(itemId);
     if (placeBlockId !== undefined) return this.getBlockIconKey(placeBlockId);
+    if (item.name.startsWith('record_')) {
+      return 'item:' + item.officialId.replace(/^minecraft:/, '');
+    }
     return 'item:' + item.name;
   },
 

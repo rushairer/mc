@@ -50,6 +50,8 @@ export enum PacketType {
   /** Authoritative combat knockback / external velocity impulse. */
   S2C_PLAYER_VELOCITY = 'S2C_PLAYER_VELOCITY',
   S2C_PLAYER_STATE = 'S2C_PLAYER_STATE',
+  /** Local client applies the authoritative Totem activation effects/visuals. */
+  S2C_TOTEM_ACTIVATE = 'S2C_TOTEM_ACTIVATE',
   S2C_BLOCK_UPDATE = 'S2C_BLOCK_UPDATE',
   S2C_MOB_SPAWN = 'S2C_MOB_SPAWN',
   S2C_MOB_MOVE = 'S2C_MOB_MOVE',

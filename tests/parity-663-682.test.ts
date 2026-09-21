@@ -101,3 +101,89 @@ test('672: Goat Horn instrument component survives canonical ItemStack cloning',
   const cloned = cloneItemStack({ id: 20110, count: 1, goatHornInstrument: 'yearn' });
   assert.equal(cloned?.goatHornInstrument, 'yearn');
 });
+
+
+test('673: Wind Charge has a dedicated behavior and canonical Chinese item name', () => {
+  assert.equal(inferItemBehaviorId('wind_charge'), 'minecraft:wind_charge');
+  assert.equal(localizeItemDisplayName('zh-CN', 'wind_charge', 'Wind Charge'), '风弹');
+  assert.equal(localizeItemDisplayName('zh-TW', 'wind_charge', 'Wind Charge'), '風彈');
+});
+
+test('674: Wind Charge rules match the player-thrown Java gameplay contract', async () => {
+  const rules = await import('../src/items/WindChargeRules');
+  assert.equal(rules.WIND_CHARGE_COOLDOWN_SECONDS, 0.5);
+  assert.equal(rules.WIND_CHARGE_SPEED, 30);
+  assert.equal(rules.WIND_CHARGE_DIRECT_DAMAGE, 1);
+  assert.equal(rules.WIND_CHARGE_BURST_RADIUS, 2.4);
+});
+
+test('675: Wind Charge projectile is gravity-free and has a dedicated visual', () => {
+  const source = readFileSync(new URL('../src/systems/ProjectileSystem.ts', import.meta.url), 'utf8');
+  assert.ok(source.includes("'wind_charge'"));
+  assert.ok(source.includes('shootWindCharge('));
+  assert.ok(source.includes("proj.type !== 'wind_charge'"));
+  assert.ok(source.includes("core.name = 'wind_charge_core'"));
+});
+
+test('676: Wind Charge uses an item-scoped half-second cooldown on the client', () => {
+  const source = readFileSync(new URL('../src/engine/Game.ts', import.meta.url), 'utf8');
+  assert.ok(source.includes('private windChargeCooldown = 0'));
+  assert.ok(source.includes('this.windChargeCooldown = WIND_CHARGE_COOLDOWN_SECONDS'));
+  assert.ok(source.includes("this.behaviors.registerItem('wind_charge'"));
+  assert.ok(source.includes('cooldown: 0.05'));
+});
+
+test('677: Wind Charge is a server-authorized throwable and consumes only after accepted use', async () => {
+  const rules = await import('../src/server/ItemActionRules');
+  const item = (await import('../src/items/ItemRegistry')).ItemRegistry.getByName('wind_charge');
+  assert.ok(item);
+  assert.equal(rules.getThrowableProjectileType(item!.id), 'wind_charge');
+  assert.equal(rules.isValidItemActionForHeldStack({
+    action: 'throw',
+    itemId: item!.id,
+    direction: { x: 0, y: 0, z: -1 },
+  }, { id: item!.id, count: 1 }), true);
+});
+
+test('678: multiplayer server independently enforces Wind Charge cooldown and no-gravity flight', () => {
+  const source = readFileSync(new URL('../src/server/GameServer.ts', import.meta.url), 'utf8');
+  assert.ok(source.includes('windChargeCooldownSeconds: number'));
+  assert.ok(source.includes('session.windChargeCooldownSeconds = WIND_CHARGE_COOLDOWN_SECONDS'));
+  assert.ok(source.includes("proj.type !== 'wind_charge'"));
+  assert.ok(source.includes('WIND_CHARGE_SPEED'));
+});
+
+test('679: Wind Charge burst affects both players and mobs without block destruction', () => {
+  const source = readFileSync(new URL('../src/server/GameServer.ts', import.meta.url), 'utf8');
+  const start = source.indexOf('private resolveWindChargeBurst');
+  const end = source.indexOf('private tickProjectiles', start);
+  const method = source.slice(start, end);
+  assert.ok(method.includes('S2C_PLAYER_VELOCITY'));
+  assert.ok(method.includes('mob.velocity.add'));
+  assert.equal(method.includes('setBlock('), false);
+});
+
+test('680: local Wind Charge burst can propel its owner and nearby mobs', () => {
+  const source = readFileSync(new URL('../src/engine/Game.ts', import.meta.url), 'utf8');
+  const start = source.indexOf('private applyWindChargeBurst');
+  const end = source.indexOf('private handleFireworkExplosion', start);
+  const method = source.slice(start, end);
+  assert.ok(method.includes('this.player.velocity.add'));
+  assert.ok(method.includes('mob.velocity.add'));
+});
+
+test('681: Wind Charge throw/burst prefer canonical sound events', () => {
+  const source = readFileSync(new URL('../src/systems/SoundSystem.ts', import.meta.url), 'utf8');
+  assert.ok(source.includes("'entity.wind_charge.throw'"));
+  assert.ok(source.includes("'entity.generic.wind_burst'"));
+  const network = readFileSync(new URL('../src/server/NetworkClient.ts', import.meta.url), 'utf8');
+  assert.ok(network.includes("'wind_charge_throw'"));
+  assert.ok(network.includes("'wind_burst'"));
+});
+
+test('682: Wind Charge has a recognizable held/inventory visual instead of the generic material tile', () => {
+  const source = readFileSync(new URL('../src/player/Player.ts', import.meta.url), 'utf8');
+  assert.ok(source.includes("name === 'wind_charge'"));
+  assert.ok(source.includes("core.name = 'wind_charge_item_core'"));
+  assert.ok(source.includes("ring.name = 'wind_charge_item_ring'"));
+});

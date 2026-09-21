@@ -3464,6 +3464,22 @@ export class GameServer {
 
   private tickMobs(dt: number) {
     for (const mob of this.mobs.values()) {
+      if (mob.type === 'item_frame' || mob.type === 'painting') {
+        mob.velocity.set(0, 0, 0);
+        mob.aiState = 'idle';
+        mob.wanderTarget = null;
+        mob.hurtTimer = Math.max(0, mob.hurtTimer - dt);
+        this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_MOVE, {
+          id: mob.id,
+          x: mob.position.x,
+          y: mob.position.y,
+          z: mob.position.z,
+          yaw: mob.yaw,
+          pitch: mob.pitch,
+        });
+        continue;
+      }
+
       // Simple gravity and physics
       mob.velocity.y -= 18.0 * dt; // gravity
       mob.position.addScaledVector(mob.velocity, dt);
@@ -3584,6 +3600,52 @@ export class GameServer {
           } else {
             mob.velocity.x = 0;
             mob.velocity.z = 0;
+          }
+        }
+      }
+
+      if (mob.leashHolderId && isLeashableMobType(mob.type)) {
+        const holder = this.players.get(mob.leashHolderId);
+        if (!holder || holder.dimension !== mob.dimension) {
+          mob.leashHolderId = undefined;
+          this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_STATE, {
+            id: mob.id,
+            health: mob.health,
+            hurtTimer: mob.hurtTimer,
+            leashHolderId: null,
+          });
+        } else {
+          const holderPos = { x: holder.x, y: holder.y + 1.0, z: holder.z };
+          const mobCenter = {
+            x: mob.position.x,
+            y: mob.position.y + (MOB_DEFS[mob.type]?.height ?? 1.0) * 0.55,
+            z: mob.position.z,
+          };
+          const distance = leashDistance(holderPos, mobCenter);
+          if (shouldBreakLeash(distance)) {
+            mob.leashHolderId = undefined;
+            if (holder.gameMode !== 'creative') {
+              this.spawnDroppedItem(
+                420,
+                1,
+                mob.position.x,
+                mob.position.y + 0.4,
+                mob.position.z,
+                mob.dimension,
+                0.25,
+              );
+            }
+            this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_STATE, {
+              id: mob.id,
+              health: mob.health,
+              hurtTimer: mob.hurtTimer,
+              leashHolderId: null,
+            });
+          } else {
+            const pull = leashPullVector(holderPos, mobCenter);
+            mob.velocity.x += pull.x * dt;
+            mob.velocity.y += pull.y * dt;
+            mob.velocity.z += pull.z * dt;
           }
         }
       }

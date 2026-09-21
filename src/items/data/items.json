@@ -5767,5 +5767,19 @@
     "name": "zombified_piglin_spawn_egg",
     "stackSize": 64,
     "runtimeId": 20310
+  },
+  {
+    "id": "minecraft:suspicious_sand",
+    "displayName": "Suspicious Sand",
+    "name": "suspicious_sand",
+    "stackSize": 64,
+    "runtimeId": 20311
+  },
+  {
+    "id": "minecraft:suspicious_gravel",
+    "displayName": "Suspicious Gravel",
+    "name": "suspicious_gravel",
+    "stackSize": 64,
+    "runtimeId": 20312
   }
 ]

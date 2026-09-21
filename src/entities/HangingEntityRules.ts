@@ -90,9 +90,11 @@ export function hangingEntityWorldPosition(
 }
 
 export function hangingEntityYaw(face: BlockFacing): number {
+  // Hanging meshes are authored with their visible front facing local +Z.
+  // Rotate that front toward the clicked face's outward normal.
   switch (face) {
-    case 'north': return 0;
-    case 'south': return Math.PI;
+    case 'north': return Math.PI;
+    case 'south': return 0;
     case 'east': return Math.PI / 2;
     case 'west': return -Math.PI / 2;
     case 'up':

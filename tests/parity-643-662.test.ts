@@ -6,6 +6,7 @@ import { Mob } from '../src/entities/Mob';
 import { MobSystem } from '../src/systems/MobSystem';
 import { inferBlockBehaviorId, inferItemBehaviorId } from '../src/world/BehaviorIds';
 import { isSupportedServerItemUseName } from '../src/server/ServerItemUseRules';
+import { parseServerMobRideInteraction } from '../src/server/ServerMobRideRules';
 import { localizeItemDisplayName } from '../src/i18nItemNames';
 import {
   LEAD_PULL_DISTANCE,
@@ -91,13 +92,29 @@ test('648: server owns hanging placement validation, spawn, consumption, and sou
   assert.ok(branch.includes('this.consumeServerHeldItem(session, held)'));
 });
 
-test('649: Item Frame has visible frame geometry and renders exactly one displayed item', () => {
+test('649: Item Frame has visible frame geometry and uses the shared canonical item visual', () => {
   const frame = new Mob('item_frame', 0.5, 64.5, 0);
   assert.ok(frame.mesh.getObjectByName('item_frame_back'));
+
+  frame.setItemVisualFactory((itemId) => {
+    const visual = new THREE.Group();
+    visual.userData.canonicalItemId = itemId;
+    visual.add(new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.2, 0.03),
+      new THREE.MeshLambertMaterial(),
+    ));
+    return visual;
+  });
   frame.setItemFrameItem({ id: 264, count: 37, customName: 'Gem' });
+
   assert.equal(frame.itemFrameItem?.count, 1);
   assert.equal(frame.itemFrameItem?.customName, 'Gem');
-  assert.ok(frame.mesh.getObjectByName('item_frame_item'));
+  const displayed = frame.mesh.getObjectByName('item_frame_item');
+  assert.ok(displayed);
+  assert.equal(displayed.userData.canonicalItemId, 264);
+
+  const game = readFileSync(new URL('../src/engine/Game.ts', import.meta.url), 'utf8');
+  assert.ok(game.includes('this.mobs.setItemVisualFactory((itemId) => this.player.createItemVisualMesh(itemId))'));
 });
 
 test('650: Item Frame insertion and rotation cover all eight Java display steps', () => {
@@ -274,6 +291,10 @@ test('660: Lead snaps beyond twelve blocks, supports active detach, and transfer
   assert.ok(server.includes("heldName === 'shears' && fenceLeashed.length > 0"));
   assert.ok(server.includes('!session.sneaking'));
   assert.ok(server.includes("intent.action === 'transfer_leashes'"));
+  assert.deepEqual(
+    parseServerMobRideInteraction({ mobId: 7, action: 'transfer_leashes' }),
+    { mobId: 7, action: 'transfer_leashes' },
+  );
   assert.ok(server.includes('leashHolderId: null'));
 });
 
@@ -323,4 +344,8 @@ test('662: hanging entities have support lifecycle, separate persistence capacit
   const server = readFileSync(new URL('../src/server/GameServer.ts', import.meta.url), 'utf8');
   assert.ok(server.includes("mob.type !== 'item_frame' && mob.type !== 'painting'"));
   assert.ok(server.includes('hangingSupportPositionFromWorld('));
+  assert.ok(server.includes("(mob.type === 'horse' || mob.type === 'pig')"));
+  assert.ok(server.includes('!mob.riderId'));
+  assert.ok(server.includes('!session.sneaking'));
+  assert.ok(server.includes('isSaddled: false'));
 });

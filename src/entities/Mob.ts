@@ -8,9 +8,17 @@ import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { cloneItemStack } from '../items/ItemStackRules';
 import type { BlockFacing } from '../types';
-import { hangingEntityYaw, itemFrameDisplayStack, nextItemFrameRotation, type PaintingVariant } from './HangingEntityRules';
+import {
+  PAINTING_VARIANTS,
+  hangingEntityYaw,
+  isItemFrameType,
+  itemFrameDisplayStack,
+  nextItemFrameRotation,
+  paintingVariantSize,
+  type PaintingVariant,
+} from './HangingEntityRules';
 
-export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker' | 'pillager' | 'wither' | 'guardian' | 'vex' | 'armor_stand' | 'item_frame' | 'painting';
+export type MobType = 'zombie' | 'skeleton' | 'creeper' | 'spider' | 'cow' | 'pig' | 'sheep' | 'chicken' | 'blaze' | 'zombie_pigman' | 'magma_cube' | 'wither_skeleton' | 'villager' | 'enderman' | 'witch' | 'iron_golem' | 'wolf' | 'cat' | 'horse' | 'shulker' | 'pillager' | 'wither' | 'guardian' | 'vex' | 'armor_stand' | 'item_frame' | 'glow_item_frame' | 'painting';
 
 export interface MobDef {
   type: MobType;
@@ -55,6 +63,7 @@ const MOB_DEFS: Record<MobType, MobDef> = {
   vex:      { type: 'vex',      health: 14,  speed: 4.0, damage: 3, hostile: true, width: 0.4, height: 0.8, bodyColor: 0xbfd3ff, headColor: 0xbfd3ff, eyeColor: 0xFF0000, xpDrop: 3,  drops: [] },
   armor_stand: { type: 'armor_stand', health: 2, speed: 0, damage: 0, hostile: false, width: 0.5, height: 1.975, bodyColor: 0x9a6a38, headColor: 0x9a6a38, xpDrop: 0, drops: [{ id: 416, count: 1, chance: 1.0 }] },
   item_frame: { type: 'item_frame', health: 1, speed: 0, damage: 0, hostile: false, width: 0.75, height: 0.75, bodyColor: 0x7a4b25, xpDrop: 0, drops: [{ id: 389, count: 1, chance: 1.0 }] },
+  glow_item_frame: { type: 'glow_item_frame', health: 1, speed: 0, damage: 0, hostile: false, width: 0.75, height: 0.75, bodyColor: 0xc99847, xpDrop: 0, drops: [{ id: 20311, count: 1, chance: 1.0 }] },
   painting: { type: 'painting', health: 1, speed: 0, damage: 0, hostile: false, width: 0.98, height: 0.98, bodyColor: 0x8b5a2b, xpDrop: 0, drops: [{ id: 321, count: 1, chance: 1.0 }] },
 };
 
@@ -195,19 +204,19 @@ export class Mob {
   }
 
   setItemFrameItem(stack: ItemStack | null) {
-    if (this.def.type !== 'item_frame') return;
+    if (!isItemFrameType(this.def.type)) return;
     this.itemFrameItem = itemFrameDisplayStack(stack);
     this.refreshItemFrameDisplay();
   }
 
   rotateItemFrame() {
-    if (this.def.type !== 'item_frame' || !this.itemFrameItem) return;
+    if (!isItemFrameType(this.def.type) || !this.itemFrameItem) return;
     this.itemFrameRotation = nextItemFrameRotation(this.itemFrameRotation);
     this.refreshItemFrameDisplay();
   }
 
   setItemFrameState(stack: ItemStack | null, rotation = 0) {
-    if (this.def.type !== 'item_frame') return;
+    if (!isItemFrameType(this.def.type)) return;
     this.itemFrameItem = itemFrameDisplayStack(stack);
     this.itemFrameRotation = ((Math.trunc(rotation) % 8) + 8) % 8;
     this.refreshItemFrameDisplay();
@@ -220,12 +229,14 @@ export class Mob {
   }
 
   get width(): number {
+    if (this.def.type === 'painting') return paintingVariantSize(this.paintingVariant).width;
     let w = this.def.type === 'magma_cube' ? this.def.width * (this.size / 3) : this.def.width;
     if (this.isBaby) w *= 0.5;
     return w;
   }
 
   get height(): number {
+    if (this.def.type === 'painting') return paintingVariantSize(this.paintingVariant).height;
     let h = this.def.type === 'magma_cube' ? this.def.height * (this.size / 3) : this.def.height;
     if (this.isBaby) h *= 0.5;
     return h;
@@ -275,7 +286,7 @@ export class Mob {
   }
 
   private refreshItemFrameDisplay() {
-    if (!this.mesh || this.def.type !== 'item_frame') return;
+    if (!this.mesh || !isItemFrameType(this.def.type)) return;
     if (this.itemFrameDisplayMesh) {
       this.mesh.remove(this.itemFrameDisplayMesh);
       this.itemFrameDisplayMesh.traverse(child => {
@@ -299,6 +310,18 @@ export class Mob {
       visual.position.z = 0.075;
       visual.rotation.set(0, 0, 0);
       visual.scale.multiplyScalar(0.78);
+      if (this.def.type === 'glow_item_frame') {
+        visual.traverse((child) => {
+          if (!(child instanceof THREE.Mesh)) return;
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          for (const material of materials) {
+            if (material instanceof THREE.MeshLambertMaterial || material instanceof THREE.MeshStandardMaterial) {
+              material.emissive.setHex(0xffffff);
+              material.emissiveIntensity = 0.7;
+            }
+          }
+        });
+      }
       group.add(visual);
     } else {
       const hue = ((this.itemFrameItem.id * 47) % 360) / 360;
@@ -319,18 +342,25 @@ export class Mob {
   private refreshPaintingVisual() {
     if (!this.mesh || this.def.type !== 'painting') return;
     const canvas = this.mesh.getObjectByName('painting_canvas');
-    if (!(canvas instanceof THREE.Mesh)) return;
-    const palette: Record<PaintingVariant, number> = {
-      kebab: 0xb45f3a,
-      aztec: 0x466b7a,
-      alban: 0xc4a56d,
-      aztec2: 0x6f4a7e,
-      bomb: 0x8b3f35,
-      plant: 0x547a45,
-      wasteland: 0x9b835e,
-    };
+    const frame = this.mesh.getObjectByName('painting_frame');
+    if (!(canvas instanceof THREE.Mesh) || !(frame instanceof THREE.Mesh)) return;
+
+    const data = PAINTING_VARIANTS[this.paintingVariant] ?? PAINTING_VARIANTS.kebab;
+    frame.geometry.dispose();
+    frame.geometry = new THREE.BoxGeometry(
+      Math.max(0.08, data.width - 0.02),
+      Math.max(0.08, data.height - 0.02),
+      0.045,
+    );
+    canvas.geometry.dispose();
+    canvas.geometry = new THREE.BoxGeometry(
+      Math.max(0.06, data.width - 0.14),
+      Math.max(0.06, data.height - 0.14),
+      0.025,
+    );
+    canvas.position.z = 0.038;
     const material = canvas.material as THREE.MeshLambertMaterial;
-    material.color.setHex(palette[this.paintingVariant] ?? palette.kebab);
+    material.color.setHex(data.color);
   }
 
   private refreshArmorStandEquipmentVisual() {
@@ -476,9 +506,14 @@ export class Mob {
     const bodyColor = this.def.bodyColor;
     const headColor = this.def.headColor ?? bodyColor;
 
-    if (type === 'item_frame') {
-      const wood = new THREE.MeshLambertMaterial({ color: 0x7a4b25 });
-      const leather = new THREE.MeshLambertMaterial({ color: 0x9a6a38 });
+    if (isItemFrameType(type)) {
+      const glowing = type === 'glow_item_frame';
+      const wood = glowing
+        ? new THREE.MeshLambertMaterial({ color: 0xc99847, emissive: 0x6a4214, emissiveIntensity: 0.8 })
+        : new THREE.MeshLambertMaterial({ color: 0x7a4b25 });
+      const leather = glowing
+        ? new THREE.MeshLambertMaterial({ color: 0xd6b36d, emissive: 0x5b421f, emissiveIntensity: 0.6 })
+        : new THREE.MeshLambertMaterial({ color: 0x9a6a38 });
       const back = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.72, 0.045), leather);
       back.name = 'item_frame_back';
       const edge = 0.09;
@@ -1420,7 +1455,7 @@ export class Mob {
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
 
-    if (this.def.type === 'item_frame' || this.def.type === 'painting') {
+    if (isItemFrameType(this.def.type) || this.def.type === 'painting') {
       this.velocity.set(0, 0, 0);
       this.mesh.position.copy(this.position);
       return;

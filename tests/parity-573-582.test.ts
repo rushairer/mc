@@ -73,14 +73,17 @@ test('579: multiplayer Fishing Rod sends only cast/reel intent and leaves local 
   assert.ok(update.includes('this.isMultiplayerNetworkConnected()'));
 });
 
-test('580: server Fishing cast validates the actual Fishing Rod and owns initial bobber/durability state', () => {
+test('580: server Fishing cast validates the actual Fishing Rod and creates bobber state without spending durability', () => {
   const source = readFileSync(new URL('../src/server/GameServer.ts', import.meta.url), 'utf8');
   const start = source.indexOf('case PacketType.C2S_FISHING_ACTION');
   const end = source.indexOf('case PacketType.C2S_PLAYER_STATE', start);
   const handler = source.slice(start, end);
   assert.ok(handler.includes("heldName !== 'fishing_rod'"));
   assert.ok(handler.includes("phase: 'flying'"));
-  assert.ok(handler.includes('this.damageServerHeldTool(session, held)'));
+  const castStart = handler.indexOf("if (request.action === 'cast')");
+  const reelStart = handler.indexOf('if (!existing) break', castStart);
+  const castBranch = handler.slice(castStart, reelStart);
+  assert.equal(castBranch.includes('this.damageServerHeldTool(session, held)'), false);
   assert.ok(handler.includes('this.sendFishingState(session, state)'));
 });
 
@@ -107,6 +110,8 @@ test('582: successful server reel rolls weighted fish and XP, drops loot, syncs 
   assert.ok(handler.includes("existing.phase === 'hooked'"));
   assert.ok(handler.includes('rollServerFishingLoot(Math.random)'));
   assert.ok(handler.includes('this.addServerXp(session, rollServerFishingXp(Math.random))'));
+  assert.ok(handler.includes('this.damageServerHeldTool(session, held)'));
+  assert.ok(handler.includes("existing.phase === 'waiting' && !Number.isFinite(existing.waitSeconds)"));
   assert.ok(handler.includes('this.fishingStates.delete(session.id)'));
   assert.ok(handler.includes('this.sendFishingState(session, null)'));
 });

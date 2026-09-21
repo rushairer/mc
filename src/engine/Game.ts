@@ -4446,12 +4446,6 @@ export class Game {
     mesh.position.copy(origin);
     this.renderer.scene.add(mesh);
     this.sound.playLever();
-    if (this.gameMode !== 'creative') {
-      const broke = this.inventory.damageTool(this.player.selectedSlot);
-      if (broke) {
-        this.clearFishingBobber();
-      }
-    }
   }
 
   private reelFishingRod() {
@@ -4467,6 +4461,13 @@ export class Game {
       this.xp.spawnXP(rollXp(FISHING_XP_RANGE, Math.random), bobber.position.clone());
       this.particles.spawnXP(bobber.position.x, bobber.position.y, bobber.position.z, 8);
       this.sound.playPickup();
+      if (this.gameMode !== 'creative') this.inventory.damageTool(this.player.selectedSlot);
+    } else if (bobber.phase === 'waiting' && !Number.isFinite(bobber.waitTimer)) {
+      this.sound.playLever();
+      if (this.gameMode !== 'creative') {
+        this.inventory.damageTool(this.player.selectedSlot);
+        this.inventory.damageTool(this.player.selectedSlot);
+      }
     } else {
       this.sound.playLever();
     }

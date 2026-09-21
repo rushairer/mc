@@ -1341,7 +1341,6 @@ export class GameServer {
             dimension: session.dimension,
           };
           this.fishingStates.set(session.id, state);
-          this.damageServerHeldTool(session, held);
           this.sendFishingState(session, state);
           break;
         }
@@ -1358,9 +1357,14 @@ export class GameServer {
             0.1,
           );
           this.addServerXp(session, rollServerFishingXp(Math.random));
+          this.damageServerHeldTool(session, held);
           this.broadcastDimension(existing.dimension, PacketType.S2C_SOUND, {
             type: 'pickup', x: existing.position.x, y: existing.position.y, z: existing.position.z,
           });
+        } else if (existing.phase === 'waiting' && !Number.isFinite(existing.waitSeconds)) {
+          this.damageServerHeldTool(session, held);
+          const afterFirstDamage = session.inventory[session.selectedSlot];
+          if (afterFirstDamage) this.damageServerHeldTool(session, afterFirstDamage);
         }
         this.fishingStates.delete(session.id);
         this.sendFishingState(session, null);

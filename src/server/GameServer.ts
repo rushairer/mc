@@ -133,7 +133,10 @@ import {
   hangingEntityWorldPosition,
   hangingSupportPositionFromWorld,
   hangingEntityYaw,
+  fenceLeashHolderId,
+  isFenceBlockName,
   isLeashableMobType,
+  parseFenceLeashHolderId,
   isPaintingVariant,
   leashDistance,
   leashPullVector,
@@ -633,7 +636,7 @@ export class GameServer {
         itemFrameItem: mob.type === 'item_frame' ? cloneItemStack(mob.itemFrameItem) : undefined,
         itemFrameRotation: mob.type === 'item_frame' ? mob.itemFrameRotation ?? 0 : undefined,
         paintingVariant: mob.type === 'painting' ? mob.paintingVariant : undefined,
-        leashHolderId: mob.leashHolderId === localSession.id ? 'local-player' : undefined,
+        leashHolderId: mob.leashHolderId === localSession.id ? 'local-player' : mob.leashHolderId,
         isSheared: mob.isSheared
       });
     }
@@ -765,7 +768,7 @@ export class GameServer {
             mData.itemFrameItem,
             mData.itemFrameRotation,
             mData.paintingVariant,
-            mData.leashHolderId === 'local-player' ? session.id : undefined
+            mData.leashHolderId === 'local-player' ? session.id : mData.leashHolderId
           );
         }
       }
@@ -1195,6 +1198,33 @@ export class GameServer {
         if (!isValidBlockCoordinate(x) || !isValidWorldY(y, WORLD_HEIGHT) || !isValidBlockCoordinate(z)) break;
         if (!isBlockActionInReach(session, x, y, z, session.gameMode)) break;
         const blockId = this.getBlock(x, y, z, session.dimension);
+        const blockName = BlockRegistry.get(blockId)?.name;
+        if (isFenceBlockName(blockName)) {
+          const holderId = fenceLeashHolderId(session.dimension, { x, y, z });
+          let tied = 0;
+          for (const mob of this.mobs.values()) {
+            if (
+              mob.dimension !== session.dimension ||
+              mob.leashHolderId !== session.id ||
+              !isLeashableMobType(mob.type)
+            ) continue;
+            mob.leashHolderId = holderId;
+            tied++;
+            this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_STATE, {
+              id: mob.id,
+              health: mob.health,
+              hurtTimer: mob.hurtTimer,
+              leashHolderId: holderId,
+            });
+          }
+          if (tied > 0) {
+            this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+              type: 'place', x: x + 0.5, y: y + 0.5, z: z + 0.5,
+            });
+          }
+          break;
+        }
+
         // Chest or Furnace interaction sounds
         if ((blockId & 0x3FF) === 54) { // Chest
           this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, { type: 'chest_open', x, y, z });

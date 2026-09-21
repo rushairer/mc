@@ -99,6 +99,7 @@ export class RedstoneSystem {
     getBlockMeta?: (x: number, y: number, z: number) => any,
     entities: RedstoneEntity[] = [],
     fixedSteps?: number,
+    getComparatorExternalSignal?: (x: number, y: number, z: number, facing: BlockFacing) => number | null,
   ) {
     const steps = fixedSteps ?? this.tickScheduler.advance(dt).steps;
     if (steps === 0) return;
@@ -346,8 +347,11 @@ export class RedstoneSystem {
             const bz = comp.z + dirs.back[2];
 
             let backSignal = 0;
+            const externalSignal = getComparatorExternalSignal?.(bx, by, bz, comp.facing) ?? null;
             const containerSignal = this.getContainerSignal(bx, by, bz, getBlockMeta);
-            if (containerSignal !== null) {
+            if (externalSignal !== null) {
+              backSignal = Math.max(0, Math.min(15, Math.trunc(externalSignal)));
+            } else if (containerSignal !== null) {
               backSignal = containerSignal;
             } else {
               const backComp = this.get(bx, by, bz);

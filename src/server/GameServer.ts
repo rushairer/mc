@@ -3267,6 +3267,9 @@ export class GameServer {
               mob.onGround = false;
             }
           }
+          rider.x = mob.position.x;
+          rider.y = mob.position.y + (MOB_DEFS[mob.type]?.height ?? 1.0) * 0.75;
+          rider.z = mob.position.z;
         }
       }
 

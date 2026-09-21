@@ -15,6 +15,7 @@ import { Mob } from '../entities/Mob';
 import { shouldTameEntity } from '../entities/EntityInteractionRules';
 import { canApplySaddle, canControlMountedMob, canMountMob, getNameTagLabel } from '../entities/MobItemInteractionRules';
 import { armorStandSlotIndex, canPlaceArmorStandAt, firstEquippedArmorStandSlot, snapArmorStandYaw } from '../entities/ArmorStandRules';
+import { LEAD_ITEM_ID, canLeashMob, getLeadPullPlan } from '../entities/LeadRules';
 import { ParticleSystem } from '../systems/ParticleSystem';
 import { FluidSystem } from '../systems/FluidSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
@@ -953,6 +954,10 @@ export class Game {
       id: 'minecraft:armor_stand',
       use: ({ stack, target }) => ({ handled: this.tryPlaceArmorStand(stack, target), cooldown: 0.35 }),
     });
+    this.behaviors.registerItem('lead', {
+      id: 'minecraft:lead',
+      use: () => ({ handled: false }),
+    });
     this.behaviors.registerItem([], {
       id: 'minecraft:spawn_egg',
       use: ({ stack, target }) => ({ handled: this.tryUseSpawnEgg(stack, target), cooldown: 0.25 }),
@@ -1116,6 +1121,34 @@ export class Game {
   private tryInteractMob(target: Mob, heldItem: ItemStack | null) {
     const heldItemId = heldItem?.id ?? 0;
     const heldItemName = heldItem ? ItemRegistry.get(heldItem.id)?.name : undefined;
+
+    if (heldItemName === 'lead' && canLeashMob(target.def.type) && !target.leashHolderId) {
+      if (heldItem && this.sendServerEntityItemUse(heldItem, target.id)) {
+        return { handled: true, cooldown: 0.25 };
+      }
+      target.setLeashHolder('local-player');
+      this.consumeInteractionItem();
+      this.sound.playLever();
+      return { handled: true, cooldown: 0.25 };
+    }
+
+    const localLeashHolderId = this.isMultiplayerNetworkConnected() ? this.network.playerId : 'local-player';
+    if (!heldItem && target.leashHolderId && target.leashHolderId === localLeashHolderId) {
+      if (this.isMultiplayerNetworkConnected()) {
+        this.network.send(PacketType.C2S_MOB_INTERACT, { mobId: target.id, action: 'interact' });
+        return { handled: true, cooldown: 0.25 };
+      }
+      target.setLeashHolder(null);
+      this.droppedItems.spawnItem(
+        LEAD_ITEM_ID,
+        1,
+        target.position.clone().add(new THREE.Vector3(0, 0.5, 0)),
+        new THREE.Vector3(0, 0.8, 0),
+        0.25,
+      );
+      this.sound.playPickup();
+      return { handled: true, cooldown: 0.25 };
+    }
 
     if (target.def.type === 'armor_stand') {
       const result = this.tryInteractArmorStand(target, heldItem);
@@ -2102,6 +2135,7 @@ export class Game {
         () => {}, // no mob attacks while UI open
         (x, y, z) => this.chunks.isSolidBlock(x, y, z)
       );
+      this.updateMobLeashes();
       this.enderDragon.update(
         dt,
         this.chunks.currentDimension,
@@ -2423,6 +2457,7 @@ export class Game {
           this.sound.playNamedEvent26_3(eventName);
         },
       );
+      this.updateMobLeashes();
 
       this.enderDragon.update(
         dt,
@@ -4501,6 +4536,48 @@ export class Game {
 
     if (this.gameMode !== 'creative' && mob.def.xpDrop > 0) {
       this.xp.spawnXP(mob.def.xpDrop, mob.position.clone().add(new THREE.Vector3(0, 0.45, 0)));
+    }
+  }
+
+  private updateMobLeashes() {
+    const localPlayerId = this.isMultiplayerNetworkConnected() ? this.network.playerId : 'local-player';
+    for (const mob of this.mobs.mobs.values()) {
+      if (!mob.leashHolderId) {
+        mob.updateLeashVisual();
+        continue;
+      }
+
+      let holderPos: THREE.Vector3 | null = null;
+      if (mob.leashHolderId === localPlayerId) {
+        holderPos = this.player.position.clone().add(new THREE.Vector3(0, 1.25, 0));
+      } else {
+        const remote = this.network.otherPlayers.get(mob.leashHolderId);
+        if (remote) holderPos = remote.targetPos.clone().add(new THREE.Vector3(0, 1.25, 0));
+      }
+
+      if (!holderPos) {
+        mob.updateLeashVisual();
+        continue;
+      }
+
+      mob.updateLeashVisual(holderPos);
+      if (this.isMultiplayerNetworkConnected() || mob.leashHolderId !== 'local-player') continue;
+
+      const delta = holderPos.clone().sub(mob.position);
+      const plan = getLeadPullPlan(delta.x, delta.y, delta.z, mob.velocity);
+      if (plan.breakLead) {
+        mob.setLeashHolder(null);
+        this.droppedItems.spawnItem(
+          LEAD_ITEM_ID,
+          1,
+          mob.position.clone().add(new THREE.Vector3(0, 0.5, 0)),
+          new THREE.Vector3(0, 0.8, 0),
+          0.25,
+        );
+        this.sound.playPickup();
+        continue;
+      }
+      mob.velocity.set(plan.velocityX, plan.velocityY, plan.velocityZ);
     }
   }
 

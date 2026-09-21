@@ -128,6 +128,8 @@ import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, WIND_CHARGE_SP
 import { getMaceSmashBonus, getMaceSmashImpulse, isMaceSmash, MACE_HEAVY_SMASH_THRESHOLD } from '../items/MaceRules';
 import { brushedReplacementName, isSuspiciousBlockName, normalizeArchaeologyLootCount } from '../items/ArchaeologyRules';
 import { isServerBrushDurationComplete, parseServerBrushAction, sameServerBrushTarget } from './BrushActionRules';
+import { parseServerBundleAction } from './BundleActionRules';
+import { insertIntoBundle, isBundleStack, removeOneFromBundle } from '../items/BundleRules';
 import {
   ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
   ITEM_ENTITY_DESPAWN_SECONDS,
@@ -1799,6 +1801,77 @@ export class GameServer {
         }
         // Java 26.3 RC3 (MC-311799): sprint-hitting another player no longer
         // slows/cancels sprint on the attacker. Mob hits keep their legacy path.
+        break;
+      }
+
+      case PacketType.C2S_BUNDLE_ACTION: {
+        const intent = parseServerBundleAction(packet.payload);
+        if (!intent) {
+          this.syncPlayerInventory(session);
+          break;
+        }
+
+        const bundle = session.inventory[intent.bundleSlot];
+        if (!bundle || !isBundleStack(bundle)) {
+          this.syncPlayerInventory(session);
+          break;
+        }
+
+        if (intent.action === 'insert_from_slot') {
+          const source = session.inventory[intent.sourceSlot];
+          if (!source) {
+            this.syncPlayerInventory(session);
+            break;
+          }
+          const result = insertIntoBundle(bundle, source);
+          if (result.insertedCount > 0) {
+            session.inventory[intent.bundleSlot] = result.bundle;
+            session.inventory[intent.sourceSlot] = result.remaining;
+            this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+              type: 'bundle_insert', x: session.x, y: session.y + 1, z: session.z,
+            });
+          }
+          this.syncPlayerInventory(session);
+          break;
+        }
+
+        const result = removeOneFromBundle(bundle, intent.selectedIndex);
+        if (!result.removed) {
+          this.syncPlayerInventory(session);
+          break;
+        }
+
+        if (intent.action === 'drop_one') {
+          if (intent.bundleSlot !== session.selectedSlot) {
+            this.syncPlayerInventory(session);
+            break;
+          }
+          session.inventory[intent.bundleSlot] = result.bundle;
+          this.spawnDroppedStack(
+            result.removed,
+            session.x,
+            session.y + 1.1,
+            session.z,
+            session.dimension,
+            0.25,
+          );
+          this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+            type: 'bundle_drop', x: session.x, y: session.y + 1, z: session.z,
+          });
+          this.syncPlayerInventory(session);
+          break;
+        }
+
+        const nextInventory = session.inventory.map((entry) => cloneItemStack(entry));
+        nextInventory[intent.bundleSlot] = result.bundle;
+        const inserted = insertItemStackIntoSlots(nextInventory, result.removed);
+        if (inserted.inserted === result.removed.count && !inserted.remaining) {
+          session.inventory = nextInventory;
+          this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+            type: 'bundle_remove', x: session.x, y: session.y + 1, z: session.z,
+          });
+        }
+        this.syncPlayerInventory(session);
         break;
       }
 

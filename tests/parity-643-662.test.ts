@@ -18,7 +18,9 @@ import {
   fenceLeashHolderId,
   isFenceBlockName,
   isLeashableMobType,
+  mobLeashHolderId,
   parseFenceLeashHolderId,
+  parseMobLeashHolderId,
   leashPullVector,
   nextItemFrameRotation,
   shouldBreakLeash,
@@ -212,6 +214,11 @@ test('657: Lead is a dedicated behavior and only supported mob families can be l
   assert.equal(inferBlockBehaviorId('oak_fence'), 'minecraft:fence');
   assert.equal(isFenceBlockName('oak_fence'), true);
   assert.equal(isFenceBlockName('oak_fence_gate'), false);
+
+  const recipes = JSON.parse(readFileSync(new URL('../src/items/data/recipes.json', import.meta.url), 'utf8'));
+  const leadShape = recipes['420'][0].inShape.flat().filter((id: number | null) => id !== null);
+  assert.deepEqual(leadShape, [287, 287, 287, 287, 287]);
+  assert.equal(leadShape.includes(341), false);
 });
 
 test('658: Lead attachment is server authoritative in multiplayer and consumes survival inventory there', () => {
@@ -229,6 +236,8 @@ test('658: Lead attachment is server authoritative in multiplayer and consumes s
   assert.ok(branch.includes('mob.leashHolderId = session.id'));
   assert.ok(branch.includes('this.consumeServerHeldItem(session, held)'));
   assert.ok(branch.includes('leashHolderId: session.id'));
+  assert.ok(branch.includes('heldByOtherPlayer'));
+  assert.ok(branch.includes('parseMobLeashHolderId(mob.leashHolderId)'));
 });
 
 test('659: Lead has six blocks of slack and applies a bounded pull beyond that distance', () => {
@@ -255,15 +264,20 @@ test('660: Lead snaps beyond twelve blocks, supports active detach, and transfer
   const client = readFileSync(new URL('../src/engine/Game.ts', import.meta.url), 'utf8');
   assert.ok(client.includes('private tryDetachLeadFromMob'));
   assert.ok(client.includes('private tryTieLeashedMobsToFence'));
+  assert.ok(client.includes("heldName === 'shears' && fenceLeashed.length > 0"));
+  assert.ok(client.includes("!this.input.isKeyDown('shift')"));
   assert.ok(client.includes('if (shouldBreakLeash(distance))'));
   assert.ok(client.includes('this.droppedItems.spawnItem(\n              420,'));
   const server = readFileSync(new URL('../src/server/GameServer.ts', import.meta.url), 'utf8');
   assert.ok(server.includes('if (shouldBreakLeash(distance))'));
   assert.ok(server.includes('fenceLeashHolderId(session.dimension, { x, y, z })'));
+  assert.ok(server.includes("heldName === 'shears' && fenceLeashed.length > 0"));
+  assert.ok(server.includes('!session.sneaking'));
+  assert.ok(server.includes("intent.action === 'transfer_leashes'"));
   assert.ok(server.includes('leashHolderId: null'));
 });
 
-test('661: Lead ownership synchronizes over the mob state channel and renders a visible leash line', () => {
+test('661: Lead ownership syncs, renders, and mob-to-mob holders survive save id remapping', () => {
   const network = readFileSync(new URL('../src/server/NetworkClient.ts', import.meta.url), 'utf8');
   assert.ok(network.includes('leashHolderId'));
   assert.ok(network.includes("mob.leashHolderId = typeof leashHolderId === 'string'"));
@@ -271,7 +285,23 @@ test('661: Lead ownership synchronizes over the mob state channel and renders a 
   assert.ok(game.includes('private leashLines = new Map<number, THREE.Line>()'));
   assert.ok(game.includes("line.name = 'mob_leash'"));
   assert.ok(game.includes('parseFenceLeashHolderId(mob.leashHolderId)'));
+  assert.ok(game.includes('parseMobLeashHolderId(mob.leashHolderId)'));
   assert.ok(game.includes('line.geometry.setFromPoints([holder, center])'));
+
+  const source = new MobSystem(new THREE.Scene());
+  source.doMobSpawning = false;
+  const holder = source.spawnMob('cow', 0, 64, 0)!;
+  const child = source.spawnMob('pig', 2, 64, 0)!;
+  child.leashHolderId = mobLeashHolderId(holder.id);
+  assert.equal(parseMobLeashHolderId(child.leashHolderId), holder.id);
+  const saved = source.serialize(0);
+
+  const restored = new MobSystem(new THREE.Scene());
+  restored.doMobSpawning = false;
+  restored.restore(saved, 0);
+  const restoredHolder = Array.from(restored.mobs.values()).find((mob) => mob.def.type === 'cow')!;
+  const restoredChild = Array.from(restored.mobs.values()).find((mob) => mob.def.type === 'pig')!;
+  assert.equal(restoredChild.leashHolderId, mobLeashHolderId(restoredHolder.id));
 });
 
 test('662: hanging entities have support lifecycle, separate persistence capacity, and no natural-mob budget cost', () => {
@@ -281,11 +311,14 @@ test('662: hanging entities have support lifecycle, separate persistence capacit
 
   const save = readFileSync(new URL('../src/systems/SaveSystem.ts', import.meta.url), 'utf8');
   assert.ok(save.includes('MAX_RESTORED_DECORATIVE_ENTITIES_PER_DIMENSION = 512'));
+  assert.ok(save.includes('entityId?: number'));
   assert.ok(save.includes("mob.type === 'armor_stand' || mob.type === 'item_frame' || mob.type === 'painting'"));
 
   const mobs = readFileSync(new URL('../src/systems/MobSystem.ts', import.meta.url), 'utf8');
   assert.ok(mobs.includes("mob.def.type !== 'item_frame'"));
   assert.ok(mobs.includes("mob.def.type !== 'painting'"));
+  assert.ok(mobs.includes('idMap.set(Number(saved.entityId), mob.id)'));
+  assert.ok(mobs.includes('mobLeashHolderId(newHolderId)'));
 
   const server = readFileSync(new URL('../src/server/GameServer.ts', import.meta.url), 'utf8');
   assert.ok(server.includes("mob.type !== 'item_frame' && mob.type !== 'painting'"));

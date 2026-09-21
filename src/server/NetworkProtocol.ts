@@ -11,6 +11,8 @@ export enum PacketType {
   C2S_HELD_ITEM_CHANGE = 'C2S_HELD_ITEM_CHANGE',
   C2S_CHUNK_REQUEST = 'C2S_CHUNK_REQUEST',
   C2S_INTERACT_BLOCK = 'C2S_INTERACT_BLOCK',
+  /** Server-authoritative sign text editing. */
+  C2S_SIGN_UPDATE = 'C2S_SIGN_UPDATE',
   C2S_INTERACT_ENTITY = 'C2S_INTERACT_ENTITY',
   /** P5.1 — server-authoritative item actions (bow release, throwables). */
   C2S_ITEM_ACTION = 'C2S_ITEM_ACTION',

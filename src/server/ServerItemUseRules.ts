@@ -1,5 +1,6 @@
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { isServerSignStylingItemName } from './ServerSignRules';
 
 export type ServerItemUseFace = 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
 
@@ -56,6 +57,7 @@ export function isSupportedServerItemUseName(name: string, kind: ServerItemUseIn
     || name === 'shears'
     || name === 'boat'
     || name.endsWith('_boat')
+    || isServerSignStylingItemName(name)
     || serverItemOnBlockKind(name) !== null;
 }
 

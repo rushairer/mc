@@ -725,7 +725,8 @@ export class Game {
     this.behaviors.registerBlock([], {
       id: 'minecraft:sign',
       preventsItemUse: true,
-      interact: ({ position, heldItem }) => {
+      interact: (context) => {
+        const { position, heldItem } = context;
         const block = BlockRegistry.get(this.chunks.getBlock(position.x, position.y, position.z));
         if (!block) return { handled: false };
         const currentMeta = this.chunks.getBlockMeta(position.x, position.y, position.z);
@@ -739,10 +740,18 @@ export class Game {
         );
         const heldItemName = heldItem ? ItemRegistry.get(heldItem.id)?.name : undefined;
         const result = applySignInteraction(currentMeta, heldItemName, side);
-        this.chunks.setBlockMeta(position.x, position.y, position.z, result.metadata, true);
-        if (result.consumeItem && heldItem && this.gameMode !== 'creative') {
-          this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+
+        if (result.consumeItem && heldItem && this.sendServerBlockItemUse(heldItem, context)) {
+          return { handled: true, cooldown: 0.25 };
         }
+
+        if (!this.isMultiplayerNetworkConnected()) {
+          this.chunks.setBlockMeta(position.x, position.y, position.z, result.metadata, true);
+          if (result.consumeItem && heldItem && this.gameMode !== 'creative') {
+            this.inventory.removeFromSlot(this.player.selectedSlot, 1);
+          }
+        }
+
         if (result.opensEditor) {
           this.editingSignPos = new THREE.Vector3(position.x, position.y, position.z);
           this.editingSignSide = side;
@@ -1739,14 +1748,23 @@ export class Game {
   saveSignText(lines: string[]) {
     if (this.editingSignPos) {
       const pos = this.editingSignPos;
-      const currentMeta = this.chunks.getBlockMeta(pos.x, pos.y, pos.z);
-      this.chunks.setBlockMeta(
-        pos.x,
-        pos.y,
-        pos.z,
-        setSignTextForSide(currentMeta, this.editingSignSide, lines),
-        true,
-      );
+      if (this.isMultiplayerNetworkConnected()) {
+        this.network.send(PacketType.C2S_SIGN_UPDATE, {
+          x: pos.x,
+          y: pos.y,
+          z: pos.z,
+          lines: Array.from({ length: 4 }, (_, index) => (lines[index] ?? '').slice(0, 15)),
+        });
+      } else {
+        const currentMeta = this.chunks.getBlockMeta(pos.x, pos.y, pos.z);
+        this.chunks.setBlockMeta(
+          pos.x,
+          pos.y,
+          pos.z,
+          setSignTextForSide(currentMeta, this.editingSignSide, lines),
+          true,
+        );
+      }
       this.editingSignPos = null;
       this.editingSignSide = 'front';
     }

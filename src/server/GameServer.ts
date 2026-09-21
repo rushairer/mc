@@ -75,7 +75,15 @@ import { Dimension, DimensionGenerator } from '../world/DimensionGenerator';
 import { Chunk } from '../world/Chunk';
 import { BlockRegistry } from '../world/BlockRegistry';
 import { planBlockPlacement } from '../world/BlockPlacement';
-import { createDefaultSignMetadata, isSignBlockName, isWallSignBlockName } from '../world/SignRules';
+import {
+  applySignInteraction,
+  createDefaultSignMetadata,
+  getSignSideForPlayer,
+  isSignBlockName,
+  isWallSignBlockName,
+  setSignTextForSide,
+} from '../world/SignRules';
+import { isServerSignStylingItemName, parseServerSignUpdate } from './ServerSignRules';
 import { resolveAxeStrippedBlockName, resolveHoeFarmlandTargetName, resolveShovelPathTargetName, rotateBoneMealSpreadOffsets26_3 } from '../world/ItemOnBlockRules';
 import {
   END_PORTAL_BLOCK_ID,
@@ -1047,12 +1055,38 @@ export class GameServer {
       case PacketType.C2S_INTERACT_BLOCK: {
         const { x, y, z } = packet.payload;
         if (!isValidBlockCoordinate(x) || !isValidWorldY(y, WORLD_HEIGHT) || !isValidBlockCoordinate(z)) break;
-        if (!isBlockActionInReach(session, x, y, z, 'survival')) break;
+        if (!isBlockActionInReach(session, x, y, z, session.gameMode)) break;
         const blockId = this.getBlock(x, y, z, session.dimension);
         // Chest or Furnace interaction sounds
         if ((blockId & 0x3FF) === 54) { // Chest
           this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, { type: 'chest_open', x, y, z });
         }
+        break;
+      }
+
+      case PacketType.C2S_SIGN_UPDATE: {
+        const intent = parseServerSignUpdate(packet.payload);
+        if (!intent) break;
+        if (!isValidWorldY(intent.y, WORLD_HEIGHT)) break;
+        if (!isBlockActionInReach(session, intent.x, intent.y, intent.z, session.gameMode)) break;
+        const blockId = this.getBlock(intent.x, intent.y, intent.z, session.dimension);
+        const block = BlockRegistry.get(blockId);
+        if (!block || !isSignBlockName(block.name)) break;
+        const metadata = createDefaultSignMetadata(
+          this.getBlockMetadata(intent.x, intent.y, intent.z, session.dimension),
+        );
+        if (metadata.signWaxed) break;
+        const side = getSignSideForPlayer(
+          block.name,
+          metadata,
+          intent.x,
+          intent.z,
+          session.x,
+          session.z,
+        );
+        const nextMetadata = setSignTextForSide(metadata, side, intent.lines);
+        this.setBlock(intent.x, intent.y, intent.z, blockId, session.dimension, nextMetadata);
+        this.broadcastServerBlockUpdate(intent.x, intent.y, intent.z, blockId, session.dimension, nextMetadata);
         break;
       }
 
@@ -1431,6 +1465,24 @@ export class GameServer {
       this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
         type: 'place', x: place.x, y: place.y, z: place.z,
       });
+      return true;
+    }
+
+    if (isSignBlockName(targetBlock.name) && isServerSignStylingItemName(itemName)) {
+      const metadata = this.getBlockMetadata(intent.x, intent.y, intent.z, session.dimension);
+      const side = getSignSideForPlayer(
+        targetBlock.name,
+        metadata,
+        intent.x,
+        intent.z,
+        session.x,
+        session.z,
+      );
+      const result = applySignInteraction(metadata, itemName, side);
+      if (!result.consumeItem) return false;
+      this.setBlock(intent.x, intent.y, intent.z, targetBlockId, session.dimension, result.metadata);
+      this.broadcastServerBlockUpdate(intent.x, intent.y, intent.z, targetBlockId, session.dimension, result.metadata);
+      this.consumeServerHeldItem(session, held);
       return true;
     }
 

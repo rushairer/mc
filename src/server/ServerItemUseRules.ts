@@ -49,7 +49,7 @@ export function parseServerItemUseIntent(payload: unknown): ServerItemUseIntent 
 }
 
 export function isSupportedServerItemUseName(name: string, kind: ServerItemUseIntent['kind']): boolean {
-  if (kind === 'entity') return name === 'shears' || name === 'saddle' || name === 'name_tag';
+  if (kind === 'entity') return name === 'shears' || name === 'saddle' || name === 'name_tag' || name === 'lead';
   return name === 'bucket'
     || name === 'water_bucket'
     || name === 'lava_bucket'

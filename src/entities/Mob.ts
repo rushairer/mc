@@ -76,6 +76,8 @@ export class Mob {
   def: MobDef;
   position: THREE.Vector3;
   velocity: THREE.Vector3;
+  yaw = 0;
+  pitch = 0;
   health: number;
   mesh: THREE.Group;
   onGround = false;

@@ -107,6 +107,8 @@ export class Mob {
   isTamed = false;
   isSitting = false;
   isRidden = false;
+  isSaddled = false;
+  customName: string | null = null;
   /** Sheep shearing state; regrowth can reset this when grass-eating is modeled. */
   isSheared = false;
   targetMob: Mob | null = null;

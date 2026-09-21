@@ -621,6 +621,7 @@ export class GameServer {
     for (const mob of this.mobs.values()) {
       const dimension = (mob.dimension === 1 ? 1 : mob.dimension === 2 ? 2 : 0) as 0 | 1 | 2;
       dimensions[dimension].mobs.push({
+        entityId: mob.id,
         type: mob.type,
         x: mob.position.x,
         y: mob.position.y,
@@ -753,9 +754,18 @@ export class GameServer {
       // Deserialise mobs
       this.mobs.clear();
 
+      const restoredServerLeashes: Array<{ mob: ServerMob; savedHolderId?: string }> = [];
+      const savedServerIdMap = new Map<number, number>();
       for (const dimension of [0, 1, 2] as const) {
         for (const mData of data.dimensions[dimension]?.mobs ?? []) {
-          this.spawnMob(
+          const savedMobHolderId = parseMobLeashHolderId(mData.leashHolderId);
+          const initialHolderId =
+            mData.leashHolderId === 'local-player'
+              ? session.id
+              : savedMobHolderId === null
+                ? mData.leashHolderId
+                : undefined;
+          const spawned = this.spawnMob(
             mData.type,
             mData.x,
             mData.y,
@@ -773,9 +783,30 @@ export class GameServer {
             mData.itemFrameItem,
             mData.itemFrameRotation,
             mData.paintingVariant,
-            mData.leashHolderId === 'local-player' ? session.id : mData.leashHolderId
+            initialHolderId
           );
+          if (!spawned) continue;
+          if (Number.isInteger(mData.entityId) && Number(mData.entityId) >= 0) {
+            savedServerIdMap.set(Number(mData.entityId), spawned.id);
+          }
+          restoredServerLeashes.push({ mob: spawned, savedHolderId: mData.leashHolderId });
         }
+      }
+
+      for (const { mob, savedHolderId } of restoredServerLeashes) {
+        const oldHolderId = parseMobLeashHolderId(savedHolderId);
+        if (oldHolderId === null) continue;
+        const newHolderId = savedServerIdMap.get(oldHolderId);
+        mob.leashHolderId =
+          newHolderId !== undefined && newHolderId !== mob.id
+            ? mobLeashHolderId(newHolderId)
+            : undefined;
+        this.broadcastDimension(mob.dimension, PacketType.S2C_MOB_STATE, {
+          id: mob.id,
+          health: mob.health,
+          hurtTimer: mob.hurtTimer,
+          leashHolderId: mob.leashHolderId ?? null,
+        });
       }
 
       if (migratedLegacySpawn) {

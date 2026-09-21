@@ -324,6 +324,10 @@ function sanitizeMobs(
       z,
       health,
       dimension,
+      isSaddled: !!mob.isSaddled,
+      customName: typeof mob.customName === 'string' && mob.customName.trim()
+        ? mob.customName.trim().slice(0, 50)
+        : undefined,
     });
   }
 

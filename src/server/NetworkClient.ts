@@ -152,15 +152,8 @@ export class NetworkClient {
         if (dimension !== this.game.chunks.currentDimension) return;
         
         this.game.chunks.setBlock(x, y, z, blockId);
-        if (metadata) {
-          const cx = Math.floor(x / CHUNK_SIZE);
-          const cz = Math.floor(z / CHUNK_SIZE);
-          const chunk = this.game.chunks.getChunk(cx, cz);
-          if (chunk) {
-            const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-            const lz = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
-            chunk.setBlockMeta(lx, y, lz, metadata);
-          }
+        if (metadata !== undefined) {
+          this.game.chunks.setBlockMeta(x, y, z, metadata ?? null, true);
         }
         break;
       }

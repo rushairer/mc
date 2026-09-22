@@ -394,7 +394,7 @@ export class Player {
   /**
    * Raycast from camera to find block in reach
    */
-  raycast(chunks: ChunkManager, includeFluids: boolean = false): { blockPos: THREE.Vector3; faceNormal: THREE.Vector3 } | null {
+  raycast(chunks: ChunkManager, includeFluids: boolean = false): { blockPos: THREE.Vector3; faceNormal: THREE.Vector3; hitPoint: THREE.Vector3 } | null {
     const origin = this.eyePosition;
     const dir = this.forward;
 
@@ -425,6 +425,7 @@ export class Player {
         return {
           blockPos: new THREE.Vector3(bx, by, bz),
           faceNormal: faceNormal,
+          hitPoint: pos.clone(),
         };
       }
 

@@ -109,6 +109,13 @@ import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, windBurstImpul
 import { getMaceSmashBonus, getMaceSmashImpulse, isMaceSmash, MACE_HEAVY_SMASH_THRESHOLD } from '../items/MaceRules';
 import { isBundleItemName, removeOneFromBundle } from '../items/BundleRules';
 import {
+  createDecoratedPotMetadata,
+  decoratedPotDecorationStacks,
+  decoratedPotItemFromMetadata,
+  insertOneIntoDecoratedPot,
+  isDecoratedPotBreakingTool,
+} from '../items/DecoratedPotRules';
+import {
   archaeologyBrushStage,
   archaeologyTargetKey,
   brushedReplacementName,
@@ -729,6 +736,13 @@ export class Game {
       interact: ({ position, blockId, heldItem }) => ({
         handled: this.tryInteractJukebox(position, blockId, heldItem),
         cooldown: 0.25,
+      }),
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:decorated_pot',
+      interact: ({ position, heldItem }) => ({
+        handled: this.tryInsertDecoratedPot(position.x, position.y, position.z, heldItem),
+        cooldown: 0.12,
       }),
     });
     // P3.1: buttons (wooden 0.5s / stone 1.5s press), fence gates and iron
@@ -4046,7 +4060,7 @@ export class Game {
       this.redstone.observeBlockChange(x, y, z);
     } else {
       this.chunks.setBlock(x, y, z, plan.blockId);
-      this.setPlacedBlockMetadata(x, y, z, plan.blockId, plan.facing);
+      this.setPlacedBlockMetadata(x, y, z, plan.blockId, plan.facing, stack);
       this.redstone.observeBlockChange(x, y, z);
       this.checkFluidAdjacency(x, y, z);
 
@@ -4065,6 +4079,28 @@ export class Game {
     if (!multiplayerPlacement && shouldConsumePlacedItem(this.gameMode)) {
       this.inventory.removeFromSlot(this.player.selectedSlot);
     }
+    return true;
+  }
+
+  private tryInsertDecoratedPot(x: number, y: number, z: number, heldItem: ItemStack | null): boolean {
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_INTERACT_BLOCK, { x, y, z });
+      return true;
+    }
+
+    const currentMeta = this.chunks.getBlockMeta(x, y, z);
+    const result = insertOneIntoDecoratedPot(currentMeta, heldItem, this.gameMode === 'creative');
+    const nextMeta = {
+      ...result.metadata,
+      decoratedPotWobbleUntil: Date.now() + 450,
+    };
+    this.chunks.setBlockMeta(x, y, z, nextMeta, true);
+    this.sound.playBlockPlace(this.chunks.getBlock(x, y, z));
+    if (result.inserted > 0 && this.gameMode !== 'creative') {
+      this.inventory.setSlot(this.player.selectedSlot, result.held);
+    }
+    this.redstone.observeBlockChange(x, y, z);
+    this.notifyState();
     return true;
   }
 
@@ -7346,7 +7382,14 @@ export class Game {
     return frameCount === 12;
   }
 
-  private setPlacedBlockMetadata(x: number, y: number, z: number, blockId: number, facing: BlockFacing) {
+  private setPlacedBlockMetadata(
+    x: number,
+    y: number,
+    z: number,
+    blockId: number,
+    facing: BlockFacing,
+    placedStack?: ItemStack,
+  ) {
     const def = BlockRegistry.get(blockId);
     if (!def) return;
     const name = def.name;
@@ -7481,6 +7524,11 @@ export class Game {
         this.redstone.setRepeaterDelay(x, y, z, 1);
       }
       this.chunks.setBlockMeta(x, y, z, metadata as any, true);
+      return;
+    }
+
+    if (name === 'decorated_pot') {
+      this.chunks.setBlockMeta(x, y, z, createDecoratedPotMetadata(placedStack, facing), true);
       return;
     }
 

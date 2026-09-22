@@ -1,5 +1,6 @@
 import rawRecipes from './data/recipes.json';
 import type { ItemStack } from '../types';
+import { craftDecoratedPot } from './DecoratedPotRules';
 
 export interface RawRecipeIngredient {
   id: number;
@@ -118,6 +119,9 @@ export function listCraftingRecipes(): RecipeListItem[] {
 }
 
 export function findCraftingResult(grid: number[]): ItemStack | null {
+  const decoratedPot = craftDecoratedPot(grid.map((id) => id > 0 ? { id, count: 1 } : null));
+  if (decoratedPot) return decoratedPot;
+
   // 1. Get bounds of active items in grid
   let minRow = 3, maxRow = -1, minCol = 3, maxCol = -1;
   let activeCount = 0;

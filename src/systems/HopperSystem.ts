@@ -7,6 +7,7 @@ import { ItemRegistry } from '../items/ItemRegistry';
 import { cloneItemStack, itemStacksCanMerge } from '../items/ItemStackRules';
 import { isSmeltingFuel } from '../items/SmeltingRecipes';
 import { BrewingSystem } from './BrewingSystem';
+import { isChiseledBookshelfBook } from '../items/ChiseledBookshelfRules';
 import type { ItemStack, BlockFacing, BlockMetadata } from '../types';
 
 const HOPPER_TRANSFER_COOLDOWN = 0.4; // 8 game ticks at 20 TPS
@@ -34,6 +35,9 @@ export function getHopperInsertionSlots(
     if (item.id === BLAZE_POWDER_ID) return [4];
     return BrewingSystem.isBottle(item) ? [0, 1, 2] : [];
   }
+  if (containerType === 'chiseled_bookshelf') {
+    return isChiseledBookshelfBook(item) ? [0, 1, 2, 3, 4, 5] : [];
+  }
   return undefined;
 }
 
@@ -56,6 +60,7 @@ export function canHopperExtractSlot(containerType: string, slotIndex: number, i
 
 export function getHopperTargetSlotLimit(containerType: string, slotIndex: number, itemId: number): number {
   if (containerType === 'brewing_stand' && slotIndex >= 0 && slotIndex <= 2) return 1;
+  if (containerType === 'chiseled_bookshelf') return 1;
   return ItemRegistry.getMaxStackSize(itemId);
 }
 
@@ -135,6 +140,9 @@ export class HopperSystem {
         if (item && item.count > 0) {
           // Determine allowed slots in target container
           const allowedSlots = this.getPushAllowedSlots(facing, targetMeta.containerType, item);
+          const bookshelfInsertionSlot = targetMeta.containerType === 'chiseled_bookshelf'
+            ? targetMeta.inventory.findIndex((slot) => !slot)
+            : -1;
           const pushedCount = this.pushItem(
             targetMeta.inventory,
             { ...item, count: 1 },
@@ -142,6 +150,9 @@ export class HopperSystem {
             (slotIndex) => getHopperTargetSlotLimit(targetMeta.containerType!, slotIndex, item.id),
           );
           if (pushedCount > 0) {
+            if (targetMeta.containerType === 'chiseled_bookshelf' && bookshelfInsertionSlot >= 0) {
+              targetMeta.chiseledBookshelfLastInteractedSlot = bookshelfInsertionSlot;
+            }
             item.count -= pushedCount;
             if (item.count <= 0) {
               meta.inventory[i] = null;
@@ -169,6 +180,9 @@ export class HopperSystem {
             item.count -= addedCount;
             if (item.count <= 0) {
               aboveMeta.inventory[slotIdx] = null;
+            }
+            if (aboveMeta.containerType === 'chiseled_bookshelf') {
+              aboveMeta.chiseledBookshelfLastInteractedSlot = slotIdx;
             }
             this.chunks.setBlockMeta(abovePos.x, abovePos.y, abovePos.z, aboveMeta, false);
             this.chunks.setBlockMeta(x, y, z, meta, false);

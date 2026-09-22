@@ -349,6 +349,7 @@ export class GameServer {
   private isStandalone = false;
   private endDragonDefeated = false;
   private endDragonHealth = 200;
+  private projectilesCanBreakBlocks = true;
 
   constructor(seed: number = 12345, isStandalone = false) {
     this.seed = seed;
@@ -1213,6 +1214,8 @@ export class GameServer {
               metadata = isWallSignBlockName(block.name)
                 ? createDefaultSignMetadata({ facing: plan.facing })
                 : createDefaultSignMetadata({ rotation: signRotationFromYaw(session.yaw) });
+            } else if (block?.name === 'decorated_pot') {
+              metadata = createDecoratedPotMetadata(held, plan.facing);
             } else if (!metadata && validFace(plan.facing)) {
               metadata = { facing: plan.facing };
             }
@@ -1297,6 +1300,24 @@ export class GameServer {
         if (!isBlockActionInReach(session, x, y, z, session.gameMode)) break;
         const blockId = this.getBlock(x, y, z, session.dimension);
         const blockName = BlockRegistry.get(blockId)?.name;
+        if (blockName === 'decorated_pot') {
+          const held = session.inventory[session.selectedSlot];
+          const currentMeta = this.getBlockMetadata(x, y, z, session.dimension);
+          const result = insertOneIntoDecoratedPot(currentMeta, held, session.gameMode === 'creative');
+          if (result.inserted <= 0) break;
+          const nextMeta: BlockMetadata = {
+            ...result.metadata,
+            decoratedPotWobbleUntil: Date.now() + 450,
+          };
+          this.setBlock(x, y, z, blockId, session.dimension, nextMeta);
+          session.inventory[session.selectedSlot] = result.held;
+          this.syncPlayerInventory(session);
+          this.broadcastServerBlockUpdate(x, y, z, blockId, session.dimension, nextMeta);
+          this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+            type: 'place', x: x + 0.5, y: y + 0.5, z: z + 0.5,
+          });
+          break;
+        }
         if (blockName === 'jukebox') {
           const held = session.inventory[session.selectedSlot];
           const heldName = held ? ItemRegistry.get(held.id)?.name : undefined;
@@ -3296,6 +3317,27 @@ export class GameServer {
           this.broadcast(PacketType.S2C_WEATHER, { type: this.weatherType, intensity: this.weatherIntensity });
           this.sendSystemMessage(`Set weather to ${w}`);
         }
+        break;
+      }
+
+      case 'gamerule': {
+        if (args[0] !== 'projectilesCanBreakBlocks') {
+          this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: 'Unsupported gamerule.' });
+          break;
+        }
+        if (args.length === 1) {
+          this.sendTo(session, PacketType.S2C_CHAT, {
+            sender: 'System',
+            text: `projectilesCanBreakBlocks = ${this.projectilesCanBreakBlocks}`,
+          });
+          break;
+        }
+        if (args[1] !== 'true' && args[1] !== 'false') {
+          this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: 'Expected true or false.' });
+          break;
+        }
+        this.projectilesCanBreakBlocks = args[1] === 'true';
+        this.sendSystemMessage(`projectilesCanBreakBlocks = ${this.projectilesCanBreakBlocks}`);
         break;
       }
 

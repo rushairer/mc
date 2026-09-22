@@ -152,6 +152,7 @@ const ZH_CN_EXACT: Dict = {
   'Suspicious Sand': '可疑的沙子',
   'Suspicious Gravel': '可疑的沙砾',
   'Decorated Pot': '饰纹陶罐',
+  'Chiseled Bookshelf': '雕纹书架',
 };
 
 const ZH_TW_EXACT: Dict = {
@@ -237,6 +238,7 @@ const ZH_TW_EXACT: Dict = {
   'Suspicious Sand': '可疑的沙子',
   'Suspicious Gravel': '可疑的礫石',
   'Decorated Pot': '飾紋陶罐',
+  'Chiseled Bookshelf': '雕紋書櫃',
 };
 
 const ZH_CN_WORDS: Dict = {

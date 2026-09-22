@@ -14938,7 +14938,7 @@
     "runtimeId": 30154,
     "displayName": "Chiseled Bookshelf",
     "name": "chiseled_bookshelf",
-    "hardness": 2,
+    "hardness": 1.5,
     "stackSize": 64,
     "diggable": true,
     "boundingBox": "block",
@@ -14951,7 +14951,7 @@
     "transparent": false,
     "emitLight": 0,
     "filterLight": 15,
-    "resistance": 3
+    "resistance": 1.5
   },
   {
     "id": "minecraft:chiseled_cinnabar",

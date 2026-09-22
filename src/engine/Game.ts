@@ -5708,7 +5708,44 @@ export class Game {
     this.notifyState();
   }
 
+  private tryShatterDecoratedPotFromProjectile(pos: THREE.Vector3): boolean {
+    if (this.isMultiplayerNetworkConnected() || !this.gamerules.getRule('projectilesCanBreakBlocks')) return false;
+    const x = Math.floor(pos.x);
+    const y = Math.floor(pos.y);
+    const z = Math.floor(pos.z);
+    const blockId = this.chunks.getBlock(x, y, z);
+    if (BlockRegistry.get(blockId)?.name !== 'decorated_pot') return false;
+
+    const meta = this.chunks.getBlockMeta(x, y, z);
+    for (const stack of meta?.inventory ?? []) {
+      if (!stack || stack.count <= 0) continue;
+      this.droppedItems.spawnStack(
+        stack,
+        new THREE.Vector3(x + 0.5, y + 0.6, z + 0.5),
+        new THREE.Vector3((Math.random() - 0.5) * 0.8, 1.1, (Math.random() - 0.5) * 0.8),
+        0.35,
+      );
+    }
+    for (const ingredient of decoratedPotDecorationStacks(meta?.potDecorations)) {
+      this.droppedItems.spawnStack(
+        ingredient,
+        new THREE.Vector3(x + 0.5, y + 0.55, z + 0.5),
+        new THREE.Vector3((Math.random() - 0.5) * 0.8, 1.0, (Math.random() - 0.5) * 0.8),
+        0.35,
+      );
+    }
+    this.chunks.setBlock(x, y, z, 0);
+    this.chunks.setBlockMeta(x, y, z, null);
+    this.redstone.unregister(x, y, z);
+    this.redstone.observeBlockChange(x, y, z);
+    this.particles.spawnBlockBreak(x + 0.5, y + 0.5, z + 0.5, 0xb46f45, 24);
+    this.sound.playBlockBreak(blockId);
+    this.notifyState();
+    return true;
+  }
+
   private handleThrowableImpact(type: ProjectileType, pos: THREE.Vector3, fromPlayer: boolean) {
+    if (this.tryShatterDecoratedPotFromProjectile(pos)) return;
     if (type === 'wind_charge') {
       this.applyWindChargeBurst(pos);
       return;

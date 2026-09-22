@@ -64,7 +64,7 @@ export interface BlockMetadata {
   /** P3.6 — note block pitch (0-24 semitones) and power-edge flag. */
   notePitch?: number;
   notePowered?: boolean;
-  containerType?: 'chest' | 'barrel' | 'hopper' | 'furnace' | 'smoker' | 'blast_furnace' | 'brewing_stand' | 'decorated_pot';
+  containerType?: 'chest' | 'barrel' | 'hopper' | 'furnace' | 'smoker' | 'blast_furnace' | 'brewing_stand' | 'decorated_pot' | 'chiseled_bookshelf';
   inventory?: (ItemStack | null)[];
   spawnerMobType?: 'zombie' | 'skeleton' | 'spider';
   transferCooldown?: number; // for hoppers
@@ -125,6 +125,8 @@ export interface BlockMetadata {
   };
   /** Short visual wobble after inserting an item. */
   decoratedPotWobbleUntil?: number;
+  /** Java chiseled bookshelf last interacted slot, 0-5; undefined means never interacted. */
+  chiseledBookshelfLastInteractedSlot?: number;
 }
 
 export interface SerializedBlockMetadata {

@@ -39,6 +39,8 @@ export interface LootContext {
 export interface BlockInteractionContext {
   position: BlockPosition;
   face?: BlockFacing;
+  /** Exact world-space ray hit used by blocks with sub-face interaction slots. */
+  hitPoint?: BlockPosition;
   blockId: number;
   block: BlockDef;
   heldItem: ItemStack | null;

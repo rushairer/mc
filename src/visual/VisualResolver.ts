@@ -130,6 +130,27 @@ export const VisualResolver = {
     const faceName = this.faceName(face);
 
     // Directional block face overrides
+    if (name === 'chiseled_bookshelf') {
+      const facing = meta?.facing ?? 'north';
+      if (faceName === 'top' || faceName === 'bottom') return 'block:chiseled_bookshelf_top';
+
+      let currentFacing: BlockFacing = 'north';
+      if (faceName === 'right') currentFacing = 'east';
+      else if (faceName === 'left') currentFacing = 'west';
+      else if (faceName === 'front') currentFacing = 'south';
+      else if (faceName === 'back') currentFacing = 'north';
+
+      if (currentFacing === facing) {
+        let mask = 0;
+        for (let slot = 0; slot < 6; slot++) {
+          if (meta?.inventory?.[slot]) mask |= 1 << slot;
+        }
+        return `block:chiseled_bookshelf_front_${mask}`;
+      }
+      return currentFacing === getOppositeFacing(facing)
+        ? 'block:chiseled_bookshelf_back'
+        : 'block:chiseled_bookshelf_side';
+    }
     if (name === 'decorated_pot') {
       if (faceName === 'top') return 'block:decorated_pot_top';
       if (faceName === 'bottom') return 'block:decorated_pot';
@@ -478,6 +499,10 @@ export const VisualResolver = {
       redstone_wire: '#cc0000',
       repeater: '#b0a090',
       lever: '#8b6f47',
+      chiseled_bookshelf_top: '#9a6a3a',
+      chiseled_bookshelf_side: '#76502f',
+      chiseled_bookshelf_back: '#68452a',
+      chiseled_bookshelf_front_0: '#8a5a32',
     };
     return colors[textureKey] ?? hashColor(fallbackName);
   },

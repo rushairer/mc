@@ -7,6 +7,7 @@ import { ItemRegistry } from '../items/ItemRegistry';
 import { cloneItemStack, itemStacksCanMerge } from '../items/ItemStackRules';
 import { isSmeltingFuel } from '../items/SmeltingRecipes';
 import { BrewingSystem } from './BrewingSystem';
+import { isChiseledBookshelfBook } from '../items/ChiseledBookshelfRules';
 import type { ItemStack, BlockFacing, BlockMetadata } from '../types';
 
 const HOPPER_TRANSFER_COOLDOWN = 0.4; // 8 game ticks at 20 TPS
@@ -34,6 +35,9 @@ export function getHopperInsertionSlots(
     if (item.id === BLAZE_POWDER_ID) return [4];
     return BrewingSystem.isBottle(item) ? [0, 1, 2] : [];
   }
+  if (containerType === 'chiseled_bookshelf') {
+    return isChiseledBookshelfBook(item) ? [0, 1, 2, 3, 4, 5] : [];
+  }
   return undefined;
 }
 
@@ -56,6 +60,7 @@ export function canHopperExtractSlot(containerType: string, slotIndex: number, i
 
 export function getHopperTargetSlotLimit(containerType: string, slotIndex: number, itemId: number): number {
   if (containerType === 'brewing_stand' && slotIndex >= 0 && slotIndex <= 2) return 1;
+  if (containerType === 'chiseled_bookshelf') return 1;
   return ItemRegistry.getMaxStackSize(itemId);
 }
 
@@ -63,11 +68,18 @@ export class HopperSystem {
   private chunks: ChunkManager;
   private droppedItems: DroppedItemSystem;
   private onStateChange: () => void;
+  private onBlockChange: (x: number, y: number, z: number) => void;
 
-  constructor(chunks: ChunkManager, droppedItems: DroppedItemSystem, onStateChange: () => void) {
+  constructor(
+    chunks: ChunkManager,
+    droppedItems: DroppedItemSystem,
+    onStateChange: () => void,
+    onBlockChange: (x: number, y: number, z: number) => void = () => {},
+  ) {
     this.chunks = chunks;
     this.droppedItems = droppedItems;
     this.onStateChange = onStateChange;
+    this.onBlockChange = onBlockChange;
   }
 
   update(dt: number) {
@@ -135,6 +147,9 @@ export class HopperSystem {
         if (item && item.count > 0) {
           // Determine allowed slots in target container
           const allowedSlots = this.getPushAllowedSlots(facing, targetMeta.containerType, item);
+          const bookshelfInsertionSlot = targetMeta.containerType === 'chiseled_bookshelf'
+            ? targetMeta.inventory.findIndex((slot) => !slot)
+            : -1;
           const pushedCount = this.pushItem(
             targetMeta.inventory,
             { ...item, count: 1 },
@@ -142,12 +157,24 @@ export class HopperSystem {
             (slotIndex) => getHopperTargetSlotLimit(targetMeta.containerType!, slotIndex, item.id),
           );
           if (pushedCount > 0) {
+            if (targetMeta.containerType === 'chiseled_bookshelf' && bookshelfInsertionSlot >= 0) {
+              targetMeta.chiseledBookshelfLastInteractedSlot = bookshelfInsertionSlot;
+            }
             item.count -= pushedCount;
             if (item.count <= 0) {
               meta.inventory[i] = null;
             }
-            this.chunks.setBlockMeta(targetPos.x, targetPos.y, targetPos.z, targetMeta, false);
+            this.chunks.setBlockMeta(
+              targetPos.x,
+              targetPos.y,
+              targetPos.z,
+              targetMeta,
+              targetMeta.containerType === 'chiseled_bookshelf',
+            );
             this.chunks.setBlockMeta(x, y, z, meta, false);
+            if (targetMeta.containerType === 'chiseled_bookshelf') {
+              this.onBlockChange(targetPos.x, targetPos.y, targetPos.z);
+            }
             return true;
           }
         }
@@ -170,8 +197,20 @@ export class HopperSystem {
             if (item.count <= 0) {
               aboveMeta.inventory[slotIdx] = null;
             }
-            this.chunks.setBlockMeta(abovePos.x, abovePos.y, abovePos.z, aboveMeta, false);
+            if (aboveMeta.containerType === 'chiseled_bookshelf') {
+              aboveMeta.chiseledBookshelfLastInteractedSlot = slotIdx;
+            }
+            this.chunks.setBlockMeta(
+              abovePos.x,
+              abovePos.y,
+              abovePos.z,
+              aboveMeta,
+              aboveMeta.containerType === 'chiseled_bookshelf',
+            );
             this.chunks.setBlockMeta(x, y, z, meta, false);
+            if (aboveMeta.containerType === 'chiseled_bookshelf') {
+              this.onBlockChange(abovePos.x, abovePos.y, abovePos.z);
+            }
             return true;
           }
         }

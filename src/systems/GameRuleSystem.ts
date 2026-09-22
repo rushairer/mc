@@ -10,6 +10,7 @@ export interface GameRules {
   drowningDamage: boolean;
   naturalRegeneration: boolean;
   mobGriefing: boolean;
+  projectilesCanBreakBlocks: boolean;
 }
 
 export class GameRuleSystem {
@@ -24,6 +25,7 @@ export class GameRuleSystem {
     drowningDamage: true,
     naturalRegeneration: true,
     mobGriefing: true,
+    projectilesCanBreakBlocks: true,
   };
 
   constructor(saved?: { difficulty: Difficulty; rules: Partial<GameRules> }) {

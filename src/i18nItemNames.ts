@@ -151,6 +151,7 @@ const ZH_CN_EXACT: Dict = {
   Brush: '刷子',
   'Suspicious Sand': '可疑的沙子',
   'Suspicious Gravel': '可疑的沙砾',
+  'Decorated Pot': '饰纹陶罐',
 };
 
 const ZH_TW_EXACT: Dict = {
@@ -235,6 +236,7 @@ const ZH_TW_EXACT: Dict = {
   Brush: '刷子',
   'Suspicious Sand': '可疑的沙子',
   'Suspicious Gravel': '可疑的礫石',
+  'Decorated Pot': '飾紋陶罐',
 };
 
 const ZH_CN_WORDS: Dict = {
@@ -269,7 +271,7 @@ const ZH_CN_WORDS: Dict = {
   torch: '火把', trapdoor: '活板门', trapped: '陷阱', tripwire: '绊线', tunic: '外套',
   void: '空位', wart: '疣', water: '水', weighted: '测重', wheat: '小麦', white: '白色',
   wither: '凋灵', wood: '木', wooden: '木', wool: '羊毛', written: '成书', yellow: '黄色',
-  poplar: '杨木', cushion: '坐垫', straw: '稻草', shelf: '层孔', shrub: '灌木', bundle: '收纳袋',
+  poplar: '杨木', cushion: '坐垫', straw: '稻草', shelf: '层孔', shrub: '灌木', bundle: '收纳袋', pottery: '陶器', sherd: '陶片', decorated: '饰纹',
 };
 
 const ZH_TW_WORDS: Dict = {
@@ -295,7 +297,7 @@ const ZH_TW_WORDS: Dict = {
   tipped: '藥水', torch: '火把', trapdoor: '地板門', trapped: '陷阱', tripwire: '絆線',
   wart: '疙瘩', weighted: '測重', white: '白色', wither: '凋零', wooden: '木製',
   poplar: '楊木', cushion: '坐墊', straw: '稻草', shelf: '層孔', shrub: '灌木',
-  yellow: '黃色', zombie: '殭屍', bundle: '收納袋',
+  yellow: '黃色', zombie: '殭屍', bundle: '收納袋', pottery: '陶器', sherd: '陶片', decorated: '飾紋',
 };
 
 const SPAWN_EGG_ENTITY_ZH_CN: Dict = {

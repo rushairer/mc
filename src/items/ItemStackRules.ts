@@ -7,6 +7,14 @@ export function cloneItemStack(stack: ItemStack | null | undefined): ItemStack |
   const clone: ItemStack = { ...stack };
   if (stack.enchantments) clone.enchantments = stack.enchantments.map((entry) => ({ ...entry }));
   if (stack.bundleContents) clone.bundleContents = stack.bundleContents.map((entry) => cloneItemStack(entry)!).filter(Boolean);
+  if (stack.potDecorations) {
+    clone.potDecorations = {
+      back: cloneItemStack(stack.potDecorations.back) ?? undefined,
+      left: cloneItemStack(stack.potDecorations.left) ?? undefined,
+      right: cloneItemStack(stack.potDecorations.right) ?? undefined,
+      front: cloneItemStack(stack.potDecorations.front) ?? undefined,
+    };
+  }
   if (stack.potion) {
     clone.potion = {
       ...stack.potion,

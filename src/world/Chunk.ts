@@ -747,6 +747,37 @@ export class Chunk {
             continue;
           }
 
+          // Decorated Pot: compact body + shoulder + neck rather than a plant cross or full cube.
+          if (def.name === 'decorated_pot') {
+            const skyLight = this.getSkyLightAt(x, y, z);
+            const blockLight = this.getBlockLightAt(x, y, z);
+            const lightBrightness = this.getAdjustedBrightness(skyLight, blockLight, timeOfDay);
+            this.addCuboid(target, x, y, z, id, atlas, {
+              minX: 1 / 16, maxX: 15 / 16,
+              minY: 0, maxY: 12 / 16,
+              minZ: 1 / 16, maxZ: 15 / 16,
+            }, {}, undefined, false, lightBrightness, biome, meta);
+            const plainPot = [
+              'decorated_pot_top',
+              'decorated_pot',
+              'decorated_pot',
+              'decorated_pot',
+              'decorated_pot',
+              'decorated_pot',
+            ];
+            this.addCuboid(target, x, y, z, id, atlas, {
+              minX: 2 / 16, maxX: 14 / 16,
+              minY: 12 / 16, maxY: 14 / 16,
+              minZ: 2 / 16, maxZ: 14 / 16,
+            }, {}, plainPot, false, lightBrightness, biome, meta);
+            this.addCuboid(target, x, y, z, id, atlas, {
+              minX: 5 / 16, maxX: 11 / 16,
+              minY: 14 / 16, maxY: 1,
+              minZ: 5 / 16, maxZ: 11 / 16,
+            }, {}, plainPot, false, lightBrightness, biome, meta);
+            continue;
+          }
+
           // Flowers & plants - cross-shaped rendering for transparent non-solid blocks.
           // Fluids are also transparent/non-solid, but they must render as culled voxel
           // surfaces; treating water as a plant fills oceans with crossed internal planes.

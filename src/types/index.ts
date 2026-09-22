@@ -64,7 +64,7 @@ export interface BlockMetadata {
   /** P3.6 — note block pitch (0-24 semitones) and power-edge flag. */
   notePitch?: number;
   notePowered?: boolean;
-  containerType?: 'chest' | 'barrel' | 'hopper' | 'furnace' | 'smoker' | 'blast_furnace' | 'brewing_stand';
+  containerType?: 'chest' | 'barrel' | 'hopper' | 'furnace' | 'smoker' | 'blast_furnace' | 'brewing_stand' | 'decorated_pot';
   inventory?: (ItemStack | null)[];
   spawnerMobType?: 'zombie' | 'skeleton' | 'spider';
   transferCooldown?: number; // for hoppers
@@ -116,6 +116,15 @@ export interface BlockMetadata {
   archaeologyLootItemId?: number;
   archaeologyLootCount?: number;
   archaeologyNatural?: boolean;
+  /** Java 26.3 decorated-pot sherd faces; entries preserve full stack components. */
+  potDecorations?: {
+    back?: ItemStack;
+    left?: ItemStack;
+    right?: ItemStack;
+    front?: ItemStack;
+  };
+  /** Short visual wobble after inserting an item. */
+  decoratedPotWobbleUntil?: number;
 }
 
 export interface SerializedBlockMetadata {
@@ -157,6 +166,13 @@ export interface ItemStack {
   customName?: string;
   /** Bundle dynamic-container contents. */
   bundleContents?: ItemStack[];
+  /** Java 26.3 minecraft:pot_decorations uses four optional full ItemStack faces. */
+  potDecorations?: {
+    back?: ItemStack;
+    left?: ItemStack;
+    right?: ItemStack;
+    front?: ItemStack;
+  };
   /** Java goat-horn instrument data component; absent stacks use ponder. */
   goatHornInstrument?: 'ponder' | 'sing' | 'seek' | 'feel' | 'admire' | 'call' | 'yearn' | 'dream';
   enchantments?: { id: EnchantmentId; level: number }[];

@@ -109,6 +109,12 @@ import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, windBurstImpul
 import { getMaceSmashBonus, getMaceSmashImpulse, isMaceSmash, MACE_HEAVY_SMASH_THRESHOLD } from '../items/MaceRules';
 import { isBundleItemName, removeOneFromBundle } from '../items/BundleRules';
 import {
+  createDecoratedPotMetadata,
+  decoratedPotBreakDrops,
+  decoratedPotDecorationStacks,
+  insertOneIntoDecoratedPot,
+} from '../items/DecoratedPotRules';
+import {
   archaeologyBrushStage,
   archaeologyTargetKey,
   brushedReplacementName,
@@ -729,6 +735,13 @@ export class Game {
       interact: ({ position, blockId, heldItem }) => ({
         handled: this.tryInteractJukebox(position, blockId, heldItem),
         cooldown: 0.25,
+      }),
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:decorated_pot',
+      interact: ({ position, heldItem }) => ({
+        handled: this.tryInsertDecoratedPot(position.x, position.y, position.z, heldItem),
+        cooldown: 0.12,
       }),
     });
     // P3.1: buttons (wooden 0.5s / stone 1.5s press), fence gates and iron
@@ -4046,7 +4059,7 @@ export class Game {
       this.redstone.observeBlockChange(x, y, z);
     } else {
       this.chunks.setBlock(x, y, z, plan.blockId);
-      this.setPlacedBlockMetadata(x, y, z, plan.blockId, plan.facing);
+      this.setPlacedBlockMetadata(x, y, z, plan.blockId, plan.facing, stack);
       this.redstone.observeBlockChange(x, y, z);
       this.checkFluidAdjacency(x, y, z);
 
@@ -4065,6 +4078,30 @@ export class Game {
     if (!multiplayerPlacement && shouldConsumePlacedItem(this.gameMode)) {
       this.inventory.removeFromSlot(this.player.selectedSlot);
     }
+    return true;
+  }
+
+  private tryInsertDecoratedPot(x: number, y: number, z: number, heldItem: ItemStack | null): boolean {
+    if (!heldItem || heldItem.count <= 0) return false;
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_INTERACT_BLOCK, { x, y, z });
+      return true;
+    }
+
+    const currentMeta = this.chunks.getBlockMeta(x, y, z);
+    const result = insertOneIntoDecoratedPot(currentMeta, heldItem, this.gameMode === 'creative');
+    if (result.inserted <= 0) return false;
+    const nextMeta = {
+      ...result.metadata,
+      decoratedPotWobbleUntil: Date.now() + 450,
+    };
+    this.chunks.setBlockMeta(x, y, z, nextMeta, true);
+    this.sound.playBlockPlace(this.chunks.getBlock(x, y, z));
+    if (this.gameMode !== 'creative') {
+      this.inventory.setSlot(this.player.selectedSlot, result.held);
+    }
+    this.redstone.observeBlockChange(x, y, z);
+    this.notifyState();
     return true;
   }
 
@@ -5672,7 +5709,44 @@ export class Game {
     this.notifyState();
   }
 
+  private tryShatterDecoratedPotFromProjectile(pos: THREE.Vector3): boolean {
+    if (this.isMultiplayerNetworkConnected() || !this.gamerules.getRule('projectilesCanBreakBlocks')) return false;
+    const x = Math.floor(pos.x);
+    const y = Math.floor(pos.y);
+    const z = Math.floor(pos.z);
+    const blockId = this.chunks.getBlock(x, y, z);
+    if (BlockRegistry.get(blockId)?.name !== 'decorated_pot') return false;
+
+    const meta = this.chunks.getBlockMeta(x, y, z);
+    for (const stack of meta?.inventory ?? []) {
+      if (!stack || stack.count <= 0) continue;
+      this.droppedItems.spawnStack(
+        stack,
+        new THREE.Vector3(x + 0.5, y + 0.6, z + 0.5),
+        new THREE.Vector3((Math.random() - 0.5) * 0.8, 1.1, (Math.random() - 0.5) * 0.8),
+        0.35,
+      );
+    }
+    for (const ingredient of decoratedPotDecorationStacks(meta?.potDecorations)) {
+      this.droppedItems.spawnStack(
+        ingredient,
+        new THREE.Vector3(x + 0.5, y + 0.55, z + 0.5),
+        new THREE.Vector3((Math.random() - 0.5) * 0.8, 1.0, (Math.random() - 0.5) * 0.8),
+        0.35,
+      );
+    }
+    this.chunks.setBlock(x, y, z, 0);
+    this.chunks.setBlockMeta(x, y, z, null);
+    this.redstone.unregister(x, y, z);
+    this.redstone.observeBlockChange(x, y, z);
+    this.particles.spawnBlockBreak(x + 0.5, y + 0.5, z + 0.5, 0xb46f45, 24);
+    this.sound.playBlockBreak(blockId);
+    this.notifyState();
+    return true;
+  }
+
   private handleThrowableImpact(type: ProjectileType, pos: THREE.Vector3, fromPlayer: boolean) {
+    if (this.tryShatterDecoratedPotFromProjectile(pos)) return;
     if (type === 'wind_charge') {
       this.applyWindChargeBurst(pos);
       return;
@@ -7346,7 +7420,14 @@ export class Game {
     return frameCount === 12;
   }
 
-  private setPlacedBlockMetadata(x: number, y: number, z: number, blockId: number, facing: BlockFacing) {
+  private setPlacedBlockMetadata(
+    x: number,
+    y: number,
+    z: number,
+    blockId: number,
+    facing: BlockFacing,
+    placedStack?: ItemStack,
+  ) {
     const def = BlockRegistry.get(blockId);
     if (!def) return;
     const name = def.name;
@@ -7481,6 +7562,11 @@ export class Game {
         this.redstone.setRepeaterDelay(x, y, z, 1);
       }
       this.chunks.setBlockMeta(x, y, z, metadata as any, true);
+      return;
+    }
+
+    if (name === 'decorated_pot') {
+      this.chunks.setBlockMeta(x, y, z, createDecoratedPotMetadata(placedStack, facing), true);
       return;
     }
 
@@ -9047,7 +9133,7 @@ export class Game {
             1.5 + Math.random() * 1.5,
             (Math.random() - 0.5) * 1.5
           );
-          this.droppedItems.spawnItem(slot.id, slot.count, dropPos, velocity, 0.5);
+          this.droppedItems.spawnStack(slot, dropPos, velocity, 0.5);
         }
       }
     }
@@ -9080,7 +9166,7 @@ export class Game {
     }
 
     // 2. Spawn item drop for the block itself
-    if (spawnDrop && this.gameMode !== 'creative' && harvestable) {
+    if (spawnDrop && this.gameMode !== 'creative' && (harvestable || def?.name === 'decorated_pot')) {
       const dropPos = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
       const velocity = new THREE.Vector3(
         (Math.random() - 0.5) * 1.5,
@@ -9088,7 +9174,19 @@ export class Game {
         (Math.random() - 0.5) * 1.5
       );
 
-      if (this.isDoorBlock(blockId)) {
+      if (def?.name === 'decorated_pot') {
+        const selectedStack = dropEnchants
+          ? this.inventory.getSlot(this.player.selectedSlot)
+          : null;
+        for (const drop of decoratedPotBreakDrops(
+          meta,
+          selectedStack,
+          dropEnchants?.silkTouch ?? false,
+          false,
+        )) {
+          this.droppedItems.spawnStack(drop, dropPos, velocity, 0.5);
+        }
+      } else if (this.isDoorBlock(blockId)) {
         const doorItemId = ItemRegistry.getItemIdForPlacedBlock(blockId);
         if (doorItemId !== undefined) {
           this.droppedItems.spawnItem(doorItemId, 1, dropPos, velocity, 0.5);

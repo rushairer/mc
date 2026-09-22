@@ -131,6 +131,13 @@ import { isServerBrushDurationComplete, parseServerBrushAction, sameServerBrushT
 import { parseServerBundleAction } from './BundleActionRules';
 import { insertIntoBundle, isBundleStack, removeOneFromBundle } from '../items/BundleRules';
 import {
+  createDecoratedPotMetadata,
+  decoratedPotBreakDrops,
+  decoratedPotDecorationStacks,
+  insertOneIntoDecoratedPot,
+} from '../items/DecoratedPotRules';
+import { EnchantSystem } from '../systems/EnchantSystem';
+import {
   ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
   ITEM_ENTITY_DESPAWN_SECONDS,
   ITEM_ENTITY_MERGE_INTERVAL_SECONDS,
@@ -342,6 +349,7 @@ export class GameServer {
   private isStandalone = false;
   private endDragonDefeated = false;
   private endDragonHealth = 200;
+  private projectilesCanBreakBlocks = true;
 
   constructor(seed: number = 12345, isStandalone = false) {
     this.seed = seed;
@@ -1077,7 +1085,23 @@ export class GameServer {
         const blockId = this.getBlock(x, y, z, session.dimension);
         if (blockId === 0) break;
 
+        const blockDef = BlockRegistry.get(blockId);
         const blockMeta = this.getBlockMetadata(x, y, z, session.dimension);
+        const tool = session.inventory[session.selectedSlot];
+
+        if (blockDef?.name === 'decorated_pot') {
+          for (const stack of blockMeta?.inventory ?? []) {
+            if (!stack || stack.count <= 0) continue;
+            this.spawnDroppedStack(stack, x + 0.5, y + 0.65, z + 0.5, session.dimension, 0.35);
+          }
+          if (session.gameMode !== 'creative') {
+            const silkTouch = !!tool && EnchantSystem.getLevel(tool, 'silk_touch') > 0;
+            for (const drop of decoratedPotBreakDrops(blockMeta, tool, silkTouch, false)) {
+              this.spawnDroppedStack(drop, x + 0.5, y + 0.55, z + 0.5, session.dimension, 0.35);
+            }
+          }
+        }
+
         const jukeboxDisc = getStoredJukeboxDisc(blockMeta?.jukeboxDisc);
         if (jukeboxDisc) {
           this.spawnDroppedStack(
@@ -1094,13 +1118,12 @@ export class GameServer {
         }
 
         this.setBlock(x, y, z, 0, session.dimension);
-        const tool = session.inventory[session.selectedSlot];
         if (tool && ItemRegistry.isTool(tool.id)) {
           session.inventory[session.selectedSlot] = damageDurableStack(tool, 1, 'tool');
           this.syncPlayerInventory(session);
         }
         this.broadcastDimension(session.dimension, PacketType.S2C_BLOCK_UPDATE, {
-          x, y, z, blockId: 0, dimension: session.dimension
+          x, y, z, blockId: 0, metadata: null, dimension: session.dimension
         });
         this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, { type: 'break', x, y, z });
         break;
@@ -1206,6 +1229,8 @@ export class GameServer {
               metadata = isWallSignBlockName(block.name)
                 ? createDefaultSignMetadata({ facing: plan.facing })
                 : createDefaultSignMetadata({ rotation: signRotationFromYaw(session.yaw) });
+            } else if (block?.name === 'decorated_pot') {
+              metadata = createDecoratedPotMetadata(held, plan.facing);
             } else if (!metadata && validFace(plan.facing)) {
               metadata = { facing: plan.facing };
             }
@@ -1290,6 +1315,24 @@ export class GameServer {
         if (!isBlockActionInReach(session, x, y, z, session.gameMode)) break;
         const blockId = this.getBlock(x, y, z, session.dimension);
         const blockName = BlockRegistry.get(blockId)?.name;
+        if (blockName === 'decorated_pot') {
+          const held = session.inventory[session.selectedSlot];
+          const currentMeta = this.getBlockMetadata(x, y, z, session.dimension);
+          const result = insertOneIntoDecoratedPot(currentMeta, held, session.gameMode === 'creative');
+          if (result.inserted <= 0) break;
+          const nextMeta: BlockMetadata = {
+            ...result.metadata,
+            decoratedPotWobbleUntil: Date.now() + 450,
+          };
+          this.setBlock(x, y, z, blockId, session.dimension, nextMeta);
+          session.inventory[session.selectedSlot] = result.held;
+          this.syncPlayerInventory(session);
+          this.broadcastServerBlockUpdate(x, y, z, blockId, session.dimension, nextMeta);
+          this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+            type: 'place', x: x + 0.5, y: y + 0.5, z: z + 0.5,
+          });
+          break;
+        }
         if (blockName === 'jukebox') {
           const held = session.inventory[session.selectedSlot];
           const heldName = held ? ItemRegistry.get(held.id)?.name : undefined;
@@ -3292,6 +3335,27 @@ export class GameServer {
         break;
       }
 
+      case 'gamerule': {
+        if (args[0] !== 'projectilesCanBreakBlocks') {
+          this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: 'Unsupported gamerule.' });
+          break;
+        }
+        if (args.length === 1) {
+          this.sendTo(session, PacketType.S2C_CHAT, {
+            sender: 'System',
+            text: `projectilesCanBreakBlocks = ${this.projectilesCanBreakBlocks}`,
+          });
+          break;
+        }
+        if (args[1] !== 'true' && args[1] !== 'false') {
+          this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: 'Expected true or false.' });
+          break;
+        }
+        this.projectilesCanBreakBlocks = args[1] === 'true';
+        this.sendSystemMessage(`projectilesCanBreakBlocks = ${this.projectilesCanBreakBlocks}`);
+        break;
+      }
+
       default:
         this.sendTo(session, PacketType.S2C_CHAT, { sender: 'System', text: `Unknown command: ${label}` });
         break;
@@ -4681,6 +4745,35 @@ export class GameServer {
     });
   }
 
+  private shatterServerDecoratedPot(
+    x: number,
+    y: number,
+    z: number,
+    dimension: number,
+  ): boolean {
+    if (!this.projectilesCanBreakBlocks) return false;
+    const blockId = this.getBlock(x, y, z, dimension);
+    if (BlockRegistry.get(blockId)?.name !== 'decorated_pot') return false;
+
+    const meta = this.getBlockMetadata(x, y, z, dimension);
+    for (const stack of meta?.inventory ?? []) {
+      if (!stack || stack.count <= 0) continue;
+      this.spawnDroppedStack(stack, x + 0.5, y + 0.65, z + 0.5, dimension, 0.35);
+    }
+    for (const drop of decoratedPotBreakDrops(meta, null, false, true)) {
+      this.spawnDroppedStack(drop, x + 0.5, y + 0.55, z + 0.5, dimension, 0.35);
+    }
+
+    this.setBlock(x, y, z, 0, dimension);
+    this.broadcastDimension(dimension, PacketType.S2C_BLOCK_UPDATE, {
+      x, y, z, blockId: 0, metadata: null, dimension,
+    });
+    this.broadcastDimension(dimension, PacketType.S2C_SOUND, {
+      type: 'break', x: x + 0.5, y: y + 0.5, z: z + 0.5,
+    });
+    return true;
+  }
+
   private tickProjectiles(dt: number) {
     for (const proj of this.projectiles.values()) {
       proj.age += dt;
@@ -4740,6 +4833,7 @@ export class GameServer {
       
       const hitBlock = this.isSolidBlock(px, py, pz, proj.dimension);
       if (hitBlock) {
+        this.shatterServerDecoratedPot(px, py, pz, proj.dimension);
         if (proj.type === 'wind_charge') this.resolveWindChargeBurst(proj);
         if (this.resolveExperienceBottleImpact(proj)) continue;
         if (this.resolveEnderPearlImpact(proj)) continue;

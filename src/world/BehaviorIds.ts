@@ -45,6 +45,7 @@ export function inferBlockBehaviorId(rawName: string): string | undefined {
   if (name.includes('repeater')) return 'minecraft:repeater';
   if (name === 'note_block') return 'minecraft:note_block';
   if (name === 'jukebox') return 'minecraft:jukebox';
+  if (name === 'decorated_pot') return 'minecraft:decorated_pot';
   if (isSignBlockName(name)) return 'minecraft:sign';
   if (name === 'bed' || (name.endsWith('_bed') && name !== 'bedrock')) return 'minecraft:bed';
   if (name === 'iron_trapdoor') return 'minecraft:iron_trapdoor';

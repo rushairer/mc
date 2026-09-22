@@ -8,6 +8,7 @@ export const PRIVILEGED_SERVER_COMMANDS = new Set([
   'give',
   'time',
   'weather',
+  'gamerule',
   'gamemode',
   'gm',
 ]);

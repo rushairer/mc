@@ -130,6 +130,20 @@ export const VisualResolver = {
     const faceName = this.faceName(face);
 
     // Directional block face overrides
+    if (name === 'decorated_pot') {
+      if (faceName === 'top') return 'block:decorated_pot_top';
+      if (faceName === 'bottom') return 'block:decorated_pot';
+      const decoration = faceName === 'right'
+        ? meta?.potDecorations?.right
+        : faceName === 'left'
+          ? meta?.potDecorations?.left
+          : faceName === 'front'
+            ? meta?.potDecorations?.front
+            : meta?.potDecorations?.back;
+      const decorationName = decoration ? ItemRegistry.get(decoration.id)?.name : undefined;
+      if (decorationName?.endsWith('_pottery_sherd')) return `item:${decorationName}`;
+      return 'block:decorated_pot';
+    }
     if (name === 'chest') {
       const facing = meta?.facing ?? 'north';
       return 'block:' + getHorizontalFacingTexture(faceName, facing, 'chest_front', 'chest_side', 'chest_top');
@@ -389,6 +403,7 @@ export const VisualResolver = {
   getItemIconKey(itemId: number): string {
     const item = ItemRegistry.get(itemId);
     if (!item) return 'item:unknown';
+    if (item.name === 'decorated_pot') return this.getBlockIconKey(item.placeBlockId ?? item.id);
     if (usesDedicatedPlaceableItemSprite26_3(itemId)) return 'item:' + item.name;
 
     const placeBlockId = ItemRegistry.getPlaceBlockId(itemId);
@@ -402,6 +417,7 @@ export const VisualResolver = {
   getItemVisualKind(itemId: number): ItemVisualKind {
     const item = ItemRegistry.get(itemId);
     if (!item) return 'sprite';
+    if (item.name === 'decorated_pot') return 'sprite';
     if (usesDedicatedPlaceableItemSprite26_3(itemId)) return 'sprite';
     if (ItemRegistry.getPlaceBlockId(itemId) !== undefined) return 'block';
     if (item.category === 'tool') return 'tool';

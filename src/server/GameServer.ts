@@ -136,6 +136,12 @@ import {
   decoratedPotDecorationStacks,
   insertOneIntoDecoratedPot,
 } from '../items/DecoratedPotRules';
+import {
+  createChiseledBookshelfMetadata,
+  interactChiseledBookshelfSlot,
+  oppositeHorizontalFacing,
+  resolveChiseledBookshelfSlot,
+} from '../items/ChiseledBookshelfRules';
 import { EnchantSystem } from '../systems/EnchantSystem';
 import {
   ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
@@ -1089,6 +1095,25 @@ export class GameServer {
         const blockMeta = this.getBlockMetadata(x, y, z, session.dimension);
         const tool = session.inventory[session.selectedSlot];
 
+        if (blockDef?.name === 'chiseled_bookshelf') {
+          for (const stack of blockMeta?.inventory ?? []) {
+            if (!stack || stack.count <= 0) continue;
+            this.spawnDroppedStack(stack, x + 0.5, y + 0.65, z + 0.5, session.dimension, 0.35);
+          }
+          if (
+            session.gameMode !== 'creative'
+            && tool
+            && EnchantSystem.getLevel(tool, 'silk_touch') > 0
+          ) {
+            this.spawnDroppedStack(
+              { id: blockDef.id, count: 1 },
+              x + 0.5, y + 0.55, z + 0.5,
+              session.dimension,
+              0.35,
+            );
+          }
+        }
+
         if (blockDef?.name === 'decorated_pot') {
           for (const stack of blockMeta?.inventory ?? []) {
             if (!stack || stack.count <= 0) continue;
@@ -1231,6 +1256,8 @@ export class GameServer {
                 : createDefaultSignMetadata({ rotation: signRotationFromYaw(session.yaw) });
             } else if (block?.name === 'decorated_pot') {
               metadata = createDecoratedPotMetadata(held, plan.facing);
+            } else if (block?.name === 'chiseled_bookshelf') {
+              metadata = createChiseledBookshelfMetadata(oppositeHorizontalFacing(playerFacing));
             } else if (!metadata && validFace(plan.facing)) {
               metadata = { facing: plan.facing };
             }
@@ -1315,6 +1342,55 @@ export class GameServer {
         if (!isBlockActionInReach(session, x, y, z, session.gameMode)) break;
         const blockId = this.getBlock(x, y, z, session.dimension);
         const blockName = BlockRegistry.get(blockId)?.name;
+        if (blockName === 'chiseled_bookshelf') {
+          const { face, hitX, hitY, hitZ } = packet.payload;
+          const currentMeta = this.getBlockMetadata(x, y, z, session.dimension);
+          const slot = resolveChiseledBookshelfSlot(
+            { x, y, z },
+            currentMeta?.facing,
+            face,
+            Number.isFinite(hitX) && Number.isFinite(hitY) && Number.isFinite(hitZ)
+              ? { x: hitX, y: hitY, z: hitZ }
+              : undefined,
+          );
+          if (slot === null) break;
+
+          const held = session.inventory[session.selectedSlot];
+          const result = interactChiseledBookshelfSlot(
+            currentMeta,
+            slot,
+            held,
+            session.gameMode === 'creative',
+          );
+          if (!result.changed) break;
+
+          if (result.removed) {
+            const nextInventory = session.inventory.map((entry) => cloneItemStack(entry));
+            const inserted = insertItemStackIntoSlots(nextInventory, result.removed);
+            session.inventory = nextInventory;
+            if (inserted.remaining) {
+              this.spawnDroppedStack(
+                inserted.remaining,
+                x + 0.5,
+                y + 0.6,
+                z + 0.5,
+                session.dimension,
+                0.25,
+              );
+            }
+          } else {
+            session.inventory[session.selectedSlot] = result.held;
+          }
+
+          this.setBlock(x, y, z, blockId, session.dimension, result.metadata);
+          this.syncPlayerInventory(session);
+          this.broadcastServerBlockUpdate(x, y, z, blockId, session.dimension, result.metadata);
+          this.broadcastDimension(session.dimension, PacketType.S2C_SOUND, {
+            type: result.removed ? 'pickup' : 'place',
+            x: x + 0.5, y: y + 0.5, z: z + 0.5,
+          });
+          break;
+        }
         if (blockName === 'decorated_pot') {
           const held = session.inventory[session.selectedSlot];
           const currentMeta = this.getBlockMetadata(x, y, z, session.dimension);

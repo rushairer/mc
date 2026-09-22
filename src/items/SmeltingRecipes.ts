@@ -103,7 +103,14 @@ function getSemanticFuelBurnTime(itemId: number): number {
   }
   if (name === 'stick' || name === 'bowl' || name === 'dead_bush') return 5;
   if (name === 'bow' || name === 'fishing_rod') return 10;
-  if (name === 'chest' || name === 'trapped_chest' || name === 'crafting_table' || name === 'bookshelf' || name === 'note_block') return 15;
+  if (
+    name === 'chest'
+    || name === 'trapped_chest'
+    || name === 'crafting_table'
+    || name === 'bookshelf'
+    || name === 'chiseled_bookshelf'
+    || name === 'note_block'
+  ) return 15;
   return 0;
 }
 

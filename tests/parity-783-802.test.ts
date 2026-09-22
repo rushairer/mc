@@ -282,4 +282,8 @@ test('802: Chiseled Bookshelf has correct visuals, names, physical stats, and 1.
   const atlas = readFileSync(new URL('../src/engine/TextureAtlas.ts', import.meta.url), 'utf8');
   assert.ok(atlas.includes('for (let mask = 0; mask < 64; mask++)'));
   assert.ok(atlas.includes('chiseled_bookshelf_front_'));
+
+  const network = readFileSync(new URL('../src/server/NetworkClient.ts', import.meta.url), 'utf8');
+  assert.ok(network.includes('metadata !== undefined'));
+  assert.ok(network.includes('metadata ?? null, true'));
 });

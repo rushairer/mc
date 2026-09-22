@@ -2595,6 +2595,44 @@ export class TextureAtlas {
       });
     };
 
+    // Chiseled Bookshelf fallback textures and all 64 occupied-slot front states.
+    const drawShelfWood = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, base: string) => {
+      ctx.fillStyle = base;
+      ctx.fillRect(x, y, size, size);
+      ctx.fillStyle = 'rgba(255,255,255,0.10)';
+      ctx.fillRect(x, y + 2, size, 1);
+      ctx.fillRect(x, y + 9, size, 1);
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.fillRect(x, y + 6, size, 1);
+      ctx.fillRect(x, y + 13, size, 1);
+    };
+    this.drawTile('chiseled_bookshelf_top', (ctx, x, y, size) => drawShelfWood(ctx, x, y, size, '#9a6a3a'));
+    this.drawTile('chiseled_bookshelf_side', (ctx, x, y, size) => drawShelfWood(ctx, x, y, size, '#76502f'));
+    this.drawTile('chiseled_bookshelf_back', (ctx, x, y, size) => drawShelfWood(ctx, x, y, size, '#68452a'));
+    for (let mask = 0; mask < 64; mask++) {
+      this.drawTile(`chiseled_bookshelf_front_${mask}`, (ctx, x, y, size) => {
+        drawShelfWood(ctx, x, y, size, '#8a5a32');
+        ctx.fillStyle = '#4a2f1e';
+        ctx.fillRect(x + 1, y + 2, 14, 12);
+        ctx.fillStyle = '#7a5433';
+        ctx.fillRect(x + 1, y + 7, 14, 2);
+        ctx.fillRect(x + 5, y + 2, 1, 12);
+        ctx.fillRect(x + 10, y + 2, 1, 12);
+        const spineColors = ['#b23a32', '#315f9d', '#b98531', '#5d8d42', '#7e4f91', '#c8b36a'];
+        for (let slot = 0; slot < 6; slot++) {
+          if ((mask & (1 << slot)) === 0) continue;
+          const col = slot % 3;
+          const row = slot < 3 ? 0 : 1;
+          const sx = x + 2 + col * 5;
+          const sy = y + 3 + row * 6;
+          ctx.fillStyle = spineColors[slot];
+          ctx.fillRect(sx, sy, 3, 4);
+          ctx.fillStyle = 'rgba(255,255,255,0.25)';
+          ctx.fillRect(sx, sy, 1, 4);
+        }
+      });
+    }
+
     // Decorated Pot fallback textures. Resource packs can override these keys.
     this.drawTile('decorated_pot', (ctx, x, y, size) => {
       ctx.fillStyle = '#a85f3d';

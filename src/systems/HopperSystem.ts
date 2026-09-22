@@ -68,11 +68,18 @@ export class HopperSystem {
   private chunks: ChunkManager;
   private droppedItems: DroppedItemSystem;
   private onStateChange: () => void;
+  private onBlockChange: (x: number, y: number, z: number) => void;
 
-  constructor(chunks: ChunkManager, droppedItems: DroppedItemSystem, onStateChange: () => void) {
+  constructor(
+    chunks: ChunkManager,
+    droppedItems: DroppedItemSystem,
+    onStateChange: () => void,
+    onBlockChange: (x: number, y: number, z: number) => void = () => {},
+  ) {
     this.chunks = chunks;
     this.droppedItems = droppedItems;
     this.onStateChange = onStateChange;
+    this.onBlockChange = onBlockChange;
   }
 
   update(dt: number) {
@@ -159,6 +166,9 @@ export class HopperSystem {
             }
             this.chunks.setBlockMeta(targetPos.x, targetPos.y, targetPos.z, targetMeta, false);
             this.chunks.setBlockMeta(x, y, z, meta, false);
+            if (targetMeta.containerType === 'chiseled_bookshelf') {
+              this.onBlockChange(targetPos.x, targetPos.y, targetPos.z);
+            }
             return true;
           }
         }
@@ -186,6 +196,9 @@ export class HopperSystem {
             }
             this.chunks.setBlockMeta(abovePos.x, abovePos.y, abovePos.z, aboveMeta, false);
             this.chunks.setBlockMeta(x, y, z, meta, false);
+            if (aboveMeta.containerType === 'chiseled_bookshelf') {
+              this.onBlockChange(abovePos.x, abovePos.y, abovePos.z);
+            }
             return true;
           }
         }

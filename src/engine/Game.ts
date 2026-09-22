@@ -333,7 +333,7 @@ export class Game {
   advancements!: AdvancementSystem;
   running = false;
   private stateListeners: GameStateListener[] = [];
-  private targetBlock: { blockPos: THREE.Vector3; faceNormal: THREE.Vector3 } | null = null;
+  private targetBlock: { blockPos: THREE.Vector3; faceNormal: THREE.Vector3; hitPoint: THREE.Vector3 } | null = null;
   private highlightMesh: THREE.LineSegments | null = null;
   private fpsFrames = 0;
   private fpsTime = 0;
@@ -1208,7 +1208,7 @@ export class Game {
   private getTargetBlockInteractionContext(heldItem: ItemStack | null): GameBlockInteractionContext | undefined {
     if (!this.targetBlock) return undefined;
 
-    const { blockPos, faceNormal } = this.targetBlock;
+    const { blockPos, faceNormal, hitPoint } = this.targetBlock;
     const blockId = this.chunks.getBlock(blockPos.x, blockPos.y, blockPos.z);
     const block = BlockRegistry.get(blockId);
     if (!block) return undefined;
@@ -1226,6 +1226,7 @@ export class Game {
               : faceNormal.z > 0
                 ? 'south'
                 : 'north',
+      hitPoint: { x: hitPoint.x, y: hitPoint.y, z: hitPoint.z },
       blockId,
       block,
       heldItem,

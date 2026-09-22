@@ -9095,7 +9095,7 @@ export class Game {
             1.5 + Math.random() * 1.5,
             (Math.random() - 0.5) * 1.5
           );
-          this.droppedItems.spawnItem(slot.id, slot.count, dropPos, velocity, 0.5);
+          this.droppedItems.spawnStack(slot, dropPos, velocity, 0.5);
         }
       }
     }
@@ -9128,7 +9128,7 @@ export class Game {
     }
 
     // 2. Spawn item drop for the block itself
-    if (spawnDrop && this.gameMode !== 'creative' && harvestable) {
+    if (spawnDrop && this.gameMode !== 'creative' && (harvestable || def?.name === 'decorated_pot')) {
       const dropPos = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
       const velocity = new THREE.Vector3(
         (Math.random() - 0.5) * 1.5,
@@ -9136,7 +9136,21 @@ export class Game {
         (Math.random() - 0.5) * 1.5
       );
 
-      if (this.isDoorBlock(blockId)) {
+      if (def?.name === 'decorated_pot') {
+        const selectedStack = this.inventory.getSlot(this.player.selectedSlot);
+        const shouldShatter =
+          !!dropEnchants
+          && !dropEnchants.silkTouch
+          && isDecoratedPotBreakingTool(selectedStack);
+        if (shouldShatter) {
+          for (const ingredient of decoratedPotDecorationStacks(meta?.potDecorations)) {
+            this.droppedItems.spawnStack(ingredient, dropPos, velocity, 0.5);
+          }
+        } else {
+          const intact = decoratedPotItemFromMetadata(meta);
+          if (intact) this.droppedItems.spawnStack(intact, dropPos, velocity, 0.5);
+        }
+      } else if (this.isDoorBlock(blockId)) {
         const doorItemId = ItemRegistry.getItemIdForPlacedBlock(blockId);
         if (doorItemId !== undefined) {
           this.droppedItems.spawnItem(doorItemId, 1, dropPos, velocity, 0.5);

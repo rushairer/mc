@@ -494,7 +494,12 @@ export class Game {
     this.player = new Player(spawn.x, spawn.y, spawn.z);
     this.mobs.setItemVisualFactory((itemId) => this.player.createItemVisualMesh(itemId));
     this.droppedItems = new DroppedItemSystem(this.renderer.scene, (itemId) => this.player.createItemVisualMesh(itemId));
-    this.hoppers = new HopperSystem(this.chunks, this.droppedItems, () => this.notifyState());
+    this.hoppers = new HopperSystem(
+      this.chunks,
+      this.droppedItems,
+      () => this.notifyState(),
+      (x, y, z) => this.redstone.observeBlockChange(x, y, z),
+    );
     this.chunks.update(spawn.x, spawn.z);
     this.player.resolveStuck(this.chunks);
     this.renderer.scene.add(this.player.mesh);

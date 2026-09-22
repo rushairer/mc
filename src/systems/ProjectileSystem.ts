@@ -536,6 +536,9 @@ export class ProjectileSystem {
                 onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
               }
             } else {
+              if (onProjectileImpact) {
+                onProjectileImpact(proj.type, proj.position.clone(), proj.fromPlayer);
+              }
               proj.inGround = true;
             }
             hitBlock = true;

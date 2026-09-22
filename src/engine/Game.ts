@@ -110,10 +110,9 @@ import { getMaceSmashBonus, getMaceSmashImpulse, isMaceSmash, MACE_HEAVY_SMASH_T
 import { isBundleItemName, removeOneFromBundle } from '../items/BundleRules';
 import {
   createDecoratedPotMetadata,
+  decoratedPotBreakDrops,
   decoratedPotDecorationStacks,
-  decoratedPotItemFromMetadata,
   insertOneIntoDecoratedPot,
-  isDecoratedPotBreakingTool,
 } from '../items/DecoratedPotRules';
 import {
   archaeologyBrushStage,
@@ -9175,17 +9174,13 @@ export class Game {
 
       if (def?.name === 'decorated_pot') {
         const selectedStack = this.inventory.getSlot(this.player.selectedSlot);
-        const shouldShatter =
-          !!dropEnchants
-          && !dropEnchants.silkTouch
-          && isDecoratedPotBreakingTool(selectedStack);
-        if (shouldShatter) {
-          for (const ingredient of decoratedPotDecorationStacks(meta?.potDecorations)) {
-            this.droppedItems.spawnStack(ingredient, dropPos, velocity, 0.5);
-          }
-        } else {
-          const intact = decoratedPotItemFromMetadata(meta);
-          if (intact) this.droppedItems.spawnStack(intact, dropPos, velocity, 0.5);
+        for (const drop of decoratedPotBreakDrops(
+          meta,
+          selectedStack,
+          dropEnchants?.silkTouch ?? false,
+          false,
+        )) {
+          this.droppedItems.spawnStack(drop, dropPos, velocity, 0.5);
         }
       } else if (this.isDoorBlock(blockId)) {
         const doorItemId = ItemRegistry.getItemIdForPlacedBlock(blockId);

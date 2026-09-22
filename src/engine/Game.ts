@@ -115,6 +115,12 @@ import {
   insertOneIntoDecoratedPot,
 } from '../items/DecoratedPotRules';
 import {
+  createChiseledBookshelfMetadata,
+  interactChiseledBookshelfSlot,
+  oppositeHorizontalFacing,
+  resolveChiseledBookshelfSlot,
+} from '../items/ChiseledBookshelfRules';
+import {
   archaeologyBrushStage,
   archaeologyTargetKey,
   brushedReplacementName,
@@ -741,6 +747,14 @@ export class Game {
       id: 'minecraft:decorated_pot',
       interact: ({ position, heldItem }) => ({
         handled: this.tryInsertDecoratedPot(position.x, position.y, position.z, heldItem),
+        cooldown: 0.12,
+      }),
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:chiseled_bookshelf',
+      preventsItemUse: true,
+      interact: (context) => ({
+        handled: this.tryInteractChiseledBookshelf(context),
         cooldown: 0.12,
       }),
     });
@@ -4079,6 +4093,57 @@ export class Game {
     if (!multiplayerPlacement && shouldConsumePlacedItem(this.gameMode)) {
       this.inventory.removeFromSlot(this.player.selectedSlot);
     }
+    return true;
+  }
+
+  private tryInteractChiseledBookshelf(target: BlockInteractionContext): boolean {
+    const { x, y, z } = target.position;
+    const currentMeta = this.chunks.getBlockMeta(x, y, z);
+    const slot = resolveChiseledBookshelfSlot(
+      target.position,
+      currentMeta?.facing,
+      target.face,
+      target.hitPoint,
+    );
+    if (slot === null) return false;
+
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_INTERACT_BLOCK, {
+        x, y, z,
+        face: target.face,
+        hitX: target.hitPoint?.x,
+        hitY: target.hitPoint?.y,
+        hitZ: target.hitPoint?.z,
+      });
+      return true;
+    }
+
+    const result = interactChiseledBookshelfSlot(
+      currentMeta,
+      slot,
+      target.heldItem,
+      this.gameMode === 'creative',
+    );
+    if (!result.changed) return false;
+
+    this.chunks.setBlockMeta(x, y, z, result.metadata, true);
+    if (result.removed) {
+      const leftover = this.inventory.addStack(result.removed);
+      if (leftover) {
+        this.droppedItems.spawnStack(
+          leftover,
+          new THREE.Vector3(x + 0.5, y + 0.65, z + 0.5),
+          new THREE.Vector3(0, 0.5, 0),
+          0.25,
+        );
+      }
+      this.sound.playPickup();
+    } else if (this.gameMode !== 'creative') {
+      this.inventory.setSlot(this.player.selectedSlot, result.held);
+      this.sound.playBlockPlace(target.blockId);
+    }
+    this.redstone.observeBlockChange(x, y, z);
+    this.notifyState();
     return true;
   }
 
@@ -7571,6 +7636,12 @@ export class Game {
       return;
     }
 
+    if (name === 'chiseled_bookshelf') {
+      const shelfFacing = oppositeHorizontalFacing(this.getPlayerHorizontalFacing());
+      this.chunks.setBlockMeta(x, y, z, createChiseledBookshelfMetadata(shelfFacing), true);
+      return;
+    }
+
     if (name === 'chest') {
       this.chunks.setBlockMeta(x, y, z, {
         facing,
@@ -9167,7 +9238,11 @@ export class Game {
     }
 
     // 2. Spawn item drop for the block itself
-    if (spawnDrop && this.gameMode !== 'creative' && (harvestable || def?.name === 'decorated_pot')) {
+    if (
+      spawnDrop
+      && this.gameMode !== 'creative'
+      && (harvestable || def?.name === 'decorated_pot' || def?.name === 'chiseled_bookshelf')
+    ) {
       const dropPos = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
       const velocity = new THREE.Vector3(
         (Math.random() - 0.5) * 1.5,
@@ -9186,6 +9261,10 @@ export class Game {
           false,
         )) {
           this.droppedItems.spawnStack(drop, dropPos, velocity, 0.5);
+        }
+      } else if (def?.name === 'chiseled_bookshelf') {
+        if (dropEnchants?.silkTouch) {
+          this.droppedItems.spawnItem(def.id, 1, dropPos, velocity, 0.5);
         }
       } else if (this.isDoorBlock(blockId)) {
         const doorItemId = ItemRegistry.getItemIdForPlacedBlock(blockId);

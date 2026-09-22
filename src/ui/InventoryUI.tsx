@@ -9,6 +9,15 @@ import { RecipeBookUI } from './RecipeBookUI';
 import { useI18n } from '../i18n';
 import { EnchantSystem } from '../systems/EnchantSystem';
 import { PotionEffects } from '../systems/PotionEffect';
+import {
+  BUNDLE_CAPACITY,
+  bundleFullnessFraction,
+  bundleUsedCapacity,
+  insertIntoBundle,
+  isBundleStack,
+  removeOneFromBundle,
+  visibleBundleContents,
+} from '../items/BundleRules';
 
 interface InventoryUIProps {
   inventory: Inventory;
@@ -17,6 +26,13 @@ interface InventoryUIProps {
   getItemIconStyle: (id: number, size?: number) => any;
   gameMode?: 'survival' | 'creative';
   onDropItem?: (itemId: number, count: number) => void;
+  onDropStack?: (stack: ItemStack) => void;
+  onBundleInventoryAction?: (
+    action: 'insert_from_slot' | 'extract_to_inventory',
+    bundleSlot: number,
+    sourceSlot?: number,
+    selectedIndex?: number,
+  ) => boolean;
 }
 
 const SLOT_SIZE = 48;
@@ -61,13 +77,24 @@ function getCreativeItems(): number[] {
   return cachedCreativeItems;
 }
 
-export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle, gameMode = 'survival', onDropItem }) => {
+export const InventoryUI: React.FC<InventoryUIProps> = ({
+  inventory,
+  onClose,
+  onInventoryChange,
+  getItemIconStyle,
+  gameMode = 'survival',
+  onDropItem,
+  onDropStack,
+  onBundleInventoryAction,
+}) => {
   const { t, getLocalizedItemName, getLocalizedDisplayName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
+  const [heldOriginSlot, setHeldOriginSlot] = useState<number | null>(null);
   const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(4).fill(0));
   const [craftResult, setCraftResult] = useState<ItemStack | null>(null);
   const [creativeSearch, setCreativeSearch] = useState('');
   const [recipeBookOpen, setRecipeBookOpen] = useState(false);
+  const [bundleSelectedIndex, setBundleSelectedIndex] = useState<Record<string, number>>({});
   const recipeEntries = useRef(getAllRecipeBookEntries()).current;
   const [hoveredSlot, setHoveredSlot] = useState<{
     item: ItemStack;
@@ -115,13 +142,15 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
   const handleCatalogClick = (itemId: number) => {
     const maxStack = ItemRegistry.getMaxStackSize(itemId);
     setHeldItem({ id: itemId, count: maxStack });
+    setHeldOriginSlot(null);
   };
 
   // P3.2: fill the 2x2 grid from inventory when a recipe book entry is chosen.
   const handleRecipeSelect = useCallback((entry: RecipeBookEntry) => {
     if (heldItem) {
-      inventory.addItem(heldItem.id, heldItem.count);
+      inventory.addStack(heldItem);
       setHeldItem(null);
+      setHeldOriginSlot(null);
     }
     const plan = planGridFill(
       entry.recipe,
@@ -180,6 +209,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
       // Crafting grid click
       const newGrid = [...craftingGrid];
       if (heldItem && newGrid[slotIndex] === 0) {
+        if (isBundleStack(heldItem) && bundleUsedCapacity(heldItem) > 0) return;
         newGrid[slotIndex] = heldItem.id;
         setHeldItem(prev => {
           if (!prev) return null;
@@ -198,6 +228,28 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     // Inventory slot click
     const slotItem = inventory.getSlot(slotIndex);
 
+    if (heldItem && slotItem && isBundleStack(slotItem)) {
+      if (
+        heldOriginSlot !== null
+        && onBundleInventoryAction?.('insert_from_slot', slotIndex, heldOriginSlot, 0)
+      ) {
+        setHeldItem(null);
+        setHeldOriginSlot(null);
+        setHoveredSlot(null);
+        return;
+      }
+
+      const result = insertIntoBundle(slotItem, heldItem);
+      if (result.insertedCount > 0) {
+        inventory.setSlot(slotIndex, result.bundle);
+        setHeldItem(result.remaining);
+        setHeldOriginSlot(null);
+        setHoveredSlot(null);
+        onInventoryChange();
+        return;
+      }
+    }
+
     if (heldItem && slotItem && heldItem.id === slotItem.id) {
       // Stack items
       const maxStack = ItemRegistry.getMaxStackSize(heldItem.id);
@@ -205,22 +257,67 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
       slotItem.count += canAdd;
       const leftover = heldItem.count - canAdd;
       setHeldItem(leftover > 0 ? { ...heldItem, count: leftover } : null);
+      if (leftover <= 0) setHeldOriginSlot(null);
     } else if (heldItem && !slotItem) {
       // Place held item
       inventory.setSlot(slotIndex, heldItem);
       setHeldItem(null);
+      setHeldOriginSlot(null);
     } else if (!heldItem && slotItem) {
       // Pick up slot
       setHeldItem(slotItem);
+      setHeldOriginSlot(slotIndex);
       inventory.setSlot(slotIndex, null);
     } else if (heldItem && slotItem) {
       // Swap
       inventory.setSlot(slotIndex, heldItem);
       setHeldItem(slotItem);
+      setHeldOriginSlot(slotIndex);
     }
 
     onInventoryChange();
-  }, [heldItem, inventory, craftingGrid, onInventoryChange]);
+  }, [heldItem, heldOriginSlot, inventory, craftingGrid, onBundleInventoryAction, onInventoryChange]);
+
+  const handleBundleContextMenu = useCallback((
+    e: React.MouseEvent,
+    item: ItemStack | null,
+    index: number,
+    slotType: 'inventory' | 'armor' | 'offhand' | 'crafting',
+  ) => {
+    if (slotType !== 'inventory' || !item || heldItem || !isBundleStack(item)) return;
+    e.preventDefault();
+    const key = `${slotType}:${index}`;
+    const selectedIndex = bundleSelectedIndex[key] ?? 0;
+    if (onBundleInventoryAction?.('extract_to_inventory', index, undefined, selectedIndex)) {
+      setHoveredSlot(null);
+      return;
+    }
+    const result = removeOneFromBundle(item, selectedIndex);
+    if (!result.removed) return;
+    inventory.setSlot(index, result.bundle);
+    setHeldItem(result.removed);
+    setHeldOriginSlot(null);
+    setHoveredSlot(null);
+    onInventoryChange();
+  }, [bundleSelectedIndex, heldItem, inventory, onBundleInventoryAction, onInventoryChange]);
+
+  const handleBundleWheel = useCallback((
+    e: React.WheelEvent,
+    item: ItemStack | null,
+    index: number,
+    slotType: 'inventory' | 'armor' | 'offhand' | 'crafting',
+  ) => {
+    if (slotType !== 'inventory' || !item || heldItem || !isBundleStack(item)) return;
+    const visible = visibleBundleContents(item);
+    if (visible.length <= 1) return;
+    e.preventDefault();
+    const key = `${slotType}:${index}`;
+    setBundleSelectedIndex((previous) => {
+      const current = Math.max(0, Math.min(visible.length - 1, previous[key] ?? 0));
+      const direction = e.deltaY > 0 ? 1 : -1;
+      return { ...previous, [key]: (current + direction + visible.length) % visible.length };
+    });
+  }, [heldItem]);
 
   const handleArmorSlotClick = useCallback((armorSlotIndex: number) => {
     const expectedSlots: ('helmet' | 'chestplate' | 'leggings' | 'boots')[] = ['helmet', 'chestplate', 'leggings', 'boots'];
@@ -278,8 +375,9 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
   const handleClose = useCallback(() => {
     // Return held item to inventory
     if (heldItem) {
-      inventory.addItem(heldItem.id, heldItem.count);
+      inventory.addStack(heldItem);
       setHeldItem(null);
+      setHeldOriginSlot(null);
     }
     // Return crafting grid items to inventory
     for (const id of craftingGrid) {
@@ -303,7 +401,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
       } else if (e.key.toLowerCase() === 'q') {
         if (heldItem) {
           const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? heldItem.count : 1;
-          onDropItem?.(heldItem.id, dropCount);
+          if (onDropStack) onDropStack({ ...heldItem, count: dropCount });
+          else onDropItem?.(heldItem.id, dropCount);
           setHeldItem(prev => {
             if (!prev) return null;
             const nextCount = prev.count - dropCount;
@@ -316,7 +415,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
             const slotItem = inventory.getSlot(index);
             if (slotItem) {
               const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? slotItem.count : 1;
-              onDropItem?.(slotItem.id, dropCount);
+              if (onDropStack) onDropStack({ ...slotItem, count: dropCount });
+              else onDropItem?.(slotItem.id, dropCount);
               if (slotItem.count <= dropCount) {
                 inventory.setSlot(index, null);
                 setHoveredSlot(null);
@@ -330,7 +430,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
             const armorItem = inventory.armor?.[index];
             if (armorItem) {
               const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? armorItem.count : 1;
-              onDropItem?.(armorItem.id, dropCount);
+              if (onDropStack) onDropStack({ ...armorItem, count: dropCount });
+              else onDropItem?.(armorItem.id, dropCount);
               if (armorItem.count <= dropCount) {
                 inventory.armor[index] = null;
                 setHoveredSlot(null);
@@ -344,7 +445,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
             const offhandItem = inventory.getOffhand();
             if (offhandItem) {
               const dropCount = (e.ctrlKey || e.metaKey || e.shiftKey) ? offhandItem.count : 1;
-              onDropItem?.(offhandItem.id, dropCount);
+              if (onDropStack) onDropStack({ ...offhandItem, count: dropCount });
+              else onDropItem?.(offhandItem.id, dropCount);
               if (offhandItem.count <= dropCount) {
                 inventory.setOffhand(null);
                 setHoveredSlot(null);
@@ -360,7 +462,7 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [handleClose, heldItem, hoveredSlot, inventory, onDropItem, onInventoryChange]);
+  }, [handleClose, heldItem, hoveredSlot, inventory, onDropItem, onDropStack, onInventoryChange]);
 
   const armorPlaceholders = [
     <svg key="helmet" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.25, color: '#fff' }}>
@@ -403,6 +505,8 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
           setHoveredSlot(null);
           onClick();
         }}
+        onContextMenu={(e) => handleBundleContextMenu(e, item, index, slotType)}
+        onWheel={(e) => handleBundleWheel(e, item, index, slotType)}
         onMouseEnter={(e) => {
           if (item && itemDef && !heldItem) {
             setHoveredSlot({
@@ -642,8 +746,10 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
     <div
       onClick={() => {
         if (heldItem) {
-          onDropItem?.(heldItem.id, heldItem.count);
+          if (onDropStack) onDropStack(heldItem);
+          else onDropItem?.(heldItem.id, heldItem.count);
           setHeldItem(null);
+          setHeldOriginSlot(null);
           onInventoryChange();
         }
       }}
@@ -1017,6 +1123,58 @@ export const InventoryUI: React.FC<InventoryUIProps> = ({ inventory, onClose, on
             <span style={{ color: '#55FF55', fontSize: '10px' }}>
               {t('durability', { current: hoveredSlot.item.durability, max: hoveredSlot.itemDef.durability })}
             </span>
+          )}
+          {isBundleStack(hoveredSlot.item) && (
+            <>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 28px)',
+                gap: '2px',
+                paddingTop: '3px',
+                minHeight: '28px',
+              }}>
+                {visibleBundleContents(hoveredSlot.item).map((entry, visibleIndex) => {
+                  const def = ItemRegistry.get(entry.id);
+                  const key = `${hoveredSlot.type}:${hoveredSlot.index}`;
+                  const selected = (bundleSelectedIndex[key] ?? 0) === visibleIndex;
+                  return (
+                    <div
+                      key={`${entry.id}:${visibleIndex}`}
+                      title={def ? getLocalizedItemName(entry.id, def.displayName) : String(entry.id)}
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        position: 'relative',
+                        boxSizing: 'border-box',
+                        border: selected ? '1px solid #fff' : '1px solid #4a4050',
+                        background: selected ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.18)',
+                      }}
+                    >
+                      <div style={getItemIconStyle(entry.id, 24)} />
+                      {entry.count > 1 && (
+                        <span style={{
+                          position: 'absolute',
+                          right: '1px',
+                          bottom: '-1px',
+                          fontSize: '8px',
+                          fontWeight: 'bold',
+                        }}>{entry.count}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <span style={{ color: '#b5b5b5', fontSize: '9px' }}>
+                {bundleUsedCapacity(hoveredSlot.item)}/{BUNDLE_CAPACITY}
+              </span>
+              <div style={{ width: '100%', height: '3px', background: '#170f18' }}>
+                <div style={{
+                  width: `${bundleFullnessFraction(hoveredSlot.item) * 100}%`,
+                  height: '100%',
+                  background: '#b28bd4',
+                }} />
+              </div>
+            </>
           )}
         </div>
       )}

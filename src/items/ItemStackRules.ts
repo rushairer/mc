@@ -6,6 +6,7 @@ export function cloneItemStack(stack: ItemStack | null | undefined): ItemStack |
   if (!stack) return null;
   const clone: ItemStack = { ...stack };
   if (stack.enchantments) clone.enchantments = stack.enchantments.map((entry) => ({ ...entry }));
+  if (stack.bundleContents) clone.bundleContents = stack.bundleContents.map((entry) => cloneItemStack(entry)!).filter(Boolean);
   if (stack.potion) {
     clone.potion = {
       ...stack.potion,

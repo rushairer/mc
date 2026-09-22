@@ -345,6 +345,27 @@ export class SoundSystem {
   }
 
   /** Wind Charge resource events first, with procedural fallbacks when no pack is active. */
+  playBundleInsert() {
+    if (this.playFirstResourceSound(['item.bundle.insert'], 0.7)) return;
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    this.synthToneCall(ctx, 'sine', 460, 610, 0.09, 0.08);
+  }
+
+  playBundleRemove() {
+    if (this.playFirstResourceSound(['item.bundle.remove_one'], 0.7)) return;
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    this.synthToneCall(ctx, 'sine', 610, 430, 0.09, 0.08);
+  }
+
+  playBundleDrop() {
+    if (this.playFirstResourceSound(['item.bundle.drop_contents'], 0.8)) return;
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    this.synthNoiseCall(ctx, 'bandpass', 820, 0.13, 0.12, 0.14);
+  }
+
   playBrush(blockName: 'suspicious_sand' | 'suspicious_gravel' = 'suspicious_sand') {
     const event = blockName === 'suspicious_gravel'
       ? 'item.brush.brushing.gravel'

@@ -107,6 +107,7 @@ import { findChorusFruitDestination26_3 } from '../world/TeleportRules26_3';
 import { GOAT_HORN_COOLDOWN_SECONDS, goatHornSoundIndex, spyglassFov } from '../items/SpecialItemUseRules';
 import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, windBurstImpulse } from '../items/WindChargeRules';
 import { getMaceSmashBonus, getMaceSmashImpulse, isMaceSmash, MACE_HEAVY_SMASH_THRESHOLD } from '../items/MaceRules';
+import { isBundleItemName, removeOneFromBundle } from '../items/BundleRules';
 import {
   archaeologyBrushStage,
   archaeologyTargetKey,
@@ -1013,6 +1014,13 @@ export class Game {
       id: 'minecraft:fire_charge',
       use: ({ target }) => ({ handled: this.tryUseFireCharge(target), cooldown: 0.25 }),
     });
+    this.behaviors.registerItem(
+      ItemRegistry.all().filter((item) => isBundleItemName(item.name)).map((item) => item.name),
+      {
+        id: 'minecraft:bundle',
+        use: ({ stack }) => ({ handled: this.tryEmptyBundleInHand(stack), cooldown: 0.18 }),
+      },
+    );
     this.behaviors.registerItem('brush', {
       id: 'minecraft:brush',
       canStartUse: ({ target }) => !!target && isSuspiciousBlockName(target.block.name),
@@ -1667,18 +1675,21 @@ export class Game {
     this.notifyState();
   }
 
-  dropItemFromUI(itemId: number, count: number) {
-    if (count <= 0) return;
+  dropStackFromUI(stack: ItemStack) {
+    if (stack.count <= 0) return;
 
     const lookDir = this.player.forward.clone();
     const spawnPos = this.player.eyePosition.clone().sub(new THREE.Vector3(0, 0.2, 0));
-    
     const velocity = lookDir.multiplyScalar(3.5).add(new THREE.Vector3(0, 2.0, 0));
     velocity.x += (Math.random() - 0.5) * 0.5;
     velocity.z += (Math.random() - 0.5) * 0.5;
 
-    this.droppedItems.spawnItem(itemId, count, spawnPos, velocity, 1.5);
+    this.droppedItems.spawnStack(stack, spawnPos, velocity, 1.5);
     this.notifyState();
+  }
+
+  dropItemFromUI(itemId: number, count: number) {
+    this.dropStackFromUI({ id: itemId, count });
   }
 
   onStateChange(listener: GameStateListener) {
@@ -7109,6 +7120,45 @@ export class Game {
       dirY: dir.y,
       dirZ: dir.z,
     });
+    return true;
+  }
+
+  bundleInventoryAction(
+    action: 'insert_from_slot' | 'extract_to_inventory',
+    bundleSlot: number,
+    sourceSlot?: number,
+    selectedIndex = 0,
+  ): boolean {
+    if (!this.isMultiplayerNetworkConnected()) return false;
+    this.network.send(PacketType.C2S_BUNDLE_ACTION, {
+      action,
+      bundleSlot,
+      sourceSlot,
+      selectedIndex,
+    });
+    return true;
+  }
+
+  private tryEmptyBundleInHand(stack: ItemStack): boolean {
+    const result = removeOneFromBundle(stack, 0);
+    if (!result.removed) return false;
+
+    if (this.isMultiplayerNetworkConnected()) {
+      this.network.send(PacketType.C2S_BUNDLE_ACTION, {
+        action: 'drop_one',
+        bundleSlot: this.player.selectedSlot,
+        selectedIndex: 0,
+      });
+      return true;
+    }
+
+    this.inventory.setSlot(this.player.selectedSlot, result.bundle);
+    const origin = this.player.eyePosition.clone().add(this.player.forward.clone().multiplyScalar(0.65));
+    const velocity = this.player.forward.clone().multiplyScalar(3.2);
+    velocity.y += 1.0;
+    this.droppedItems.spawnStack(result.removed, origin, velocity, 0.25);
+    this.sound.playBundleDrop();
+    this.notifyState();
     return true;
   }
 

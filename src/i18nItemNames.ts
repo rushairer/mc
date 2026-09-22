@@ -295,7 +295,7 @@ const ZH_TW_WORDS: Dict = {
   tipped: '藥水', torch: '火把', trapdoor: '地板門', trapped: '陷阱', tripwire: '絆線',
   wart: '疙瘩', weighted: '測重', white: '白色', wither: '凋零', wooden: '木製',
   poplar: '楊木', cushion: '坐墊', straw: '稻草', shelf: '層孔', shrub: '灌木',
-  yellow: '黃色', zombie: '殭屍',
+  yellow: '黃色', zombie: '殭屍', bundle: '收納袋',
 };
 
 const SPAWN_EGG_ENTITY_ZH_CN: Dict = {

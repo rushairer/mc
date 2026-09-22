@@ -269,7 +269,7 @@ const ZH_CN_WORDS: Dict = {
   torch: '火把', trapdoor: '活板门', trapped: '陷阱', tripwire: '绊线', tunic: '外套',
   void: '空位', wart: '疣', water: '水', weighted: '测重', wheat: '小麦', white: '白色',
   wither: '凋灵', wood: '木', wooden: '木', wool: '羊毛', written: '成书', yellow: '黄色',
-  poplar: '杨木', cushion: '坐垫', straw: '稻草', shelf: '层孔', shrub: '灌木',
+  poplar: '杨木', cushion: '坐垫', straw: '稻草', shelf: '层孔', shrub: '灌木', bundle: '收纳袋',
 };
 
 const ZH_TW_WORDS: Dict = {

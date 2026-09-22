@@ -4082,6 +4082,7 @@ export class Game {
   }
 
   private tryInsertDecoratedPot(x: number, y: number, z: number, heldItem: ItemStack | null): boolean {
+    if (!heldItem || heldItem.count <= 0) return false;
     if (this.isMultiplayerNetworkConnected()) {
       this.network.send(PacketType.C2S_INTERACT_BLOCK, { x, y, z });
       return true;
@@ -4089,13 +4090,14 @@ export class Game {
 
     const currentMeta = this.chunks.getBlockMeta(x, y, z);
     const result = insertOneIntoDecoratedPot(currentMeta, heldItem, this.gameMode === 'creative');
+    if (result.inserted <= 0) return false;
     const nextMeta = {
       ...result.metadata,
       decoratedPotWobbleUntil: Date.now() + 450,
     };
     this.chunks.setBlockMeta(x, y, z, nextMeta, true);
     this.sound.playBlockPlace(this.chunks.getBlock(x, y, z));
-    if (result.inserted > 0 && this.gameMode !== 'creative') {
+    if (this.gameMode !== 'creative') {
       this.inventory.setSlot(this.player.selectedSlot, result.held);
     }
     this.redstone.observeBlockChange(x, y, z);
@@ -9173,7 +9175,9 @@ export class Game {
       );
 
       if (def?.name === 'decorated_pot') {
-        const selectedStack = this.inventory.getSlot(this.player.selectedSlot);
+        const selectedStack = dropEnchants
+          ? this.inventory.getSlot(this.player.selectedSlot)
+          : null;
         for (const drop of decoratedPotBreakDrops(
           meta,
           selectedStack,

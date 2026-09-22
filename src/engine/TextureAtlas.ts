@@ -2595,6 +2595,24 @@ export class TextureAtlas {
       });
     };
 
+    // Decorated Pot fallback textures. Resource packs can override these keys.
+    this.drawTile('decorated_pot', (ctx, x, y, size) => {
+      ctx.fillStyle = '#a85f3d';
+      ctx.fillRect(x, y, size, size);
+      ctx.fillStyle = '#7a3e29';
+      for (let row = 2; row < size; row += 4) ctx.fillRect(x, y + row, size, 1);
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(x + 2, y + 1, size - 4, 1);
+    });
+    this.drawTile('decorated_pot_top', (ctx, x, y, size) => {
+      ctx.fillStyle = '#8f4d31';
+      ctx.fillRect(x, y, size, size);
+      ctx.fillStyle = '#5e2e20';
+      ctx.fillRect(x + 3, y + 3, size - 6, size - 6);
+      ctx.fillStyle = '#b76b46';
+      ctx.fillRect(x + 5, y + 5, size - 10, size - 10);
+    });
+
     // Draw all block textures
     for (const b of BlockRegistry.all()) {
       const key = b.textureKey;
@@ -2611,7 +2629,21 @@ export class TextureAtlas {
       const iconKey = `${b.name}_icon`;
       if (!this.tileIndex.has(iconKey)) {
         const colors = VisualResolver.getIconColors(b.id);
-        if (b.name.includes('ore')) {
+        if (b.name === 'decorated_pot') {
+          this.drawTile(iconKey, (ctx, x, y, size) => {
+            ctx.clearRect(x, y, size, size);
+            ctx.fillStyle = '#7a3e29';
+            ctx.fillRect(x + 6, y + 2, 4, 2);
+            ctx.fillRect(x + 5, y + 4, 6, 2);
+            ctx.fillStyle = '#a85f3d';
+            ctx.fillRect(x + 4, y + 6, 8, 6);
+            ctx.fillRect(x + 5, y + 12, 6, 2);
+            ctx.fillStyle = 'rgba(255,255,255,0.18)';
+            ctx.fillRect(x + 5, y + 7, 1, 4);
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.fillRect(x + 5, y + 11, 6, 1);
+          });
+        } else if (b.name.includes('ore')) {
           drawBlockIcon(b.name, '#909090', '#7a7a7a', '#686868', (ctx, ix, iy, is) => {
             ctx.fillStyle = colors.top;
             ctx.fillRect(ix + 5, iy + 3, 2, 2);

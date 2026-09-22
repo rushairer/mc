@@ -131,6 +131,13 @@ import { isServerBrushDurationComplete, parseServerBrushAction, sameServerBrushT
 import { parseServerBundleAction } from './BundleActionRules';
 import { insertIntoBundle, isBundleStack, removeOneFromBundle } from '../items/BundleRules';
 import {
+  createDecoratedPotMetadata,
+  decoratedPotBreakDrops,
+  decoratedPotDecorationStacks,
+  insertOneIntoDecoratedPot,
+} from '../items/DecoratedPotRules';
+import { EnchantSystem } from '../systems/EnchantSystem';
+import {
   ITEM_ENTITY_DEFAULT_PICKUP_DELAY_SECONDS,
   ITEM_ENTITY_DESPAWN_SECONDS,
   ITEM_ENTITY_MERGE_INTERVAL_SECONDS,

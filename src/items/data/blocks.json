@@ -17601,7 +17601,7 @@
     "hardness": 1.5,
     "stackSize": 64,
     "diggable": true,
-    "boundingBox": "empty",
+    "boundingBox": "block",
     "material": "rock",
     "drops": [
       {

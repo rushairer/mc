@@ -41,6 +41,7 @@ const BOOLEAN_GAMERULES = [
   'drowningDamage',
   'naturalRegeneration',
   'mobGriefing',
+  'projectilesCanBreakBlocks',
 ] as const;
 
 export class CommandSystem {

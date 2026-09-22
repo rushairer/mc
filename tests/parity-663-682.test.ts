@@ -157,7 +157,7 @@ test('678: multiplayer server independently enforces Wind Charge cooldown and no
 test('679: Wind Charge burst affects both players and mobs without block destruction', () => {
   const source = readFileSync(new URL('../src/server/GameServer.ts', import.meta.url), 'utf8');
   const start = source.indexOf('private resolveWindChargeBurst');
-  const end = source.indexOf('private tickProjectiles', start);
+  const end = source.indexOf('private shatterServerDecoratedPot', start);
   const method = source.slice(start, end);
   assert.ok(method.includes('S2C_PLAYER_VELOCITY'));
   assert.ok(method.includes('mob.velocity.add'));

@@ -577,6 +577,10 @@ export class RedstoneSystem {
     if (Number.isFinite(meta.jukeboxComparatorOutput)) {
       return Math.max(0, Math.min(15, Math.floor(meta.jukeboxComparatorOutput)));
     }
+    if (meta.containerType === 'chiseled_bookshelf') {
+      const slot = meta.chiseledBookshelfLastInteractedSlot;
+      return Number.isInteger(slot) && slot >= 0 && slot < 6 ? slot + 1 : 0;
+    }
     if (!meta.containerType || !meta.inventory) return null;
     const inventory: any[] = meta.inventory;
     let sumCounts = 0;

@@ -170,7 +170,6 @@ export function insertOneIntoDecoratedPot(
     currentMeta.inventory[0] = inserted;
   }
 
-  currentMeta.decoratedPotWobbleUntil = Date.now() + 450;
   const nextHeld = cloneItemStack(held)!;
   if (!creative) nextHeld.count -= 1;
   return {
@@ -178,6 +177,19 @@ export function insertOneIntoDecoratedPot(
     held: creative ? nextHeld : nextHeld.count > 0 ? nextHeld : null,
     inserted: 1,
   };
+}
+
+export function decoratedPotBreakDrops(
+  meta: BlockMetadata | null | undefined,
+  tool: ItemStack | null | undefined,
+  silkTouch = false,
+  forcedShatter = false,
+): ItemStack[] {
+  if (forcedShatter || (isDecoratedPotBreakingTool(tool) && !silkTouch)) {
+    return decoratedPotDecorationStacks(meta?.potDecorations);
+  }
+  const intact = decoratedPotItemFromMetadata(meta);
+  return intact ? [intact] : [];
 }
 
 export function decoratedPotComparatorSignal(meta: BlockMetadata | null | undefined): number {

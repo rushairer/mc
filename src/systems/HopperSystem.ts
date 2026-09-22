@@ -164,7 +164,13 @@ export class HopperSystem {
             if (item.count <= 0) {
               meta.inventory[i] = null;
             }
-            this.chunks.setBlockMeta(targetPos.x, targetPos.y, targetPos.z, targetMeta, false);
+            this.chunks.setBlockMeta(
+              targetPos.x,
+              targetPos.y,
+              targetPos.z,
+              targetMeta,
+              targetMeta.containerType === 'chiseled_bookshelf',
+            );
             this.chunks.setBlockMeta(x, y, z, meta, false);
             if (targetMeta.containerType === 'chiseled_bookshelf') {
               this.onBlockChange(targetPos.x, targetPos.y, targetPos.z);
@@ -194,7 +200,13 @@ export class HopperSystem {
             if (aboveMeta.containerType === 'chiseled_bookshelf') {
               aboveMeta.chiseledBookshelfLastInteractedSlot = slotIdx;
             }
-            this.chunks.setBlockMeta(abovePos.x, abovePos.y, abovePos.z, aboveMeta, false);
+            this.chunks.setBlockMeta(
+              abovePos.x,
+              abovePos.y,
+              abovePos.z,
+              aboveMeta,
+              aboveMeta.containerType === 'chiseled_bookshelf',
+            );
             this.chunks.setBlockMeta(x, y, z, meta, false);
             if (aboveMeta.containerType === 'chiseled_bookshelf') {
               this.onBlockChange(abovePos.x, abovePos.y, abovePos.z);

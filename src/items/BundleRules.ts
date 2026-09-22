@@ -10,7 +10,7 @@ export function isBundleItemName(name: string | undefined): boolean {
   return name === 'bundle' || !!name?.endsWith('_bundle');
 }
 
-export function isBundleStack(stack: ItemStack | null | undefined): boolean {
+export function isBundleStack(stack: ItemStack | null | undefined): stack is ItemStack {
   return !!stack && isBundleItemName(ItemRegistry.get(stack.id)?.name);
 }
 

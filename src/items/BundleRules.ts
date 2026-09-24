@@ -1,6 +1,7 @@
 import type { ItemStack } from '../types';
-import { ItemRegistry } from './ItemRegistry';
 import { cloneItemStack, getItemStackMaxSize, itemStacksCanMerge } from './ItemStackRules';
+import { isShulkerBoxStack } from './ShulkerBoxRules';
+export { isShulkerBoxStack } from './ShulkerBoxRules';
 
 export const BUNDLE_CAPACITY = 64;
 export const BUNDLE_NESTED_BASE_WEIGHT = 4;
@@ -14,11 +15,6 @@ export function isBundleStack(stack: ItemStack | null | undefined): stack is Ite
   return !!stack && isBundleItemName(ItemRegistry.get(stack.id)?.name);
 }
 
-export function isShulkerBoxStack(stack: ItemStack | null | undefined): boolean {
-  if (!stack) return false;
-  const name = ItemRegistry.get(stack.id)?.name ?? '';
-  return name === 'shulker_box' || name.endsWith('_shulker_box');
-}
 
 export function bundleUnitWeight(stack: ItemStack): number {
   if (isBundleStack(stack)) {

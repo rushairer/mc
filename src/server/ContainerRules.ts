@@ -5,6 +5,7 @@ import {
   isValidItemStack,
   itemStacksCanMerge,
 } from '../items/ItemStackRules';
+import { isShulkerBoxStack } from '../items/ShulkerBoxRules';
 
 /**
  * P5.3 — Server container rules (pure, testable).
@@ -15,6 +16,7 @@ import {
 export const CONTAINER_SIZES: Record<string, number> = {
   chest: 27,
   barrel: 27,
+  shulker_box: 27,
   hopper: 5,
 };
 
@@ -32,6 +34,7 @@ export interface ContainerTransactionState {
   containerSlots: (ItemStack | null)[];
   playerSlots: (ItemStack | null)[];
   cursor: ItemStack | null;
+  containerKind?: string;
 }
 
 export function containerKey(x: number, y: number, z: number): string {
@@ -105,6 +108,7 @@ function cloneTransactionState(state: ContainerTransactionState): ContainerTrans
     containerSlots: state.containerSlots.map((slot) => cloneStack(slot)),
     playerSlots: state.playerSlots.map((slot) => cloneStack(slot)),
     cursor: cloneStack(state.cursor),
+    containerKind: state.containerKind,
   };
 }
 
@@ -115,6 +119,11 @@ function getIntentSlots(
   return area === 'container' ? state.containerSlots : state.playerSlots;
 }
 
+function canInsertAtIntentTarget(state: ContainerTransactionState, intent: ContainerClickIntent, stack: ItemStack | null): boolean {
+  if (!stack || intent.area !== 'container' || state.containerKind !== 'shulker_box') return true;
+  return !isShulkerBoxStack(stack);
+}
+
 function applyServerLeftClick(
   state: ContainerTransactionState,
   intent: ContainerClickIntent,
@@ -123,6 +132,8 @@ function applyServerLeftClick(
   const slots = getIntentSlots(next, intent.area);
   const slot = slots[intent.slotIndex];
   const cursor = next.cursor;
+
+  if (cursor && !canInsertAtIntentTarget(next, intent, cursor)) return next;
 
   if (!cursor && slot) {
     next.cursor = cloneStack(slot);
@@ -160,6 +171,8 @@ function applyServerRightClick(
   const slots = getIntentSlots(next, intent.area);
   const slot = slots[intent.slotIndex];
   const cursor = next.cursor;
+
+  if (cursor && !canInsertAtIntentTarget(next, intent, cursor)) return next;
 
   if (!cursor && slot) {
     const pickedCount = Math.ceil(slot.count / 2);
@@ -239,6 +252,7 @@ function applyServerQuickMove(
   const sourceSlots = getIntentSlots(next, intent.area);
   const source = sourceSlots[intent.slotIndex];
   if (!source) return next;
+  if (intent.area === 'player' && next.containerKind === 'shulker_box' && isShulkerBoxStack(source)) return next;
 
   const destinationSlots = intent.area === 'container' ? next.playerSlots : next.containerSlots;
   const destinationIndices = intent.area === 'container'

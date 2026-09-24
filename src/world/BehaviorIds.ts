@@ -38,6 +38,7 @@ export function inferBlockBehaviorId(rawName: string): string | undefined {
   if (name === 'ender_chest') return 'minecraft:ender_chest';
   if (name === 'shulker_box' || name.endsWith('_shulker_box')) return 'minecraft:shulker_box';
   if (name === 'hopper') return 'minecraft:hopper';
+  if (name === 'dispenser' || name === 'dropper') return 'minecraft:dispenser_dropper';
   if (name === 'enchanting_table') return 'minecraft:enchanting_table';
   if (name.includes('anvil')) return 'minecraft:anvil';
   if (name === 'brewing_stand') return 'minecraft:brewing_stand';

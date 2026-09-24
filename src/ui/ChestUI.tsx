@@ -12,7 +12,7 @@ interface ChestUIProps {
   onInventoryChange: () => void;
   getItemIconStyle: (id: number, size?: number) => any;
   onDropItem?: (itemId: number, count: number) => void;
-  titleKey?: 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox' | 'enderChest';
+  titleKey?: 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox' | 'enderChest' | 'dispenser' | 'dropper';
   serverCursor?: ItemStack | null;
   onServerSlotClick?: (area: 'container' | 'player', slotIndex: number, options?: { button?: 'left' | 'right'; shift?: boolean }) => void;
 }
@@ -67,6 +67,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
   const authoritative = Boolean(onServerSlotClick);
   const displayHeldItem = authoritative ? (serverCursor ?? null) : heldItem;
   const [, forceRender] = useState(0);
+  const containerColumns = chestSlots.length === 9 ? 3 : 9;
   const [hoveredSlot, setHoveredSlot] = useState<{
     item: ItemStack;
     itemDef: any;
@@ -351,7 +352,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
           </div>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: `repeat(9, ${SLOT_SIZE}px)`,
+            gridTemplateColumns: `repeat(${containerColumns}, ${SLOT_SIZE}px)`,
             gap: '2px',
           }}>
             {Array.from({ length: chestSlots.length }, (_, i) =>

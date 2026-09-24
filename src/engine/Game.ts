@@ -109,6 +109,7 @@ import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, windBurstImpul
 import { getMaceSmashBonus, getMaceSmashImpulse, isMaceSmash, MACE_HEAVY_SMASH_THRESHOLD } from '../items/MaceRules';
 import { isBundleItemName, removeOneFromBundle } from '../items/BundleRules';
 import { createShulkerBoxDropStack, createShulkerBoxMetadata, isShulkerBoxName, shulkerBoxOpeningOffset } from '../items/ShulkerBoxRules';
+import { activateDispenserLike, dispenserFacingOffset } from '../items/DispenserRules';
 import {
   createDecoratedPotMetadata,
   decoratedPotBreakDrops,
@@ -255,7 +256,7 @@ export interface GameState {
   inventory: Inventory;
   chestInventory: (ItemStack | null)[] | null;
   serverContainerCursor: ItemStack | null;
-  chestTitleKey: 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox' | 'enderChest';
+  chestTitleKey: 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox' | 'enderChest' | 'dispenser' | 'dropper';
   hopperInventory: (ItemStack | null)[] | null;
   furnaceInventory: (ItemStack | null)[] | null;
   furnaceType: 'furnace' | 'smoker' | 'blast_furnace' | null;
@@ -651,6 +652,14 @@ export class Game {
     });
     this.behaviors.registerBlock([], {
       id: 'minecraft:shulker_box',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.openChestUI(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    this.behaviors.registerBlock(['dispenser', 'dropper'], {
+      id: 'minecraft:dispenser_dropper',
       preventsItemUse: true,
       interact: ({ position }) => {
         this.openChestUI(position.x, position.y, position.z);
@@ -7691,6 +7700,16 @@ export class Game {
       return;
     }
 
+    if (name === 'dispenser' || name === 'dropper') {
+      this.chunks.setBlockMeta(x, y, z, {
+        facing: this.getDispenserPlacementFacing(),
+        containerType: name,
+        inventory: new Array(9).fill(null),
+        powered: false,
+      }, true);
+      return;
+    }
+
     if (name === 'ender_chest') {
       this.chunks.setBlockMeta(x, y, z, {
         facing: oppositeHorizontalFacing(this.getPlayerHorizontalFacing()),
@@ -8330,6 +8349,16 @@ export class Game {
     return def ? def.name.includes('trapdoor') : false;
   }
 
+  private getDispenserPlacementFacing(): BlockFacing {
+    const look = this.player.forward;
+    const ax = Math.abs(look.x);
+    const ay = Math.abs(look.y);
+    const az = Math.abs(look.z);
+    if (ay >= ax && ay >= az) return look.y > 0 ? 'down' : 'up';
+    if (ax >= az) return look.x > 0 ? 'west' : 'east';
+    return look.z > 0 ? 'north' : 'south';
+  }
+
   private getPlayerHorizontalFacing(): BlockFacing {
     const forward = this.player.forward;
     if (Math.abs(forward.x) > Math.abs(forward.z)) {
@@ -8763,6 +8792,20 @@ export class Game {
     const name = def.name;
     const powered = this.redstone.isPositionPowered(x, y, z);
 
+    if (name === 'dispenser' || name === 'dropper') {
+      const meta = this.ensureChestMetadata(x, y, z);
+      if (!meta) return;
+      const wasPowered = !!meta.powered;
+      if (powered && !wasPowered) {
+        this.activateDispenserDropper(x, y, z, name);
+      }
+      if (powered !== wasPowered) {
+        const latest = this.chunks.getBlockMeta(x, y, z) ?? meta;
+        this.chunks.setBlockMeta(x, y, z, { ...latest, powered }, true);
+      }
+      return;
+    }
+
     // P3.6: note blocks play on a rising power edge.
     if (name === 'note_block') {
       const meta = this.chunks.getBlockMeta(x, y, z) ?? {};
@@ -8843,10 +8886,20 @@ export class Game {
   private ensureChestMetadata(x: number, y: number, z: number): BlockMetadata | null {
     const blockId = this.chunks.getBlock(x, y, z);
     const def = BlockRegistry.get(blockId);
-    if (!def || (def.name !== 'chest' && def.name !== 'barrel' && !isShulkerBoxName(def.name))) return null;
+    if (!def || (
+      def.name !== 'chest'
+      && def.name !== 'barrel'
+      && def.name !== 'dispenser'
+      && def.name !== 'dropper'
+      && !isShulkerBoxName(def.name)
+    )) return null;
 
     const current = this.chunks.getBlockMeta(x, y, z);
-    const expectedType = isShulkerBoxName(def.name) ? 'shulker_box' : (def.name === 'barrel' ? 'barrel' : 'chest');
+    const expectedType = isShulkerBoxName(def.name)
+      ? 'shulker_box'
+      : (def.name === 'barrel'
+        ? 'barrel'
+        : (def.name === 'dispenser' || def.name === 'dropper' ? def.name : 'chest'));
     if (current?.containerType === expectedType && current.inventory) {
       return current;
     }
@@ -8854,7 +8907,7 @@ export class Game {
     const metadata: BlockMetadata = {
       ...current,
       containerType: expectedType,
-      inventory: new Array(27).fill(null),
+      inventory: new Array(expectedType === 'dispenser' || expectedType === 'dropper' ? 9 : 27).fill(null),
     };
     this.chunks.setBlockMeta(x, y, z, metadata);
     return metadata;
@@ -8966,7 +9019,7 @@ export class Game {
     return metadata?.inventory ?? null;
   }
 
-  private getOpenChestTitleKey(): 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox' | 'enderChest' {
+  private getOpenChestTitleKey(): 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox' | 'enderChest' | 'dispenser' | 'dropper' {
     if (!this.openChestPos) return 'chest';
 
     const x = this.openChestPos.x;
@@ -8976,6 +9029,8 @@ export class Game {
     const def = BlockRegistry.get(blockId);
     if (def?.name === 'barrel') return 'barrel';
     if (def?.name === 'ender_chest') return 'enderChest';
+    if (def?.name === 'dispenser') return 'dispenser';
+    if (def?.name === 'dropper') return 'dropper';
     if (isShulkerBoxName(def?.name)) return 'shulkerBox';
     return this.getDoubleChestPartners(x, y, z) ? 'doubleChest' : 'chest';
   }
@@ -9203,6 +9258,50 @@ export class Game {
       }, true);
       this.redstone.observeBlockChange(x, y, z);
     }
+  }
+
+  private activateDispenserDropper(x: number, y: number, z: number, kind: 'dispenser' | 'dropper') {
+    const meta = this.ensureChestMetadata(x, y, z);
+    if (!meta?.inventory) return;
+
+    const offset = dispenserFacingOffset(meta.facing);
+    const tx = x + offset.x;
+    const ty = y + offset.y;
+    const tz = z + offset.z;
+    const targetMeta = this.chunks.getBlockMeta(tx, ty, tz);
+    const targetSlots = targetMeta?.containerType && targetMeta.inventory
+      ? targetMeta.inventory
+      : undefined;
+
+    const result = activateDispenserLike(kind, meta.inventory, {
+      targetSlots,
+      targetContainerType: targetMeta?.containerType,
+    });
+
+    if (result.action === 'empty') {
+      this.sound.playLever();
+      return;
+    }
+
+    meta.inventory = result.sourceSlots;
+    this.chunks.setBlockMeta(x, y, z, meta, true);
+
+    if (result.action === 'insert' && targetMeta && result.targetSlots) {
+      targetMeta.inventory = result.targetSlots;
+      this.chunks.setBlockMeta(tx, ty, tz, targetMeta, true);
+    } else if (result.action === 'eject' && result.stack) {
+      const spawnPos = new THREE.Vector3(
+        x + 0.5 + offset.x * 0.7,
+        y + 0.5 + offset.y * 0.7,
+        z + 0.5 + offset.z * 0.7,
+      );
+      const velocity = new THREE.Vector3(offset.x, offset.y, offset.z).multiplyScalar(3.0);
+      if (offset.y === 0) velocity.y += 0.15;
+      this.droppedItems.spawnStack(result.stack, spawnPos, velocity, 0.2);
+    }
+
+    this.sound.playLever();
+    this.notifyState();
   }
 
   private getFacingDirection(facing: string): [number, number, number] {

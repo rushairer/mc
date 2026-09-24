@@ -83,6 +83,8 @@ export interface TranslationsSchema {
   barrel: string;
   shulkerBox: string;
   enderChest: string;
+  dispenser: string;
+  dropper: string;
   hopper: string;
   done: string;
   durability: string;
@@ -291,6 +293,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     barrel: 'Barrel',
     shulkerBox: 'Shulker Box',
     enderChest: 'Ender Chest',
+    dispenser: 'Dispenser',
+    dropper: 'Dropper',
     hopper: 'Hopper',
     done: 'Done',
     durability: 'Durability: {current} / {max}',
@@ -497,6 +501,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     barrel: '木桶',
     shulkerBox: '潜影盒',
     enderChest: '末影箱',
+    dispenser: '发射器',
+    dropper: '投掷器',
     hopper: '漏斗',
     done: '完成',
     durability: '耐久度: {current} / {max}',
@@ -703,6 +709,8 @@ export const translations: Record<Locale, TranslationsSchema> = {
     barrel: '木桶',
     shulkerBox: '界伏盒',
     enderChest: '終界箱',
+    dispenser: '發射器',
+    dropper: '投擲器',
     hopper: '漏斗',
     done: '完成',
     durability: '耐久度: {current} / {max}',

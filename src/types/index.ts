@@ -64,7 +64,7 @@ export interface BlockMetadata {
   /** P3.6 — note block pitch (0-24 semitones) and power-edge flag. */
   notePitch?: number;
   notePowered?: boolean;
-  containerType?: 'chest' | 'barrel' | 'shulker_box' | 'hopper' | 'furnace' | 'smoker' | 'blast_furnace' | 'brewing_stand' | 'decorated_pot' | 'chiseled_bookshelf';
+  containerType?: 'chest' | 'barrel' | 'shulker_box' | 'hopper' | 'dispenser' | 'dropper' | 'furnace' | 'smoker' | 'blast_furnace' | 'brewing_stand' | 'decorated_pot' | 'chiseled_bookshelf';
   inventory?: (ItemStack | null)[];
   spawnerMobType?: 'zombie' | 'skeleton' | 'spider';
   transferCooldown?: number; // for hoppers

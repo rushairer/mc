@@ -2681,6 +2681,24 @@ export class TextureAtlas {
             ctx.fillStyle = 'rgba(0,0,0,0.2)';
             ctx.fillRect(x + 5, y + 11, 6, 1);
           });
+        } else if (b.name === 'ender_chest') {
+          this.drawTile(iconKey, (ctx, x, y, size) => {
+            ctx.clearRect(x, y, size, size);
+            // Ender Chest: dark obsidian shell, green latch and purple End energy.
+            ctx.fillStyle = '#19131f';
+            ctx.fillRect(x + 3, y + 4, 10, 9);
+            ctx.fillStyle = '#2d2236';
+            ctx.fillRect(x + 3, y + 3, 10, 4);
+            ctx.fillStyle = '#5a3b70';
+            ctx.fillRect(x + 4, y + 4, 8, 1);
+            ctx.fillStyle = '#0f0b13';
+            ctx.fillRect(x + 4, y + 8, 8, 1);
+            ctx.fillStyle = '#b7d43f';
+            ctx.fillRect(x + 7, y + 7, 2, 3);
+            ctx.fillStyle = '#8f63b8';
+            ctx.fillRect(x + 4, y + 12, 2, 1);
+            ctx.fillRect(x + 10, y + 12, 2, 1);
+          });
         } else if (b.name.includes('ore')) {
           drawBlockIcon(b.name, '#909090', '#7a7a7a', '#686868', (ctx, ix, iy, is) => {
             ctx.fillStyle = colors.top;

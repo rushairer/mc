@@ -2,6 +2,7 @@ import rawRecipes from './data/recipes.json';
 import type { ItemStack } from '../types';
 import { craftDecoratedPot } from './DecoratedPotRules';
 import { craftChiseledBookshelf } from './ChiseledBookshelfRules';
+import { craftShulkerBox } from './ShulkerBoxRules';
 
 export interface RawRecipeIngredient {
   id: number;
@@ -119,13 +120,7 @@ export function listCraftingRecipes(): RecipeListItem[] {
   return out;
 }
 
-export function findCraftingResult(grid: number[]): ItemStack | null {
-  const stacks = grid.map((id) => id > 0 ? { id, count: 1 } : null);
-  const decoratedPot = craftDecoratedPot(stacks);
-  if (decoratedPot) return decoratedPot;
-  const chiseledBookshelf = craftChiseledBookshelf(stacks);
-  if (chiseledBookshelf) return chiseledBookshelf;
-
+function findCraftingResultByIds(grid: number[]): ItemStack | null {
   // 1. Get bounds of active items in grid
   let minRow = 3, maxRow = -1, minCol = 3, maxCol = -1;
   let activeCount = 0;
@@ -198,4 +193,28 @@ export function findCraftingResult(grid: number[]): ItemStack | null {
   }
 
   return null;
+}
+
+
+/** Component-aware crafting entry point used by interactive crafting grids. */
+export function findCraftingResultFromStacks(
+  grid: readonly (ItemStack | null | undefined)[],
+): ItemStack | null {
+  const stacks = Array.from({ length: 9 }, (_, index) => grid[index] ?? null);
+
+  const shulkerBox = craftShulkerBox(stacks);
+  if (shulkerBox) return shulkerBox;
+
+  const decoratedPot = craftDecoratedPot(stacks);
+  if (decoratedPot) return decoratedPot;
+
+  const chiseledBookshelf = craftChiseledBookshelf(stacks);
+  if (chiseledBookshelf) return chiseledBookshelf;
+
+  return findCraftingResultByIds(stacks.map((stack) => stack?.id ?? 0));
+}
+
+/** Legacy numeric-grid compatibility API. */
+export function findCraftingResult(grid: number[]): ItemStack | null {
+  return findCraftingResultFromStacks(grid.map((id) => id > 0 ? { id, count: 1 } : null));
 }

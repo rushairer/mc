@@ -1220,9 +1220,9 @@
   {
     "id": 227,
     "displayName": "Light Gray Shulker Box",
-    "name": "silver_shulker_box",
+    "name": "light_gray_shulker_box",
     "stackSize": 1,
-    "officialId": "minecraft:silver_shulker_box"
+    "officialId": "minecraft:light_gray_shulker_box"
   },
   {
     "id": 228,
@@ -5781,5 +5781,12 @@
     "name": "suspicious_gravel",
     "stackSize": 64,
     "runtimeId": 20312
+  },
+  {
+    "id": "minecraft:shulker_box",
+    "runtimeId": 20313,
+    "displayName": "Shulker Box",
+    "name": "shulker_box",
+    "stackSize": 1
   }
 ]

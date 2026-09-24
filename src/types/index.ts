@@ -64,7 +64,7 @@ export interface BlockMetadata {
   /** P3.6 — note block pitch (0-24 semitones) and power-edge flag. */
   notePitch?: number;
   notePowered?: boolean;
-  containerType?: 'chest' | 'barrel' | 'hopper' | 'furnace' | 'smoker' | 'blast_furnace' | 'brewing_stand' | 'decorated_pot' | 'chiseled_bookshelf';
+  containerType?: 'chest' | 'barrel' | 'shulker_box' | 'hopper' | 'furnace' | 'smoker' | 'blast_furnace' | 'brewing_stand' | 'decorated_pot' | 'chiseled_bookshelf';
   inventory?: (ItemStack | null)[];
   spawnerMobType?: 'zombie' | 'skeleton' | 'spider';
   transferCooldown?: number; // for hoppers
@@ -168,6 +168,8 @@ export interface ItemStack {
   customName?: string;
   /** Bundle dynamic-container contents. */
   bundleContents?: ItemStack[];
+  /** Shulker Box block-entity inventory preserved on the dropped/placed item. */
+  shulkerBoxContents?: (ItemStack | null)[];
   /** Java 26.3 minecraft:pot_decorations uses four optional full ItemStack faces. */
   potDecorations?: {
     back?: ItemStack;

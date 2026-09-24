@@ -150,7 +150,8 @@ const getOfficialId = (item: { id: number | string; name: string; officialId?: s
 for (const item of rawItems) {
   const baseId = getRuntimeId(item);
   const officialId = getOfficialId(item);
-  const isBlock = baseId < 256;
+  const matchingBlock = BlockRegistry.getByName(officialId);
+  const isBlock = baseId < 256 || !!matchingBlock;
 
   const registerItem = (id: number, meta: number, name: string, displayName: string, itemOfficialId: string) => {
     // Determine category
@@ -234,7 +235,9 @@ for (const item of rawItems) {
       }
     }
 
-    const placeBlockId = ITEM_PLACE_BLOCK_OVERRIDES[id] ?? (isBlock ? id : undefined);
+    const placeBlockId = ITEM_PLACE_BLOCK_OVERRIDES[id]
+      ?? matchingBlock?.id
+      ?? (baseId < 256 ? id : undefined);
     const itemDef = {
       id,
       officialId: itemOfficialId,

@@ -146,11 +146,8 @@ export const ChestUI: React.FC<ChestUIProps> = ({
       return;
     }
     if (heldItem) {
-      let leftover = inventory.addItem(heldItem.id, heldItem.count);
-      if (leftover > 0) {
-        const chestLeftover = addToSlots(chestSlots, { ...heldItem, count: leftover });
-        leftover = chestLeftover?.count ?? 0;
-      }
+      const leftover = inventory.addStack(heldItem);
+      if (leftover) addToSlots(chestSlots, leftover);
       setHeldItem(null);
     }
     notifyChanged();

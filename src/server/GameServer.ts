@@ -187,7 +187,7 @@ const WORLD_SPAWN_X = 8;
 const WORLD_SPAWN_Z = 8;
 
 type OpenServerContainer =
-  | { source: 'block'; x: number; y: number; z: number; dimension: number; key: string; kind: 'chest' | 'hopper' | 'shulker_box'; cursor: ItemStack | null }
+  | { source: 'block'; x: number; y: number; z: number; dimension: number; key: string; kind: 'chest' | 'hopper' | 'shulker_box' | 'ender_chest'; cursor: ItemStack | null }
   | { source: 'vehicle'; vehicleId: number; cursor: ItemStack | null };
 
 interface PlayerSession {
@@ -214,6 +214,8 @@ interface PlayerSession {
   xpProgress: number;
   xpCurrent: number;
   inventory: (ItemStack | null)[];
+  /** Player-owned inventory shared by every Ender Chest they open. */
+  enderChestInventory: (ItemStack | null)[];
   armor: (ItemStack | null)[];
   offhand: ItemStack | null;
   selectedSlot: number;
@@ -411,6 +413,7 @@ export class GameServer {
       xpProgress: 0,
       xpCurrent: 0,
       inventory: Array(36).fill(null),
+      enderChestInventory: Array(27).fill(null),
       armor: Array(4).fill(null),
       offhand: null,
       selectedSlot: 0,
@@ -1096,6 +1099,19 @@ export class GameServer {
         const blockMeta = this.getBlockMetadata(x, y, z, session.dimension);
         const tool = session.inventory[session.selectedSlot];
 
+        if (blockDef?.name === 'ender_chest' && session.gameMode !== 'creative') {
+          const toolDef = tool ? ItemRegistry.get(tool.id) : undefined;
+          if (toolDef?.toolType === 'pickaxe') {
+            const silkTouch = !!tool && EnchantSystem.getLevel(tool, 'silk_touch') > 0;
+            this.spawnDroppedStack(
+              silkTouch ? { id: blockDef.id, count: 1 } : { id: 49, count: 8 },
+              x + 0.5, y + 0.55, z + 0.5,
+              session.dimension,
+              0.35,
+            );
+          }
+        }
+
         if (blockDef && isShulkerBoxName(blockDef.name)) {
           const key = this.dimensionContainerKey(session.dimension, x, y, z);
           const inventory = this.containerData.get(key) ?? blockMeta?.inventory;
@@ -1275,6 +1291,8 @@ export class GameServer {
               metadata = createChiseledBookshelfMetadata(oppositeHorizontalFacing(playerFacing));
             } else if (block && isShulkerBoxName(block.name)) {
               metadata = createShulkerBoxMetadata(held, plan.facing);
+            } else if (block?.name === 'ender_chest') {
+              metadata = { facing: oppositeHorizontalFacing(playerFacing) };
             } else if (!metadata && validFace(plan.facing)) {
               metadata = { facing: plan.facing };
             }
@@ -1312,7 +1330,9 @@ export class GameServer {
         const placedBlock = BlockRegistry.get(blockId);
         const meta = placedBlock && isShulkerBoxName(placedBlock.name)
           ? createShulkerBoxMetadata(held, validFacing ? facing : 'up')
-          : (validFacing ? { facing } : null);
+          : (placedBlock?.name === 'ender_chest'
+            ? { facing: oppositeHorizontalFacing(horizontalFacingFromYaw(session.yaw)) }
+            : (validFacing ? { facing } : null));
         this.setBlock(x, y, z, blockId, session.dimension, meta);
         if (session.gameMode !== 'creative') {
           session.inventory[session.selectedSlot] = consumeHeldStack(held!);
@@ -2276,18 +2296,21 @@ export class GameServer {
         if (!isBlockActionInReach(session, x, y, z, session.gameMode)) break;
         const blockId = this.getBlock(x, y, z, session.dimension);
         const name = BlockRegistry.get(blockId)?.name ?? '';
-        const kind: 'chest' | 'hopper' | 'shulker_box' | null = name.includes('hopper')
-          ? 'hopper'
-          : (isShulkerBoxName(name) ? 'shulker_box' : (name.includes('chest') || name.includes('barrel') ? 'chest' : null));
+        const kind: 'chest' | 'hopper' | 'shulker_box' | 'ender_chest' | null = name === 'ender_chest'
+          ? 'ender_chest'
+          : (name.includes('hopper')
+            ? 'hopper'
+            : (isShulkerBoxName(name) ? 'shulker_box' : (name.includes('chest') || name.includes('barrel') ? 'chest' : null)));
         if (!kind) break;
         if (kind === 'shulker_box') {
           const metadata = this.getBlockMetadata(x, y, z, session.dimension);
           const offset = shulkerBoxOpeningOffset(metadata?.facing);
           if (this.isSolidBlock(x + offset.x, y + offset.y, z + offset.z, session.dimension)) break;
         }
+        if (kind === 'ender_chest' && this.isSolidBlock(x, y + 1, z, session.dimension)) break;
         this.closeServerContainer(session);
         const key = this.dimensionContainerKey(session.dimension, x, y, z);
-        if (!this.containerData.has(key)) {
+        if (kind !== 'ender_chest' && !this.containerData.has(key)) {
           const metadata = this.getBlockMetadata(x, y, z, session.dimension);
           this.containerData.set(key, kind === 'shulker_box'
             ? normalizeShulkerBoxContents(metadata?.inventory)
@@ -2306,7 +2329,7 @@ export class GameServer {
           this.closeServerContainer(session);
           break;
         }
-        const slots = this.getOpenContainerSlots(open);
+        const slots = this.getOpenContainerSlots(session, open);
         if (!slots) break;
         const next = applyServerContainerClick({
           containerSlots: slots,
@@ -2318,7 +2341,7 @@ export class GameServer {
           this.sendOpenContainerState(session);
           break;
         }
-        this.setOpenContainerSlots(open, next.containerSlots);
+        this.setOpenContainerSlots(session, open, next.containerSlots);
         session.inventory = next.playerSlots;
         open.cursor = next.cursor;
         this.syncPlayerInventory(session);
@@ -3477,13 +3500,21 @@ export class GameServer {
     return `${dimension}:${containerKey(x, y, z)}`;
   }
 
-  private getOpenContainerSlots(open: OpenServerContainer): (ItemStack | null)[] | null {
-    if (open.source === 'block') return this.containerData.get(open.key) ?? null;
+  private getOpenContainerSlots(player: PlayerSession, open: OpenServerContainer): (ItemStack | null)[] | null {
+    if (open.source === 'block') {
+      if (open.kind === 'ender_chest') return player.enderChestInventory;
+      return this.containerData.get(open.key) ?? null;
+    }
     return this.vehicles.get(open.vehicleId)?.inventory ?? null;
   }
 
-  private setOpenContainerSlots(open: OpenServerContainer, slots: (ItemStack | null)[]) {
+  private setOpenContainerSlots(player: PlayerSession, open: OpenServerContainer, slots: (ItemStack | null)[]) {
     if (open.source === 'block') {
+      if (open.kind === 'ender_chest') {
+        player.enderChestInventory = slots.slice(0, 27).map((slot) => cloneItemStack(slot));
+        while (player.enderChestInventory.length < 27) player.enderChestInventory.push(null);
+        return;
+      }
       const stored = slots.map((slot) => cloneItemStack(slot));
       this.containerData.set(open.key, stored);
       if (open.kind === 'shulker_box') {
@@ -3516,7 +3547,7 @@ export class GameServer {
   private sendOpenContainerState(player: PlayerSession) {
     const open = player.openContainer;
     if (!open) return;
-    const slots = this.getOpenContainerSlots(open) ?? [];
+    const slots = this.getOpenContainerSlots(player, open) ?? [];
     this.sendTo(player, PacketType.S2C_CONTAINER_DATA, open.source === 'block'
       ? {
           source: 'block',
@@ -3537,13 +3568,13 @@ export class GameServer {
   private closeServerContainer(player: PlayerSession) {
     const open = player.openContainer;
     if (!open) return;
-    const slots = this.getOpenContainerSlots(open) ?? [];
+    const slots = this.getOpenContainerSlots(player, open) ?? [];
     const next = returnContainerCursorToInventory({
       containerSlots: slots,
       playerSlots: player.inventory,
       cursor: open.cursor,
     });
-    this.setOpenContainerSlots(open, next.containerSlots);
+    this.setOpenContainerSlots(player, open, next.containerSlots);
     player.inventory = next.playerSlots;
     if (next.cursor) {
       this.spawnDroppedStack(next.cursor, player.x, player.y + 0.5, player.z, player.dimension);

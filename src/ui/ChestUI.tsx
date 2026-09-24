@@ -12,7 +12,7 @@ interface ChestUIProps {
   onInventoryChange: () => void;
   getItemIconStyle: (id: number, size?: number) => any;
   onDropItem?: (itemId: number, count: number) => void;
-  titleKey?: 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox';
+  titleKey?: 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox' | 'enderChest';
   serverCursor?: ItemStack | null;
   onServerSlotClick?: (area: 'container' | 'player', slotIndex: number, options?: { button?: 'left' | 'right'; shift?: boolean }) => void;
 }

@@ -187,7 +187,7 @@ const WORLD_SPAWN_X = 8;
 const WORLD_SPAWN_Z = 8;
 
 type OpenServerContainer =
-  | { source: 'block'; x: number; y: number; z: number; key: string; kind: 'chest' | 'hopper' | 'shulker_box'; cursor: ItemStack | null }
+  | { source: 'block'; x: number; y: number; z: number; dimension: number; key: string; kind: 'chest' | 'hopper' | 'shulker_box'; cursor: ItemStack | null }
   | { source: 'vehicle'; vehicleId: number; cursor: ItemStack | null };
 
 interface PlayerSession {
@@ -2293,7 +2293,7 @@ export class GameServer {
             ? normalizeShulkerBoxContents(metadata?.inventory)
             : createContainerSlots(kind));
         }
-        session.openContainer = { source: 'block', x, y, z, key, kind, cursor: null };
+        session.openContainer = { source: 'block', x, y, z, dimension: session.dimension, key, kind, cursor: null };
         this.sendOpenContainerState(session);
         break;
       }
@@ -3487,11 +3487,10 @@ export class GameServer {
       const stored = slots.map((slot) => cloneItemStack(slot));
       this.containerData.set(open.key, stored);
       if (open.kind === 'shulker_box') {
-        const blockId = this.getBlock(open.x, open.y, open.z, Number(open.key.split(':', 1)[0]));
-        const dimension = Number(open.key.split(':', 1)[0]);
-        const metadata = this.getBlockMetadata(open.x, open.y, open.z, dimension);
+        const blockId = this.getBlock(open.x, open.y, open.z, open.dimension);
+        const metadata = this.getBlockMetadata(open.x, open.y, open.z, open.dimension);
         if (blockId !== 0 && isShulkerBoxName(BlockRegistry.get(blockId)?.name)) {
-          this.setBlock(open.x, open.y, open.z, blockId, dimension, {
+          this.setBlock(open.x, open.y, open.z, blockId, open.dimension, {
             ...metadata,
             containerType: 'shulker_box',
             inventory: normalizeShulkerBoxContents(stored),

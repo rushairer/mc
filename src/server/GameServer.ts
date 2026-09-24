@@ -130,6 +130,7 @@ import { brushedReplacementName, isSuspiciousBlockName, normalizeArchaeologyLoot
 import { isServerBrushDurationComplete, parseServerBrushAction, sameServerBrushTarget } from './BrushActionRules';
 import { parseServerBundleAction } from './BundleActionRules';
 import { insertIntoBundle, isBundleStack, removeOneFromBundle } from '../items/BundleRules';
+import { createShulkerBoxDropStack, createShulkerBoxMetadata, isShulkerBoxName, normalizeShulkerBoxContents, shulkerBoxOpeningOffset } from '../items/ShulkerBoxRules';
 import {
   createDecoratedPotMetadata,
   decoratedPotBreakDrops,
@@ -186,7 +187,7 @@ const WORLD_SPAWN_X = 8;
 const WORLD_SPAWN_Z = 8;
 
 type OpenServerContainer =
-  | { source: 'block'; x: number; y: number; z: number; key: string; cursor: ItemStack | null }
+  | { source: 'block'; x: number; y: number; z: number; dimension: number; key: string; kind: 'chest' | 'hopper' | 'shulker_box'; cursor: ItemStack | null }
   | { source: 'vehicle'; vehicleId: number; cursor: ItemStack | null };
 
 interface PlayerSession {
@@ -1095,6 +1096,20 @@ export class GameServer {
         const blockMeta = this.getBlockMetadata(x, y, z, session.dimension);
         const tool = session.inventory[session.selectedSlot];
 
+        if (blockDef && isShulkerBoxName(blockDef.name)) {
+          const key = this.dimensionContainerKey(session.dimension, x, y, z);
+          const inventory = this.containerData.get(key) ?? blockMeta?.inventory;
+          if (session.gameMode !== 'creative') {
+            this.spawnDroppedStack(
+              createShulkerBoxDropStack(blockId, { ...blockMeta, inventory: normalizeShulkerBoxContents(inventory) }),
+              x + 0.5, y + 0.55, z + 0.5,
+              session.dimension,
+              0.35,
+            );
+          }
+          this.containerData.delete(key);
+        }
+
         if (blockDef?.name === 'chiseled_bookshelf') {
           for (const stack of blockMeta?.inventory ?? []) {
             if (!stack || stack.count <= 0) continue;
@@ -1258,6 +1273,8 @@ export class GameServer {
               metadata = createDecoratedPotMetadata(held, plan.facing);
             } else if (block?.name === 'chiseled_bookshelf') {
               metadata = createChiseledBookshelfMetadata(oppositeHorizontalFacing(playerFacing));
+            } else if (block && isShulkerBoxName(block.name)) {
+              metadata = createShulkerBoxMetadata(held, plan.facing);
             } else if (!metadata && validFace(plan.facing)) {
               metadata = { facing: plan.facing };
             }
@@ -1292,7 +1309,10 @@ export class GameServer {
         if (this.getBlock(x, y, z, session.dimension) !== 0) break;
         if (!canPlaceHeldBlock(held, blockId)) break;
         const validFacing = validFace(facing);
-        const meta = validFacing ? { facing } : null;
+        const placedBlock = BlockRegistry.get(blockId);
+        const meta = placedBlock && isShulkerBoxName(placedBlock.name)
+          ? createShulkerBoxMetadata(held, validFacing ? facing : 'up')
+          : (validFacing ? { facing } : null);
         this.setBlock(x, y, z, blockId, session.dimension, meta);
         if (session.gameMode !== 'creative') {
           session.inventory[session.selectedSlot] = consumeHeldStack(held!);
@@ -2256,12 +2276,24 @@ export class GameServer {
         if (!isBlockActionInReach(session, x, y, z, session.gameMode)) break;
         const blockId = this.getBlock(x, y, z, session.dimension);
         const name = BlockRegistry.get(blockId)?.name ?? '';
-        const kind = name.includes('hopper') ? 'hopper' : (name.includes('chest') || name.includes('barrel') ? 'chest' : null);
+        const kind: 'chest' | 'hopper' | 'shulker_box' | null = name.includes('hopper')
+          ? 'hopper'
+          : (isShulkerBoxName(name) ? 'shulker_box' : (name.includes('chest') || name.includes('barrel') ? 'chest' : null));
         if (!kind) break;
+        if (kind === 'shulker_box') {
+          const metadata = this.getBlockMetadata(x, y, z, session.dimension);
+          const offset = shulkerBoxOpeningOffset(metadata?.facing);
+          if (this.isSolidBlock(x + offset.x, y + offset.y, z + offset.z, session.dimension)) break;
+        }
         this.closeServerContainer(session);
         const key = this.dimensionContainerKey(session.dimension, x, y, z);
-        if (!this.containerData.has(key)) this.containerData.set(key, createContainerSlots(kind));
-        session.openContainer = { source: 'block', x, y, z, key, cursor: null };
+        if (!this.containerData.has(key)) {
+          const metadata = this.getBlockMetadata(x, y, z, session.dimension);
+          this.containerData.set(key, kind === 'shulker_box'
+            ? normalizeShulkerBoxContents(metadata?.inventory)
+            : createContainerSlots(kind));
+        }
+        session.openContainer = { source: 'block', x, y, z, dimension: session.dimension, key, kind, cursor: null };
         this.sendOpenContainerState(session);
         break;
       }
@@ -2280,6 +2312,7 @@ export class GameServer {
           containerSlots: slots,
           playerSlots: session.inventory,
           cursor: open.cursor,
+          containerKind: open.source === 'block' ? open.kind : undefined,
         }, intent);
         if (!next) {
           this.sendOpenContainerState(session);
@@ -3451,7 +3484,19 @@ export class GameServer {
 
   private setOpenContainerSlots(open: OpenServerContainer, slots: (ItemStack | null)[]) {
     if (open.source === 'block') {
-      this.containerData.set(open.key, slots);
+      const stored = slots.map((slot) => cloneItemStack(slot));
+      this.containerData.set(open.key, stored);
+      if (open.kind === 'shulker_box') {
+        const blockId = this.getBlock(open.x, open.y, open.z, open.dimension);
+        const metadata = this.getBlockMetadata(open.x, open.y, open.z, open.dimension);
+        if (blockId !== 0 && isShulkerBoxName(BlockRegistry.get(blockId)?.name)) {
+          this.setBlock(open.x, open.y, open.z, blockId, open.dimension, {
+            ...metadata,
+            containerType: 'shulker_box',
+            inventory: normalizeShulkerBoxContents(stored),
+          });
+        }
+      }
       return;
     }
     const vehicle = this.vehicles.get(open.vehicleId);

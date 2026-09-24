@@ -8,6 +8,7 @@ import { cloneItemStack, itemStacksCanMerge } from '../items/ItemStackRules';
 import { isSmeltingFuel } from '../items/SmeltingRecipes';
 import { BrewingSystem } from './BrewingSystem';
 import { isChiseledBookshelfBook } from '../items/ChiseledBookshelfRules';
+import { isShulkerBoxStack } from '../items/ShulkerBoxRules';
 import type { ItemStack, BlockFacing, BlockMetadata } from '../types';
 
 const HOPPER_TRANSFER_COOLDOWN = 0.4; // 8 game ticks at 20 TPS
@@ -38,6 +39,7 @@ export function getHopperInsertionSlots(
   if (containerType === 'chiseled_bookshelf') {
     return isChiseledBookshelfBook(item) ? [0, 1, 2, 3, 4, 5] : [];
   }
+  if (containerType === 'shulker_box' && isShulkerBoxStack(item)) return [];
   return undefined;
 }
 

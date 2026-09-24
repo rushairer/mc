@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ItemStack } from '../types';
 import { Inventory } from '../player/Inventory';
 import { ItemRegistry } from '../items/ItemRegistry';
+import { isShulkerBoxStack } from '../items/ShulkerBoxRules';
 import { useI18n } from '../i18n';
 
 interface ChestUIProps {
@@ -11,7 +12,7 @@ interface ChestUIProps {
   onInventoryChange: () => void;
   getItemIconStyle: (id: number, size?: number) => any;
   onDropItem?: (itemId: number, count: number) => void;
-  titleKey?: 'chest' | 'doubleChest' | 'barrel';
+  titleKey?: 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox';
   serverCursor?: ItemStack | null;
   onServerSlotClick?: (area: 'container' | 'player', slotIndex: number, options?: { button?: 'left' | 'right'; shift?: boolean }) => void;
 }
@@ -115,6 +116,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
       return;
     }
     const slotItem = getSlot(target);
+    if (target.type === 'chest' && titleKey === 'shulkerBox' && heldItem && isShulkerBoxStack(heldItem)) return;
 
     if (heldItem && slotItem && heldItem.id === slotItem.id) {
       const maxStack = ItemRegistry.getMaxStackSize(heldItem.id);
@@ -136,7 +138,7 @@ export const ChestUI: React.FC<ChestUIProps> = ({
     }
 
     notifyChanged();
-  }, [authoritative, getSlot, heldItem, notifyChanged, onServerSlotClick, setSlot]);
+  }, [authoritative, getSlot, heldItem, notifyChanged, onServerSlotClick, setSlot, titleKey]);
 
   const handleClose = useCallback(() => {
     if (authoritative) {
@@ -144,11 +146,8 @@ export const ChestUI: React.FC<ChestUIProps> = ({
       return;
     }
     if (heldItem) {
-      let leftover = inventory.addItem(heldItem.id, heldItem.count);
-      if (leftover > 0) {
-        const chestLeftover = addToSlots(chestSlots, { ...heldItem, count: leftover });
-        leftover = chestLeftover?.count ?? 0;
-      }
+      const leftover = inventory.addStack(heldItem);
+      if (leftover) addToSlots(chestSlots, leftover);
       setHeldItem(null);
     }
     notifyChanged();

@@ -109,6 +109,7 @@ import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, windBurstImpul
 import { getMaceSmashBonus, getMaceSmashImpulse, isMaceSmash, MACE_HEAVY_SMASH_THRESHOLD } from '../items/MaceRules';
 import { isBundleItemName, removeOneFromBundle } from '../items/BundleRules';
 import { createShulkerBoxDropStack, createShulkerBoxMetadata, isShulkerBoxName, shulkerBoxOpeningOffset } from '../items/ShulkerBoxRules';
+import { activateDispenserLike, dispenserFacingOffset } from '../items/DispenserRules';
 import {
   createDecoratedPotMetadata,
   decoratedPotBreakDrops,
@@ -8781,6 +8782,20 @@ export class Game {
     const name = def.name;
     const powered = this.redstone.isPositionPowered(x, y, z);
 
+    if (name === 'dispenser' || name === 'dropper') {
+      const meta = this.ensureChestMetadata(x, y, z);
+      if (!meta) return;
+      const wasPowered = !!meta.powered;
+      if (powered && !wasPowered) {
+        this.activateDispenserDropper(x, y, z, name);
+      }
+      if (powered !== wasPowered) {
+        const latest = this.chunks.getBlockMeta(x, y, z) ?? meta;
+        this.chunks.setBlockMeta(x, y, z, { ...latest, powered }, true);
+      }
+      return;
+    }
+
     // P3.6: note blocks play on a rising power edge.
     if (name === 'note_block') {
       const meta = this.chunks.getBlockMeta(x, y, z) ?? {};
@@ -9233,6 +9248,50 @@ export class Game {
       }, true);
       this.redstone.observeBlockChange(x, y, z);
     }
+  }
+
+  private activateDispenserDropper(x: number, y: number, z: number, kind: 'dispenser' | 'dropper') {
+    const meta = this.ensureChestMetadata(x, y, z);
+    if (!meta?.inventory) return;
+
+    const offset = dispenserFacingOffset(meta.facing);
+    const tx = x + offset.x;
+    const ty = y + offset.y;
+    const tz = z + offset.z;
+    const targetMeta = this.chunks.getBlockMeta(tx, ty, tz);
+    const targetSlots = targetMeta?.containerType && targetMeta.inventory
+      ? targetMeta.inventory
+      : undefined;
+
+    const result = activateDispenserLike(kind, meta.inventory, {
+      targetSlots,
+      targetContainerType: targetMeta?.containerType,
+    });
+
+    if (result.action === 'empty') {
+      this.sound.playLever();
+      return;
+    }
+
+    meta.inventory = result.sourceSlots;
+    this.chunks.setBlockMeta(x, y, z, meta, true);
+
+    if (result.action === 'insert' && targetMeta && result.targetSlots) {
+      targetMeta.inventory = result.targetSlots;
+      this.chunks.setBlockMeta(tx, ty, tz, targetMeta, true);
+    } else if (result.action === 'eject' && result.stack) {
+      const spawnPos = new THREE.Vector3(
+        x + 0.5 + offset.x * 0.7,
+        y + 0.5 + offset.y * 0.7,
+        z + 0.5 + offset.z * 0.7,
+      );
+      const velocity = new THREE.Vector3(offset.x, offset.y, offset.z).multiplyScalar(3.0);
+      if (offset.y === 0) velocity.y += 0.15;
+      this.droppedItems.spawnStack(result.stack, spawnPos, velocity, 0.2);
+    }
+
+    this.sound.playLever();
+    this.notifyState();
   }
 
   private getFacingDirection(facing: string): [number, number, number] {

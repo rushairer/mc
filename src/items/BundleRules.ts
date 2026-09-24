@@ -1,4 +1,5 @@
 import type { ItemStack } from '../types';
+import { ItemRegistry } from './ItemRegistry';
 import { cloneItemStack, getItemStackMaxSize, itemStacksCanMerge } from './ItemStackRules';
 import { isShulkerBoxStack } from './ShulkerBoxRules';
 export { isShulkerBoxStack } from './ShulkerBoxRules';

@@ -13,38 +13,24 @@
   "axes": {
     "definitions": {
       "state": "partial",
-      "evidence": [
-        "npm run audit:latest",
-        "npm run audit:vanilla",
-        "npm run audit:items"
-      ]
+      "evidence": ["npm run audit:latest", "npm run audit:vanilla", "npm run audit:items"]
     },
     "visualModels": {
       "state": "partial",
-      "evidence": [
-        "npm run audit:items",
-        "all current visuals are generated rather than model-parity verified"
-      ]
+      "evidence": ["npm run audit:items", "all current visuals are generated rather than model-parity verified"]
     },
     "behavior": {
       "state": "partial",
-      "evidence": [
-        "system-specific acceptance tests are required before a feature can be complete"
-      ]
+      "evidence": ["system-specific acceptance tests are required before a feature can be complete"]
     },
     "automatedAcceptance": {
       "state": "partial",
-      "evidence": [
-        "npm run test:unit",
-        "npm run check",
-        "npm run smoke",
-        "npm run smoke:two-client"
-      ]
+      "evidence": ["npm run test:unit", "npm run check", "npm run smoke", "npm run smoke:two-client"]
     }
   },
   "inventory": {
     "baseBlockDefinitions": 1251,
-    "baseItemDefinitions": 724,
+    "baseItemDefinitions": 725,
     "implementedMobTypes": 24,
     "implementedBiomes": 11,
     "implementedEnchantments": 4,
@@ -52,84 +38,19 @@
     "implementedAdvancements": 10
   },
   "systems": {
-    "saveMigration": {
-      "definitions": "complete",
-      "visualModels": "not-applicable",
-      "behavior": "partial",
-      "automatedAcceptance": "partial"
-    },
-    "blockStateFoundation": {
-      "definitions": "partial",
-      "visualModels": "not-applicable",
-      "behavior": "partial",
-      "automatedAcceptance": "partial"
-    },
-    "tickScheduler": {
-      "definitions": "complete",
-      "visualModels": "not-applicable",
-      "behavior": "complete",
-      "automatedAcceptance": "partial"
-    },
-    "behaviorRegistry": {
-      "definitions": "complete",
-      "visualModels": "not-applicable",
-      "behavior": "complete",
-      "automatedAcceptance": "partial"
-    },
-    "tagsLootTierRules": {
-      "definitions": "partial",
-      "visualModels": "not-applicable",
-      "behavior": "partial",
-      "automatedAcceptance": "partial"
-    },
-    "worldGeneration": {
-      "definitions": "partial",
-      "visualModels": "partial",
-      "behavior": "partial",
-      "automatedAcceptance": "missing"
-    },
-    "blocks": {
-      "definitions": "partial",
-      "visualModels": "partial",
-      "behavior": "partial",
-      "automatedAcceptance": "missing"
-    },
-    "itemsAndCrafting": {
-      "definitions": "partial",
-      "visualModels": "partial",
-      "behavior": "partial",
-      "automatedAcceptance": "missing"
-    },
-    "mobs": {
-      "definitions": "partial",
-      "visualModels": "partial",
-      "behavior": "partial",
-      "automatedAcceptance": "missing"
-    },
-    "combatAndProgression": {
-      "definitions": "partial",
-      "visualModels": "partial",
-      "behavior": "partial",
-      "automatedAcceptance": "missing"
-    },
-    "redstone": {
-      "definitions": "partial",
-      "visualModels": "partial",
-      "behavior": "partial",
-      "automatedAcceptance": "missing"
-    },
-    "audioAndUi": {
-      "definitions": "partial",
-      "visualModels": "partial",
-      "behavior": "partial",
-      "automatedAcceptance": "missing"
-    },
-    "multiplayer": {
-      "definitions": "partial",
-      "visualModels": "partial",
-      "behavior": "partial",
-      "automatedAcceptance": "missing"
-    },
+    "saveMigration": { "definitions": "complete", "visualModels": "not-applicable", "behavior": "partial", "automatedAcceptance": "partial" },
+    "blockStateFoundation": { "definitions": "partial", "visualModels": "not-applicable", "behavior": "partial", "automatedAcceptance": "partial" },
+    "tickScheduler": { "definitions": "complete", "visualModels": "not-applicable", "behavior": "complete", "automatedAcceptance": "partial" },
+    "behaviorRegistry": { "definitions": "complete", "visualModels": "not-applicable", "behavior": "complete", "automatedAcceptance": "partial" },
+    "tagsLootTierRules": { "definitions": "partial", "visualModels": "not-applicable", "behavior": "partial", "automatedAcceptance": "partial" },
+    "worldGeneration": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "blocks": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "itemsAndCrafting": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "mobs": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "combatAndProgression": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "redstone": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "audioAndUi": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
+    "multiplayer": { "definitions": "partial", "visualModels": "partial", "behavior": "partial", "automatedAcceptance": "missing" },
     "wildernessBound26_3": {
       "definitions": "partial",
       "visualModels": "partial",

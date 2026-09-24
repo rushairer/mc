@@ -81,6 +81,7 @@ export interface TranslationsSchema {
   chest: string;
   doubleChest: string;
   barrel: string;
+  shulkerBox: string;
   hopper: string;
   done: string;
   durability: string;
@@ -287,6 +288,7 @@ export const translations: Record<Locale, TranslationsSchema> = {
     chest: 'Chest',
     doubleChest: 'Double Chest',
     barrel: 'Barrel',
+    shulkerBox: 'Shulker Box',
     hopper: 'Hopper',
     done: 'Done',
     durability: 'Durability: {current} / {max}',
@@ -491,6 +493,7 @@ export const translations: Record<Locale, TranslationsSchema> = {
     chest: '箱子',
     doubleChest: '大箱子',
     barrel: '木桶',
+    shulkerBox: '潜影盒',
     hopper: '漏斗',
     done: '完成',
     durability: '耐久度: {current} / {max}',
@@ -695,6 +698,7 @@ export const translations: Record<Locale, TranslationsSchema> = {
     chest: '箱子',
     doubleChest: '大箱子',
     barrel: '木桶',
+    shulkerBox: '界伏盒',
     hopper: '漏斗',
     done: '完成',
     durability: '耐久度: {current} / {max}',

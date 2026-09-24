@@ -108,6 +108,7 @@ import { GOAT_HORN_COOLDOWN_SECONDS, goatHornSoundIndex, spyglassFov } from '../
 import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, windBurstImpulse } from '../items/WindChargeRules';
 import { getMaceSmashBonus, getMaceSmashImpulse, isMaceSmash, MACE_HEAVY_SMASH_THRESHOLD } from '../items/MaceRules';
 import { isBundleItemName, removeOneFromBundle } from '../items/BundleRules';
+import { createShulkerBoxDropStack, createShulkerBoxMetadata, isShulkerBoxName, shulkerBoxOpeningOffset } from '../items/ShulkerBoxRules';
 import {
   createDecoratedPotMetadata,
   decoratedPotBreakDrops,
@@ -254,7 +255,7 @@ export interface GameState {
   inventory: Inventory;
   chestInventory: (ItemStack | null)[] | null;
   serverContainerCursor: ItemStack | null;
-  chestTitleKey: 'chest' | 'doubleChest' | 'barrel';
+  chestTitleKey: 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox';
   hopperInventory: (ItemStack | null)[] | null;
   furnaceInventory: (ItemStack | null)[] | null;
   furnaceType: 'furnace' | 'smoker' | 'blast_furnace' | null;
@@ -632,6 +633,14 @@ export class Game {
     });
     this.behaviors.registerBlock(['chest', 'barrel'], {
       id: 'minecraft:storage',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.openChestUI(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    this.behaviors.registerBlock([], {
+      id: 'minecraft:shulker_box',
       preventsItemUse: true,
       interact: ({ position }) => {
         this.openChestUI(position.x, position.y, position.z);
@@ -1814,6 +1823,12 @@ export class Game {
           || this.isChestBlockedAt(partners.rightPos.x, partners.rightPos.y, partners.rightPos.z)
         : this.isChestBlockedAt(x, y, z);
       if (blocked) return;
+    }
+    if (isShulkerBoxName(block?.name)) {
+      const meta = this.chunks.getBlockMeta(x, y, z);
+      const offset = shulkerBoxOpeningOffset(meta?.facing);
+      const blockingId = this.chunks.getBlock(x + offset.x, y + offset.y, z + offset.z);
+      if (BlockRegistry.isSolid(blockingId)) return;
     }
 
     const metadata = this.ensureChestMetadata(x, y, z);
@@ -7647,6 +7662,11 @@ export class Game {
       return;
     }
 
+    if (isShulkerBoxName(name)) {
+      this.chunks.setBlockMeta(x, y, z, createShulkerBoxMetadata(placedStack, facing), true);
+      return;
+    }
+
     if (name === 'chest') {
       this.chunks.setBlockMeta(x, y, z, {
         facing,
@@ -8792,10 +8812,10 @@ export class Game {
   private ensureChestMetadata(x: number, y: number, z: number): BlockMetadata | null {
     const blockId = this.chunks.getBlock(x, y, z);
     const def = BlockRegistry.get(blockId);
-    if (!def || (def.name !== 'chest' && def.name !== 'barrel')) return null;
+    if (!def || (def.name !== 'chest' && def.name !== 'barrel' && !isShulkerBoxName(def.name))) return null;
 
     const current = this.chunks.getBlockMeta(x, y, z);
-    const expectedType = def.name === 'barrel' ? 'barrel' : 'chest';
+    const expectedType = isShulkerBoxName(def.name) ? 'shulker_box' : (def.name === 'barrel' ? 'barrel' : 'chest');
     if (current?.containerType === expectedType && current.inventory) {
       return current;
     }
@@ -8913,7 +8933,7 @@ export class Game {
     return metadata?.inventory ?? null;
   }
 
-  private getOpenChestTitleKey(): 'chest' | 'doubleChest' | 'barrel' {
+  private getOpenChestTitleKey(): 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox' {
     if (!this.openChestPos) return 'chest';
 
     const x = this.openChestPos.x;
@@ -8922,6 +8942,7 @@ export class Game {
     const blockId = this.chunks.getBlock(x, y, z);
     const def = BlockRegistry.get(blockId);
     if (def?.name === 'barrel') return 'barrel';
+    if (isShulkerBoxName(def?.name)) return 'shulkerBox';
     return this.getDoubleChestPartners(x, y, z) ? 'doubleChest' : 'chest';
   }
 
@@ -9201,7 +9222,7 @@ export class Game {
       : null;
 
     // 1. Drop contents if it's a container
-    if (spawnDrop && meta?.inventory) {
+    if (spawnDrop && meta?.inventory && !isShulkerBoxName(def?.name)) {
       for (const slot of meta.inventory) {
         if (slot && slot.count > 0) {
           const dropPos = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
@@ -9246,7 +9267,7 @@ export class Game {
     if (
       spawnDrop
       && this.gameMode !== 'creative'
-      && (harvestable || def?.name === 'decorated_pot' || def?.name === 'chiseled_bookshelf')
+      && (harvestable || def?.name === 'decorated_pot' || def?.name === 'chiseled_bookshelf' || isShulkerBoxName(def?.name))
     ) {
       const dropPos = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
       const velocity = new THREE.Vector3(
@@ -9271,6 +9292,8 @@ export class Game {
         if (dropEnchants?.silkTouch) {
           this.droppedItems.spawnItem(def.id, 1, dropPos, velocity, 0.5);
         }
+      } else if (def && isShulkerBoxName(def.name)) {
+        this.droppedItems.spawnStack(createShulkerBoxDropStack(blockId, meta), dropPos, velocity, 0.5);
       } else if (this.isDoorBlock(blockId)) {
         const doorItemId = ItemRegistry.getItemIdForPlacedBlock(blockId);
         if (doorItemId !== undefined) {

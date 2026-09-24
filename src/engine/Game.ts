@@ -255,7 +255,7 @@ export interface GameState {
   inventory: Inventory;
   chestInventory: (ItemStack | null)[] | null;
   serverContainerCursor: ItemStack | null;
-  chestTitleKey: 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox';
+  chestTitleKey: 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox' | 'enderChest';
   hopperInventory: (ItemStack | null)[] | null;
   furnaceInventory: (ItemStack | null)[] | null;
   furnaceType: 'furnace' | 'smoker' | 'blast_furnace' | null;
@@ -397,6 +397,8 @@ export class Game {
   private fpArmGroup!: THREE.Group;
   private fpLastHeldItemId = -1;
   private openChestPos: THREE.Vector3 | null = null;
+  /** Personal 27-slot inventory shared by every Ender Chest in this world. */
+  private enderChestInventory: (ItemStack | null)[] = new Array(27).fill(null);
   private openChestVehicleId: number | null = null;
   private serverContainerCursor: ItemStack | null = null;
   private vehicleInputSendTimer = 0;
@@ -633,6 +635,14 @@ export class Game {
     });
     this.behaviors.registerBlock(['chest', 'barrel'], {
       id: 'minecraft:storage',
+      preventsItemUse: true,
+      interact: ({ position }) => {
+        this.openChestUI(position.x, position.y, position.z);
+        return { handled: true, cooldown: 0.5 };
+      },
+    });
+    this.behaviors.registerBlock('ender_chest', {
+      id: 'minecraft:ender_chest',
       preventsItemUse: true,
       interact: ({ position }) => {
         this.openChestUI(position.x, position.y, position.z);
@@ -1816,8 +1826,8 @@ export class Game {
 
   openChestUI(x: number, y: number, z: number) {
     const block = BlockRegistry.get(this.chunks.getBlock(x, y, z));
-    if (block?.name === 'chest') {
-      const partners = this.getDoubleChestPartners(x, y, z);
+    if (block?.name === 'chest' || block?.name === 'ender_chest') {
+      const partners = block.name === 'chest' ? this.getDoubleChestPartners(x, y, z) : null;
       const blocked = partners
         ? this.isChestBlockedAt(partners.leftPos.x, partners.leftPos.y, partners.leftPos.z)
           || this.isChestBlockedAt(partners.rightPos.x, partners.rightPos.y, partners.rightPos.z)
@@ -1831,8 +1841,10 @@ export class Game {
       if (BlockRegistry.isSolid(blockingId)) return;
     }
 
-    const metadata = this.ensureChestMetadata(x, y, z);
-    if (!metadata) return;
+    if (block?.name !== 'ender_chest') {
+      const metadata = this.ensureChestMetadata(x, y, z);
+      if (!metadata) return;
+    }
 
     this.openChestPos = new THREE.Vector3(x, y, z);
     this.openUI = 'chest';
@@ -1865,9 +1877,16 @@ export class Game {
 
     const openPos = this.openChestPos ?? this.openHopperPos;
     if (x === undefined || y === undefined || z === undefined || !openPos || openPos.x !== x || openPos.y !== y || openPos.z !== z) return;
+    const blockName = BlockRegistry.get(this.chunks.getBlock(x, y, z))?.name;
+    if (blockName === 'ender_chest') {
+      this.enderChestInventory = slots.slice(0, 27).map((slot) => cloneItemStack(slot));
+      while (this.enderChestInventory.length < 27) this.enderChestInventory.push(null);
+      this.notifyState();
+      return;
+    }
     const metadata = this.chunks.getBlockMeta(x, y, z);
     if (!metadata) return;
-    metadata.inventory = slots.map((slot) => (slot ? { ...slot } : null));
+    metadata.inventory = slots.map((slot) => cloneItemStack(slot));
     this.chunks.setBlockMeta(x, y, z, metadata, true);
     this.notifyState();
   }
@@ -7004,6 +7023,7 @@ export class Game {
         armor: [...this.inventory.armor],
         offhand: this.inventory.getOffhand(),
       },
+      enderChestInventory: this.enderChestInventory.map((slot) => cloneItemStack(slot)),
       seed: this.seed,
       dimensions,
       endDragonDefeated: this.enderDragon.getState().defeated,
@@ -7081,6 +7101,9 @@ export class Game {
         this.advancements.reset();
       }
 
+      this.enderChestInventory = (data.enderChestInventory ?? []).slice(0, 27).map((slot) => cloneItemStack(slot));
+      while (this.enderChestInventory.length < 27) this.enderChestInventory.push(null);
+
       if (data.inventory) {
         this.inventory.fromJSON(data.inventory.slots);
         if (data.inventory.armor && Array.isArray(data.inventory.armor)) {
@@ -7095,6 +7118,7 @@ export class Game {
         this.maps.restoreFromMaps([
           ...this.inventory.slots.flatMap((slot) => slot?.map ? [slot.map] : []),
           ...(this.inventory.getOffhand()?.map ? [this.inventory.getOffhand()!.map!] : []),
+          ...this.enderChestInventory.flatMap((slot) => slot?.map ? [slot.map] : []),
         ]);
       }
 
@@ -7664,6 +7688,13 @@ export class Game {
 
     if (isShulkerBoxName(name)) {
       this.chunks.setBlockMeta(x, y, z, createShulkerBoxMetadata(placedStack, facing), true);
+      return;
+    }
+
+    if (name === 'ender_chest') {
+      this.chunks.setBlockMeta(x, y, z, {
+        facing: oppositeHorizontalFacing(this.getPlayerHorizontalFacing()),
+      }, true);
       return;
     }
 
@@ -8896,6 +8927,8 @@ export class Game {
     const x = this.openChestPos.x;
     const y = this.openChestPos.y;
     const z = this.openChestPos.z;
+    const openDef = BlockRegistry.get(this.chunks.getBlock(x, y, z));
+    if (openDef?.name === 'ender_chest') return this.enderChestInventory;
 
     const partners = this.getDoubleChestPartners(x, y, z);
     if (partners) {
@@ -8933,7 +8966,7 @@ export class Game {
     return metadata?.inventory ?? null;
   }
 
-  private getOpenChestTitleKey(): 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox' {
+  private getOpenChestTitleKey(): 'chest' | 'doubleChest' | 'barrel' | 'shulkerBox' | 'enderChest' {
     if (!this.openChestPos) return 'chest';
 
     const x = this.openChestPos.x;
@@ -8942,6 +8975,7 @@ export class Game {
     const blockId = this.chunks.getBlock(x, y, z);
     const def = BlockRegistry.get(blockId);
     if (def?.name === 'barrel') return 'barrel';
+    if (def?.name === 'ender_chest') return 'enderChest';
     if (isShulkerBoxName(def?.name)) return 'shulkerBox';
     return this.getDoubleChestPartners(x, y, z) ? 'doubleChest' : 'chest';
   }
@@ -9222,7 +9256,7 @@ export class Game {
       : null;
 
     // 1. Drop contents if it's a container
-    if (spawnDrop && meta?.inventory && !isShulkerBoxName(def?.name)) {
+    if (spawnDrop && meta?.inventory && !isShulkerBoxName(def?.name) && def?.name !== 'ender_chest') {
       for (const slot of meta.inventory) {
         if (slot && slot.count > 0) {
           const dropPos = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
@@ -9294,6 +9328,9 @@ export class Game {
         }
       } else if (def && isShulkerBoxName(def.name)) {
         this.droppedItems.spawnStack(createShulkerBoxDropStack(blockId, meta), dropPos, velocity, 0.5);
+      } else if (def?.name === 'ender_chest') {
+        if (dropEnchants?.silkTouch) this.droppedItems.spawnItem(def.id, 1, dropPos, velocity, 0.5);
+        else this.droppedItems.spawnItem(49, 8, dropPos, velocity, 0.5);
       } else if (this.isDoorBlock(blockId)) {
         const doorItemId = ItemRegistry.getItemIdForPlacedBlock(blockId);
         if (doorItemId !== undefined) {

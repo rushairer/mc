@@ -142,7 +142,7 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
   const handleClose = useCallback(() => {
     // Return held item to inventory
     if (heldItem) {
-      inventory.addItem(heldItem.id, heldItem.count);
+      inventory.addStack(heldItem);
       setHeldItem(null);
     }
     // Return crafting grid items to inventory

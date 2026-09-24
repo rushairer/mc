@@ -78,6 +78,8 @@ export interface SaveData {
     armor: (ItemStack | null)[];
     offhand?: ItemStack | null;
   };
+  /** Java Ender Chest storage belongs to the player, not to a block position. */
+  enderChestInventory?: (ItemStack | null)[];
   seed: number;
   dimensions: Partial<Record<SaveDimensionId, DimensionSaveData>>;
   endDragonDefeated?: boolean;
@@ -132,6 +134,7 @@ interface LegacySaveData {
   schemaVersion?: number;
   player?: Partial<SaveData['player']>;
   inventory?: Partial<SaveData['inventory']>;
+  enderChestInventory?: (ItemStack | null)[];
   seed?: number;
   chunks?: LegacyChunk[];
   mobs?: SerializedMob[];
@@ -446,6 +449,10 @@ export function migrateAndValidateSave(rawValue: unknown): SaveData {
   const armor = Array.isArray(rawInventory.armor) ? rawInventory.armor.slice(0, 4) : [];
   while (slots.length < 36) slots.push(null);
   while (armor.length < 4) armor.push(null);
+  const enderChestInventory = Array.isArray(migrated.enderChestInventory)
+    ? migrated.enderChestInventory.slice(0, 27)
+    : [];
+  while (enderChestInventory.length < 27) enderChestInventory.push(null);
   const protectRecoveredPlayer = originalVersion < 2 || migrated.recovery?.recovered === true ||
     [0, 1, 2].some((dimension) => (migrated.dimensions?.[dimension as SaveDimensionId]?.mobs?.length ?? 0) > MAX_RESTORED_MOBS_PER_DIMENSION);
   const dimensions: SaveData['dimensions'] = {};
@@ -476,6 +483,7 @@ export function migrateAndValidateSave(rawValue: unknown): SaveData {
       armor,
       offhand: rawInventory.offhand ?? null,
     },
+    enderChestInventory,
     seed: Math.floor(finiteOr(migrated.seed, 12345)),
     dimensions,
     endDragonDefeated: migrated.endDragonDefeated === true,

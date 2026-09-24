@@ -199,8 +199,9 @@ test('861: Dispenser uses the eject path even when a container is directly in fr
 
 test('862: local redstone activation is rising-edge gated and points output along stored facing', () => {
   const source = readFileSync(new URL('../src/engine/Game.ts', import.meta.url), 'utf8');
-  const start = source.indexOf("if (name === 'dispenser' || name === 'dropper')");
-  assert.ok(start >= 0);
+  const redstoneStart = source.indexOf('const powered = this.redstone.isPositionPowered');
+  const start = source.indexOf("if (name === 'dispenser' || name === 'dropper')", redstoneStart);
+  assert.ok(redstoneStart >= 0 && start >= redstoneStart);
   const powerBlock = source.slice(start, start + 850);
   assert.ok(powerBlock.includes('powered && !wasPowered'));
   assert.ok(powerBlock.includes('this.activateDispenserDropper(x, y, z, name)'));

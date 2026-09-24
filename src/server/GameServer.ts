@@ -1347,7 +1347,7 @@ export class GameServer {
         if (!canPlaceHeldBlock(held, blockId)) break;
         const validFacing = validFace(facing);
         const placedBlock = BlockRegistry.get(blockId);
-        const meta = placedBlock && isShulkerBoxName(placedBlock.name)
+        const meta: BlockMetadata | null = placedBlock && isShulkerBoxName(placedBlock.name)
           ? createShulkerBoxMetadata(held, validFacing ? facing : 'up')
           : (placedBlock?.name === 'dispenser' || placedBlock?.name === 'dropper'
             ? {

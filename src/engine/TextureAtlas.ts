@@ -2699,6 +2699,24 @@ export class TextureAtlas {
             ctx.fillRect(x + 4, y + 12, 2, 1);
             ctx.fillRect(x + 10, y + 12, 2, 1);
           });
+        } else if (b.name === 'dispenser' || b.name === 'dropper') {
+          this.drawTile(iconKey, (ctx, x, y, size) => {
+            ctx.clearRect(x, y, size, size);
+            ctx.fillStyle = '#777777';
+            ctx.fillRect(x + 2, y + 2, 12, 12);
+            ctx.fillStyle = '#9a9a9a';
+            ctx.fillRect(x + 3, y + 3, 10, 2);
+            ctx.fillStyle = '#4c4c4c';
+            ctx.fillRect(x + 4, y + 6, 8, 6);
+            ctx.fillStyle = '#161616';
+            if (b.name === 'dispenser') {
+              ctx.fillRect(x + 5, y + 7, 2, 2);
+              ctx.fillRect(x + 9, y + 7, 2, 2);
+              ctx.fillRect(x + 6, y + 10, 4, 1);
+            } else {
+              ctx.fillRect(x + 6, y + 8, 4, 3);
+            }
+          });
         } else if (b.name.includes('ore')) {
           drawBlockIcon(b.name, '#909090', '#7a7a7a', '#686868', (ctx, ix, iy, is) => {
             ctx.fillStyle = colors.top;

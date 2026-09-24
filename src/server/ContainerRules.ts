@@ -18,6 +18,8 @@ export const CONTAINER_SIZES: Record<string, number> = {
   barrel: 27,
   shulker_box: 27,
   hopper: 5,
+  dispenser: 9,
+  dropper: 9,
 };
 
 export type ContainerArea = 'container' | 'player';

@@ -187,7 +187,7 @@ const WORLD_SPAWN_X = 8;
 const WORLD_SPAWN_Z = 8;
 
 type OpenServerContainer =
-  | { source: 'block'; x: number; y: number; z: number; dimension: number; key: string; kind: 'chest' | 'hopper' | 'shulker_box' | 'ender_chest'; cursor: ItemStack | null }
+  | { source: 'block'; x: number; y: number; z: number; dimension: number; key: string; kind: 'chest' | 'hopper' | 'shulker_box' | 'ender_chest' | 'dispenser' | 'dropper'; cursor: ItemStack | null }
   | { source: 'vehicle'; vehicleId: number; cursor: ItemStack | null };
 
 interface PlayerSession {
@@ -1099,6 +1099,18 @@ export class GameServer {
         const blockMeta = this.getBlockMetadata(x, y, z, session.dimension);
         const tool = session.inventory[session.selectedSlot];
 
+        if (blockDef?.name === 'dispenser' || blockDef?.name === 'dropper') {
+          const key = this.dimensionContainerKey(session.dimension, x, y, z);
+          const stored = this.containerData.get(key) ?? blockMeta?.inventory ?? [];
+          if (session.gameMode !== 'creative') {
+            for (const stack of stored) {
+              if (!stack || stack.count <= 0) continue;
+              this.spawnDroppedStack(stack, x + 0.5, y + 0.65, z + 0.5, session.dimension, 0.35);
+            }
+          }
+          this.containerData.delete(key);
+        }
+
         if (blockDef?.name === 'ender_chest' && session.gameMode !== 'creative') {
           const toolDef = tool ? ItemRegistry.get(tool.id) : undefined;
           if (toolDef?.toolType === 'pickaxe') {
@@ -1291,6 +1303,13 @@ export class GameServer {
               metadata = createChiseledBookshelfMetadata(oppositeHorizontalFacing(playerFacing));
             } else if (block && isShulkerBoxName(block.name)) {
               metadata = createShulkerBoxMetadata(held, plan.facing);
+            } else if (block?.name === 'dispenser' || block?.name === 'dropper') {
+              metadata = {
+                facing: plan.facing,
+                containerType: block.name,
+                inventory: new Array(9).fill(null),
+                powered: false,
+              };
             } else if (block?.name === 'ender_chest') {
               metadata = { facing: oppositeHorizontalFacing(playerFacing) };
             } else if (!metadata && validFace(plan.facing)) {
@@ -1330,9 +1349,16 @@ export class GameServer {
         const placedBlock = BlockRegistry.get(blockId);
         const meta = placedBlock && isShulkerBoxName(placedBlock.name)
           ? createShulkerBoxMetadata(held, validFacing ? facing : 'up')
-          : (placedBlock?.name === 'ender_chest'
-            ? { facing: oppositeHorizontalFacing(horizontalFacingFromYaw(session.yaw)) }
-            : (validFacing ? { facing } : null));
+          : (placedBlock?.name === 'dispenser' || placedBlock?.name === 'dropper'
+            ? {
+                facing: validFacing ? facing : 'north',
+                containerType: placedBlock.name,
+                inventory: new Array(9).fill(null),
+                powered: false,
+              }
+            : (placedBlock?.name === 'ender_chest'
+              ? { facing: oppositeHorizontalFacing(horizontalFacingFromYaw(session.yaw)) }
+              : (validFacing ? { facing } : null)));
         this.setBlock(x, y, z, blockId, session.dimension, meta);
         if (session.gameMode !== 'creative') {
           session.inventory[session.selectedSlot] = consumeHeldStack(held!);
@@ -2296,11 +2322,13 @@ export class GameServer {
         if (!isBlockActionInReach(session, x, y, z, session.gameMode)) break;
         const blockId = this.getBlock(x, y, z, session.dimension);
         const name = BlockRegistry.get(blockId)?.name ?? '';
-        const kind: 'chest' | 'hopper' | 'shulker_box' | 'ender_chest' | null = name === 'ender_chest'
+        const kind: 'chest' | 'hopper' | 'shulker_box' | 'ender_chest' | 'dispenser' | 'dropper' | null = name === 'ender_chest'
           ? 'ender_chest'
-          : (name.includes('hopper')
-            ? 'hopper'
-            : (isShulkerBoxName(name) ? 'shulker_box' : (name.includes('chest') || name.includes('barrel') ? 'chest' : null)));
+          : (name === 'dispenser' || name === 'dropper'
+            ? name
+            : (name.includes('hopper')
+              ? 'hopper'
+              : (isShulkerBoxName(name) ? 'shulker_box' : (name.includes('chest') || name.includes('barrel') ? 'chest' : null))));
         if (!kind) break;
         if (kind === 'shulker_box') {
           const metadata = this.getBlockMetadata(x, y, z, session.dimension);

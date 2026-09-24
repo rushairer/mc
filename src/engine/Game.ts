@@ -7721,7 +7721,7 @@ export class Game {
       this.chunks.setBlockMeta(x, y, z, {
         facing,
         containerType: 'chest',
-        inventory: new Array(expectedType === 'dispenser' || expectedType === 'dropper' ? 9 : 27).fill(null),
+        inventory: new Array(27).fill(null),
       }, true);
       return;
     }
@@ -8897,7 +8897,7 @@ export class Game {
     const metadata: BlockMetadata = {
       ...current,
       containerType: expectedType,
-      inventory: new Array(27).fill(null),
+      inventory: new Array(expectedType === 'dispenser' || expectedType === 'dropper' ? 9 : 27).fill(null),
     };
     this.chunks.setBlockMeta(x, y, z, metadata);
     return metadata;

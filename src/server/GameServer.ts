@@ -1352,7 +1352,7 @@ export class GameServer {
           : (placedBlock?.name === 'dispenser' || placedBlock?.name === 'dropper'
             ? {
                 facing: dispenserFacingFromLook(session.yaw, session.pitch),
-                containerType: placedBlock.name,
+                containerType: placedBlock.name === 'dispenser' ? 'dispenser' : 'dropper',
                 inventory: new Array(9).fill(null),
                 powered: false,
               }

@@ -94,7 +94,7 @@ test('531: Chest Boat opens through the existing server-owned cursor/container t
   assert.ok(source.includes("session.openContainer = { source: 'vehicle', vehicleId: vehicle.id, cursor: null }"));
   assert.ok(source.includes("open.source === 'block'"));
   assert.ok(source.includes('this.vehicles.get(open.vehicleId)?.inventory'));
-  assert.ok(source.includes('this.setOpenContainerSlots(open, next.containerSlots)'));
+  assert.ok(source.includes('this.setOpenContainerSlots(session, open, next.containerSlots)'));
   assert.ok(source.includes("source: 'vehicle'"));
   assert.ok(source.includes('vehicleId: open.vehicleId'));
   assert.equal(PacketType.C2S_CONTAINER_CLICK, 'C2S_CONTAINER_CLICK');

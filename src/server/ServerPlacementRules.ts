@@ -16,6 +16,23 @@ export function horizontalFacingFromYaw(yaw: number): BlockFacing {
   return z > 0 ? 'south' : 'north';
 }
 
+/** Dispenser/Dropper output faces opposite the player's nearest look direction. */
+export function dispenserFacingFromLook(yaw: number, pitch: number): BlockFacing {
+  const safeYaw = Number.isFinite(yaw) ? yaw : 0;
+  const safePitch = Number.isFinite(pitch) ? pitch : 0;
+  const cosPitch = Math.cos(safePitch);
+  const lookX = -Math.sin(safeYaw) * cosPitch;
+  const lookY = Math.sin(safePitch);
+  const lookZ = -Math.cos(safeYaw) * cosPitch;
+
+  const ax = Math.abs(lookX);
+  const ay = Math.abs(lookY);
+  const az = Math.abs(lookZ);
+  if (ay >= ax && ay >= az) return lookY > 0 ? 'down' : 'up';
+  if (ax >= az) return lookX > 0 ? 'west' : 'east';
+  return lookZ > 0 ? 'north' : 'south';
+}
+
 export function signRotationFromYaw(yaw: number): number {
   if (!Number.isFinite(yaw)) return 0;
   return ((Math.round(((yaw + Math.PI) * 16) / (2 * Math.PI)) % 16) + 16) % 16;

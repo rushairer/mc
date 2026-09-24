@@ -110,7 +110,7 @@ import {
   getEndPortalInteriorCells,
 } from '../world/EndPortalRules';
 import { coordinateRandom } from '../engine/DeterministicRandom';
-import { createServerPlacementCells, getDoorSidePosition, horizontalFacingFromYaw, isPlacementReplaceableBlockName, resolveDoorHinge, signRotationFromYaw } from './ServerPlacementRules';
+import { createServerPlacementCells, dispenserFacingFromLook, getDoorSidePosition, horizontalFacingFromYaw, isPlacementReplaceableBlockName, resolveDoorHinge, signRotationFromYaw } from './ServerPlacementRules';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { cloneItemStack } from '../items/ItemStackRules';
 import { getDefaultUseRemainderItemId } from '../items/ItemUseRules';
@@ -1305,7 +1305,7 @@ export class GameServer {
               metadata = createShulkerBoxMetadata(held, plan.facing);
             } else if (block?.name === 'dispenser' || block?.name === 'dropper') {
               metadata = {
-                facing: plan.facing,
+                facing: dispenserFacingFromLook(session.yaw, session.pitch),
                 containerType: block.name,
                 inventory: new Array(9).fill(null),
                 powered: false,
@@ -1351,7 +1351,7 @@ export class GameServer {
           ? createShulkerBoxMetadata(held, validFacing ? facing : 'up')
           : (placedBlock?.name === 'dispenser' || placedBlock?.name === 'dropper'
             ? {
-                facing: validFacing ? facing : 'north',
+                facing: dispenserFacingFromLook(session.yaw, session.pitch),
                 containerType: placedBlock.name,
                 inventory: new Array(9).fill(null),
                 powered: false,

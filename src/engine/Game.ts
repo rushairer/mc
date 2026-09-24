@@ -7702,7 +7702,7 @@ export class Game {
 
     if (name === 'dispenser' || name === 'dropper') {
       this.chunks.setBlockMeta(x, y, z, {
-        facing,
+        facing: this.getDispenserPlacementFacing(),
         containerType: name,
         inventory: new Array(9).fill(null),
         powered: false,
@@ -8347,6 +8347,16 @@ export class Game {
   private isTrapdoorBlock(blockId: number): boolean {
     const def = BlockRegistry.get(blockId);
     return def ? def.name.includes('trapdoor') : false;
+  }
+
+  private getDispenserPlacementFacing(): BlockFacing {
+    const look = this.player.forward;
+    const ax = Math.abs(look.x);
+    const ay = Math.abs(look.y);
+    const az = Math.abs(look.z);
+    if (ay >= ax && ay >= az) return look.y > 0 ? 'down' : 'up';
+    if (ax >= az) return look.x > 0 ? 'west' : 'east';
+    return look.z > 0 ? 'north' : 'south';
   }
 
   private getPlayerHorizontalFacing(): BlockFacing {

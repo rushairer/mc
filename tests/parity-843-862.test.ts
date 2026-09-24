@@ -5,6 +5,7 @@ import { inferBlockBehaviorId } from '../src/world/BehaviorIds';
 import { ItemRegistry } from '../src/items/ItemRegistry';
 import { findCraftingResult } from '../src/items/CraftingRecipes';
 import { createContainerSlots } from '../src/server/ContainerRules';
+import { dispenserFacingFromLook } from '../src/server/ServerPlacementRules';
 import {
   activateDispenserLike,
   dispenserFacingOffset,
@@ -57,8 +58,12 @@ test('847: local placement creates facing nine-slot container metadata', () => {
   const start = source.indexOf("if (name === 'dispenser' || name === 'dropper')");
   assert.ok(start >= 0);
   const block = source.slice(start, start + 650);
-  assert.ok(block.includes('facing,'));
+  assert.ok(block.includes('facing: this.getDispenserPlacementFacing()'));
   assert.ok(block.includes('containerType: name'));
+  assert.equal(dispenserFacingFromLook(0, 0), 'south');
+  assert.equal(dispenserFacingFromLook(Math.PI / 2, 0), 'east');
+  assert.equal(dispenserFacingFromLook(0, Math.PI / 2 - 0.01), 'down');
+  assert.equal(dispenserFacingFromLook(0, -Math.PI / 2 + 0.01), 'up');
   assert.ok(block.includes('inventory: new Array(9).fill(null)'));
   assert.ok(block.includes('powered: false'));
 });
@@ -99,6 +104,8 @@ test('852: multiplayer placement creates nine-slot machine metadata in both plac
   assert.ok(matches.length >= 2);
   assert.ok(source.includes('containerType: block.name'));
   assert.ok(source.includes('containerType: placedBlock.name'));
+  const facingUses = source.match(/facing: dispenserFacingFromLook\(session\.yaw, session\.pitch\)/g) ?? [];
+  assert.ok(facingUses.length >= 2);
 });
 
 test('853: breaking a server-owned Dispenser or Dropper releases its stored stacks and clears coordinate storage', () => {

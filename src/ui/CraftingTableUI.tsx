@@ -2,7 +2,8 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { ItemStack } from '../types';
 import { ItemRegistry } from '../items/ItemRegistry';
 import { Inventory } from '../player/Inventory';
-import { findCraftingResult } from '../items/CraftingRecipes';
+import { findCraftingResultFromStacks } from '../items/CraftingRecipes';
+import { cloneItemStack } from '../items/ItemStackRules';
 import { getAllRecipeBookEntries, planGridFill, type RecipeBookEntry } from '../items/RecipeBook';
 import { RecipeBookUI } from './RecipeBookUI';
 import { useI18n } from '../i18n';
@@ -20,7 +21,7 @@ const SLOT_SIZE = 48;
 export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onClose, onInventoryChange, getItemIconStyle, onDropItem }) => {
   const { t, getLocalizedItemName, getLocalizedCategory } = useI18n();
   const [heldItem, setHeldItem] = useState<ItemStack | null>(null);
-  const [craftingGrid, setCraftingGrid] = useState<number[]>(new Array(9).fill(0));
+  const [craftingGrid, setCraftingGrid] = useState<(ItemStack | null)[]>(new Array(9).fill(null));
   const [craftResult, setCraftResult] = useState<ItemStack | null>(null);
   const [hoveredSlot, setHoveredSlot] = useState<{
     item: ItemStack;
@@ -50,7 +51,7 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
 
   // Recalculate crafting result when grid changes
   useEffect(() => {
-    const result = findCraftingResult(craftingGrid);
+    const result = findCraftingResultFromStacks(craftingGrid);
     setCraftResult(result);
   }, [craftingGrid]);
 
@@ -58,17 +59,18 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
     if (isCraftingSlot) {
       // Crafting grid click
       const newGrid = [...craftingGrid];
-      if (heldItem && newGrid[slotIndex] === 0) {
-        newGrid[slotIndex] = heldItem.id;
+      if (heldItem && !newGrid[slotIndex]) {
+        const placed = cloneItemStack(heldItem)!;
+        placed.count = 1;
+        newGrid[slotIndex] = placed;
         setHeldItem(prev => {
           if (!prev) return null;
           const newCount = prev.count - 1;
           return newCount > 0 ? { ...prev, count: newCount } : null;
         });
-      } else if (!heldItem && newGrid[slotIndex] !== 0) {
-        const itemId = newGrid[slotIndex];
-        newGrid[slotIndex] = 0;
-        setHeldItem({ id: itemId, count: 1 });
+      } else if (!heldItem && newGrid[slotIndex]) {
+        setHeldItem(cloneItemStack(newGrid[slotIndex])!);
+        newGrid[slotIndex] = null;
       }
       setCraftingGrid(newGrid);
       return;
@@ -106,7 +108,7 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
     // Add result to inventory
     inventory.addStack(craftResult);
     // Remove one of each ingredient from crafting grid
-    const newGrid = craftingGrid.map(() => 0); // clear all on craft
+    const newGrid = craftingGrid.map(() => null); // clear all on craft
     setCraftingGrid(newGrid);
     onInventoryChange();
   }, [craftResult, inventory, craftingGrid, onInventoryChange]);
@@ -115,7 +117,7 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
   const handleRecipeSelect = useCallback((entry: RecipeBookEntry) => {
     // Return any held item first so the grid fill can use full inventory view.
     if (heldItem) {
-      inventory.addItem(heldItem.id, heldItem.count);
+      inventory.addStack(heldItem);
       setHeldItem(null);
     }
     const plan = planGridFill(
@@ -132,7 +134,7 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
         if (slot.count <= 0) inventory.setSlot(move.fromSlot, null);
       }
     }
-    setCraftingGrid(plan.grid);
+    setCraftingGrid(plan.grid.map((id) => id > 0 ? { id, count: 1 } : null));
     setRecipeBookOpen(false);
     onInventoryChange();
   }, [heldItem, inventory, onInventoryChange]);
@@ -144,10 +146,10 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
       setHeldItem(null);
     }
     // Return crafting grid items to inventory
-    for (const id of craftingGrid) {
-      if (id !== 0) inventory.addItem(id, 1);
+    for (const stack of craftingGrid) {
+      if (stack) inventory.addStack(stack);
     }
-    setCraftingGrid(new Array(9).fill(0));
+    setCraftingGrid(new Array(9).fill(null));
     onInventoryChange();
     onClose();
   }, [heldItem, inventory, craftingGrid, onInventoryChange, onClose]);
@@ -386,10 +388,9 @@ export const CraftingTableUI: React.FC<CraftingTableUIProps> = ({ inventory, onC
               gridTemplateColumns: `repeat(3, ${SLOT_SIZE}px)`,
               gap: '2px',
             }}>
-              {craftingGrid.map((id, i) => {
-                const item = id !== 0 ? { id, count: 1 } : null;
-                return renderSlot(item, i, () => handleSlotClick(i, true), false, 'crafting');
-              })}
+              {craftingGrid.map((item, i) =>
+                renderSlot(item, i, () => handleSlotClick(i, true), false, 'crafting')
+              )}
             </div>
             <div style={{ fontSize: '20px', color: '#aaa' }}>→</div>
             {renderSlot(craftResult, -1, handleCraftResultClick, true, 'crafting')}

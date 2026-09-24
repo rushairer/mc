@@ -130,7 +130,7 @@ test('368: chest obstruction distinguishes opaque solids from transparent solids
   assert.equal(isChestObstructingBlock(BlockRegistry.getByName('stone')), true);
   assert.equal(isChestObstructingBlock(BlockRegistry.getByName('glass')), false);
   const source = gameSource();
-  assert.ok(source.includes("if (block?.name === 'chest')"));
+  assert.ok(source.includes("if (block?.name === 'chest' || block?.name === 'ender_chest')"));
   assert.ok(source.includes('this.isChestBlockedAt(partners.leftPos.x'));
 });
 

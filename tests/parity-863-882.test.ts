@@ -140,6 +140,15 @@ test('879: Flint and Steel loses one durability on successful Dispenser use and 
   assert.equal(once[0]?.durability, 1);
   const broken = damageDispenserTool(once, 0, 64);
   assert.equal(broken[0], null);
+
+  const unbreaking: ItemStack = {
+    id: item('flint_and_steel').id,
+    count: 1,
+    durability: 10,
+    enchantments: [{ id: 'unbreaking', level: 3 }],
+  };
+  const spared = damageDispenserTool([unbreaking], 0, 64, () => 0.9);
+  assert.equal(spared[0]?.durability, 10);
 });
 
 test('880: empty buckets collect only stationary Water/Lava source identities plus Powder Snow', () => {

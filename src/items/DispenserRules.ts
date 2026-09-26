@@ -128,3 +128,121 @@ export function activateDispenserLike(
     sourceSlot,
   };
 }
+
+export type DispenserProjectileKind =
+  | 'arrow'
+  | 'snowball'
+  | 'egg'
+  | 'experience_bottle'
+  | 'potion'
+  | 'firework_rocket'
+  | 'fireball'
+  | 'wind_charge';
+
+export type DispenserSpecialAction =
+  | { kind: 'projectile'; projectile: DispenserProjectileKind; potionVariant?: 'splash' | 'lingering' }
+  | { kind: 'prime_tnt' }
+  | { kind: 'ignite' }
+  | { kind: 'place_fluid'; blockName: 'water' | 'lava' | 'powder_snow' }
+  | { kind: 'collect_fluid' };
+
+export function getDispenserSpecialAction(itemName: string | null | undefined): DispenserSpecialAction | null {
+  switch (itemName) {
+    case 'arrow':
+    case 'spectral_arrow':
+    case 'tipped_arrow':
+      return { kind: 'projectile', projectile: 'arrow' };
+    case 'snowball':
+      return { kind: 'projectile', projectile: 'snowball' };
+    case 'egg':
+      return { kind: 'projectile', projectile: 'egg' };
+    case 'experience_bottle':
+      return { kind: 'projectile', projectile: 'experience_bottle' };
+    case 'splash_potion':
+      return { kind: 'projectile', projectile: 'potion', potionVariant: 'splash' };
+    case 'lingering_potion':
+      return { kind: 'projectile', projectile: 'potion', potionVariant: 'lingering' };
+    case 'firework_rocket':
+    case 'fireworks':
+      return { kind: 'projectile', projectile: 'firework_rocket' };
+    case 'fire_charge':
+      return { kind: 'projectile', projectile: 'fireball' };
+    case 'wind_charge':
+      return { kind: 'projectile', projectile: 'wind_charge' };
+    case 'tnt':
+      return { kind: 'prime_tnt' };
+    case 'flint_and_steel':
+      return { kind: 'ignite' };
+    case 'water_bucket':
+      return { kind: 'place_fluid', blockName: 'water' };
+    case 'lava_bucket':
+      return { kind: 'place_fluid', blockName: 'lava' };
+    case 'powder_snow_bucket':
+      return { kind: 'place_fluid', blockName: 'powder_snow' };
+    case 'bucket':
+      return { kind: 'collect_fluid' };
+    default:
+      return null;
+  }
+}
+
+export function consumeDispenserSlot(
+  slots: readonly (ItemStack | null)[],
+  sourceSlot: number,
+): (ItemStack | null)[] {
+  const next = slots.map((slot) => cloneItemStack(slot));
+  const selected = next[sourceSlot];
+  if (!selected) return next;
+  selected.count -= 1;
+  next[sourceSlot] = selected.count > 0 ? selected : null;
+  return next;
+}
+
+export function replaceOneDispenserItem(
+  slots: readonly (ItemStack | null)[],
+  sourceSlot: number,
+  replacement: ItemStack,
+): { slots: (ItemStack | null)[]; overflow: ItemStack | null } {
+  const next = consumeDispenserSlot(slots, sourceSlot);
+  if (!next[sourceSlot]) {
+    next[sourceSlot] = cloneItemStack(replacement);
+    return { slots: next, overflow: null };
+  }
+
+  const inserted = insertOneFromDropper(next, replacement);
+  return {
+    slots: inserted.slots,
+    overflow: inserted.inserted ? null : cloneItemStack(replacement),
+  };
+}
+
+export function damageDispenserTool(
+  slots: readonly (ItemStack | null)[],
+  sourceSlot: number,
+  maxDurability: number,
+): (ItemStack | null)[] {
+  const next = slots.map((slot) => cloneItemStack(slot));
+  const selected = next[sourceSlot];
+  if (!selected) return next;
+  const remaining = (selected.durability ?? maxDurability) - 1;
+  next[sourceSlot] = remaining > 0 ? { ...selected, durability: remaining } : null;
+  return next;
+}
+
+export function collectableFluidBucketName(blockName: string | null | undefined): 'water_bucket' | 'lava_bucket' | 'powder_snow_bucket' | null {
+  if (blockName === 'water') return 'water_bucket';
+  if (blockName === 'lava') return 'lava_bucket';
+  if (blockName === 'powder_snow') return 'powder_snow_bucket';
+  return null;
+}
+
+export function isDispenserFluidPlacementReplaceable(blockName: string | null | undefined): boolean {
+  return blockName === undefined
+    || blockName === 'air'
+    || blockName === 'water'
+    || blockName === 'lava'
+    || blockName === 'tall_grass'
+    || blockName === 'grass'
+    || blockName === 'dandelion'
+    || blockName === 'poppy';
+}

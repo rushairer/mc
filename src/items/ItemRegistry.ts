@@ -193,6 +193,10 @@ for (const item of rawItems) {
           ? stats.damage + 3
           : getMeleeAttackDamage(toolType, toolMaterial);
       }
+    } else if (name === 'flint_and_steel') {
+      category = 'tool';
+      durability = item.maxDurability ?? 64;
+      damage = 1;
     } else if (name === 'bow' || name === 'crossbow' || name === 'trident' || name === 'mace' || name === 'brush' || name === 'fishing_rod' || name === 'shears') {
       category = 'tool';
       toolType = name === 'trident' ? 'trident' : name;

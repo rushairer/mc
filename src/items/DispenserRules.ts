@@ -142,12 +142,23 @@ export type DispenserProjectileKind =
   | 'fireball'
   | 'wind_charge';
 
+export type DispenserEquipmentSlot = 'helmet' | 'chestplate' | 'leggings' | 'boots';
+
 export type DispenserSpecialAction =
   | { kind: 'projectile'; projectile: DispenserProjectileKind; potionVariant?: 'splash' | 'lingering' }
   | { kind: 'prime_tnt' }
   | { kind: 'ignite' }
   | { kind: 'place_fluid'; blockName: 'water' | 'lava' | 'powder_snow' }
-  | { kind: 'collect_fluid' };
+  | { kind: 'collect_fluid' }
+  | { kind: 'spawn_egg' }
+  | { kind: 'armor_stand' }
+  | { kind: 'boat'; chest: boolean }
+  | { kind: 'minecart' }
+  | { kind: 'shulker_box' }
+  | { kind: 'bone_meal' }
+  | { kind: 'shears' }
+  | { kind: 'glass_bottle' }
+  | { kind: 'equip'; slot: DispenserEquipmentSlot; noFallback: boolean };
 
 export function getDispenserSpecialAction(itemName: string | null | undefined): DispenserSpecialAction | null {
   switch (itemName) {
@@ -184,8 +195,30 @@ export function getDispenserSpecialAction(itemName: string | null | undefined): 
       return { kind: 'place_fluid', blockName: 'powder_snow' };
     case 'bucket':
       return { kind: 'collect_fluid' };
-    default:
+    case 'armor_stand':
+      return { kind: 'armor_stand' };
+    case 'bone_meal':
+      return { kind: 'bone_meal' };
+    case 'shears':
+      return { kind: 'shears' };
+    case 'glass_bottle':
+      return { kind: 'glass_bottle' };
+    default: {
+      if (itemName?.endsWith('_spawn_egg')) return { kind: 'spawn_egg' };
+      if (itemName === 'boat' || (itemName?.endsWith('_boat') && !itemName.endsWith('_chest_boat'))) {
+        return { kind: 'boat', chest: false };
+      }
+      if (itemName?.endsWith('_chest_boat')) return { kind: 'boat', chest: true };
+      if (itemName === 'minecart' || itemName?.endsWith('_minecart')) return { kind: 'minecart' };
+      if (itemName === 'shulker_box' || itemName?.endsWith('_shulker_box')) return { kind: 'shulker_box' };
+
+      const slot = dispenserEquipmentSlot(itemName);
+      if (slot) {
+        const noFallback = isDispenserHeadItemName(itemName);
+        return { kind: 'equip', slot, noFallback };
+      }
       return null;
+    }
   }
 }
 
@@ -251,4 +284,39 @@ export function isDispenserFluidPlacementReplaceable(blockName: string | null | 
     || blockName === 'grass'
     || blockName === 'dandelion'
     || blockName === 'poppy';
+}
+
+export function isDispenserHeadItemName(itemName: string | null | undefined): boolean {
+  if (!itemName) return false;
+  return itemName === 'carved_pumpkin'
+    || itemName === 'skull'
+    || itemName === 'head'
+    || itemName.endsWith('_head')
+    || itemName.endsWith('_skull');
+}
+
+export function dispenserEquipmentSlot(itemName: string | null | undefined): DispenserEquipmentSlot | null {
+  if (!itemName) return null;
+  if (itemName.endsWith('_helmet') || isDispenserHeadItemName(itemName)) return 'helmet';
+  if (itemName.endsWith('_chestplate') || itemName === 'elytra') return 'chestplate';
+  if (itemName.endsWith('_leggings')) return 'leggings';
+  if (itemName.endsWith('_boots')) return 'boots';
+  return null;
+}
+
+export function dispenserEquipmentSlotIndex(slot: DispenserEquipmentSlot): number {
+  switch (slot) {
+    case 'helmet': return 0;
+    case 'chestplate': return 1;
+    case 'leggings': return 2;
+    case 'boots': return 3;
+  }
+}
+
+export function canDispenserPlaceBoat(
+  targetIsWater: boolean,
+  targetIsAir: boolean,
+  belowIsWater: boolean,
+): boolean {
+  return targetIsWater || (targetIsAir && belowIsWater);
 }

@@ -114,8 +114,10 @@ import {
   collectableFluidBucketName,
   consumeDispenserSlot,
   damageDispenserTool,
+  dispenserEquipmentSlotIndex,
   dispenserFacingOffset,
   getDispenserSpecialAction,
+  canDispenserPlaceBoat,
   isDispenserFluidPlacementReplaceable,
   replaceOneDispenserItem,
   selectDispenserSlot,
@@ -9457,6 +9459,184 @@ export class Game {
       meta.inventory = replaced.slots;
       if (replaced.overflow) this.droppedItems.spawnStack(replaced.overflow, origin, direction.clone().multiplyScalar(2), 0.2);
       return true;
+    }
+
+    if (special.kind === 'spawn_egg') {
+      const itemName = ItemRegistry.get(selected.id)?.name ?? '';
+      const mobType = spawnEggMobTypeForItemName(itemName);
+      if (!mobType) return false;
+      const mob = this.mobs.spawnMob(mobType, tx + 0.5, ty, tz + 0.5);
+      if (!mob) return false;
+      meta.inventory = consumeDispenserSlot(meta.inventory, sourceSlot);
+      return true;
+    }
+
+    if (special.kind === 'armor_stand') {
+      if (ty < 0 || ty >= WORLD_HEIGHT) return false;
+      const stand = this.mobs.spawnMob('armor_stand', tx + 0.5, ty, tz + 0.5);
+      if (!stand) return false;
+      meta.inventory = consumeDispenserSlot(meta.inventory, sourceSlot);
+      return true;
+    }
+
+    if (special.kind === 'boat') {
+      const targetId = this.chunks.getBlock(tx, ty, tz);
+      const belowId = ty > 0 ? this.chunks.getBlock(tx, ty - 1, tz) : 0;
+      if (!canDispenserPlaceBoat(BlockRegistry.isWater(targetId), targetId === 0, BlockRegistry.isWater(belowId))) {
+        return false;
+      }
+      const vehicleType = special.chest ? 'chest_boat' : 'boat';
+      this.vehicles.spawnVehicle(
+        vehicleType,
+        new THREE.Vector3(tx + 0.5, ty + 0.2, tz + 0.5),
+        selected.id,
+      );
+      meta.inventory = consumeDispenserSlot(meta.inventory, sourceSlot);
+      return true;
+    }
+
+    if (special.kind === 'minecart') {
+      const targetId = this.chunks.getBlock(tx, ty, tz);
+      if (!BlockRegistry.isRail(targetId)) return false;
+      this.vehicles.spawnVehicle(
+        'minecart',
+        new THREE.Vector3(tx + 0.5, ty + 0.05, tz + 0.5),
+        selected.id,
+      );
+      meta.inventory = consumeDispenserSlot(meta.inventory, sourceSlot);
+      return true;
+    }
+
+    if (special.kind === 'shulker_box') {
+      const targetId = this.chunks.getBlock(tx, ty, tz);
+      const replaceable = targetId === 0
+        || BlockRegistry.isFluid(targetId)
+        || targetId === 31
+        || targetId === 37
+        || targetId === 38;
+      if (!replaceable) return false;
+      const blockId = ItemRegistry.getPlaceBlockId(selected.id);
+      if (blockId === undefined) return false;
+      this.chunks.setBlock(tx, ty, tz, blockId);
+      const supportId = ty > 0 ? this.chunks.getBlock(tx, ty - 1, tz) : 0;
+      const shulkerFacing = supportId !== 0 ? 'up' : (meta.facing ?? 'up');
+      this.chunks.setBlockMeta(
+        tx,
+        ty,
+        tz,
+        createShulkerBoxMetadata(selected, shulkerFacing),
+        true,
+      );
+      meta.inventory = consumeDispenserSlot(meta.inventory, sourceSlot);
+      this.redstone.observeBlockChange(tx, ty, tz);
+      return true;
+    }
+
+    if (special.kind === 'bone_meal') {
+      const targetId = this.chunks.getBlock(tx, ty, tz);
+      const targetName = BlockRegistry.get(targetId)?.name;
+      if (targetName === 'shelf_mushroom') {
+        const current = this.chunks.getBlockMeta(tx, ty, tz);
+        if (current?.shelfMushroomSize === 'large') return true;
+        this.chunks.setBlockMeta(tx, ty, tz, { ...current, shelfMushroomSize: 'large' }, true);
+        meta.inventory = consumeDispenserSlot(meta.inventory, sourceSlot);
+        return true;
+      }
+      if (targetName === 'red_shrub') {
+        const start = Math.floor(coordinateRandom(
+          this.seed,
+          tx,
+          this.worldTickScheduler.getCurrentTick() + 2630,
+          tz,
+        ) * 8);
+        for (const spread of rotateBoneMealSpreadOffsets26_3(start)) {
+          const nx = tx + spread.x;
+          const nz = tz + spread.z;
+          if (this.chunks.getBlock(nx, ty, nz) !== 0) continue;
+          if (!BlockRegistry.isSolid(this.chunks.getBlock(nx, ty - 1, nz))) continue;
+          this.chunks.setBlock(nx, ty, nz, targetId);
+          this.chunks.setBlockMeta(nx, ty, nz, null, true);
+          this.redstone.observeBlockChange(nx, ty, nz);
+          meta.inventory = consumeDispenserSlot(meta.inventory, sourceSlot);
+          return true;
+        }
+        return true;
+      }
+      // Bone Meal remains in the Dispenser when the target cannot grow.
+      return true;
+    }
+
+    if (special.kind === 'shears') {
+      const sheep = Array.from(this.mobs.mobs.values()).find((mob) =>
+        mob.def.type === 'sheep'
+        && !mob.isBaby
+        && !mob.isSheared
+        && Math.floor(mob.position.x) === tx
+        && Math.floor(mob.position.y) === ty
+        && Math.floor(mob.position.z) === tz
+      );
+      if (!sheep) return true;
+      sheep.isSheared = true;
+      const woolCount = 1 + Math.floor(Math.random() * 3);
+      this.droppedItems.spawnItem(
+        35,
+        woolCount,
+        sheep.position.clone().add(new THREE.Vector3(0, 0.7, 0)),
+        new THREE.Vector3((Math.random() - 0.5) * 0.5, 1.2, (Math.random() - 0.5) * 0.5),
+        0.5,
+      );
+      const maxDurability = ItemRegistry.get(selected.id)?.durability ?? 238;
+      meta.inventory = damageDispenserTool(meta.inventory, sourceSlot, maxDurability);
+      return true;
+    }
+
+    if (special.kind === 'glass_bottle') {
+      const targetId = this.chunks.getBlock(tx, ty, tz);
+      if (BlockRegistry.get(targetId)?.name !== 'water') return false;
+      const waterBottle = ItemRegistry.getByName('potion');
+      if (!waterBottle) return false;
+      const replaced = replaceOneDispenserItem(meta.inventory, sourceSlot, {
+        id: waterBottle.id,
+        count: 1,
+        potion: { kind: 'water', name: 'Water' },
+      });
+      meta.inventory = replaced.slots;
+      if (replaced.overflow) {
+        this.droppedItems.spawnStack(replaced.overflow, origin, direction.clone().multiplyScalar(2), 0.2);
+      }
+      return true;
+    }
+
+    if (special.kind === 'equip') {
+      const slotIndex = dispenserEquipmentSlotIndex(special.slot);
+      const equipped = cloneItemStack(selected)!;
+      equipped.count = 1;
+
+      const playerInFront =
+        Math.floor(this.player.position.x) === tx
+        && Math.floor(this.player.position.y) === ty
+        && Math.floor(this.player.position.z) === tz;
+      if (playerInFront && !this.inventory.getArmorSlot(slotIndex)) {
+        this.inventory.setArmorSlot(slotIndex, equipped);
+        meta.inventory = consumeDispenserSlot(meta.inventory, sourceSlot);
+        return true;
+      }
+
+      const stand = Array.from(this.mobs.mobs.values()).find((mob) =>
+        mob.def.type === 'armor_stand'
+        && Math.floor(mob.position.x) === tx
+        && Math.floor(mob.position.y) === ty
+        && Math.floor(mob.position.z) === tz
+        && !mob.getArmorStandEquipment(slotIndex)
+      );
+      if (stand) {
+        stand.setArmorStandEquipment(slotIndex, equipped);
+        meta.inventory = consumeDispenserSlot(meta.inventory, sourceSlot);
+        return true;
+      }
+
+      // Heads / carved pumpkins do nothing when they cannot equip; ordinary armor falls back to item ejection.
+      return special.noFallback;
     }
 
     return false;

@@ -109,7 +109,17 @@ import { WIND_CHARGE_COOLDOWN_SECONDS, WIND_CHARGE_DIRECT_DAMAGE, windBurstImpul
 import { getMaceSmashBonus, getMaceSmashImpulse, isMaceSmash, MACE_HEAVY_SMASH_THRESHOLD } from '../items/MaceRules';
 import { isBundleItemName, removeOneFromBundle } from '../items/BundleRules';
 import { createShulkerBoxDropStack, createShulkerBoxMetadata, isShulkerBoxName, shulkerBoxOpeningOffset } from '../items/ShulkerBoxRules';
-import { activateDispenserLike, dispenserFacingOffset } from '../items/DispenserRules';
+import {
+  activateDispenserLike,
+  collectableFluidBucketName,
+  consumeDispenserSlot,
+  damageDispenserTool,
+  dispenserFacingOffset,
+  getDispenserSpecialAction,
+  isDispenserFluidPlacementReplaceable,
+  replaceOneDispenserItem,
+  selectDispenserSlot,
+} from '../items/DispenserRules';
 import {
   createDecoratedPotMetadata,
   decoratedPotBreakDrops,
@@ -9272,10 +9282,34 @@ export class Game {
     const targetSlots = targetMeta?.containerType && targetMeta.inventory
       ? targetMeta.inventory
       : undefined;
+    const sourceSlot = selectDispenserSlot(meta.inventory);
+
+    if (sourceSlot < 0) {
+      this.sound.playLever();
+      return;
+    }
+
+    if (kind === 'dispenser') {
+      const selected = meta.inventory[sourceSlot];
+      const itemName = selected ? ItemRegistry.get(selected.id)?.name : undefined;
+      const special = getDispenserSpecialAction(itemName);
+      if (selected && special) {
+        const handled = this.tryActivateSpecialDispenserItem(
+          x, y, z, tx, ty, tz, offset, meta, sourceSlot, selected, special,
+        );
+        if (handled) {
+          this.chunks.setBlockMeta(x, y, z, meta, true);
+          this.sound.playLever();
+          this.notifyState();
+          return;
+        }
+      }
+    }
 
     const result = activateDispenserLike(kind, meta.inventory, {
       targetSlots,
       targetContainerType: targetMeta?.containerType,
+      sourceSlot,
     });
 
     if (result.action === 'empty') {
@@ -9302,6 +9336,130 @@ export class Game {
 
     this.sound.playLever();
     this.notifyState();
+  }
+
+  private tryActivateSpecialDispenserItem(
+    x: number,
+    y: number,
+    z: number,
+    tx: number,
+    ty: number,
+    tz: number,
+    offset: { x: number; y: number; z: number },
+    meta: BlockMetadata,
+    sourceSlot: number,
+    selected: ItemStack,
+    special: NonNullable<ReturnType<typeof getDispenserSpecialAction>>,
+  ): boolean {
+    if (!meta.inventory) return false;
+    const origin = new THREE.Vector3(
+      x + 0.5 + offset.x * 0.7,
+      y + 0.5 + offset.y * 0.7,
+      z + 0.5 + offset.z * 0.7,
+    );
+    const direction = new THREE.Vector3(offset.x, offset.y, offset.z).normalize();
+
+    if (special.kind === 'projectile') {
+      let projectile;
+      switch (special.projectile) {
+        case 'arrow':
+          projectile = this.projectiles.shootArrow(origin, direction, true);
+          break;
+        case 'snowball':
+        case 'egg':
+          projectile = this.projectiles.shootThrowable(special.projectile, origin, direction, true);
+          break;
+        case 'experience_bottle':
+          projectile = this.projectiles.shootExperienceBottle(origin, direction, true);
+          break;
+        case 'potion':
+          projectile = this.projectiles.shootPotion(
+            origin,
+            direction,
+            true,
+            2,
+            selected.potion?.effect,
+            special.potionVariant,
+          );
+          break;
+        case 'firework_rocket':
+          projectile = this.projectiles.shootFireworkRocket(origin, direction, true);
+          break;
+        case 'fireball':
+          projectile = this.projectiles.shootFireball(origin, direction, true, 4);
+          break;
+        case 'wind_charge':
+          projectile = this.projectiles.shootWindCharge(origin, direction, true, 1);
+          break;
+      }
+      if (projectile) projectile.hitsPlayers = true;
+      meta.inventory = consumeDispenserSlot(meta.inventory, sourceSlot);
+      return true;
+    }
+
+    if (special.kind === 'prime_tnt') {
+      this.tntFuses.push({
+        position: new THREE.Vector3(tx + 0.5, ty + 0.5, tz + 0.5),
+        timer: 4.0,
+      });
+      meta.inventory = consumeDispenserSlot(meta.inventory, sourceSlot);
+      return true;
+    }
+
+    if (special.kind === 'ignite') {
+      const targetId = this.chunks.getBlock(tx, ty, tz);
+      const targetName = BlockRegistry.get(targetId)?.name;
+      let ignited = false;
+      if (targetName === 'tnt') {
+        this.igniteTNT(tx, ty, tz);
+        ignited = true;
+      } else if (targetId === 0 && this.chunks.isSolidBlock(tx, ty - 1, tz)) {
+        const fire = BlockRegistry.getByName('fire');
+        if (fire) {
+          this.chunks.setBlock(tx, ty, tz, fire.id);
+          this.chunks.setBlockMeta(tx, ty, tz, null);
+          this.redstone.observeBlockChange(tx, ty, tz);
+          ignited = true;
+        }
+      }
+      if (ignited) meta.inventory = damageDispenserTool(meta.inventory, sourceSlot, 64);
+      // Flint and Steel stays in the Dispenser when no valid ignition target exists.
+      return true;
+    }
+
+    if (special.kind === 'place_fluid') {
+      const targetId = this.chunks.getBlock(tx, ty, tz);
+      const targetName = targetId === 0 ? 'air' : BlockRegistry.get(targetId)?.name;
+      if (!isDispenserFluidPlacementReplaceable(targetName)) return false;
+      const placed = BlockRegistry.getByName(special.blockName);
+      const emptyBucket = ItemRegistry.getByName('bucket');
+      if (!placed || !emptyBucket) return false;
+      this.chunks.setBlock(tx, ty, tz, placed.id);
+      this.chunks.setBlockMeta(tx, ty, tz, special.blockName === 'powder_snow' ? null : { fluidLevel: 8 });
+      if (special.blockName !== 'powder_snow') this.scheduleFluidNeighborhood(tx, ty, tz);
+      const replaced = replaceOneDispenserItem(meta.inventory, sourceSlot, { id: emptyBucket.id, count: 1 });
+      meta.inventory = replaced.slots;
+      if (replaced.overflow) this.droppedItems.spawnStack(replaced.overflow, origin, direction.clone().multiplyScalar(2), 0.2);
+      return true;
+    }
+
+    if (special.kind === 'collect_fluid') {
+      const targetId = this.chunks.getBlock(tx, ty, tz);
+      const targetName = targetId === 0 ? undefined : BlockRegistry.get(targetId)?.name;
+      const filledName = collectableFluidBucketName(targetName);
+      if (!filledName) return false;
+      const filledBucket = ItemRegistry.getByName(filledName);
+      if (!filledBucket) return false;
+      this.chunks.setBlock(tx, ty, tz, 0);
+      this.chunks.setBlockMeta(tx, ty, tz, null);
+      if (targetName !== 'powder_snow') this.scheduleFluidNeighborhood(tx, ty, tz);
+      const replaced = replaceOneDispenserItem(meta.inventory, sourceSlot, { id: filledBucket.id, count: 1 });
+      meta.inventory = replaced.slots;
+      if (replaced.overflow) this.droppedItems.spawnStack(replaced.overflow, origin, direction.clone().multiplyScalar(2), 0.2);
+      return true;
+    }
+
+    return false;
   }
 
   private getFacingDirection(facing: string): [number, number, number] {

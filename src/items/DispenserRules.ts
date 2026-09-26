@@ -94,10 +94,11 @@ export function activateDispenserLike(
     targetSlots?: readonly (ItemStack | null)[];
     targetContainerType?: string;
     random?: () => number;
+    sourceSlot?: number;
   } = {},
 ): DispenserActivationResult {
   const source = sourceSlots.map((slot) => cloneItemStack(slot));
-  const sourceSlot = selectDispenserSlot(source, options.random ?? Math.random);
+  const sourceSlot = options.sourceSlot ?? selectDispenserSlot(source, options.random ?? Math.random);
   if (sourceSlot < 0) return { action: 'empty', sourceSlots: source };
 
   const selected = source[sourceSlot]!;

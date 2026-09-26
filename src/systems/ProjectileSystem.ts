@@ -23,6 +23,8 @@ export interface Projectile {
   potionEffect?: PotionEffectData;
   /** P3.4 — splash vs lingering. */
   potionVariant?: 'splash' | 'lingering';
+  /** Neutral sources such as Dispensers may hit players even when treated as player-like for mob collision. */
+  hitsPlayers?: boolean;
 }
 
 const ARROW_GRAVITY = -12;
@@ -86,6 +88,7 @@ export class ProjectileSystem {
     this.projectiles.set(potion.id, potion);
     this.addProjectileMesh(mesh);
     mesh.position.copy(potion.position);
+    return potion;
   }
 
   shootExperienceBottle(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean) {
@@ -106,6 +109,7 @@ export class ProjectileSystem {
     this.projectiles.set(projectile.id, projectile);
     this.addProjectileMesh(mesh);
     mesh.position.copy(projectile.position);
+    return projectile;
   }
 
   shootThrowable(type: 'snowball' | 'egg' | 'ender_pearl', origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean) {
@@ -128,6 +132,7 @@ export class ProjectileSystem {
     this.projectiles.set(projectile.id, projectile);
     this.addProjectileMesh(mesh);
     mesh.position.copy(projectile.position);
+    return projectile;
   }
 
   shootWindCharge(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage = 1) {
@@ -146,6 +151,7 @@ export class ProjectileSystem {
     mesh.position.copy(origin);
     this.addProjectileMesh(mesh);
     this.projectiles.set(projectile.id, projectile);
+    return projectile;
   }
 
   shootArrow(
@@ -179,6 +185,7 @@ export class ProjectileSystem {
     mesh.position.copy(origin);
     this.addProjectileMesh(mesh);
     this.projectiles.set(arrow.id, arrow);
+    return arrow;
   }
 
   /**
@@ -267,6 +274,7 @@ export class ProjectileSystem {
     mesh.position.copy(origin);
     this.addProjectileMesh(mesh);
     this.projectiles.set(rocket.id, rocket);
+    return rocket;
   }
 
   shootFireball(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage: number = 4) {
@@ -288,6 +296,7 @@ export class ProjectileSystem {
     mesh.position.copy(origin);
     this.addProjectileMesh(mesh);
     this.projectiles.set(fireball.id, fireball);
+    return fireball;
   }
 
   shootWitherSkull(origin: THREE.Vector3, direction: THREE.Vector3, fromPlayer: boolean, damage: number = 8) {
@@ -557,7 +566,7 @@ export class ProjectileSystem {
       }
 
       // Player collision (arrows/potions from mobs)
-      if (!proj.fromPlayer && proj.type !== 'eye_of_ender') {
+      if ((proj.hitsPlayers ?? !proj.fromPlayer) && proj.type !== 'eye_of_ender') {
         const distToPlayer = proj.position.distanceTo(playerPos);
         if (distToPlayer < playerWidth + 0.3 &&
             proj.position.y > playerPos.y &&

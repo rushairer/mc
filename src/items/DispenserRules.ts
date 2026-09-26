@@ -5,6 +5,8 @@ import {
   itemStacksCanMerge,
 } from './ItemStackRules';
 import { isShulkerBoxStack } from './ShulkerBoxRules';
+import { EnchantSystem } from '../systems/EnchantSystem';
+import { getDurabilityUseChance } from '../systems/DurabilityRules';
 
 export type DispenserLikeKind = 'dispenser' | 'dropper';
 
@@ -221,10 +223,13 @@ export function damageDispenserTool(
   slots: readonly (ItemStack | null)[],
   sourceSlot: number,
   maxDurability: number,
+  random: () => number = Math.random,
 ): (ItemStack | null)[] {
   const next = slots.map((slot) => cloneItemStack(slot));
   const selected = next[sourceSlot];
   if (!selected) return next;
+  const useChance = getDurabilityUseChance(EnchantSystem.getLevel(selected, 'unbreaking'), 'tool');
+  if (random() >= useChance) return next;
   const remaining = (selected.durability ?? maxDurability) - 1;
   next[sourceSlot] = remaining > 0 ? { ...selected, durability: remaining } : null;
   return next;

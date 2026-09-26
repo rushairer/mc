@@ -9518,11 +9518,13 @@ export class Game {
       const blockId = ItemRegistry.getPlaceBlockId(selected.id);
       if (blockId === undefined) return false;
       this.chunks.setBlock(tx, ty, tz, blockId);
+      const supportId = ty > 0 ? this.chunks.getBlock(tx, ty - 1, tz) : 0;
+      const shulkerFacing = supportId !== 0 ? 'up' : (meta.facing ?? 'up');
       this.chunks.setBlockMeta(
         tx,
         ty,
         tz,
-        createShulkerBoxMetadata(selected, meta.facing ?? 'up'),
+        createShulkerBoxMetadata(selected, shulkerFacing),
         true,
       );
       meta.inventory = consumeDispenserSlot(meta.inventory, sourceSlot);

@@ -87,12 +87,13 @@ test('891: all 17 Shulker Box identities use block placement behavior', () => {
   for (const name of names) assert.deepEqual(getDispenserSpecialAction(name), { kind: 'shulker_box' });
 });
 
-test('892: dispensed Shulker Boxes preserve item contents and inherit the machine facing', () => {
+test('892: dispensed Shulker Boxes preserve contents and match Java support-sensitive facing', () => {
   const source = readFileSync(new URL('../src/engine/Game.ts', import.meta.url), 'utf8');
   const start = source.indexOf("if (special.kind === 'shulker_box')");
   const branch = source.slice(start, start + 1250);
   assert.ok(branch.includes('ItemRegistry.getPlaceBlockId(selected.id)'));
-  assert.ok(branch.includes("createShulkerBoxMetadata(selected, meta.facing ?? 'up')"));
+  assert.ok(branch.includes("const shulkerFacing = supportId !== 0 ? 'up' : (meta.facing ?? 'up')"));
+  assert.ok(branch.includes('createShulkerBoxMetadata(selected, shulkerFacing)'));
   assert.ok(branch.includes('consumeDispenserSlot(meta.inventory, sourceSlot)'));
 });
 

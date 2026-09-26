@@ -31,6 +31,7 @@ test('884: Dispenser Spawn Egg execution uses the existing spawn-egg mob mapping
 });
 
 test('885: Armor Stand has a first-class Dispenser placement action', () => {
+  assert.ok(item('armor_stand'));
   assert.deepEqual(getDispenserSpecialAction('armor_stand'), { kind: 'armor_stand' });
   const source = readFileSync(new URL('../src/engine/Game.ts', import.meta.url), 'utf8');
   const start = source.indexOf("if (special.kind === 'armor_stand')");

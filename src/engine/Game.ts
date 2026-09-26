@@ -59,7 +59,7 @@ import {
   type SerializedMob,
 } from '../systems/SaveSystem';
 import { RedstoneSystem, type RedstoneEntity } from '../systems/RedstoneSystem';
-import { ProjectileSystem, type ProjectileType } from '../systems/ProjectileSystem';
+import { ProjectileSystem, type Projectile, type ProjectileType } from '../systems/ProjectileSystem';
 import { CommandSystem } from '../systems/CommandSystem';
 import { VisualResolver } from '../visual/VisualResolver';
 import { Dimension, DimensionGenerator } from '../world/DimensionGenerator';
@@ -9360,7 +9360,7 @@ export class Game {
     const direction = new THREE.Vector3(offset.x, offset.y, offset.z).normalize();
 
     if (special.kind === 'projectile') {
-      let projectile;
+      let projectile: Projectile | undefined;
       switch (special.projectile) {
         case 'arrow':
           projectile = this.projectiles.shootArrow(origin, direction, true);

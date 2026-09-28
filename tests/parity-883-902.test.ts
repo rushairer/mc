@@ -184,9 +184,11 @@ test('901: Dispenser equipment preserves ItemStack components and never overwrit
   assert.ok(branch.includes('stand.setArmorStandEquipment(slotIndex, equipped)'));
 });
 
-test('902: armor/elytra fall back to ordinary ejection without a target, while heads and carved pumpkins remain in the Dispenser', () => {
+test('902: current Java fallback semantics distinguish ordinary heads from carved pumpkin and Wither Skeleton Skull', () => {
   assert.deepEqual(getDispenserSpecialAction('diamond_chestplate'), { kind: 'equip', slot: 'chestplate', noFallback: false });
   assert.deepEqual(getDispenserSpecialAction('elytra'), { kind: 'equip', slot: 'chestplate', noFallback: false });
+  assert.deepEqual(getDispenserSpecialAction('skeleton_skull'), { kind: 'equip', slot: 'helmet', noFallback: false });
+  assert.deepEqual(getDispenserSpecialAction('zombie_head'), { kind: 'equip', slot: 'helmet', noFallback: false });
   assert.deepEqual(getDispenserSpecialAction('carved_pumpkin'), { kind: 'equip', slot: 'helmet', noFallback: true });
   assert.deepEqual(getDispenserSpecialAction('wither_skeleton_skull'), { kind: 'equip', slot: 'helmet', noFallback: true });
   const source = readFileSync(new URL('../src/engine/Game.ts', import.meta.url), 'utf8');

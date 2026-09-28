@@ -214,7 +214,10 @@ export function getDispenserSpecialAction(itemName: string | null | undefined): 
 
       const slot = dispenserEquipmentSlot(itemName);
       if (slot) {
-        const noFallback = isDispenserHeadItemName(itemName);
+        // Current Java behavior: ordinary mob heads eject on failed equip,
+        // while carved pumpkins and Wither Skeleton Skulls retain their
+        // optional placement/equip behavior and remain in the Dispenser.
+        const noFallback = itemName === 'carved_pumpkin' || itemName === 'wither_skeleton_skull';
         return { kind: 'equip', slot, noFallback };
       }
       return null;
